@@ -37,6 +37,14 @@ def _no_constant(_value):
     raise CanonicalError("NaN and Infinity are not JSON")
 
 
+def _integer(text):
+    # An integer in the exact range has at most 16 digits; a longer one is
+    # refused before conversion, which Python limits to 4,300 digits.
+    if len(text.lstrip("-")) > len(str(MAX_SAFE_INTEGER)):
+        raise CanonicalError("integer outside the exact range")
+    return int(text)
+
+
 def parse(data: str | bytes) -> Any:
     """Decode JSON under the profile's rules."""
     if isinstance(data, bytes):
@@ -49,11 +57,15 @@ def parse(data: str | bytes) -> Any:
             data,
             object_pairs_hook=_pairs,
             parse_float=_no_float,
+            parse_int=_integer,
             parse_constant=_no_constant,
         )
+    except CanonicalError:
+        raise
     except RecursionError as exc:
         raise CanonicalError("nesting too deep") from exc
-    except json.JSONDecodeError as exc:
+    except ValueError as exc:
+        # JSONDecodeError, and any other value the decoder cannot represent.
         raise CanonicalError("invalid JSON") from exc
 
 

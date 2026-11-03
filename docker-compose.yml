@@ -21,7 +21,7 @@ services:
     shm_size: ${KEEN_POSTGRES_SHM_SIZE:-256mb}
     environment:
       POSTGRES_USER: keen
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMe123!}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env to a random value}
       POSTGRES_DB: keen
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keen -d keen"]
@@ -37,9 +37,9 @@ services:
 
   valkey:
     image: valkey/valkey:8@sha256:8f836008e0986c36adf50da714c7060cf689dbb335f61fe077939d90fa650809
-    command: ["valkey-server", "--requirepass", "${KEEN_REDIS_PASSWORD:-ChangeMe123!}"]
+    command: ["valkey-server", "--requirepass", "${KEEN_REDIS_PASSWORD:?Set KEEN_REDIS_PASSWORD in .env to a random value}"]
     environment:
-      - KEEN_REDIS_PASSWORD=${KEEN_REDIS_PASSWORD:-ChangeMe123!}
+      - KEEN_REDIS_PASSWORD=${KEEN_REDIS_PASSWORD:?Set KEEN_REDIS_PASSWORD in .env to a random value}
     ports:
       - "127.0.0.1:6399:6379"
     networks: [keen]

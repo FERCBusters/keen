@@ -69,8 +69,11 @@ function inboxItems() {
   ];
 }
 
-async function inbox(t, { fail = null, failRead = false, failAll = false } = {}) {
-  const state = { items: inboxItems(), navigations: [], bell: 0 };
+async function inbox(
+  t,
+  { fail = null, failRead = false, failAll = false, items = inboxItems() } = {},
+) {
+  const state = { items, navigations: [], bell: 0 };
   const unread = () => state.items.filter((item) => !item.read_at).length;
   const ui = await page(t, 'notifications', {
     me: {},
@@ -134,6 +137,24 @@ test('the inbox lists notifications newest first with unread ones marked', async
   assert.ok(measure.querySelector('.bi-graph-down-arrow'));
   assert.match(measure.textContent, /Recorded 2026-10-29 · by Keen/);
   assert.ok(other.querySelector('.bi-bell'));
+});
+
+test('notification links stay on Keen whatever path the record names', async (t) => {
+  const [template] = inboxItems();
+  const hrefs = [
+    '/\\evil.example/x',
+    '/\t/evil.example/x',
+    '/\n/evil.example/x',
+    '\\\\evil.example/x',
+    'data:text/html,x',
+    'https://evil.example/x',
+    '',
+    '/audit.html?id=a2',
+  ];
+  const items = hrefs.map((href, index) => ({ ...template, id: `h${index}`, href }));
+  const { ui } = await inbox(t, { items });
+  const links = rows(ui).map((link) => link.getAttribute('href'));
+  assert.deepEqual(links, [...hrefs.slice(0, -1).map(() => '#'), '/audit.html?id=a2']);
 });
 
 test('opening an unread notification marks it read before going to its record', async (t) => {

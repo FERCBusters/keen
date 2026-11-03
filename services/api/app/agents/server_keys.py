@@ -36,12 +36,14 @@ from cryptography.hazmat.primitives import hpke
 from cryptography.hazmat.primitives.asymmetric import mlkem, x25519
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.agents.credentials import revoke_keys
 from app.agents.ueu.jcs import canonical
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import AgentServerKey
+from app.db.models import AgentEnrollmentProfile, AgentServerKey, KeenAgent
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
 from app.security.agent_signatures import b64url, unb64url
@@ -437,12 +439,23 @@ def seal_response(opened: Opened, status: int, payload: bytes) -> bytes:
 
 
 def reset_identity(db: Session, now: datetime | None = None) -> Identity:
-    """Replace KEEN's identity key and erase every agent key it vouched for.
+    """Replace KEEN's identity key, erase its encryption keys and revoke every
+    agent key.
 
     Every agent must then enrol again with a new code or bootstrap key; the
     caller commits.
     """
     now = now or utc_now_naive()
+    # Agent requests lock their enrolment profile, then their agent. Taking
+    # the same locks first lets a request in flight finish before keys are
+    # revoked, so a renewal cannot bind a key the reset misses.
+    db.execute(
+        select(AgentEnrollmentProfile.id)
+        .order_by(AgentEnrollmentProfile.id)
+        .with_for_update()
+    ).all()
+    db.execute(select(KeenAgent.id).order_by(KeenAgent.id).with_for_update()).all()
+    revoke_keys(db)
     for row in (
         db.query(AgentServerKey)
         .filter(AgentServerKey.state != "destroyed")

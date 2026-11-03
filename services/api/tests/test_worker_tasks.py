@@ -2,7 +2,7 @@
 
 import contextlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -581,6 +581,80 @@ def test_evidence_retention_task_self_schedules_only_on_progress():
         ):
             wt.evidence_retention_task()
         assert [c.kwargs for c in requeue.call_args_list] == expected
+
+
+def test_audit_log_retention_deletes_expired_records_in_short_batches(
+    contract_db, monkeypatch
+):
+    from app.core.datetime_utils import utc_now_naive
+    from app.db.models import AuditLog
+    from app.services import audit_retention
+    from app.worker.celery_app import celery_app
+    from sqlalchemy.orm import sessionmaker
+
+    # Each batch commits in its own session, as the worker's would.
+    monkeypatch.setattr(
+        audit_retention,
+        "SessionLocal",
+        sessionmaker(
+            bind=contract_db.get_bind(),
+            autoflush=False,
+            join_transaction_mode="create_savepoint",
+        ),
+    )
+    monkeypatch.setattr(audit_retention, "BATCH_SIZE", 2)
+    monkeypatch.setattr(audit_retention, "BATCHES_PER_RUN", 2)
+    monkeypatch.setattr(audit_retention.settings, "audit_log_retention_days", 400)
+    now = utc_now_naive()
+    ages = [900, 700, 600, 500, 401, 399, 1, 0]
+    for days in ages:
+        contract_db.add(
+            AuditLog(
+                ts=now - timedelta(days=days, minutes=1),
+                method="GET",
+                path=f"/v1/aged/{days}",
+                status_code=200,
+                duration_ms=1,
+            )
+        )
+    contract_db.commit()
+
+    def kept():
+        contract_db.expire_all()
+        return sorted(
+            int(path.rsplit("/", 1)[1])
+            for (path,) in contract_db.query(AuditLog.path).filter(
+                AuditLog.path.like("/v1/aged/%")
+            )
+        )
+
+    with patch.object(wt.audit_log_retention_task, "apply_async") as requeue:
+        # A run stops after its batches and queues the next at once.
+        assert wt.audit_log_retention_task() == {"removed": 4, "more": True}
+        assert [c.kwargs for c in requeue.call_args_list] == [{"countdown": 1}]
+        assert kept() == [0, 1, 399, 401]
+        assert wt.audit_log_retention_task() == {"removed": 1, "more": False}
+        assert requeue.call_count == 1
+    assert kept() == [0, 1, 399]
+
+    # 0 keeps every record.
+    monkeypatch.setattr(audit_retention.settings, "audit_log_retention_days", 0)
+    contract_db.add(
+        AuditLog(
+            ts=now - timedelta(days=10000),
+            method="GET",
+            path="/v1/aged/10000",
+            status_code=200,
+            duration_ms=1,
+        )
+    )
+    contract_db.commit()
+    assert wt.audit_log_retention_task() == {"removed": 0, "more": False}
+    assert kept() == [0, 1, 399, 10000]
+    # The nightly schedule runs it on the internal queue.
+    entry = celery_app.conf.beat_schedule["audit-log-retention-daily"]
+    assert entry["task"] == wt.audit_log_retention_task.name
+    assert celery_app.amqp.router.route({}, entry["task"])["queue"].name == "celery"
 
 
 def test_security_notifications_task():

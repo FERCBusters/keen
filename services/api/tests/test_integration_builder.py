@@ -635,6 +635,38 @@ def test_request_paths_stay_relative_to_the_connection(path):
         Definition(path=path)
 
 
+DOT_SEGMENT_PATHS = [
+    "/../tenant-b/collect",
+    "/tenant-a/./collect",
+    "/tenant-a/..",
+    "/%2e%2e/tenant-b",
+    "/%2E%2E/tenant-b",
+    "/.%2e/tenant-b",
+    "/%2e/collect",
+    "/tenant-a%2f..%2ftenant-b",
+    "/tenant-a%2F..%2Ftenant-b",
+    "/tenant-a%5c..%5ctenant-b",
+    "/tenant-a\\..\\tenant-b",
+    "/..;/tenant-b",
+    "/%252e%252e/tenant-b",
+]
+
+
+@pytest.mark.parametrize("path", DOT_SEGMENT_PATHS)
+def test_request_and_detail_paths_cannot_climb_out_of_the_base_path(path):
+    with pytest.raises(ValueError, match=r"cannot contain \. or \.\. segments"):
+        Definition(path=path)
+    with pytest.raises(ValueError, match=r"cannot contain \. or \.\. segments"):
+        Definition(enrichments=[{"name": "detail", "path": path}])
+
+
+@pytest.mark.parametrize(
+    "path", ["/v1.2/items", "/a..b/c", "/.well-known/x", "/repos/group%2Fproject"]
+)
+def test_dots_and_encoded_slashes_within_a_name_are_ordinary_paths(path):
+    assert Definition(path=path, enrichments=[{"name": "detail", "path": path}])
+
+
 @pytest.mark.parametrize("path", ["/issues?state=open", "/issues#open"])
 def test_query_and_fragment_belong_in_the_query_mapping(path):
     with pytest.raises(ValueError, match="Move query parameters to Query"):

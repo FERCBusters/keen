@@ -57,9 +57,30 @@ def create_session(
     return session_id
 
 
+def remaining_lifetime(payload: dict[str, Any], max_age_seconds: int) -> int:
+    """Seconds before a session reaches its absolute lifetime; 0 once it has.
+
+    A session without a readable creation time counts as expired.
+    """
+    try:
+        created = datetime.fromisoformat(payload["created_at"])
+        age = (datetime.now(timezone.utc) - created).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return 0
+    return max(0, min(max_age_seconds, int(max_age_seconds - age)))
+
+
 def get_session(
-    redis_client, session_id: str, *, refresh_ttl_seconds: int | None = None
+    redis_client,
+    session_id: str,
+    *,
+    refresh_ttl_seconds: int | None = None,
+    max_age_seconds: int | None = None,
 ) -> dict[str, Any] | None:
+    """Load a session; with ``max_age_seconds``, end one older than that.
+
+    A refresh never extends a session past its absolute lifetime.
+    """
     if not session_id:
         return None
     key = session_key(session_id)
@@ -70,13 +91,20 @@ def get_session(
         payload = json.loads(raw)
     except Exception:
         return None
+    if not isinstance(payload, dict):
+        return None
+    if max_age_seconds is not None:
+        remaining = remaining_lifetime(payload, max_age_seconds)
+        if remaining <= 0:
+            delete_session(redis_client, session_id)
+            return None
+        if refresh_ttl_seconds:
+            refresh_ttl_seconds = min(refresh_ttl_seconds, remaining)
     if refresh_ttl_seconds:
         try:
             redis_client.expire(key, int(refresh_ttl_seconds))
         except Exception:
             pass
-    if not isinstance(payload, dict):
-        return None
     return payload
 
 
@@ -88,6 +116,7 @@ def update_session_authz(
     permission_codes: list[str] | set[str] | tuple[str, ...],
     authz_version: int,
     ttl_seconds: int,
+    max_age_seconds: int | None = None,
 ) -> None:
     if not session_id:
         return
@@ -108,13 +137,19 @@ def update_session_authz(
                 return
             if not isinstance(payload, dict):
                 return
+            ttl = int(ttl_seconds)
+            if max_age_seconds is not None:
+                # A permission refresh never extends the absolute lifetime.
+                ttl = min(ttl, remaining_lifetime(payload, max_age_seconds))
+                if ttl <= 0:
+                    return
             payload["effective_role"] = str(effective_role or "")
             payload["permission_codes"] = sorted(
                 {str(c) for c in permission_codes if c}
             )
             payload["authz_version"] = int(authz_version)
             pipe.multi()
-            pipe.set(key, json.dumps(payload), ex=int(ttl_seconds), xx=True)
+            pipe.set(key, json.dumps(payload), ex=ttl, xx=True)
             pipe.execute()
     except WatchError:
         return

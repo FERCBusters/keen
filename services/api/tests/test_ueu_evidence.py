@@ -198,6 +198,9 @@ def test_python_reproduces_the_agents_transport_vectors():
         '{"a":"\\ud800"}',
         '{"b":1, "a":2}',
         '{"a":9007199254740992}',
+        # Longer than Python converts (4,300 digits), and than the exact range.
+        '{"a":' + "1" * 5000 + "}",
+        '{"a":-' + "9" * 17 + "}",
     ],
 )
 def test_canonical_form_is_strict(text):
@@ -694,6 +697,23 @@ def test_non_canonical_bodies_and_other_producers_are_rejected(keen):
     sealed = agent.seal(env, stream=str(uuid.uuid4()))
     r = agent.post("/v1/otlp/logs", agent.otlp([sealed]), "otlp-logs")
     assert r.status_code == 400
+
+
+def test_oversized_integers_are_refused_as_non_canonical(keen):
+    """A client error, so the agent drops the batch instead of retrying it."""
+    agent, _ = enrolled(keen)
+    oversized = ('{"a":' + "1" * 5000 + "}").encode()
+    sealed = agent.seal(agent.observation("firewall", "ufw", {"enabled": True}))
+    sealed["bytes"] = oversized
+    r = agent.post("/v1/otlp/logs", agent.otlp([sealed], sign=False), "otlp-logs")
+    assert r.status_code == 400 and "CANONICALISATION" in r.text, r.text
+    # A signed batch's manifest is read the same way.
+    sealed = agent.seal(agent.observation("firewall", "ufw", {"enabled": True}))
+    body = agent.otlp([sealed], manifest=oversized)
+    r = agent.post("/v1/otlp/logs", body, "otlp-logs")
+    assert r.status_code == 400 and "VERIFICATION_FAILED" in r.text, r.text
+    with keen.db() as db:
+        assert db.query(Event).count() == 0
 
 
 def test_correlation_context_is_accepted_and_bounded(keen):

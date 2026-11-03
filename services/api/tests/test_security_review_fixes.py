@@ -260,9 +260,20 @@ def mail(monkeypatch):
     monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: True)
     monkeypatch.setattr(sso_emails_operations, "recent_signin", lambda *a: None)
     monkeypatch.setattr(sso_emails_operations, "limit", lambda *a: None)
+    # Verification links go through the security-email outbox; record each one
+    # as it is queued in the request's transaction.
     messages = []
+    queue = sso_emails_operations.queue_email
+
+    def queued(db, **message):
+        messages.append(message)
+        queue(db, **message)
+
+    monkeypatch.setattr(sso_emails_operations, "queue_email", queued)
     monkeypatch.setattr(
-        sso_emails_operations.mailer, "send_email", lambda **kw: messages.append(kw)
+        sso_emails_operations.mailer,
+        "send_email",
+        lambda **kw: pytest.fail("SMTP is contacted during the request"),
     )
     return messages
 
@@ -341,8 +352,11 @@ def test_conflict(db, user, mail):
     )
     db.add(other)
     db.commit()
-    with pytest.raises((HTTPException, DomainError)):
-        send(db, user, mail, "taken@example.org")
+    # Another account's address gets the answer a free one gets, and no link.
+    assert sso_emails.request_address(
+        sso_emails.Address(email="taken@example.org"), req(user), user, db
+    ) == {"ok": True}
+    assert mail == []
     token = send(db, user, mail)
     db.add(UserSsoEmail(email="alias@example.org", user_id=other.id))
     db.commit()
@@ -351,20 +365,20 @@ def test_conflict(db, user, mail):
 
 
 def test_smtp_failure(db, user, mail, monkeypatch):
+    from app.db.models import SecurityNotification
+
     monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: False)
     with pytest.raises((HTTPException, DomainError)):
         send(db, user, mail)
+    assert db.query(SecurityNotification).count() == 0
     monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: True)
 
-    def fail(**kw):
-        raise RuntimeError("sensitive SMTP detail")
-
-    monkeypatch.setattr(sso_emails_operations.mailer, "send_email", fail)
-    with pytest.raises((HTTPException, DomainError)) as exc:
-        send(db, user, mail)
-    assert (
-        "sensitive" not in str(exc.value) and db.query(SsoEmailChallenge).count() == 0
-    )
+    # The request queues the link and never waits on the mail server, so an
+    # SMTP failure is the delivery worker's to retry.
+    send(db, user, mail)
+    (queued,) = db.query(SecurityNotification).all()
+    assert (queued.recipient, queued.status) == ("alias@example.org", "pending")
+    assert "#token=" in queued.body and db.query(SsoEmailChallenge).count() == 1
 
 
 @pytest.mark.parametrize(
@@ -551,11 +565,9 @@ def test_a_concurrent_claim_of_the_address_is_reported_as_a_conflict(
 
 
 def test_removing_an_unknown_address_sends_no_notification(db, user, mail, monkeypatch):
-    from app.services import security_notifications
-
     sent = []
     monkeypatch.setattr(
-        security_notifications, "enqueue", lambda *a, **kw: sent.append(a[2])
+        sso_emails_operations, "enqueue", lambda *a, **kw: sent.append(a[2])
     )
     sso_emails.remove_address(
         sso_emails.Address(email="never@example.org"), req(user), user, db

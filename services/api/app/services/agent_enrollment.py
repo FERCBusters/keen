@@ -10,10 +10,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from pydantic import Field, field_validator
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.agents import server_keys
-from app.agents.credentials import digest, live_only, reauthenticate
+from app.agents.credentials import digest, live_only, reauthenticate, revoke_keys
 from app.agents.schema import Strict
 from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
@@ -95,6 +96,46 @@ class Renewal(Strict):
     public_key: str = Field(pattern=PUBLIC_KEY)
     nonce: str = Field(pattern=NONCE)
     proof: str = Field(pattern=PROOF)
+
+
+# Transaction lock namespace for claims on an agent name.
+_AGENT_NAME_LOCK = 75431020
+
+
+def lock_agent_name(db: Session, name: str) -> None:
+    """Serialise claims on one agent name, whatever its case, until commit.
+
+    Profile enrolments and administrator registrations take it, so a profile
+    enrolment's check sees every agent that claimed the name before it.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:space, hashtext(:name))"),
+            {"space": _AGENT_NAME_LOCK, "name": name.lower()},
+        )
+
+
+def name_held_outside(db: Session, name: str, profile_id: str) -> bool:
+    """Whether an active agent outside the profile holds the name.
+
+    The name becomes the trusted ``system`` label of the agent's evidence, which
+    mapping rules match, so a profile's key enrols only under names no other
+    active device holds; machines within one profile may share a name.
+    """
+    return (
+        db.query(KeenAgent.id)
+        .filter(
+            func.lower(KeenAgent.name) == name.lower(),
+            KeenAgent.enabled.is_(True),
+            KeenAgent.expires_at > utc_now_naive(),
+            or_(
+                KeenAgent.enrollment_profile_id.is_(None),
+                KeenAgent.enrollment_profile_id != profile_id,
+            ),
+        )
+        .first()
+        is not None
+    )
 
 
 def audit(db, context: ChangeContext, action, profile=None, agent=None):
@@ -228,13 +269,7 @@ def manage(*, ident: str, action: str, context: ChangeContext, db: Session):
             synchronize_session=False,
         )
         enrolled = db.query(KeenAgent.id).filter_by(enrollment_profile_id=ident)
-        db.query(AgentKey).filter(
-            AgentKey.agent_id.in_(enrolled.scalar_subquery()),
-            AgentKey.state != "revoked",
-        ).update(
-            {AgentKey.state: "revoked", AgentKey.retired_at: utc_now_naive()},
-            synchronize_session=False,
-        )
+        revoke_keys(db, AgentKey.agent_id.in_(enrolled.scalar_subquery()))
     else:
         profile.state = "paused" if action == "pause" else "active"
     audit(db, context, "profile-" + action, ident)
@@ -351,6 +386,15 @@ def previous_binding(db, agent, credential_hash, public_key):
     return key
 
 
+def require_pinned_identity(db, pinned):
+    if pinned != server_keys.current_fingerprint(db):
+        raise DomainError(
+            401,
+            "This credential was issued under a different KEEN identity key; "
+            "ask an administrator for a new one",
+        )
+
+
 def enroll(*, body: Enrollment, context: ChangeContext, db: Session):
     live_only()
     rate(context)
@@ -359,12 +403,7 @@ def enroll(*, body: Enrollment, context: ChangeContext, db: Session):
         raise DomainError(401, "Invalid enrollment credential")
     credential = body.credential
     kind, ident, pinned = match.groups()
-    if pinned != server_keys.current_fingerprint(db):
-        raise DomainError(
-            401,
-            "This credential was issued under a different KEEN identity key; "
-            "ask an administrator for a new one",
-        )
+    require_pinned_identity(db, pinned)
     if abs(time.time() - body.created) > PROOF_SECONDS:
         raise DomainError(
             400, "Key proof is not current; check the machine's clock and retry"
@@ -382,6 +421,10 @@ def enroll(*, body: Enrollment, context: ChangeContext, db: Session):
         agent, key = enroll_with_code(db, context, credential, ident, body)
     else:
         agent, key = enroll_with_profile(db, context, credential, ident, body)
+    # Both paths now hold the lock an identity reset takes first, so the
+    # identity stays as read here until this commits. A reset that committed
+    # while they waited for it strands the credential, and nothing binds.
+    require_pinned_identity(db, pinned)
     result = grant(db, agent, key)
     db.commit()
     return result
@@ -481,6 +524,12 @@ def enroll_with_profile(db, context, bootstrap, ident, body):
         and profile.enrollment_count >= profile.max_enrollments
     ):
         raise DomainError(403, "Enrollment limit reached")
+    lock_agent_name(db, body.name)
+    if name_held_outside(db, body.name, ident):
+        raise DomainError(
+            409,
+            "Agent name is in use outside this enrollment profile; choose another name",
+        )
     agent = KeenAgent(
         id=str(uuid.uuid4()),
         name=body.name,

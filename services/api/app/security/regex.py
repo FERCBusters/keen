@@ -1,4 +1,8 @@
-"""One bounded execution boundary for administrator-supplied match patterns."""
+"""One bounded execution boundary for supplied match patterns.
+
+Mapping rules and selectors match in Python under a runtime timeout; event
+filters match in PostgreSQL, whose statements their callers bound.
+"""
 
 import re
 import time
@@ -22,6 +26,19 @@ MATCH_CONCURRENTLY = False
 # thread has itself used the budget; until then the match is tried again, at
 # most this many times in all.
 MATCH_ATTEMPTS = 3
+# PostgreSQL matches event-filter patterns with its own engine. It reads a
+# backslash and digits as a back-reference once that many groups precede them,
+# where Python reads an octal escape, and back-references and lookaround
+# constraints take the most time there as the text grows. Both are found in the
+# pattern's text, so a reading that differs from Python's cannot hide them.
+_DATABASE_BACKREFERENCE = re.compile(r"\\[1-9]")
+_DATABASE_LOOKAROUND = ("(?=", "(?!", "(?<=", "(?<!")
+# In expanded mode Python reads a{1, 2} as literal text, while the regex
+# package and PostgreSQL read a quantifier, so the checks below would not see
+# what actually runs.
+_EXPANDED_MODE = (
+    "Expanded mode (the x flag) is unsupported; write the pattern without it"
+)
 
 
 def validate_pattern(pattern):
@@ -31,6 +48,8 @@ def validate_pattern(pattern):
         parsed = _parser.parse(pattern, 0)
     except (re.error, RecursionError) as exc:
         raise ValueError(f"Invalid pattern: {exc}") from exc
+    if parsed.state.flags & re.VERBOSE:
+        raise ValueError(_EXPANDED_MODE)
 
     def check(items, repeated=False):
         unbounded = 0
@@ -50,6 +69,8 @@ def validate_pattern(pattern):
             elif op == _parser.ATOMIC_GROUP:
                 check(value, repeated)
             elif op == _parser.SUBPATTERN:
+                if value[1] & re.VERBOSE:
+                    raise ValueError(_EXPANDED_MODE)
                 check(value[-1], repeated)
             elif op == _parser.BRANCH:
                 if repeated:
@@ -64,6 +85,23 @@ def validate_pattern(pattern):
             raise ValueError("Use one unbounded repetition at most")
 
     check(parsed)
+
+
+def validate_database_pattern(pattern):
+    """Check a pattern that PostgreSQL matches, as event filters do.
+
+    The pattern meets the mapping-rule checks and contains neither a
+    back-reference nor a lookaround as PostgreSQL reads them.
+    """
+    validate_pattern(pattern)
+    if _DATABASE_BACKREFERENCE.search(pattern):
+        raise ValueError(
+            "Backreferences are unsupported, and the database reads a backslash "
+            "followed by a digit as one; write a character code as a hexadecimal "
+            "escape such as \\x41"
+        )
+    if any(construct in pattern for construct in _DATABASE_LOOKAROUND):
+        raise ValueError("Lookahead and lookbehind are unsupported")
 
 
 @dataclass(frozen=True)

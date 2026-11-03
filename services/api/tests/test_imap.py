@@ -854,10 +854,10 @@ def test_environment_and_demo_connections_never_poll(contract_db, monkeypatch):
     ]
     monkeypatch.setattr(sc, "connections", lambda *args: peers)
     results = imap.ingest_imap_all(contract_db)
-    assert [r["reason"] for r in results] == [
-        "Create a named IMAP connection",
-        "IMAP is disabled in demo environments",
-    ]
+    assert {r["connection_id"]: r["reason"] for r in results} == {
+        "env:imap": "Create a named IMAP connection",
+        "named": "IMAP is disabled in demo environments",
+    }
     assert all(r["skipped"] for r in results)
     assert contract_db.query(IngestionCursor).count() == 0
 

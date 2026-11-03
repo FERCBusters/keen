@@ -104,6 +104,8 @@ class Settings(BaseSettings):
     # Cookie-backed sessions stored in Valkey/Redis
     session_cookie_name: str = Field(default="keen_session")
     session_ttl_seconds: int = Field(default=60 * 60 * 24 * 7)  # 7 days
+    # Absolute lifetime from sign-in, whatever the session's use (30 days).
+    session_max_age_seconds: int = Field(default=60 * 60 * 24 * 30, ge=300)
 
     # Cookie settings - secure by default for production
     cookie_secure: bool = Field(default=True)
@@ -327,6 +329,10 @@ class Settings(BaseSettings):
     # Set to 0 to disable. The data remains exact; it may simply be up to this
     # many seconds behind newly ingested events.
     aggregate_cache_ttl_seconds: int = Field(default=60)
+
+    # Days the audit trail keeps request and action records. The worker deletes
+    # older records daily in short batches; 0 keeps them indefinitely.
+    audit_log_retention_days: int = Field(default=400, ge=0, le=36500)
 
     # Diagnostics: label each SQL statement with the request or task that ran
     # it, for tools/keen-perf-trace.sh. Leave off in normal operation.
@@ -651,11 +657,10 @@ class Settings(BaseSettings):
     # Example: {"Authorization": "Bearer ...", "X-Tenant": "acme"}
     question_webhook_generic_headers_json: str = Field(default="")
 
-    # Optional signing secret for the generic webhook; when set, Keen will add a
-    # signature header (default: X-Keen-Signature) with value:
-    #   sha256=<hex hmac>
+    # Optional signing secret for the generic webhook. When set, each delivery
+    # carries X-Keen-Timestamp (Unix seconds) and X-Keen-Signature:
+    #   v1=<hex HMAC-SHA256 of "<timestamp>.<body>">
     question_webhook_signing_secret: str = Field(default="")
-    question_webhook_signature_header: str = Field(default="X-Keen-Signature")
 
     # HTTP timeout for outbound webhook requests.
     question_webhook_timeout_seconds: float = Field(default=6.0)
@@ -670,10 +675,8 @@ class Settings(BaseSettings):
     # Optional extra headers (JSON object) added to the incident webhook request.
     # Example: {"Authorization": "Bearer ...", "X-Tenant": "acme"}
     incident_webhook_headers_json: str = Field(default="")
-    # Optional signing secret. When set, Keen sends an HMAC SHA-256 signature of
-    # the canonical JSON body in the configured header.
+    # Optional signing secret, signing deliveries as question webhooks do.
     incident_webhook_signing_secret: str = Field(default="")
-    incident_webhook_signature_header: str = Field(default="X-Keen-Signature")
     incident_webhook_timeout_seconds: float = Field(default=6.0)
 
     # -----------------------------------------------------------------------------

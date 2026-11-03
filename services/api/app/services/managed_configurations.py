@@ -81,16 +81,74 @@ COLLECTION_SECTIONS = {
 # Common credential names, and every credential field a source connection reads.
 # Collectors take credentials from the environment or a connection's encrypted
 # store, so these names never belong in editable collection documents.
-SECRET_KEYS = {
+_CREDENTIAL_WORDS = (
     "password",
+    "passwd",
+    "passphrase",
     "token",
+    "bearer",
     "api_key",
+    "apikey",
+    "access_key",
+    "secret_key",
+    "subscription_key",
+    "functions_key",
     "authorization",
+    "credentials",
+    "signature",
     "client_secret",
+    "cookie",
     "private_key",
     "secret",
+)
+SECRET_KEYS = {
+    *_CREDENTIAL_WORDS,
     *(name for _, secret in CONNECTION_FIELDS.values() for name in secret.split()),
 }
+# Credential names that qualify a credential word, as header and field names
+# such as X-Api-Key, Private-Token, X-Auth-Token, Proxy-Authorization,
+# Ocp-Apim-Subscription-Key and X-Functions-Key do.
+SECRET_SUFFIXES = tuple("_" + word for word in _CREDENTIAL_WORDS)
+# Shown in place of a value that listings withhold.
+WITHHELD = "[withheld]"
+
+
+def credential_name(key: Any) -> bool:
+    """Whether a configuration or header name holds a credential."""
+    name = str(key).lower().replace("-", "_")
+    return name in SECRET_KEYS or name.endswith(SECRET_SUFFIXES)
+
+
+def withheld_inputs(source: str, section: str, entry: Any) -> Any:
+    """A collection entry as administrators see it, with credentials withheld.
+
+    Values under credential names are withheld, and so are every RSS feed's
+    custom headers and feed credentials whatever their names, which the
+    configuration editor also refuses to show. Collection uses the stored
+    entry; only listings use this copy.
+    """
+
+    def withhold(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: WITHHELD for key in value}
+        return WITHHELD
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: WITHHELD if credential_name(key) else walk(child)
+                for key, child in value.items()
+            }
+        if isinstance(value, list):
+            return [walk(child) for child in value]
+        return value
+
+    shown = walk(entry)
+    if source == "rss" and section == "feeds" and isinstance(entry, dict):
+        for key in ("headers", "auth"):
+            if entry.get(key):
+                shown[key] = withhold(entry[key])
+    return shown
 
 
 class DocumentInput(BaseModel):
@@ -192,8 +250,7 @@ def _safe_document(document: dict[str, Any]):
         if isinstance(value, dict):
             for key, child in value.items():
                 key = str(key)
-                name = key.lower().replace("-", "_")
-                if name in SECRET_KEYS or name.endswith("_password"):
+                if credential_name(key):
                     raise DomainError(
                         400,
                         f"Move credential {path + key} into a server environment variable",
@@ -708,7 +765,7 @@ def get_evidence_definitions(*, db: Session):
                             "section": section,
                             "key": key,
                             "collector": collector_id(adapter, section, key),
-                            "entry": entry,
+                            "entry": withheld_inputs(adapter, section, entry),
                             "version": _version(db, adapter),
                         }
                     )
@@ -734,7 +791,7 @@ def get_evidence_definitions(*, db: Session):
                             "section": section,
                             "key": key,
                             "collector": collector_id(connection.source, section, key),
-                            "entry": entry,
+                            "entry": withheld_inputs(connection.source, section, entry),
                             "connection_id": connection.id,
                             "connection_name": connection.name,
                             "version": (
@@ -982,7 +1039,12 @@ def save_evidence_definition(
         when["connection_id"] = managed.id
         if section != "source":
             key = _collector_key(adapter, section, payload.entry)
-            if payload.entry not in managed.inputs.get(section, []):
+            # Only the rule is saved here; the entry, stored or as listed with
+            # its credentials withheld, names the input.
+            inputs = managed.inputs.get(section, [])
+            if payload.entry not in inputs and payload.entry not in [
+                withheld_inputs(adapter, section, entry) for entry in inputs
+            ]:
                 raise DomainError(
                     409, "Edit this input in the deployment connections file"
                 )

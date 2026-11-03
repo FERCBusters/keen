@@ -2,7 +2,7 @@
 // wizard, the risk detail page and the Mitigator. Other pages that list risks
 // use its score bands. Each page passes its own framework so links keep the
 // selected framework.
-import { esc, withFramework } from '/app.js';
+import { esc, localPath, withFramework } from '/app.js';
 
 export const RISK_TYPES = ['Confidentiality', 'Integrity', 'Availability'];
 export const PESTLE_TYPES = [
@@ -104,9 +104,9 @@ export function partyBadgesHtml(parties, framework) {
         p.kind === 'person' ? 'bi-person' : p.kind === 'vendor' ? 'bi-building' : 'bi-people';
       const label = `<i class="bi ${icon} me-1" aria-hidden="true"></i>${esc(p.label || 'Party')}`;
       const title = p.detail ? ` title="${esc(p.detail)}"` : '';
-      const href = String(p.href || '');
-      return href.startsWith('/')
-        ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(withFramework(href, framework))}"${title}>${label}</a>`
+      const href = localPath(p.href) && localPath(withFramework(p.href, framework));
+      return href
+        ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(href)}"${title}>${label}</a>`
         : `<span class="badge badge-soft me-1"${title}>${label}</span>`;
     })
     .join('');

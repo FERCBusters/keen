@@ -16,10 +16,12 @@ from app.db.models import (
     IsmsDocument,
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
+    User,
 )
 from app.services.audits.validation import try_uuid
 from app.services.control_refs import control_by_id_or_ref
 from app.services.errors import DomainError
+from app.services.isms.access import can_read_isms
 
 
 def control_or_404(db: Session, framework: str, control_id_or_ref: str) -> ControlItem:
@@ -57,6 +59,16 @@ def dedupe_scope_values(raw_values: list[str] | None, *, label: str) -> list[str
     if len(vals) > 1000:
         raise DomainError(status_code=400, detail=f"Too many {label}")
     return vals
+
+
+def require_document_scope_access(db: Session, user: User) -> None:
+    """Scoping ISMS documents requires ISMS read access, as SWOT scope does.
+
+    The check comes before any lookup, so an unreadable document and a missing
+    one are refused alike.
+    """
+    if not can_read_isms(db, user):
+        raise DomainError(403, "ISMS read access is required to scope documents")
 
 
 def document_or_404(
@@ -180,6 +192,7 @@ def set_audit_scope(
     db: Session,
     audit: Audit,
     *,
+    user: User,
     control_values: list[str] | None,
     clause_values: list[str] | None,
     document_values: list[str] | None = None,
@@ -193,6 +206,8 @@ def set_audit_scope(
         state(db).require("documents")
     documents: list[IsmsDocument] = []
     if replace_documents:
+        if document_values:
+            require_document_scope_access(db, user)
         document_refs = dedupe_scope_values(document_values, label="documents")
         by_id: dict[uuid.UUID, IsmsDocument] = {}
         for d in [document_or_404(db, audit.framework_slug, v) for v in document_refs]:

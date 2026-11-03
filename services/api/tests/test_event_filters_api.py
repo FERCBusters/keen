@@ -8,6 +8,7 @@ read events.
 
 import csv
 import io
+import json
 import uuid
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -23,11 +24,33 @@ from app.db.models import (
     Mapping,
 )
 from app.mapping.rules import rule_rationale
+from app.security.regex import compile_pattern, validate_database_pattern
+from app.services import events as event_operations
+from psycopg2 import errors
+from sqlalchemy import event as sql_event
+from sqlalchemy import text
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401
 
 FW = "fw-filters"
+# Every view that applies the Events page filters, and a window covering the
+# fixture's events.
+FILTERED_VIEWS = (
+    "/v1/events",
+    "/v1/events/facets",
+    "/v1/events/export",
+    "/v1/charts/event_volume_timeseries",
+    "/v1/graph/control_source",
+    "/v1/graph/clause_source",
+)
+WINDOW = {"start_date": "2026-02-01", "end_date": "2026-03-31"}
+BACKREFERENCE = (
+    "Invalid regular expression: Backreferences are unsupported, and the database "
+    "reads a backslash followed by a digit as one; write a character code as a "
+    "hexadecimal escape such as \\x41"
+)
+LOOKAROUND = "Invalid regular expression: Lookahead and lookbehind are unsupported"
 
 
 @pytest.fixture
@@ -373,6 +396,11 @@ def test_list_filters_combine_lists_rules_and_text_conditions(events, params, ex
             "Invalid regular expression: Nested repetition can stall ingestion",
         ),
         (
+            "actor:regex:(?x)(a{1, 2}){1, 1000}$",
+            "Invalid regular expression: Expanded mode (the x flag) is unsupported; "
+            "write the pattern without it",
+        ),
+        (
             "actor:regex:(a)\\1",
             "Invalid regular expression: Backreferences are unsupported",
         ),
@@ -385,13 +413,77 @@ def test_list_filters_combine_lists_rules_and_text_conditions(events, params, ex
             "actor:regex:(?P<name>a)",
             "The database does not support this regular expression: invalid regular expression: invalid embedded option",
         ),
+        # Python reads \101 as the octal escape for "A"; once 101 groups
+        # precede it, PostgreSQL reads a back-reference, whose matching time
+        # grows polynomially with the text.
+        ("summary:regex:" + "()" * 98 + "(.*)(.*)(.+)\\101$", BACKREFERENCE),
+        ("summary:regex:\\101", BACKREFERENCE),
+        ("summary:regex:[\\1]", BACKREFERENCE),
+        # PostgreSQL's lookaround constraints take quadratic time.
+        ("summary:regex:a(?=.*z)", LOOKAROUND),
+        ("summary:not_regex:a(?!b)", LOOKAROUND),
+        ("any:regex:(?<=a)b", LOOKAROUND),
+        ("any:regex:(?<!a)b", LOOKAROUND),
     ],
 )
 def test_unusable_text_conditions_are_refused(events, condition, detail):
-    for path in ("/v1/events", "/v1/events/facets", "/v1/events/export"):
-        response = events.reader.get(path, params={"framework": FW, "f": condition})
+    for path in FILTERED_VIEWS:
+        response = events.reader.get(
+            path, params={"framework": FW, "f": condition, **WINDOW}
+        )
         assert response.status_code == 400, (path, response.text)
         assert response.json()["detail"] == detail, path
+
+
+def test_mapping_rule_patterns_keep_the_python_engine_rules():
+    # Rule patterns match in Python, which reads these constructs safely.
+    assert compile_pattern("\\101").search("A")
+    assert compile_pattern("a(?=b)").search("ab")
+    # The database check reads the pattern's text, so it also refuses an
+    # escaped backslash before a digit; [\\]1 matches a backslash and a digit.
+    for pattern in ("\\101", "a(?=b)", "\\\\1"):
+        with pytest.raises(ValueError):
+            validate_database_pattern(pattern)
+    validate_database_pattern("[\\\\]1")
+    validate_database_pattern("\\x41\\d+\\.\\(")
+
+
+def test_every_filtered_view_scans_with_the_budget(events):
+    """Each view applies the budget and reports a stopped scan as a 400."""
+    if not events.keen.postgres:
+        pytest.skip("PostgreSQL statement budgets")
+    params = {"framework": FW, "f": "summary:regex:review", **WINDOW}
+    for path in FILTERED_VIEWS:
+        assert events.reader.get(path, params=params).status_code == 200, path
+
+    dialect = events.db.get_bind().engine.dialect
+    budgets = []
+
+    def scan(cursor, statement, parameters, context):
+        if "~*" not in statement:
+            return False
+        cursor.execute("SHOW statement_timeout")
+        budgets.append(cursor.fetchone()[0])
+        if budgets[-1] != "0":
+            # The database stops the scan when its budget runs out.
+            raise errors.QueryCanceled("canceling statement due to statement timeout")
+        return False
+
+    sql_event.listen(dialect, "do_execute", scan)
+    try:
+        for n, path in enumerate(FILTERED_VIEWS):
+            budgets.clear()
+            # A source of its own leaves the view no cached answer.
+            response = events.reader.get(path, params={**params, "source": f"s{n}"})
+            assert budgets and set(budgets) == {"5s"}, (path, budgets)
+            assert response.status_code == 400, (path, response.text)
+            assert response.json()["detail"] == (
+                "The regular expression search took too long; narrow the date "
+                "range or simplify the pattern"
+            )
+            assert events.db.execute(text("SHOW statement_timeout")).scalar() == "0"
+    finally:
+        sql_event.remove(dialect, "do_execute", scan)
 
 
 def test_filter_lists_are_bounded(events):
@@ -549,6 +641,142 @@ def test_exports_apply_list_filters_and_name_them(events):
     assert response.headers["content-disposition"] == (
         'attachment; filename="events_source-ci-jenkins_rule-backup-runs.json"'
     )
+
+
+def _export_statements(events, record):
+    """Record each statement that reads a page of exported events."""
+
+    def page(conn, cursor, statement, parameters, context, executemany):
+        if "ORDER BY events.timestamp DESC" in statement:
+            record(statement)
+
+    engine = events.db.get_bind().engine
+    sql_event.listen(engine, "before_cursor_execute", page)
+    return lambda: sql_event.remove(engine, "before_cursor_execute", page)
+
+
+def test_exports_page_by_time_and_identifier(events, monkeypatch):
+    # Every fixture event has the same timestamp, so pages split within it.
+    monkeypatch.setattr(event_operations, "EXPORT_PAGE_ROWS", 3)
+    pages = []
+    stop = _export_statements(events, pages.append)
+    try:
+        response = events.reader.get(
+            "/v1/events/export", params={"framework": FW, "format": "json"}
+        )
+    finally:
+        stop()
+
+    assert response.status_code == 200, response.text
+    # Newest first, then by identifier, each event once.
+    stored = events.db.query(Event.id, Event.timestamp).all()
+    newest_first = sorted(stored, key=lambda row: (-row.timestamp.timestamp(), row.id))
+    expected = [str(row.id) for row in newest_first]
+    assert [item["id"] for item in response.json()["items"]] == expected
+    # Each page starts after the last one's key; none re-reads earlier events.
+    assert len(pages) == 3 and not any("OFFSET" in s for s in pages)
+
+
+@pytest.mark.parametrize("fmt", ["csv", "json", "ndjson"])
+def test_an_export_that_reaches_its_time_limit_says_so(events, monkeypatch, fmt):
+    clock = SimpleNamespace(now=1000.0)
+    monkeypatch.setattr(
+        event_operations, "time", SimpleNamespace(monotonic=lambda: clock.now)
+    )
+    monkeypatch.setattr(event_operations, "EXPORT_PAGE_ROWS", 2)
+    read_page, apply_budget = (
+        event_operations._export_page,
+        event_operations.scan_budget,
+    )
+    budgets = []
+
+    def slow_page(*args):
+        found = read_page(*args)
+        clock.now += 40
+        return found
+
+    def budget(db, filters, *, within_ms=None):
+        budgets.append(within_ms)
+        apply_budget(db, filters, within_ms=within_ms)
+
+    monkeypatch.setattr(event_operations, "_export_page", slow_page)
+    monkeypatch.setattr(event_operations, "scan_budget", budget)
+
+    response = events.reader.get(
+        "/v1/events/export", params={"framework": FW, "format": fmt}
+    )
+
+    assert response.status_code == 200, response.text
+    # The count and each page run within the time the export has left; after
+    # two 40-second pages, none is left for a third.
+    assert budgets == [60000, 60000, 20000]
+    detail = (
+        "Export incomplete: 4 of 8 events were exported before the export reached "
+        "its time limit; narrow the date range or filters and export again"
+    )
+    if fmt == "json":
+        exported = response.json()
+        assert len(exported.pop("items")) == 4
+        assert exported == {
+            "total": 8,
+            "returned": 8,
+            "incomplete": True,
+            "exported": 4,
+            "detail": detail,
+        }
+    elif fmt == "ndjson":
+        lines = [json.loads(line) for line in response.text.splitlines()]
+        assert len(lines) == 5 and all("id" in line for line in lines[:4])
+        assert lines[-1] == {"incomplete": True, "exported": 4, "detail": detail}
+    else:
+        rows = list(csv.reader(io.StringIO(response.text)))
+        assert rows[0][0] == "id" and len(rows) == 6
+        assert rows[-1] == [detail]
+
+
+def test_a_stopped_export_is_reported(events, monkeypatch):
+    """A count stopped by its budget is an error; a page stopped later ends the file."""
+    if not events.keen.postgres:
+        pytest.skip("PostgreSQL statement budgets")
+    monkeypatch.setattr(event_operations, "EXPORT_PAGE_ROWS", 3)
+    dialect = events.db.get_bind().engine.dialect
+    stop = {"count": True}
+    pages = []
+
+    def scan(cursor, statement, parameters, context):
+        # The database stops the chosen statement as its budget runs out.
+        cancelled = errors.QueryCanceled("canceling statement due to statement timeout")
+        if "count(*)" in statement and stop["count"]:
+            raise cancelled
+        if "ORDER BY events.timestamp DESC" in statement:
+            pages.append(statement)
+            if len(pages) == 2:
+                raise cancelled
+        return False
+
+    sql_event.listen(dialect, "do_execute", scan)
+    try:
+        counted = events.reader.get(
+            "/v1/events/export", params={"framework": FW, "format": "json"}
+        )
+        assert (counted.status_code, counted.json()["detail"]) == (
+            400,
+            "The search took too long; narrow the date range or filters",
+        )
+        # The next export counts and reads its first page; its second page is
+        # stopped after the response has started.
+        stop["count"] = False
+        response = events.reader.get(
+            "/v1/events/export", params={"framework": FW, "format": "json"}
+        )
+    finally:
+        sql_event.remove(dialect, "do_execute", scan)
+
+    assert response.status_code == 200, response.text
+    exported = response.json()
+    assert len(exported["items"]) == 3
+    assert (exported["incomplete"], exported["exported"]) == (True, 3)
+    assert exported["detail"].startswith("Export incomplete: 3 of 8 events")
 
 
 def test_the_ticker_shows_newer_arrivals_with_bounded_summaries(events):

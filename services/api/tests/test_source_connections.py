@@ -1,10 +1,12 @@
 """Connection isolation contracts."""
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import fakeredis
 import pytest
 from app.api.routes import source_connections as api
 from app.db.models import Event, SourceConnection
@@ -13,6 +15,7 @@ from app.ingest import connections as sc
 from app.ingest.common import store_event_with_artifact
 from app.mapping.rules import evaluate_by_framework, parse_rules
 from app.services.errors import DomainError
+from celery.exceptions import SoftTimeLimitExceeded
 from cryptography.fernet import Fernet
 
 
@@ -166,10 +169,60 @@ def test_failed_connection_does_not_block_others(monkeypatch):
         return [{"created_events": 1}]
 
     db = Mock()
-    result = run(db)
-    assert result[0]["error"] == "Connection ingestion failed"
-    assert result[1]["created_events"] == 1 and result[1]["connection_id"] == "good"
+    result = {row["connection_id"]: row for row in run(db)}
+    assert result["bad"]["error"] == "Connection ingestion failed"
+    assert result["good"]["created_events"] == 1
     db.rollback.assert_called_once()
+
+
+def test_a_time_limit_ends_the_whole_run(monkeypatch):
+    monkeypatch.setattr(sc.deployment_settings, "loki_enabled", True)
+    monkeypatch.setattr(sc, "get_valkey", lambda: None)
+    monkeypatch.setattr(
+        sc, "connections", lambda *a: [connection("slow"), connection("next")]
+    )
+    seen = []
+
+    @sc.connection_runs("loki")
+    def run(db):
+        seen.append(sc.identity()["connection_id"])
+        raise SoftTimeLimitExceeded()
+
+    with pytest.raises(SoftTimeLimitExceeded):
+        run(Mock())
+    # The run stops at the limit; later connections wait for the next run.
+    assert seen == ["slow"]
+
+
+def test_each_run_starts_one_connection_further_along(monkeypatch):
+    monkeypatch.setattr(sc.deployment_settings, "loki_enabled", True)
+    store = fakeredis.FakeRedis()
+    monkeypatch.setattr(sc, "get_valkey", lambda: store)
+    names = ["c", "a", "b", "off"]
+    monkeypatch.setattr(
+        sc,
+        "connections",
+        lambda *a: [replace(connection(name), enabled=name != "off") for name in names],
+    )
+    seen = []
+
+    @sc.connection_runs("loki")
+    def run(db):
+        seen.append(sc.identity()["connection_id"])
+        return []
+
+    starts = []
+    for _ in range(4):
+        seen.clear()
+        run(None)
+        assert sorted(seen) == ["a", "b", "c"]
+        starts.append(seen[0])
+        # The order is the stable one, rotated.
+        assert "".join(seen) in "abcab"
+    assert starts == ["b", "c", "a", "b"]
+    # A run of one connection draws no turn.
+    run(None, connection_id="a")
+    assert int(store.get("keen:ingest:rotation:loki")) == 4
 
 
 def test_disabled_type_does_not_resolve_secrets(monkeypatch):
@@ -468,7 +521,10 @@ def test_empty_environment_defaults_are_omitted(monkeypatch, source, sections):
     assert seen == ["named"]
     for section in sections:
         document[section] = [{"name": "configured"}]
-        assert [row["connection_id"] for row in run(None)] == ["env:" + source, "named"]
+        assert sorted(row["connection_id"] for row in run(None)) == [
+            "env:" + source,
+            "named",
+        ]
         document[section] = []
 
 
@@ -492,9 +548,10 @@ def test_broken_environment_config_does_not_block_named_source(monkeypatch):
 
     monkeypatch.setattr(sc, "deployment_document", broken)
     result = sc.connection_runs("forgejo")(lambda db: [{"created_events": 1}])(None)
-    assert result[0]["error"] == "Connection ingestion failed"
+    by_connection = {row["connection_id"]: row for row in result}
+    assert by_connection["env:forgejo"]["error"] == "Connection ingestion failed"
     assert "private" not in str(result)
-    assert result[1]["connection_id"] == "named"
+    assert by_connection["named"]["created_events"] == 1
 
 
 def test_bookstack_account_wide_environment_polling_is_preserved(monkeypatch):

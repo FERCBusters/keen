@@ -942,23 +942,15 @@ test('an audit trail failure is reported', async (t) => {
   assert.equal(el('auditMeta').textContent, 'Showing 0-0 of 0');
 });
 
-test('audit-only users see just the audit tab and no admin data', async (t) => {
-  const { el, ui, calls, state } = await admin(t, { me: { can_audit_trail: true } });
-  assert.equal(ui.window.location.hash, '#audit');
-  assert.ok(state.calls.some((c) => c.method === 'TAB' && c.url === 'tab-audit'));
-  assert.equal(el('tab-users').style.display, 'none');
-  assert.equal(el('tab-audit').style.display, '');
-  assert.equal(el('pane-users').style.display, 'none');
-  assert.equal(calls('GET', '/api/v1/users').length, 0);
-  assert.equal(calls('GET', '/api/v1/admin/ingest/status').length, 0);
-  assert.equal(calls('GET', '/api/v1/admin/source-catalogue').length, 0);
-  assert.equal(calls('GET', '/api/v1/admin/audit').length, 1);
-});
-
-test('users without admin or audit access are told so', async (t) => {
-  const { el, calls } = await admin(t, { me: {} });
-  assert.equal(el('out').textContent, 'You do not have access to this page.');
-  assert.equal(calls('GET', '/api/v1/admin/audit').length, 0);
+test('only administrators load the page, its audit trail included', async (t) => {
+  for (const me of [{}, { can_audit_trail: true, can_manage_audits: true }]) {
+    const { el, calls } = await admin(t, { me, hash: '#audit' });
+    assert.equal(el('out').textContent, 'You do not have access to this page.');
+    assert.equal(calls('GET', '/api/v1/admin/audit').length, 0);
+    assert.equal(calls('GET', '/api/v1/admin/entity-changelog').length, 0);
+    assert.equal(calls('GET', '/api/v1/users').length, 0);
+    assert.equal(el('tab-users').style.display, '');
+  }
 });
 
 test('tabs follow the address hash and update it when changed', async (t) => {

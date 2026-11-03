@@ -31,7 +31,12 @@ from app.security.permissions import can_read_events, has_permission
 from app.services.context import ChangeContext
 from app.services.control_inheritance import evidence_pairs
 from app.services.errors import DomainError
-from app.services.event_filters import EventFilters, event_predicates
+from app.services.event_filters import (
+    EventFilters,
+    event_predicates,
+    run_scan,
+    scan_budget,
+)
 
 
 def _event_filters(start_date: Optional[date], end_date: Optional[date]):
@@ -193,8 +198,11 @@ def graph_control_source(
         pairs = evidence_pairs(framework, db)
         group = _source_group_columns(breakdown)
         width = len(group)
+        scan_budget(db, scope)
 
-        edge_rows = (
+        edge_rows = run_scan(
+            db,
+            scope,
             db.query(
                 *group,
                 ControlItem.id,
@@ -207,16 +215,18 @@ def graph_control_source(
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(*group, ControlItem.id, ControlItem.ref, ControlItem.title)
-            .all()
+            .all,
         )
 
-        src_totals_rows = (
+        src_totals_rows = run_scan(
+            db,
+            scope,
             db.query(*group, func.count(func.distinct(Event.id)).label("n"))
             .join(pairs, pairs.c.event_id == Event.id)
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(*group)
-            .all()
+            .all,
         )
         src_totals = {
             _grouped_node_id(row, breakdown): int(row[-1] or 0)
@@ -332,8 +342,11 @@ def graph_clause_source(
         pairs = evidence_pairs(framework, db)
         group = _source_group_columns(breakdown)
         width = len(group)
+        scan_budget(db, scope)
 
-        edge_rows = (
+        edge_rows = run_scan(
+            db,
+            scope,
             db.query(
                 *group,
                 FrameworkClause.id,
@@ -356,10 +369,12 @@ def graph_clause_source(
                 FrameworkClause.ref,
                 FrameworkClause.title,
             )
-            .all()
+            .all,
         )
 
-        src_totals_rows = (
+        src_totals_rows = run_scan(
+            db,
+            scope,
             db.query(*group, func.count(func.distinct(Event.id)).label("n"))
             .join(pairs, pairs.c.event_id == Event.id)
             .join(ControlItem, ControlItem.id == pairs.c.control_id)
@@ -371,7 +386,7 @@ def graph_clause_source(
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(*group)
-            .all()
+            .all,
         )
         src_totals = {
             _grouped_node_id(row, breakdown): int(row[-1] or 0)

@@ -231,6 +231,13 @@ def normalize_saved_search_url(url: str | None) -> str:
     path = (parts.path or "").strip() or "/"
     if not path.startswith("/"):
         path = "/" + path
+    # Browsers resolve "." and ".." segments, "%2e" included, so a path such as
+    # /.//host or /x/%2e%2e//host becomes the network-path reference //host.
+    if any(
+        segment.lower().replace("%2e", ".") in {".", ".."}
+        for segment in path.split("/")
+    ):
+        raise DomainError(status_code=400, detail="Invalid saved search URL")
 
     pairs = []
     for k, v in parse_qsl(parts.query or "", keep_blank_values=False):

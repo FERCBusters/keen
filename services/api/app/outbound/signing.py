@@ -1,10 +1,22 @@
-"""Signatures for outbound webhook bodies."""
+"""Signatures for outbound webhooks, in Keen's signed-submission scheme.
 
-import hashlib
-import hmac
+Each delivery carries ``X-Keen-Timestamp`` (Unix seconds) and
+``X-Keen-Signature: v1=<hex>``, the HMAC-SHA256 of ``<timestamp>.<body>``
+under the shared secret, so a receiver can refuse stale and repeated
+deliveries as well as altered ones.
+"""
+
+import time
+
+from app.security.signed_webhooks import SIGNATURE_HEADER, TIMESTAMP_HEADER, sign
 
 
-def sign_body(secret: str, body: bytes) -> str:
-    """Return the ``sha256=<hex>`` HMAC header value for a request body."""
-    mac = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    return f"sha256={mac}"
+def signature_headers(
+    secret: str, body: bytes, now: float | None = None
+) -> dict[str, str]:
+    """Return the timestamp and signature headers for a delivery of ``body``."""
+    timestamp = str(int(time.time() if now is None else now))
+    return {
+        TIMESTAMP_HEADER: timestamp,
+        SIGNATURE_HEADER: sign(secret, timestamp, body),
+    }

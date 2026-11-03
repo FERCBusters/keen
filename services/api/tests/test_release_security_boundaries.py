@@ -3,16 +3,21 @@
 import asyncio
 import io
 import socket
+import ssl
 import subprocess
+import threading
+import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import app.services.artifacts as artifacts_operations
 import httpx
 import pytest
 from app.core.config import settings
-from app.ingest import forgejo, gitea, gitea_compatible, github, http
+from app.ingest import bookstack, forgejo, gitea, gitea_compatible, github, http
+from app.integrations import transport as custom
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.services.errors import DomainError
 from app.services.isms.schemas import (
@@ -20,9 +25,42 @@ from app.services.isms.schemas import (
     EffectivenessMetricEntryPayload,
     MeetingLinkPayload,
 )
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
+
+
+def tls_certificate(tmp_path, hostname="feed.example"):
+    """A self-signed certificate and key for a local TLS peer."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=1))
+        .not_valid_after(now + timedelta(days=1))
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(hostname)]), False)
+        .sign(key, hashes.SHA256())
+    )
+    certfile = tmp_path / "cert.pem"
+    keyfile = tmp_path / "key.pem"
+    certfile.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    keyfile.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    return certfile, keyfile
 
 
 async def body_request(chunks, headers=(), path="/v1/agents/enroll"):
@@ -354,42 +392,9 @@ def test_named_webhook_secret_never_retained_as_header_metadata(monkeypatch, hea
 
 def test_pinned_transport_verifies_original_tls_hostname(monkeypatch, tmp_path):
     """Local TLS peer verifies actual certificate handling, not just extensions."""
-    import ssl
-    import threading
-    from datetime import timedelta, timezone
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    from cryptography import x509
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    from cryptography.x509.oid import NameOID
-
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "feed.example")])
-    now = datetime.now(timezone.utc)
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(name)
-        .issuer_name(name)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now - timedelta(minutes=1))
-        .not_valid_after(now + timedelta(days=1))
-        .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName("feed.example")]), False
-        )
-        .sign(key, hashes.SHA256())
-    )
-    certfile = tmp_path / "cert.pem"
-    keyfile = tmp_path / "key.pem"
-    certfile.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-    keyfile.write_bytes(
-        key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        )
-    )
+    certfile, keyfile = tls_certificate(tmp_path)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -434,8 +439,6 @@ def test_pinned_transport_verifies_original_tls_hostname(monkeypatch, tmp_path):
             with pytest.raises(httpx.ConnectError):
                 client.get(f"https://feed.example:{server.server_port}/rss")
         # The custom API transport uses a separate TLS implementation.
-        from app.integrations import transport as custom
-
         monkeypatch.setattr(custom.ssl, "create_default_context", lambda: trusted)
         for host, valid in [("feed.example", True), ("wrong.example", False)]:
             conn = custom.PinnedHTTPS(host, server.server_port, "127.0.0.1", 2)
@@ -452,3 +455,144 @@ def test_pinned_transport_verifies_original_tls_hostname(monkeypatch, tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+# A hostile upstream sends its response one byte at a time, well inside the
+# per-read timeout, for far longer than the request budget.
+DRIP_SECONDS = 6.0
+BUDGET = 1.0
+READ_TIMEOUT = 1.0
+
+
+@pytest.fixture
+def dripping_peer(tmp_path):
+    """A real local TLS server; ``drip`` chooses what it sends slowly."""
+    certfile, keyfile = tls_certificate(tmp_path)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile, keyfile)
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(4)
+    listener.settimeout(0.2)
+    stop = threading.Event()
+    peer = SimpleNamespace(
+        port=listener.getsockname()[1], certfile=certfile, drip=None, served=0
+    )
+    body = b'{"ok": true}'
+
+    def drip(conn):
+        started = time.monotonic()
+        while time.monotonic() - started < DRIP_SECONDS and not stop.is_set():
+            conn.sendall(b"a")
+            time.sleep(READ_TIMEOUT / 4)
+
+    def respond(conn):
+        if peer.drip == "headers":
+            conn.sendall(b"HTTP/1.1 200 OK\r\nX-Drip: ")
+            drip(conn)
+            conn.sendall(b"\r\nContent-Type: application/json\r\n")
+        if peer.drip == "body":
+            conn.sendall(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                b"Content-Length: 100000\r\nConnection: close\r\n\r\n"
+            )
+            drip(conn)
+            return
+        if peer.drip != "headers":
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n")
+        conn.sendall(
+            b"Content-Length: %d\r\nConnection: close\r\n\r\n" % len(body) + body
+        )
+
+    def serve():
+        while not stop.is_set():
+            try:
+                raw, _ = listener.accept()
+            except OSError:
+                continue
+            try:
+                raw.settimeout(None)
+                conn = context.wrap_socket(raw, server_side=True)
+                request = b""
+                while b"\r\n\r\n" not in request:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    request += chunk
+                peer.served += 1
+                respond(conn)
+                conn.close()
+            except (OSError, ssl.SSLError):
+                raw.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        yield peer
+    finally:
+        stop.set()
+        thread.join(5)
+        listener.close()
+
+
+@pytest.mark.parametrize("drip", ["headers", "body"])
+def test_builtin_collection_budget_ends_a_dripping_response(
+    dripping_peer, monkeypatch, drip
+):
+    # Production transport construction; only its trust anchor and the address
+    # check (tested above) are substituted for the local peer.
+    monkeypatch.setattr(
+        http.httpx,
+        "create_ssl_context",
+        lambda **kw: ssl.create_default_context(cafile=str(dripping_peer.certfile)),
+    )
+    monkeypatch.setattr(http, "destination", lambda url: ["127.0.0.1"])
+    monkeypatch.setattr(http, "MAX_RESPONSE_SECONDS", BUDGET)
+    url = f"https://feed.example:{dripping_peer.port}/feed.xml"
+    with http.client(timeout=READ_TIMEOUT) as client:
+        # The same budgeted TLS path accepts an ordinary response and still
+        # verifies the original hostname.
+        assert client.get(url).json() == {"ok": True}
+        with pytest.raises(httpx.ConnectError):
+            client.get(f"https://wrong.example:{dripping_peer.port}/feed.xml")
+        dripping_peer.drip = drip
+        started = time.monotonic()
+        with pytest.raises((httpx.TimeoutException, TimeoutError)):
+            client.get(url)
+        elapsed = time.monotonic() - started
+    assert elapsed < BUDGET + 1.0
+    assert dripping_peer.served == 2
+
+
+@pytest.mark.parametrize("drip", ["headers", "body"])
+def test_custom_api_budget_ends_a_dripping_response(dripping_peer, monkeypatch, drip):
+    trusted = ssl.create_default_context(cafile=str(dripping_peer.certfile))
+    monkeypatch.setattr(custom.ssl, "create_default_context", lambda: trusted)
+    monkeypatch.setattr(
+        custom, "destination", lambda url: (custom.urlsplit(url), ["127.0.0.1"])
+    )
+    url = f"https://feed.example:{dripping_peer.port}/records"
+    assert custom.request(url, timeout=BUDGET) == (
+        {"ok": True},
+        {
+            "Content-Type": "application/json",
+            "Content-Length": "12",
+            "Connection": "close",
+        },
+    )
+    dripping_peer.drip = drip
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        custom.request(url, timeout=BUDGET)
+    assert time.monotonic() - started < BUDGET + 1.0
+
+
+def test_api_bookstack_lookups_use_the_budgeted_collection_transport(monkeypatch):
+    # Catalogue and page-snapshot lookups run inside API requests.
+    dns(monkeypatch, ["8.8.8.8"])
+    monkeypatch.setattr(settings, "ingestion_allowed_cidrs", "")
+    monkeypatch.setattr(settings, "bookstack_base_url", "https://docs.example")
+    monkeypatch.setattr(settings, "bookstack_token_id", "synthetic-id")
+    monkeypatch.setattr(settings, "bookstack_token_secret", "synthetic-secret")
+    with bookstack._client() as client:
+        assert isinstance(client._transport, http.IngestionTransport)

@@ -11,8 +11,10 @@ the same semantics:
   field: ``contains``, ``not_contains``, ``starts_with``, ``ends_with``,
   ``equals``, ``not_equals``, ``regex`` and ``not_regex``. Matching ignores
   case. A regular expression is checked with the same bounds as a mapping rule
-  pattern before it reaches the database, and the database scan has a time
-  budget.
+  pattern, and refused when it holds a back-reference or lookaround, before it
+  reaches the database. Every surface runs its scan through ``scan_budget``
+  and ``run_scan``, so the scan has a time budget and a stopped scan is
+  reported to the caller.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from app.db.models import (
     Mapping,
 )
 from app.mapping.rules import rule_rationale
-from app.security.regex import validate_pattern
+from app.security.regex import validate_database_pattern
 from app.services.control_inheritance import (
     effective_framework_ids,
     events_mapped_to,
@@ -164,7 +166,7 @@ def parse_text_condition(raw: str) -> TextCondition:
         )
     if op.endswith("regex"):
         try:
-            validate_pattern(value)
+            validate_database_pattern(value)
         except ValueError as exc:
             raise DomainError(400, f"Invalid regular expression: {exc}") from None
     return TextCondition(field=field_name, op=op, value=value)
@@ -292,10 +294,22 @@ def applies(filters: EventFilters, name: str) -> bool:
     return name not in filters.excluded
 
 
-def scan_budget(db: Session, filters: EventFilters) -> None:
-    """Bound a regular expression scan; the budget ends with the transaction."""
-    if filters.uses_regex and db.get_bind().dialect.name == "postgresql":
-        db.execute(text(f"SET LOCAL statement_timeout = {int(REGEX_SCAN_TIMEOUT_MS)}"))
+def scan_budget(
+    db: Session, filters: EventFilters, *, within_ms: int | None = None
+) -> None:
+    """Bound the statements of a filter scan; the budget ends with the transaction.
+
+    A regular expression scan stops after ``REGEX_SCAN_TIMEOUT_MS``.
+    ``within_ms`` bounds every statement, with or without a pattern, to the
+    time an operation has left.
+    """
+    limits = [REGEX_SCAN_TIMEOUT_MS] if filters.uses_regex else []
+    if within_ms is not None:
+        limits.append(within_ms)
+    if limits and db.get_bind().dialect.name == "postgresql":
+        # PostgreSQL reads zero as no limit, so the shortest budget is 1 ms.
+        budget = max(1, int(min(limits)))
+        db.execute(text(f"SET LOCAL statement_timeout = {budget}"))
 
 
 def run_scan(db: Session, filters: EventFilters, query):
@@ -312,10 +326,14 @@ def run_scan(db: Session, filters: EventFilters, query):
         if not statement_cancelled(exc):
             raise
         db.rollback()
+        if filters.uses_regex:
+            raise DomainError(
+                400,
+                "The regular expression search took too long; narrow the date "
+                "range or simplify the pattern",
+            ) from None
         raise DomainError(
-            400,
-            "The regular expression search took too long; narrow the date range "
-            "or simplify the pattern",
+            400, "The search took too long; narrow the date range or filters"
         ) from None
 
 

@@ -1,4 +1,9 @@
-"""HTTPS with validated/pinned DNS, no redirects/proxies, bounded responses."""
+"""HTTPS with validated/pinned DNS, no redirects/proxies, bounded responses.
+
+Each request's ``timeout`` is one wall-clock budget for the connection, TLS
+handshake, request, response headers and body, enforced on every socket
+operation as in the built-in collector transport.
+"""
 
 import base64
 import http.client
@@ -10,6 +15,7 @@ import ssl
 import time
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from app.ingest.http import budget, budgeted, remaining
 from cryptography.fernet import Fernet
 
 from .errors import IntegrationError
@@ -99,12 +105,17 @@ def destination(url):
 class PinnedHTTPS(http.client.HTTPSConnection):
     def __init__(self, hostname, port, address, timeout):
         super().__init__(
-            hostname, port, timeout=timeout, context=ssl.create_default_context()
+            hostname,
+            port,
+            timeout=timeout,
+            context=budgeted(ssl.create_default_context()),
         )
         self.address = address
 
     def connect(self):
-        sock = socket.create_connection((self.address, self.port), self.timeout)
+        sock = socket.create_connection(
+            (self.address, self.port), remaining(self.timeout)
+        )
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
 
 
@@ -119,6 +130,7 @@ def request(
     timeout=20,
     form=None,
 ):
+    deadline = time.monotonic() + timeout
     u, addresses = destination(url)
     pairs = parse_qsl(u.query, keep_blank_values=True) + list((query or {}).items())
     hdr = {
@@ -149,36 +161,33 @@ def request(
             if form is not None
             else "application/json"
         )
-    deadline = time.monotonic() + timeout
     conn = PinnedHTTPS(u.hostname, u.port or 443, addresses[0], timeout)
     try:
-        conn.request(
-            method,
-            (u.path or "/") + ("?" + urlencode(pairs) if pairs else ""),
-            payload,
-            hdr,
-        )
-        response = conn.getresponse()
-        if response.status != 200:
-            # Never include remote bodies/URLs or credentials in exceptions.
-            raise IntegrationError(
-                f"HTTP {response.status}: check credentials, endpoint and service availability"
+        with budget(deadline):
+            conn.request(
+                method,
+                (u.path or "/") + ("?" + urlencode(pairs) if pairs else ""),
+                payload,
+                hdr,
             )
-        if response.getheader("Content-Encoding", "identity") != "identity":
-            raise IntegrationError("Compressed responses are not supported")
-        data = bytearray()
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError("API response exceeded its time budget")
-            if conn.sock is not None:
-                conn.sock.settimeout(remaining)
-            chunk = response.read1(min(65536, MAX_BYTES + 1 - len(data)))
-            if not chunk:
-                break
-            data.extend(chunk)
-            if len(data) > MAX_BYTES:
-                raise IntegrationError("Response exceeds 4 MiB; reduce page size")
+            response = conn.getresponse()
+            if response.status != 200:
+                # Never include remote bodies/URLs or credentials in exceptions.
+                raise IntegrationError(
+                    f"HTTP {response.status}: check credentials, endpoint and service availability"
+                )
+            if response.getheader("Content-Encoding", "identity") != "identity":
+                raise IntegrationError("Compressed responses are not supported")
+            data = bytearray()
+            while True:
+                # Buffered bytes need no socket read, so check between chunks too.
+                remaining()
+                chunk = response.read1(min(65536, MAX_BYTES + 1 - len(data)))
+                if not chunk:
+                    break
+                data.extend(chunk)
+                if len(data) > MAX_BYTES:
+                    raise IntegrationError("Response exceeds 4 MiB; reduce page size")
         return json.loads(data), dict(response.getheaders())
     finally:
         conn.close()

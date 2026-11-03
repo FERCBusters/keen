@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { loadUi } from './support/load-ui.mjs';
 import { page, settle } from './support/page-fixture.mjs';
 
 const hostile = '<img src=x onerror=alert(1)>';
@@ -491,3 +492,22 @@ for (const [name, path, message] of [
     const missing = await detail(t, name, { path, query: '', swot: true, sources: true });
     assert.match(missing.ui.el('status').textContent, /^Missing /);
   });
+
+test('related SWOT significance and totals are inserted as text', async (t) => {
+  const ui = await loadUi('pages/swot-related.js', {
+    html: '<main><div id="host"></div></main>',
+    vendor: {
+      apiGet: async () => ({
+        items: [{ id: 's1', title: 'Team', kind: 'strength', significance: hostile }],
+        total: hostile,
+      }),
+      withFramework: (url) => url,
+    },
+  });
+  t.after(ui.close);
+  await ui.api.mountSwotRelated('document', 'd1', ui.document.getElementById('host'));
+  const pane = ui.document.getElementById('swotRelatedPane');
+  assert.equal(pane.querySelector('img'), null);
+  assert.match(pane.textContent, /strength · <img src=x onerror=alert\(1\)>\/5/);
+  assert.match(pane.textContent, /Explore in SWOT analysis \(<img src=x onerror=alert\(1\)>\)/);
+});

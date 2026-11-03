@@ -11,7 +11,7 @@ import httpx
 
 from app.core.config import settings
 from app.ingest.http import client as secure_http_client
-from app.outbound.signing import sign_body
+from app.outbound.signing import signature_headers
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +88,6 @@ class OutboundWebhookConfig:
     generic_urls: list[str]
     generic_headers: dict[str, str]
     generic_signing_secret: str
-    generic_signature_header: str
     timeout_seconds: float
 
     @classmethod
@@ -138,10 +137,6 @@ class OutboundWebhookConfig:
             generic_signing_secret=str(
                 settings.question_webhook_signing_secret or ""
             ).strip(),
-            generic_signature_header=str(
-                settings.question_webhook_signature_header or "X-Keen-Signature"
-            ).strip()
-            or "X-Keen-Signature",
             timeout_seconds=float(settings.question_webhook_timeout_seconds or 6.0),
         )
 
@@ -392,17 +387,17 @@ def send_question_created_webhooks(
             generic_payload, separators=(",", ":"), sort_keys=True
         ).encode("utf-8")
         generic_headers.setdefault("Content-Type", "application/json")
-        if config.generic_signing_secret:
-            generic_headers[config.generic_signature_header] = sign_body(
-                config.generic_signing_secret, body
-            )
 
         g_sent = 0
         g_failed = 0
         for url in config.generic_urls:
+            headers = dict(generic_headers)
+            if config.generic_signing_secret:
+                # Signed as each delivery is sent, so its timestamp is current.
+                headers.update(signature_headers(config.generic_signing_secret, body))
             try:
                 with client.stream(
-                    "POST", url, content=body, headers=generic_headers
+                    "POST", url, content=body, headers=headers
                 ) as response:
                     code = int(response.status_code)
                 if 200 <= code < 300:

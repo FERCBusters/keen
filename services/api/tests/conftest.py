@@ -81,3 +81,13 @@ def contract_db(contract_postgres_engine):
                 yield db
         finally:
             engine.dispose()
+
+
+@pytest.fixture
+def without_implied_permissions(monkeypatch):
+    """Audit management implies events.read and isms.read. A check that stands
+    on its own behind that implication runs with it switched off, so the account
+    under test holds exactly the permissions it was granted."""
+    from app.security import permissions
+
+    monkeypatch.setattr(permissions, "PERMISSION_IMPLICATIONS", {})

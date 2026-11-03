@@ -29,7 +29,7 @@ from app.schemas import (
     PermissionOut,
     UpstreamUrlPayload,
 )
-from app.security.auth import require_admin, require_authenticated
+from app.security.auth import require_admin
 from app.services import admin as service
 from app.services import cloud_posture, control_owners
 from app.services.presentation import (
@@ -490,7 +490,7 @@ def admin_audit_trail(
     method: str | None = None,
     status_min: int | None = None,
     status_max: int | None = None,
-    user=Depends(require_authenticated),
+    user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     "List internal UI->API audit trail entries.\n\n    Records are written by middleware in app/main.py.\n"
@@ -515,10 +515,10 @@ def admin_entity_changelog(
     entity_id: str | None = None,
     username: str | None = None,
     q: str | None = None,
-    user=Depends(require_authenticated),
+    user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    "List semantic entity changelogs for Admin → Audit trail.\n\n    This complements the lower-level request AuditLog by showing the user-facing\n    before/after diff for Control, Clause and Risk changes.\n"
+    "List semantic entity changelogs for Admin → Audit trail.\n\n    This complements the lower-level request AuditLog by showing the user-facing\n    before/after diff of every recorded change.\n"
     return service.admin_entity_changelog(
         limit=limit,
         offset=offset,

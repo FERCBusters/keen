@@ -5,12 +5,18 @@ runs. Requests pass the production middleware, sign-in, CSRF and the
 administrator and demo-mode guards; a list records each broker hand-off.
 """
 
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 from app.core.config import settings
-from app.db.models import IntegrationCollector, IsmsEffectivenessMeasure
+from app.db.models import (
+    IntegrationCollector,
+    IntegrationConnection,
+    IsmsEffectivenessMeasure,
+)
+from app.integrations import transport
 from app.services import integrations as integration_operations
 from cryptography.fernet import Fernet
 
@@ -158,6 +164,22 @@ def test_definitions_never_hold_credentials(api, definition):
     assert api.keen.db.query(IntegrationCollector).count() == 0
 
 
+@pytest.mark.parametrize(
+    "definition",
+    [
+        {**DEFINITION, "path": "/../tenant-b/collect"},
+        {**DEFINITION, "path": "/v1/%2e%2e/%2e%2e/tenant-b/collect"},
+        {**DEFINITION, "enrichments": [{"name": "d", "path": "/..%2ftenant-b/{/id}"}]},
+    ],
+    ids=["collection", "encoded-collection", "detail"],
+)
+def test_definitions_cannot_send_the_credential_outside_the_base_path(api, definition):
+    refused = collector(api, definition, status=422)
+
+    assert ". or .. segments" in json.dumps(refused)
+    assert api.keen.db.query(IntegrationCollector).count() == 0
+
+
 def test_collector_definitions_are_bounded_and_need_a_real_connection(api):
     oversized = collector(api, {**DEFINITION, "query": {"q": "x" * 70000}}, 422)
     assert oversized["detail"] == "Definition exceeds 64 KiB"
@@ -263,6 +285,14 @@ CONNECTION = {"name": "Checks", "base_url": "https://checks.example"}
             {"auth_options": {"token_path": "/token?grant=1"}},
             "OAuth token path must be relative to the connection",
         ),
+        (
+            {"auth_options": {"token_path": "/../tenant-b/oauth/token"}},
+            "OAuth token path cannot contain . or .. segments",
+        ),
+        (
+            {"auth_options": {"token_path": "/tenant-a/%2E%2E/oauth/token"}},
+            "OAuth token path cannot contain . or .. segments",
+        ),
         ({"auth_kind": "bearer"}, "A credential is required"),
         (
             {"auth_kind": "bearer", "secret": "line\nbreak"},
@@ -297,19 +327,26 @@ def test_saved_credentials_never_follow_an_edit_elsewhere(api, monkeypatch):
         body = {**current, **changes, "version": version}
         return api.call("PUT", f"/connections/{key}", body, status)
 
-    redirect = "Supply a new credential when changing the connection origin"
+    redirect = "Supply a new credential when changing the connection base URL"
     for changes in (
         {"base_url": "https://collector.attacker.example"},
         {"base_url": "https://checks.example:8443"},
+        # The same origin with another path is another destination.
+        {"base_url": "https://checks.example/tenants/b"},
+        {"base_url": "https://checks.example/Tenants"},
         {"auth_name": "X-Other"},
     ):
         assert edit(422, **changes)["detail"].startswith(redirect)
     assert edit(422, auth_kind="bearer")["detail"] == (
         "Supply a new credential when changing authentication type"
     )
-    # Renaming keeps the saved credential; a new origin needs a new one.
+    # Renaming keeps the saved credential, and so do spellings of the same
+    # destination; a new destination needs a new one.
     assert edit(name="Renamed checks")["has_secret"] is True
     current["name"] = "Renamed checks"
+    for same in ("https://CHECKS.example/", "https://checks.example:443"):
+        assert edit(base_url=same)["has_secret"] is True
+    current["base_url"] = "https://checks.example"
     moved = edit(base_url="https://new-checks.example", secret="new-s3")
     assert (moved["base_url"], moved["has_secret"]) == (
         "https://new-checks.example",
@@ -320,6 +357,46 @@ def test_saved_credentials_never_follow_an_edit_elsewhere(api, monkeypatch):
     assert cleared["has_secret"] is False
     stale = api.call("PUT", f"/connections/{key}", {**current, "version": 1}, 409)
     assert stale["detail"] == "This item changed. Reload before saving."
+
+
+def test_a_new_base_path_needs_the_oauth_secret_again(api, monkeypatch):
+    # The token request goes to base URL + token path, so a path change on
+    # the same origin would post the saved client secret somewhere else.
+    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
+    body = {
+        "name": "Gateway tenant A",
+        "base_url": "https://gateway.example/tenants/a",
+        "auth_kind": "oauth_client_credentials",
+        "username": "client-a",
+        "auth_options": {"token_path": "/oauth/token"},
+    }
+    saved = api.call("POST", "/connections", {**body, "secret": "synthetic-a"})
+    moved = {**body, "base_url": "https://gateway.example/tenants/b", "version": 1}
+
+    refused = api.call("PUT", f"/connections/{saved['id']}", moved, 422)
+    assert refused["detail"].startswith("Supply a new credential")
+    connection = api.keen.db.get(IntegrationConnection, saved["id"])
+    api.keen.db.refresh(connection)
+    assert connection.base_url == "https://gateway.example/tenants/a"
+
+    sent = []
+    monkeypatch.setattr(
+        transport,
+        "request",
+        lambda url, **kw: (
+            sent.append((url, kw["auth"]["secret"]))
+            or ({"access_token": "t", "token_type": "Bearer"}, {})
+        ),
+    )
+    transport.connection_auth(connection)
+    # With a new secret the move is accepted, and the new secret goes there.
+    api.call("PUT", f"/connections/{saved['id']}", {**moved, "secret": "synthetic-b"})
+    api.keen.db.refresh(connection)
+    transport.connection_auth(connection)
+    assert sent == [
+        ("https://gateway.example/tenants/a/oauth/token", "synthetic-a"),
+        ("https://gateway.example/tenants/b/oauth/token", "synthetic-b"),
+    ]
 
 
 def test_live_revisions_change_only_between_runs(api):

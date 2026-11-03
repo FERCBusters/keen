@@ -12,6 +12,7 @@ import {
   confirmAction,
   esc,
   fmtTs,
+  localPath,
   safeExternalHref,
   toast,
   withFramework,
@@ -44,9 +45,9 @@ export function questionHref(item, framework) {
       `/event.html?id=${encodeURIComponent(item?.event_id || '')}&thread=${encodeURIComponent(item?.thread_id || '')}#questions`,
     framework,
   );
-  // target_url is built by the server; checking the scheme keeps a future
-  // user-influenced value from becoming a javascript: or data: link.
-  return safeExternalHref(href) || '#';
+  // The server builds target_url as a Keen path; anything else, another site
+  // or a javascript: or data: link included, opens nothing.
+  return localPath(href) || '#';
 }
 
 export function questionTitle(item) {

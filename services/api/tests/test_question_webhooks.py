@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from app.outbound import question_webhooks as qw
-from app.outbound.signing import sign_body
+from app.outbound.signing import signature_headers
+from app.security.signed_webhooks import matches, presented
 
 PAYLOAD = {
     "type": "keen.question.created",
@@ -57,12 +58,22 @@ def test_parse_json_headers():
     assert qw._parse_json_headers(None) == {}
 
 
-def test_hmac_signature_format():
-    expected = hashlib.sha256(b"").hexdigest()
-    mac = sign_body("secret", b"")
-    assert mac == f"sha256={hmac.new(b'secret', b'', hashlib.sha256).hexdigest()}"
-    assert mac.split("=", 1)[0] == "sha256"
-    assert expected != mac.split("=", 1)[1]
+def test_deliveries_are_signed_over_their_timestamp_and_body():
+    headers = signature_headers("secret", b'{"a":1}', now=1_700_000_000)
+    assert headers == {
+        "X-Keen-Timestamp": "1700000000",
+        "X-Keen-Signature": "v1="
+        + hmac.new(b"secret", b'1700000000.{"a":1}', hashlib.sha256).hexdigest(),
+    }
+    # A receiver checks them exactly as Keen checks signed submissions.
+    timestamp, signature = presented(
+        [headers["X-Keen-Timestamp"]],
+        [headers["X-Keen-Signature"]],
+        now=1_700_000_060,
+    )
+    assert matches("secret", timestamp, b'{"a":1}', signature)
+    assert not matches("secret", timestamp, b'{"a":2}', signature)
+    assert not matches("secret", "1700000001", b'{"a":1}', signature)
 
 
 def test_abs_url_and_question_links():
@@ -83,7 +94,6 @@ def test_from_settings_created_uses_primary_urls():
             "question_webhook_generic_urls": "https://gw.example",
             "question_webhook_generic_headers_json": '{"X-Env": "yes"}',
             "question_webhook_signing_secret": "  fixture-secret  ",
-            "question_webhook_signature_header": " X-Sig ",
             "question_webhook_timeout_seconds": "4",
         }.items():
             stack.enter_context(patch.object(qw.settings, attr, value))
@@ -94,7 +104,6 @@ def test_from_settings_created_uses_primary_urls():
     assert config.generic_urls == ["https://gw.example"]
     assert config.generic_headers == {"X-Env": "yes"}
     assert config.generic_signing_secret == "fixture-secret"
-    assert config.generic_signature_header == "X-Sig"
     assert config.timeout_seconds == 4.0
     assert config.any_enabled() is True
 
@@ -124,7 +133,6 @@ def test_from_settings_reply_fallback():
             stack.enter_context(patch.object(qw.settings, attr, None))
         config = qw.OutboundWebhookConfig.from_settings(event="reply")
     assert config.slack_urls == ["https://primary.slack"]
-    assert config.generic_signature_header == "X-Keen-Signature"
     assert config.timeout_seconds == float(
         qw.settings.question_webhook_timeout_seconds or 6.0
     )
@@ -254,7 +262,6 @@ def make_config(**overrides):
         "generic_urls": [],
         "generic_headers": {},
         "generic_signing_secret": "",
-        "generic_signature_header": "X-Keen-Signature",
         "timeout_seconds": 2.0,
     }
     values.update(overrides)
@@ -306,9 +313,12 @@ def test_send_created_webhooks_success_and_signature():
     generic_post = next(entry for entry in seen if "gw.example" in entry.get("url", ""))
     assert generic_post["headers"]["content-type"] == "application/json"
     assert generic_post["headers"]["x-instance"] == "corp"
-    assert generic_post["headers"]["x-keen-signature"] == sign_body(
-        "fixture-secret", generic_post["body"]
+    sent = generic_post["headers"]
+    timestamp, signature = presented(
+        [sent["x-keen-timestamp"]], [sent["x-keen-signature"]]
     )
+    assert matches("fixture-secret", timestamp, generic_post["body"], signature)
+    assert not any(value.startswith("sha256=") for value in sent.values())
     expected_body = json.dumps(PAYLOAD, separators=(",", ":"), sort_keys=True).encode()
     assert generic_post["body"] == expected_body
 
@@ -320,6 +330,7 @@ def test_send_created_webhooks_no_signing_secret_no_header():
         out = qw.send_question_created_webhooks(config, PAYLOAD)
     generic_post = next(entry for entry in seen if "gw.example" in entry.get("url", ""))
     assert "x-keen-signature" not in generic_post["headers"]
+    assert "x-keen-timestamp" not in generic_post["headers"]
     assert out["generic_sent"] == 1
 
 

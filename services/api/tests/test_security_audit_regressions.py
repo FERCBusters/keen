@@ -403,7 +403,6 @@ def test_outbound_notification_rejects_cleartext_and_loopback(monkeypatch, url):
         url=url,
         headers={},
         signing_secret="synthetic",
-        signature_header="X-Signature",
         timeout_seconds=1,
     )
     with pytest.raises(ValueError):

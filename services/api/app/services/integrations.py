@@ -19,7 +19,7 @@ from app.db.models import IntegrationRevision as Revision
 from app.db.models import IntegrationRun as Run
 from app.db.models import IsmsEffectivenessMeasure as Measure
 from app.integrations.runtime import dispatch, fail, queue_run
-from app.integrations.schema import Definition, Strict
+from app.integrations.schema import Definition, Strict, has_dot_segment
 from app.integrations.templates import templates
 from app.integrations.transport import encrypt
 from app.services.errors import DomainError
@@ -231,6 +231,10 @@ def _save_connection(key, body, db, new=False):
         or "#" in token_path
     ):
         raise DomainError(422, "OAuth token path must be relative to the connection")
+    if has_dot_segment(token_path):
+        raise DomainError(
+            422, "OAuth token path cannot contain . or .. segments, encoded or not"
+        )
     c = Connection(id=key, version=0) if new else require(db, Connection, key, True)
     match_version(c, body.version)
     if body.auth_kind != "none" and not body.secret and not c.encrypted_secret:
@@ -245,14 +249,22 @@ def _save_connection(key, body, db, new=False):
             422, "Supply a new credential when changing authentication type"
         )
 
-    def origin(url):
+    def destination(url):
+        # Requests, including the OAuth token request, join their paths to
+        # the base URL without its trailing slash; every other part of the
+        # scheme, host, port and path decides where the secret goes.
         parts = urlsplit(url or "")
-        return parts.scheme, (parts.hostname or "").lower(), parts.port or 443
+        return (
+            parts.scheme.lower(),
+            (parts.hostname or "").lower(),
+            parts.port or 443,
+            parts.path.rstrip("/"),
+        )
 
     def presentation(base_url, auth_name, auth_options):
         # Where the saved secret is sent and under which header or parameter.
         return (
-            origin(base_url),
+            destination(base_url),
             (auth_name or "").strip(),
             (auth_options or {}).get("token_path", "/oauth/token"),
         )
@@ -268,7 +280,7 @@ def _save_connection(key, body, db, new=False):
         # Saved secrets are write-only; never let an edit redirect them elsewhere.
         raise DomainError(
             422,
-            "Supply a new credential when changing the connection origin, "
+            "Supply a new credential when changing the connection base URL, "
             "credential header or parameter, or OAuth token path",
         )
     for name in (

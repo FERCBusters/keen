@@ -5,6 +5,7 @@ import logging
 import math
 from functools import partial
 
+import anyio
 from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -12,6 +13,8 @@ from fastapi.routing import APIRoute
 from sqlalchemy.exc import DataError
 
 from app.security.redaction import storable
+from app.security.request_limits import json_body_limit
+from app.security.route_policy import policy_path
 from app.services.errors import DomainError
 
 MAX_JSON_DEPTH = 64
@@ -97,7 +100,13 @@ async def json_object(request: Request) -> dict:
 
 async def _strict_json(request: Request):
     if not hasattr(request, "_json"):
-        request._json = decode_json_body(await request.body())
+        body = await request.body()
+        if len(body) > json_body_limit(policy_path(request)):
+            raise HTTPException(413, "Request body too large")
+        # Decoding runs in a worker thread, where the depth walk and NUL
+        # replacement share the interpreter with the event loop. The size
+        # limit bounds the C decoder, which holds the interpreter lock.
+        request._json = await anyio.to_thread.run_sync(decode_json_body, body)
     return request._json
 
 

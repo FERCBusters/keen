@@ -137,6 +137,37 @@ test('overview reports coverage and highlight counts for the selected framework'
   assert.equal(ui.el('homeActivity').hidden, true);
 });
 
+test('attention items link only to paths on Keen', async (t) => {
+  const item = (label, href) => ({ href, label, detail: 'Review' });
+  const ui = await home(t, {
+    routes: {
+      '/api/v1/home': {
+        control_count: 1,
+        clause_count: 0,
+        attention: [
+          // Its dot segments resolve to "//evil.example/phish" once the framework is added.
+          item('Dots', '/.//evil.example/phish'),
+          item('Parent', '/x/..//evil.example/phish'),
+          item('Script', 'javascript:alert(1)'),
+          item('Audit', '/audits.html'),
+        ],
+      },
+    },
+  });
+  assert.deepEqual(
+    [...ui.el('homeAttention').querySelectorAll('.home-attention-item')].map((a) => [
+      a.querySelector('strong').textContent,
+      a.getAttribute('href'),
+    ]),
+    [
+      ['Dots', '#'],
+      ['Parent', '#'],
+      ['Script', '#'],
+      ['Audit', '/audits.html?framework=A'],
+    ],
+  );
+});
+
 test('the activity band renders the chart payload with its accessibility text', async (t) => {
   const ui = await home(t);
   assert.equal(ui.el('homeActivity').hidden, false);
@@ -291,8 +322,24 @@ test('a stale cached home page reloads once with a revision marker, then explain
       },
     },
   });
-  assert.deepEqual(replaced, ['/?framework=B&__keen_home=20261026-home-5#explore']);
+  assert.deepEqual(replaced, [
+    'https://keen.example/?framework=B&__keen_home=20261026-home-5#explore',
+  ]);
   assert.equal(stale.calls.length, 0);
+
+  // A page reached at a path beginning with "//" reloads on this site, never at that "host".
+  await home(t, {
+    htmlName: 'events',
+    globals: {
+      location: {
+        href: 'https://keen.example//evil.example/phish?framework=B',
+        replace: (u) => replaced.push(u),
+      },
+    },
+  });
+  const reload = new URL(replaced.pop(), 'https://keen.example');
+  assert.equal(reload.origin, 'https://keen.example');
+  assert.equal(reload.pathname, '//evil.example/phish');
 
   const looping = await home(t, {
     htmlName: 'events',

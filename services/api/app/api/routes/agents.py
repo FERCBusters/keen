@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import gzip
+import hashlib
 import io
 import json
 import logging
@@ -33,6 +34,8 @@ from app.services.errors import DomainError
 
 from .agent_enrollment import router as enrollment_router
 
+logger = logging.getLogger(__name__)
+
 
 class AgentRoute(DomainRoute):
     def get_route_handler(self):
@@ -60,10 +63,17 @@ class AgentRoute(DomainRoute):
                     status_code=exc.status_code,
                     headers=exc.headers,
                 )
-            except Exception:
+            except Exception as exc:
                 if request.url.path != "/v1/otlp/logs":
                     raise
-                logging.getLogger(__name__).exception("OTLP batch failed")
+                # Database and storage errors can quote stored values, so the
+                # log names the batch, its sender and the error class alone.
+                logger.error(
+                    "OTLP batch %s from agent %s failed (%s)",
+                    getattr(request.state, "otlp_batch", "-"),
+                    getattr(request.state, "agent_id", "-"),
+                    type(exc).__name__,
+                )
                 return JSONResponse(
                     {
                         "code": 13,
@@ -165,6 +175,7 @@ def _admit_batch(request, db):
 async def ingest(request: Request, response: Response, db: Session = Depends(get_db)):
     live_only()
     auth = await run_in_threadpool(_admit_batch, request, db)
+    request.state.agent_id = auth.agent_id
     opened = None
     if auth.signed is not None:
         # keen-agent: the signature covers the encrypted body.
@@ -216,6 +227,8 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
         raise HTTPException(
             400, "Invalid OTLP JSON logs; maximum 64 records and bounded attributes"
         )
+    # Names the batch in diagnostics: a resent batch has the same digest.
+    request.state.otlp_batch = hashlib.sha256(body).hexdigest()[:16]
     result = await run_in_threadpool(
         partial(
             service.persist_batch,

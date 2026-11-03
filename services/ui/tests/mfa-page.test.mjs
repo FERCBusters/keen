@@ -114,7 +114,16 @@ test('a TOTP-only account is asked for its authenticator code and completes sign
   assert.deepEqual(ui.navigations, [['replace', '/events.html?q=x']]);
 });
 
-for (const next of ['https://evil.example/', '//evil.example/x', '/mfa.html', '/\\evil.example'])
+for (const next of [
+  'https://evil.example/',
+  '//evil.example/x',
+  '/mfa.html',
+  '/\\evil.example',
+  '/.//evil.example/phish',
+  '/%2e//evil.example/phish',
+  '/x/..//evil.example/phish',
+  'javascript:alert(1)',
+])
   test('post-MFA navigation ignores unsafe next value ' + JSON.stringify(next), async (t) => {
     const ui = await mfaPage(t, {
       states: [verifyState(), readyState],

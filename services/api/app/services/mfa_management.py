@@ -82,11 +82,30 @@ def state(*, context: ChangeContext, db: Session, row, user):
     }
 
 
+CODES_REFUSED = (
+    "Too many incorrect codes; sign in again in an hour, or use a security key"
+)
+
+
 def verify_code(*, payload: Code, context: ChangeContext, db: Session, row, user):
     if row.stage != "verify":
         raise DomainError(400, "Start a second-factor verification first")
+    # The account's row is locked, so concurrent guesses are counted in turn,
+    # and the count survives a new sign-in.
+    if mfa.codes_refused(user):
+        db.delete(row)
+        db.commit()
+        raise DomainError(401, CODES_REFUSED)
     if not mfa.verify_code(db, user, payload.code.strip(), payload.kind):
+        if mfa.record_wrong_code(user):
+            db.delete(row)
+            mfa.audit(db, user, "verification-ended", ip=context.client_ip)
+            db.commit()
+            raise DomainError(401, CODES_REFUSED)
+        mfa.audit(db, user, "rejected-" + payload.kind, ip=context.client_ip)
+        db.commit()
         raise DomainError(400, "Invalid or already-used code")
+    mfa.clear_wrong_codes(user)
     mfa.verified(row)
     mfa.audit(db, user, "verified-" + payload.kind, ip=context.client_ip)
     db.commit()

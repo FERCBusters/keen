@@ -7,6 +7,7 @@ import {
   getCurrentFramework,
   progressRing,
   withFramework,
+  localPath,
 } from '/app.js';
 
 // HTML and unversioned modules must come from the same UI release. A browser
@@ -33,7 +34,7 @@ function ensureHomeLayout() {
     // Preserve the chosen framework and other parameters. A different URL
     // bypasses a fresh cached document without creating a reload loop.
     url.searchParams.set('__keen_home', revision);
-    location.replace(url.pathname + url.search + url.hash);
+    location.replace(url.href);
   } else {
     const message = document.createElement('div');
     message.className = 'alert alert-warning m-4';
@@ -110,7 +111,7 @@ if (ensureHomeLayout()) {
   }
 
   function homeLink(href) {
-    return esc(withFramework(href, framework));
+    return esc(localPath(withFramework(href, framework)) || '#');
   }
   function homeNumber(value) {
     return Number.isFinite(value) ? value.toLocaleString() : '-';

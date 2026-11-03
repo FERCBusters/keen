@@ -14,6 +14,7 @@ import {
   resolveSavedSearchUrl,
   getCurrentFramework,
   withFramework,
+  localPath,
   showTableLoading,
   progressRing,
 } from '/app.js';
@@ -140,7 +141,7 @@ function render() {
     const evHtml = withheld
       ? '<span class="small-muted">-</span>'
       : ev > 0
-        ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=evidence`, framework)}" class="badge badge-soft">${ev}</a>`
+        ? `<a href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=evidence`, framework)}" class="badge badge-soft">${esc(ev)}</a>`
         : `<span class="badge text-bg-light">0</span>`;
 
     const lastIso = c.last_evidence || '';
@@ -286,8 +287,9 @@ document.getElementById('frontSearch').addEventListener('submit', (ev) => {
 
   // If the input matches a saved search name, jump straight to that saved URL.
   const saved = resolveSavedSearchUrl(q);
-  if (saved) {
-    location.href = withFramework(saved, framework);
+  const target = saved && localPath(withFramework(saved, framework));
+  if (target) {
+    location.href = target;
     return;
   }
 

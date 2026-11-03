@@ -2,11 +2,21 @@
 
 Resolve and validate immediately before connecting, pin the selected address,
 and retain the original hostname for TLS verification and the Host header.
+
+Each request has one wall-clock budget covering the connection, TLS handshake,
+request, response headers and body. A socket timeout restarts with every byte,
+so an upstream that drips its status line or headers would otherwise hold a
+request open indefinitely; every TLS socket operation therefore waits at most
+for what remains of the budget. The custom API transport shares this bound.
 """
 
 import ipaddress
 import socket
+import ssl
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from threading import Lock
 from urllib.parse import urlsplit
 
@@ -20,6 +30,68 @@ suppress_provider_logs("httpx")
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_RESPONSE_SECONDS = 120
+
+_deadline: ContextVar[float | None] = ContextVar("keen_request_deadline", default=None)
+
+
+@contextmanager
+def budget(deadline: float) -> Iterator[None]:
+    """End this thread's socket operations at ``deadline`` (``time.monotonic``)."""
+    token = _deadline.set(deadline)
+    try:
+        yield
+    finally:
+        _deadline.reset(token)
+
+
+def remaining(timeout: float | None = None) -> float | None:
+    """``timeout`` limited to what is left of the current request's budget."""
+    deadline = _deadline.get()
+    if deadline is None:
+        return timeout
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise TimeoutError("Request exceeded its time budget")
+    return left if timeout is None else min(timeout, left)
+
+
+class BudgetedSocket(ssl.SSLSocket):
+    """A TLS socket whose handshake, reads and writes end with the budget.
+
+    Each operation's timeout is clamped just before it starts; CPython bounds a
+    whole TLS read, write or handshake by the socket timeout, so a peer sending
+    one byte at a time cannot extend a request past its deadline.
+    """
+
+    def _bound(self) -> None:
+        timeout = self.gettimeout()
+        if timeout != 0.0:  # leave non-blocking sockets as they are
+            self.settimeout(remaining(timeout))
+
+    def do_handshake(self, block=False):
+        self._bound()
+        return super().do_handshake(block)
+
+    def read(self, len=1024, buffer=None):
+        self._bound()
+        return super().read(len, buffer)
+
+    def write(self, data):
+        self._bound()
+        return super().write(data)
+
+    def send(self, data, flags=0):
+        self._bound()
+        return super().send(data, flags)
+
+
+def budgeted(context: ssl.SSLContext) -> ssl.SSLContext:
+    """Make ``context`` create sockets that observe the current request budget.
+
+    Certificate and hostname verification are those of ``context``.
+    """
+    context.sslsocket_class = BudgetedSocket
+    return context
 
 
 def destination(url):
@@ -98,8 +170,15 @@ class LimitedStream(httpx.SyncByteStream):
 
     def __iter__(self):
         count = 0
+        chunks = iter(self.stream)
         try:
-            for chunk in self.stream:
+            while True:
+                # The budget applies only while this stream reads, never while
+                # the caller holds a chunk.
+                with budget(self.deadline):
+                    chunk = next(chunks, None)
+                if chunk is None:
+                    break
                 if time.monotonic() > self.deadline:
                     raise TimeoutError("Ingestion response exceeded its time budget")
                 count += len(chunk)
@@ -126,12 +205,23 @@ class IngestionTransport(httpx.BaseTransport):
         headers = request.headers.copy()
         headers["Host"] = request.url.netloc.decode("ascii")
         headers["Accept-Encoding"] = "identity"
+        configured = request.extensions.get("timeout", {})
+        with budget(deadline):
+            # The TCP connection is made before its TLS socket exists.
+            timeouts = {
+                name: remaining(configured.get(name))
+                for name in ("connect", "read", "write", "pool")
+            }
         pinned = httpx.Request(
             request.method,
             request.url.copy_with(host=addresses[0]),
             headers=headers,
             stream=request.stream,
-            extensions={**request.extensions, "sni_hostname": request.url.host},
+            extensions={
+                **request.extensions,
+                "sni_hostname": request.url.host,
+                "timeout": timeouts,
+            },
         )
         # Pools are keyed by the original origin as well as the pinned IP;
         # two HTTPS hosts on one IP must each perform hostname verification.
@@ -139,10 +229,12 @@ class IngestionTransport(httpx.BaseTransport):
         with self.lock:
             if origin not in self.transports:
                 self.transports[origin] = httpx.HTTPTransport(
-                    verify=True, trust_env=False
+                    verify=budgeted(httpx.create_ssl_context(trust_env=False)),
+                    trust_env=False,
                 )
             transport = self.transports[origin]
-        response = transport.handle_request(pinned)
+        with budget(deadline):
+            response = transport.handle_request(pinned)
         # Do not allow an upstream to bypass the byte cap with a compression bomb.
         if response.headers.get("content-encoding", "identity").lower() != "identity":
             response.close()

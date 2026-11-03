@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AuditLog, User
+from app.security.redaction import redact_str
 from app.services.context import ChangeContext
 
 
@@ -28,7 +29,9 @@ def record_action(
             qs = None
 
     ua = (context.user_agent or "").strip() or None
-    ref = (context.referer or "").strip() or None
+    # Redacted as the request audit trail does; an identity provider's redirect
+    # can carry codes and tokens in its address.
+    ref = redact_str((context.referer or "").strip()) or None
     if ua and len(ua) > 256:
         ua = ua[:256]
     if ref and len(ref) > 512:

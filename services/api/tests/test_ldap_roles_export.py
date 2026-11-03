@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import app.services.login as login_operations
 import app.services.risks as risks_operations
+import fakeredis
 import pytest
 import yaml
 from app.api.routes import managed_configurations as mappings
@@ -113,6 +114,9 @@ def directory(monkeypatch):
             events.append("unbind")
 
     monkeypatch.setattr(ldap, "Connection", FakeConnection)
+    # Each test counts directory-entry attempts in its own store.
+    store = fakeredis.FakeRedis()
+    monkeypatch.setattr(ldap, "get_valkey", lambda: store)
     return state, events, connections
 
 

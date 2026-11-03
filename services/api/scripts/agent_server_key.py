@@ -3,9 +3,9 @@
 
 The identity key's fingerprint ends every enrolment code and bootstrap key,
 and every keen-agent pins it. Replace it only if its private key may have been
-exposed: afterwards every agent must enrol again with a new code (Issue
-enrolment code on its card), and every enrolment profile needs a new
-bootstrap key.
+exposed: the reset also revokes every agent key, so every agent must enrol
+again with a new code (Issue enrolment code on its card), and every enrolment
+profile needs a new bootstrap key.
 
     python scripts/agent_server_key.py
     python scripts/agent_server_key.py --reset --confirm-fingerprint=<fingerprint>
@@ -58,9 +58,9 @@ def main(argv=None, session=SessionLocal):
     print(
         "New identity fingerprint: "
         + replacement.fingerprint
-        + ". Restart the API and worker so no process keeps the old keys. Every "
-        "agent must enrol again with a new code, and every enrolment profile "
-        "needs a new bootstrap key."
+        + ". Every agent key is revoked. Restart the API and worker so no "
+        "process keeps the old keys. Every agent must enrol again with a new "
+        "code, and every enrolment profile needs a new bootstrap key."
     )
 
 

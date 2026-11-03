@@ -13,6 +13,7 @@ import {
   toast,
   getCurrentFramework,
   withFramework,
+  localPath,
   loadEntityChangelog,
   openAuditSampleModal,
   canSampleIntoAudit,
@@ -220,7 +221,7 @@ function renderRelations() {
   $('relatedList').innerHTML = types
     .map((type) => {
       const links = (current.links || []).filter((link) => link.target_type === type);
-      return `<section class="col-12 col-md-6 col-xl-4"><div class="card h-100"><div class="card-body p-3"><h3 class="h6 d-flex justify-content-between">${esc(label(type))}<span class="badge text-bg-secondary">${links.length}</span></h3><div class="d-grid gap-2">${links.map((link) => `<div class="border rounded p-2 d-flex align-items-center gap-2"><a class="text-break flex-grow-1" href="${esc(withFramework(link.url, framework))}"${isNew ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(link.title)}</a>${manage ? `<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-unlink-type="${type}" data-unlink-id="${esc(link.target_id)}" aria-label="Remove ${esc(link.title)}">Unlink</button>` : ''}</div>`).join('') || '<span class="small-muted">No linked items.</span>'}</div></div></div></section>`;
+      return `<section class="col-12 col-md-6 col-xl-4"><div class="card h-100"><div class="card-body p-3"><h3 class="h6 d-flex justify-content-between">${esc(label(type))}<span class="badge text-bg-secondary">${links.length}</span></h3><div class="d-grid gap-2">${links.map((link) => `<div class="border rounded p-2 d-flex align-items-center gap-2"><a class="text-break flex-grow-1" href="${esc(localPath(withFramework(link.url, framework)) || '#')}"${isNew ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(link.title)}</a>${manage ? `<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-unlink-type="${type}" data-unlink-id="${esc(link.target_id)}" aria-label="Remove ${esc(link.title)}">Unlink</button>` : ''}</div>`).join('') || '<span class="small-muted">No linked items.</span>'}</div></div></div></section>`;
     })
     .join('');
   renderGraph($('graph'), current, framework);

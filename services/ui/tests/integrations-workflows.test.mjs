@@ -354,6 +354,20 @@ test('the overview summarises integration health and each status', async (t) => 
   assert.match(el('list').textContent, /Build your first custom API ingester/);
 });
 
+test('revision and version numbers from the server are inserted as text', async (t) => {
+  const data = baseData();
+  data.collectors[0] = { ...data.collectors[0], live_revision: HOSTILE, version: HOSTILE };
+  data.runs[1] = { ...data.runs[1], revision: HOSTILE };
+  const ctx = await builder(t, { data });
+  const card = cardFor(ctx, HOSTILE + 'Uptime checks');
+  assert.equal(card.querySelector('img'), null);
+  assert.match(card.textContent, /Live revision <img src=x[^·]*· Draft <img src=x/);
+  const run = ctx.el('runs').querySelectorAll('.ig-run')[1];
+  assert.equal(run.querySelector('img'), null);
+  assert.match(run.textContent, /revision <img src=x/);
+  assert.equal(ctx.ui.window.pwned, undefined);
+});
+
 test('collector actions post the draft version and report the outcome', async (t) => {
   const ctx = await builder(t);
   const { el, state, buttonIn } = ctx;

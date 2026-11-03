@@ -24,7 +24,7 @@ export async function mountSwotRelated(type, id, container = null) {
     const data = await apiGet(
       `/api/v1/isms/swot?target_type=${encodeURIComponent(type)}&target_id=${encodeURIComponent(id)}&limit=100`,
     );
-    section.innerHTML = `<h2 class="h5">Related SWOT items</h2>${data.items.map((row) => `<p><a href="${esc(withFramework(`/swot.html?id=${encodeURIComponent(row.id)}&tab=related`, framework))}">${esc(row.title)}</a> <span class="small-muted">${esc(row.kind)} · ${row.significance}/5</span></p>`).join('') || '<p class="small-muted">No SWOT items linked.</p>'}<a href="${esc(withFramework(`/swot.html?target_type=${encodeURIComponent(type)}&target_id=${encodeURIComponent(id)}`, framework))}">Explore in SWOT analysis (${data.total})</a>`;
+    section.innerHTML = `<h2 class="h5">Related SWOT items</h2>${data.items.map((row) => `<p><a href="${esc(withFramework(`/swot.html?id=${encodeURIComponent(row.id)}&tab=related`, framework))}">${esc(row.title)}</a> <span class="small-muted">${esc(row.kind)} · ${esc(row.significance)}/5</span></p>`).join('') || '<p class="small-muted">No SWOT items linked.</p>'}<a href="${esc(withFramework(`/swot.html?target_type=${encodeURIComponent(type)}&target_id=${encodeURIComponent(id)}`, framework))}">Explore in SWOT analysis (${esc(data.total)})</a>`;
   } catch {
     section.textContent = 'Related SWOT items are unavailable with your current access.';
   }

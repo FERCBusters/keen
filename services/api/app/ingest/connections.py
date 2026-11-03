@@ -15,10 +15,12 @@ from functools import wraps
 from pathlib import Path
 
 import yaml
+from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from sqlalchemy import select, text
 
 from app.core.config import settings as deployment_settings
 from app.core.managed_configuration import load_document as deployment_document
+from app.core.valkey import get_valkey
 from app.db.models import SourceConnection
 from app.integrations.transport import decrypt
 
@@ -342,6 +344,25 @@ def environment_has_inputs(source, db):
     return any(document.get(section) for section in sections)
 
 
+def rotated(source, items):
+    """Start each run of ``source`` one connection further along than the last.
+
+    A run that its time limit ends leaves its last connections uncollected;
+    the next run starts after the previous starting point, so no connection
+    is always last. Without Valkey the order is unchanged.
+    """
+    if len(items) < 2:
+        return items
+    try:
+        turn = int(get_valkey().incr("keen:ingest:rotation:" + source))
+    except Exception:
+        return items
+    # Database rows arrive in no set order, so rotate a stable one.
+    items = sorted(items, key=lambda c: c.id)
+    offset = turn % len(items)
+    return items[offset:] + items[:offset]
+
+
 def connection_runs(source):
     """Fan out a scheduled/manual run; one failed connection cannot starve others."""
 
@@ -357,11 +378,12 @@ def connection_runs(source):
                     }
                 ]
             results = []
-            for connection in connections(db, source):
-                if connection_id and connection.id != connection_id:
-                    continue
-                if not connection.enabled:
-                    continue
+            selected = [
+                c
+                for c in connections(db, source)
+                if c.enabled and (not connection_id or c.id == connection_id)
+            ]
+            for connection in rotated(source, selected):
                 with connection_scope(connection):
                     try:
                         if (
@@ -387,6 +409,9 @@ def connection_runs(source):
                         results.extend(
                             redact_obj({**row, **identity()}) for row in rows
                         )
+                    except (SoftTimeLimitExceeded, TimeLimitExceeded):
+                        # The task's time limit ends the whole run.
+                        raise
                     except Exception:
                         if db is not None:
                             db.rollback()

@@ -11,7 +11,7 @@ from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.agents import server_keys
-from app.agents.credentials import live_only, reauthenticate, view
+from app.agents.credentials import live_only, reauthenticate, revoke_keys, view
 from app.agents.schema import Strict, fingerprint
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
@@ -24,6 +24,8 @@ from app.db.models import (
 )
 from app.ingest.common import store_event_with_artifact
 from app.security.redaction import redact_obj, redact_str
+from app.services import posture_risks
+from app.services.agent_enrollment import lock_agent_name
 from app.services.errors import DomainError
 from app.services.features import state as feature_state
 from app.services.ueu_evidence import catalogue_grant
@@ -132,6 +134,8 @@ def listing(*, db: Session):
 def register(*, body: Registration, db: Session):
     live_only()
     validate_assignment(db, body)
+    # Profile enrolments check the names registrations hold.
+    lock_agent_name(db, body.name)
     if body.subject_type == "public":
         public_subject_key(db)
     a = KeenAgent(
@@ -172,8 +176,11 @@ def assign(*, agent_id: str, body: Assignment, db: Session):
         # Posture is a signed assertion by the device's own key.
         raise DomainError(409, "Workstation posture agents enrol with a key")
     if a.agent_type != body.agent_type or a.person_id != body.person_id:
-        # New assignments start with new observations. Historical raw events stay intact.
+        # New assignments start with new observations and no accepted risks: a
+        # risk recorded for the previous holder stays in the register, detached
+        # from this device's results. Historical raw events stay intact.
         db.query(AgentPostureObservation).filter_by(agent_id=a.id).delete()
+        posture_risks.unlink(db, "workstation", a.id)
         a.agent_type, a.person_id = body.agent_type, body.person_id
         a.posture_assigned_at = (
             utc_now_naive() if body.agent_type == "workstation" else None
@@ -224,12 +231,7 @@ def revoke(*, agent_id: str, db: Session):
     a.enabled = False
     a.token_hash = ""
     a.enrollment_code_hash = None
-    db.query(AgentKey).filter(
-        AgentKey.agent_id == a.id, AgentKey.state != "revoked"
-    ).update(
-        {AgentKey.state: "revoked", AgentKey.retired_at: utc_now_naive()},
-        synchronize_session=False,
-    )
+    revoke_keys(db, AgentKey.agent_id == a.id)
     db.commit()
     return {"ok": True}
 

@@ -111,6 +111,7 @@ def get_current_user_from_headers_cookies(
         r,
         sid,
         refresh_ttl_seconds=settings.session_ttl_seconds if refresh_session else None,
+        max_age_seconds=settings.session_max_age_seconds,
     )
     if not sess or not sess.get("user_id"):
         return None

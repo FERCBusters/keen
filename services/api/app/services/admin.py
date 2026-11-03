@@ -60,13 +60,13 @@ from app.schemas import (
 )
 from app.security.auth import ROLE_ADMIN, ROLE_NORMAL
 from app.security.permissions import (
-    has_permission,
     normalize_group_description,
     normalize_group_name,
     normalize_permission_codes,
 )
 from app.security.roles import (
     count_effective_admins,
+    is_effective_admin,
     lock_admin_changes,
     normalize_role,
 )
@@ -1194,6 +1194,10 @@ def admin_set_group_permissions(
     if not gid:
         raise DomainError(status_code=400, detail="group_id must be a UUID")
 
+    # Membership changes take the same lock, so the members whose permission
+    # snapshots this change invalidates are read after any change in progress.
+    lock_admin_changes(db)
+
     g = db.query(Group).filter(Group.id == gid).one_or_none()
     if not g:
         raise DomainError(status_code=404, detail="Group not found")
@@ -1346,6 +1350,13 @@ def admin_remap_run(
     }
 
 
+def _require_audit_trail_reader(db: Session, user) -> None:
+    # The audit trail spans every register's change history and every account's
+    # requests, so it belongs to administrators alone.
+    if not is_effective_admin(db, user):
+        raise DomainError(status_code=403, detail="Admin role required")
+
+
 def admin_audit_trail(
     *,
     limit: int = 50,
@@ -1358,16 +1369,11 @@ def admin_audit_trail(
     user,
     db: Session,
 ):
-    """List internal UI->API audit trail entries.
+    """List internal UI->API audit trail entries, for administrators.
 
     Records are written by middleware in app/main.py.
     """
-
-    # Allow admins, and also allow non-admin users that have been granted
-    # explicit/group permission to view the audit trail (e.g. an "auditors" group).
-    if (user.role or "") != "admin":
-        if not has_permission(db, user, "audittrail.read"):
-            raise DomainError(status_code=403, detail="Audit access required")
+    _require_audit_trail_reader(db, user)
 
     limit = max(1, min(int(limit or 50), 200))
     offset = max(0, int(offset or 0))
@@ -1428,11 +1434,10 @@ def admin_entity_changelog(
     """List semantic entity changelogs for Admin → Audit trail.
 
     This complements the lower-level context AuditLog by showing the user-facing
-    before/after diff for Control, Clause and Risk changes.
+    before/after diff of every recorded change, whatever the register, so it is
+    for administrators only. The type filter names controls, clauses and risks.
     """
-
-    if (user.role or "") != "admin" and not has_permission(db, user, "audittrail.read"):
-        raise DomainError(status_code=403, detail="Audit access required")
+    _require_audit_trail_reader(db, user)
     if entity_type:
         entity_type = entity_type.strip().lower()
         if entity_type not in {"control", "clause", "risk"}:

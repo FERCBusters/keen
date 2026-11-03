@@ -173,7 +173,7 @@ async function auditsPage(t, options = {}) {
       if (p === '/api/v1/audits/scope-coverage') {
         state.coverageQueries.push(Object.fromEntries(u.searchParams));
         if (options.coverageFail) throw new Error('Coverage offline');
-        return coverage;
+        return options.coverage ?? coverage;
       }
       throw new Error('Unexpected GET ' + u);
     },
@@ -403,6 +403,23 @@ test('scope coverage summarises included items and gaps with links and a gap mat
   ui.el('coverageMode').value = 'completed';
   ui.el('coverageMode').dispatchEvent(new ui.window.Event('change'));
   await settle(() => state.coverageQueries.at(-1)?.mode === 'completed');
+});
+
+test('scope coverage leaves out documents the API withholds', async (t) => {
+  // Accounts without ISMS read access receive no document rows or counts.
+  const withheld = {
+    ...coverage,
+    summary: { ...coverage.summary, documents: null },
+    included: { controls: coverage.included.controls },
+    gaps: { controls: coverage.gaps.controls, clauses: coverage.gaps.clauses },
+  };
+  const { ui } = await auditsPage(t, { query: '&tab=coverage', coverage: withheld });
+  await settle(() => ui.el('coverageIncludedRows').querySelector('a'));
+  assert.equal(ui.el('coverageSummary').querySelectorAll('.card').length, 2);
+  assert.doesNotMatch(ui.el('coverageSummary').textContent, /Documents/);
+  assert.equal(ui.el('coverageChart').querySelectorAll('g.coverage-row').length, 2);
+  assert.doesNotMatch(ui.el('coverageGapMatrix').textContent, /Document/);
+  assert.doesNotMatch(ui.el('coverageIncludedRows').textContent, /Document/);
 });
 
 test('scope coverage explains missing D3 and load failures', async (t) => {

@@ -820,6 +820,14 @@ class User(Base):
     mfa_totp_last_step: Mapped[int] = mapped_column(
         Integer, nullable=False, default=-1, server_default="-1"
     )
+    # Wrong TOTP and recovery codes since mfa_code_failures_since, across
+    # sign-ins; see security/mfa.py.
+    mfa_code_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    mfa_code_failures_since: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
     email: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     # One of: admin | normal

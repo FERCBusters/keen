@@ -91,7 +91,11 @@ test('the front search opens the events list, or a saved search by its name', as
     },
     vendor: {
       resolveSavedSearchUrl: (name) =>
-        name === 'Weekly review' ? '/events.html?source=diary&q=review' : null,
+        ({
+          'Weekly review': '/events.html?source=diary&q=review',
+          // Its dot segments resolve to "//evil.example/phish" once written out again.
+          Elsewhere: '/.//evil.example/phish',
+        })[name] || null,
     },
   });
   const submit = () =>
@@ -102,10 +106,14 @@ test('the front search opens the events list, or a saved search by its name', as
   submit();
   ui.el('frontQ').value = 'Weekly review';
   submit();
+  // A saved URL that would leave Keen is searched for as text instead.
+  ui.el('frontQ').value = 'Elsewhere';
+  submit();
   assert.deepEqual(visited, [
     '/events.html?q=deploy+%3Cb%3E&framework=A',
     '/events.html?framework=A',
     '/events.html?source=diary&q=review&framework=A',
+    '/events.html?q=Elsewhere&framework=A',
   ]);
 });
 

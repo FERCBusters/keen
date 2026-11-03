@@ -21,6 +21,11 @@ from app.security.roles import attach_effective_role
 
 COOKIE = "keen_mfa_pending"
 TTL = 300
+# Wrong TOTP or recovery codes an account may receive, counted across sign-ins
+# from the first of them; the one that reaches the limit ends the ceremony, and
+# the account then accepts no code until CODE_LOCKOUT has passed.
+CODE_ATTEMPTS = 5
+CODE_LOCKOUT = timedelta(hours=1)
 
 
 def digest(value):
@@ -107,12 +112,48 @@ def limit(request, user_id=None):
         raise HTTPException(503, "Authentication rate limiter unavailable")
 
 
+def _code_failures_current(user) -> bool:
+    since = user.mfa_code_failures_since
+    return since is not None and now() - since < CODE_LOCKOUT
+
+
+def codes_refused(user) -> bool:
+    """Whether wrong codes have spent the account's allowance for now.
+
+    The caller holds the account's row lock, as every ceremony step does.
+    """
+    return _code_failures_current(user) and user.mfa_code_failures >= CODE_ATTEMPTS
+
+
+def record_wrong_code(user) -> bool:
+    """Count a wrong code against the account; True once it spends the allowance.
+
+    The refusal that follows lasts CODE_LOCKOUT from the code that spent it.
+    """
+    if not _code_failures_current(user):
+        user.mfa_code_failures = 0
+        user.mfa_code_failures_since = now()
+    user.mfa_code_failures += 1
+    if user.mfa_code_failures < CODE_ATTEMPTS:
+        return False
+    user.mfa_code_failures_since = now()
+    return True
+
+
+def clear_wrong_codes(user) -> None:
+    """A right code shows the person holds the factor."""
+    user.mfa_code_failures = 0
+    user.mfa_code_failures_since = None
+
+
 def audit(db, user, action, request=None, *, ip=None):
     if action in {
         "factor-enrolled",
         "factor-removed",
         "recovery-codes-regenerated",
         "operator-reset",
+        "verified-recovery",
+        "verification-ended",
     }:
         from app.services.security_notifications import enqueue
 

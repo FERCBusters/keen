@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote, urljoin, urlsplit
 
 from .errors import IntegrationError
-from .schema import Definition, pointer
+from .schema import Definition, has_dot_segment, pointer
 from .transport import request
 
 
@@ -172,6 +172,10 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
                         return quote(str(value), safe="")
 
                     path = re.sub(r"\{([^}]+)\}", substitute, detail.path)
+                    if has_dot_segment(path):
+                        raise IntegrationError(
+                            "A detail request value forms a . or .. path segment"
+                        )
                     related, _ = fetch(
                         base_url.rstrip("/") + path, auth=auth, timeout=20
                     )

@@ -87,3 +87,19 @@ def test_rules_cover_every_permission_the_application_checks():
         for match in pattern.findall(path.read_text())
     }
     assert used <= known, sorted(used - known)
+
+
+def test_policy_implications_match_permission_resolution():
+    from app.security.permissions import PERMISSION_IMPLICATIONS
+
+    policy = _policy()
+    assert policy.IMPLIED_PERMISSIONS == PERMISSION_IMPLICATIONS
+    # A rule admits the holders of a permission that implies the one it names.
+    events = set(policy.POLICY["GET /v1/events"].alternatives)
+    assert events == {
+        frozenset({code}) for code in ("events.read", *PERMISSION_IMPLICATIONS)
+    }
+    sampling = policy.POLICY["POST /v1/audits/{audit_id}/evidence"].alternatives
+    assert sampling == (frozenset({"audits.admin"}),)
+    assert policy.POLICY["GET /v1/admin/entity-changelog"].kind == "admin"
+    assert policy.POLICY["GET /v1/auth/check-admin"].kind == "admin"

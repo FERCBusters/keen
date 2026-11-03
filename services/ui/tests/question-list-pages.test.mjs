@@ -35,6 +35,7 @@ async function questionsPage(t, name, options = {}) {
   const ui = await page(t, name, {
     me: options.me || { is_admin: true },
     globals: options.globals,
+    vendor: options.vendor,
     setup(window) {
       // The design system's navbar exposes this hook for the question bell.
       window.keenRefreshBell = () => (state.bell += 1);
@@ -138,4 +139,40 @@ test('users with delete permission can remove their threads; empty and failed li
   const failed = await questionsPage(t, 'questions', { fail: true });
   assert.match(failed.ui.el('status').textContent, /Queue offline/);
   assert.match(failed.ui.el('status').className, /alert/);
+});
+
+// The pinned design system's withFramework writes a same-origin URL out as its
+// path and returns another site's address in full, framework included.
+function pinnedWithFramework(url, framework) {
+  const u = new URL(String(url || ''), 'https://keen.example');
+  u.searchParams.set('framework', framework);
+  return u.origin === 'https://keen.example' ? u.pathname + u.search + u.hash : u.href;
+}
+
+test('a question opens only a path on Keen, whatever address the server sends', async (t) => {
+  const hostile = [
+    'https://evil.example/phish',
+    'http://evil.example/phish',
+    '//evil.example/phish',
+    '/.//evil.example/phish',
+    '/x/%2e%2e//evil.example/phish',
+    '/\\evil.example/phish',
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+  ];
+  const { ui } = await questionsPage(t, 'questions', {
+    items: [
+      { thread_id: 'ok', target_url: '/risk.html?id=r1#questions' },
+      ...hostile.map((target_url, i) => ({ thread_id: `h${i}`, target_url })),
+    ],
+    vendor: { withFramework: pinnedWithFramework },
+  });
+  const hrefs = [...ui.el('queueBody').querySelectorAll('tr a.btn')].map((a) =>
+    a.getAttribute('href'),
+  );
+  assert.equal(hrefs[0], '/risk.html?id=r1&framework=A#questions');
+  assert.deepEqual(
+    hrefs.slice(1),
+    hostile.map(() => '#'),
+  );
 });

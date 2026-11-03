@@ -241,6 +241,7 @@ test('box titles open their records in a new tab and stay out of dragging and li
       ['p', '//evil.example/x'],
       ['h', 'https://evil.example/x'],
       ['b', '/\\evil.example'],
+      ['t', '/\t/evil.example'],
     ].map(([id, url], index) => ({
       id,
       kind: 'document',
@@ -274,9 +275,7 @@ test('box titles open their records in a new tab and stay out of dragging and li
   assert.equal(link('i2').querySelector('b'), null);
   assert.equal(link('i2').getAttribute('aria-label'), 'Open Risk: Export (opens in a new tab)');
   // Withheld items, notes and anything outside Keen stay plain text.
-  for (const id of ['i3', 'n', 'j', 'p', 'h', 'b']) assert.equal(link(id), null, id);
-  assert.equal(ui.api.recordHref('/swot.html?id=s1'), '/swot.html?id=s1');
-  assert.equal(ui.api.recordHref(undefined), '');
+  for (const id of ['i3', 'n', 'j', 'p', 'h', 'b', 't']) assert.equal(link(id), null, id);
 
   const pointer = (type, target) =>
     target.dispatchEvent(

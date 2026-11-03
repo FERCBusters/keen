@@ -6,6 +6,7 @@ Valkey substitute; PostgreSQL is used when KEEN_CONTRACT_TEST_DATABASE_URL is
 set (SQLite otherwise, which does not establish locking behaviour).
 """
 
+import asyncio
 import json
 import time
 import uuid
@@ -13,6 +14,7 @@ from unittest.mock import MagicMock, Mock
 
 import fakeredis
 import pytest
+from app.api import errors
 from app.core import valkey
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
@@ -20,6 +22,8 @@ from app.db.models import (
     AuditLog,
     EntityChangelog,
     Event,
+    Framework,
+    IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMeasureSecret,
     IsmsEffectivenessMetricEntry,
@@ -27,6 +31,7 @@ from app.db.models import (
     User,
 )
 from app.security.passwords import hash_password
+from app.security.request_limits import MAX_JSON_BODY
 from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
@@ -323,6 +328,67 @@ def test_sign_out_fails_closed_when_revocation_fails(keen, monkeypatch, path):
     assert replay.get("/v1/me").status_code == 401
 
 
+# --- Absolute session lifetime ----------------------------------------------------
+
+
+def _age_session(keen, sid, seconds):
+    from datetime import datetime, timedelta, timezone
+
+    from app.security.sessions import session_key
+
+    key = session_key(sid)
+    payload = json.loads(keen.store.get(key))
+    created = datetime.now(timezone.utc) - timedelta(seconds=seconds)
+    payload["created_at"] = created.isoformat()
+    keen.store.set(key, json.dumps(payload), keepttl=True)
+
+
+@pytest.mark.parametrize("auth_method", ["local", "oidc", "ldap"])
+def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
+    keen, monkeypatch, auth_method
+):
+    from app.security.sessions import create_session, session_key
+
+    monkeypatch.setattr(settings, "session_max_age_seconds", 3600)
+    user = keen.user()
+    sid = create_session(
+        keen.store,
+        user_id=str(user.id),
+        ttl_seconds=settings.session_ttl_seconds,
+        auth_method=auth_method,
+        mfa_version=user.mfa_version,
+        session_version=user.session_version,
+    )
+    client = keen.client()
+    client.cookies.set(settings.session_cookie_name, sid)
+
+    # Near the end of its lifetime, use refreshes it only up to that end, and
+    # a permission refresh never extends it either.
+    _age_session(keen, sid, 3600 - 120)
+    # The first request also stores the session's permission snapshot.
+    assert client.get("/v1/auth/check").status_code == 204
+    assert json.loads(keen.store.get(session_key(sid)))["authz_version"] is not None
+    assert 0 < keen.store.ttl(session_key(sid)) <= 120
+    assert client.get("/v1/me").status_code == 200
+    assert 0 < keen.store.ttl(session_key(sid)) <= 120
+
+    _age_session(keen, sid, 3601)
+    assert client.get("/v1/auth/check").status_code == 401
+    assert keen.store.get(session_key(sid)) is None
+
+
+def test_a_session_without_a_readable_start_is_refused(keen):
+    from app.security.sessions import session_key
+
+    client = keen.client(keen.user())
+    sid = client.cookies.get(settings.session_cookie_name)
+    payload = json.loads(keen.store.get(session_key(sid)))
+    payload["created_at"] = "not-a-time"
+    keen.store.set(session_key(sid), json.dumps(payload), keepttl=True)
+
+    assert client.get("/v1/auth/check").status_code == 401
+
+
 # --- Webhook persistence and replay claims -------------------------------------
 
 
@@ -365,6 +431,61 @@ def test_failed_webhook_persistence_releases_replay_claim(keen, monkeypatch):
     # A delivery that did persist is still rejected as a replay.
     assert client.post(path, content=body, headers=headers).status_code == 400
     assert len(calls) == 2
+
+
+def test_webhook_allowances_are_per_built_in_provider_and_address(keen, monkeypatch):
+    from app.ingest import connections, webhooks
+
+    monkeypatch.setenv("SYNTHETIC_WEBHOOK_SECRET", "synthetic-webhook-secret")
+    monkeypatch.setattr(
+        webhooks,
+        "load_webhook_policies",
+        lambda path: {
+            "providers": {
+                "monitor": {
+                    "secret_header": "X-Monitor-Secret",
+                    "secret_env": "SYNTHETIC_WEBHOOK_SECRET",
+                }
+            }
+        },
+    )
+    lookups = []
+    listed = connections.connections
+    monkeypatch.setattr(
+        connections,
+        "connections",
+        lambda *a, **kw: lookups.append(a) or listed(*a, **kw),
+    )
+    client = client_from("198.51.100.4")
+    # A made-up provider per request draws on one shared allowance.
+    for index in range(100):
+        assert client.post(f"/v1/webhooks/made-up-{index}/alert").status_code == 403
+    assert len(lookups) == 100
+    for path in ("/v1/webhooks/made-up-new/alert", "/v1/webhooks/monitor/alert"):
+        refused = client.post(path, headers={"X-Monitor-Secret": "wrong"})
+        assert refused.status_code == 429 and refused.headers["Retry-After"]
+    # Throttled requests stop before any connection lookup.
+    assert len(lookups) == 100
+    # Each built-in provider keeps its own allowance from that address.
+    for _ in range(100):
+        assert client.post("/v1/webhooks/cloudtrail_source_ip/a").status_code == 403
+    assert client.post("/v1/webhooks/cloudtrail_source_ip/a").status_code == 429
+    assert client.post("/v1/webhooks/enroll/diff").status_code == 403
+    assert client.post("/v1/webhooks/made-up-later/alert").status_code == 429
+    assert len(lookups) == 201
+    # The store holds one counter for the other names and one per built-in.
+    assert sorted(keen.store.keys("keen:rl:webhook:*")) == [
+        "keen:rl:webhook:other:ip:198.51.100.4",
+        "keen:rl:webhook:provider:cloudtrail_source_ip:ip:198.51.100.4",
+        "keen:rl:webhook:provider:enroll:ip:198.51.100.4",
+    ]
+    # Another address, and metric submissions, have their own allowances.
+    assert (
+        client_from("198.51.100.5").post("/v1/webhooks/monitor/alert").status_code
+        == 403
+    )
+    metric = client.post("/v1/webhooks/isms/effectiveness-metrics/m-1", content=b"{}")
+    assert metric.status_code == 403
 
 
 # --- Metric webhook redaction ---------------------------------------------------
@@ -526,6 +647,97 @@ def test_audit_trail_omits_authorisation_codes(keen, path):
         and "SYNTH-STATE" not in (r.query_string or "")
         for r in rows
     )
+
+
+def client_from(address):
+    """An anonymous client whose requests arrive from ``address``."""
+    from app import main
+
+    return TestClient(
+        main.app,
+        base_url=BASE,
+        raise_server_exceptions=False,
+        client=(address, 50000),
+    )
+
+
+def audited(keen, **criteria):
+    keen.db.expire_all()
+    return keen.db.query(AuditLog).filter_by(**criteria).count()
+
+
+def test_public_reads_leave_no_audit_records(keen):
+    client = client_from("203.0.113.5")
+    public = ("/health", "/v1/auth/methods", "/v1/agents/server-key")
+    for path in public:
+        for _ in range(3):
+            client.get(path)
+    assert keen.db.query(AuditLog).filter(AuditLog.path.in_(public)).count() == 0
+    # Other methods on those paths, and protected paths, are still recorded.
+    assert client.post("/v1/auth/methods").status_code in (401, 403, 405)
+    assert client.get("/v1/events").status_code == 401
+    assert audited(keen, path="/v1/auth/methods", method="POST") == 1
+    assert audited(keen, path="/v1/events", client_ip="203.0.113.5") == 1
+
+
+def test_unauthenticated_refusals_are_audited_sixty_a_minute_per_address(
+    keen, monkeypatch
+):
+    from app import main
+
+    first, second = client_from("203.0.113.7"), client_from("203.0.113.8")
+    for _ in range(30):
+        assert first.get("/v1/events").status_code == 401
+    # Refusals of any other status draw on the same allowance.
+    for _ in range(35):
+        malformed = first.post(
+            "/v1/auth/login",
+            content=b"{",
+            headers={"Origin": BASE, "Content-Type": "application/json"},
+        )
+        assert malformed.status_code == 400, malformed.text
+    assert second.get("/v1/events").status_code == 401
+    assert audited(keen, status_code=401, client_ip="203.0.113.7") == 30
+    assert audited(keen, status_code=400, client_ip="203.0.113.7") == 30
+    assert audited(keen, status_code=401, client_ip="203.0.113.8") == 1
+    # Signed-in requests from that address are recorded whatever the count.
+    # (A route's own session shares the test connection and would roll back
+    # its audit record, so these are refused before any route runs.)
+    member = keen.user()
+    signed_in = client_from("203.0.113.7")
+    login = signed_in.post(
+        "/v1/auth/login",
+        json={"username": member.username, "password": PASSWORD},
+        headers={"Origin": BASE},
+    )
+    assert login.status_code == 200, login.text
+    for _ in range(3):
+        assert signed_in.get("/v1/users").status_code == 403
+    assert audited(keen, path="/v1/users", username=member.username) == 3
+
+    # An unauthenticated request that succeeds is recorded whatever the count.
+    for _ in range(3):
+        assert first.post("/v1/auth/logout", headers={"Origin": BASE}).status_code < 400
+    assert audited(keen, path="/v1/auth/logout", client_ip="203.0.113.7") == 3
+
+    # Without Valkey the refusals cannot be counted, so they are not recorded.
+    broken = Mock()
+    broken.pipeline.side_effect = ConnectionError("synthetic outage")
+    monkeypatch.setattr(main, "get_valkey", lambda: broken)
+    assert client_from("203.0.113.9").get("/v1/events").status_code == 401
+    assert audited(keen, client_ip="203.0.113.9") == 0
+
+
+def test_ipv6_refusals_share_one_audit_allowance_per_network(keen):
+    """Addresses in one IPv6 /64 network draw on one allowance between them."""
+    for host in range(1, 66):
+        response = client_from(f"2001:db8:5:7::{host:x}").get("/v1/events")
+        assert response.status_code == 401
+    assert client_from("2001:db8:5:8::1").get("/v1/events").status_code == 401
+    keen.db.expire_all()
+    recorded = keen.db.query(AuditLog).filter(AuditLog.client_ip.like("2001:db8:5:%"))
+    assert recorded.filter(AuditLog.client_ip.like("2001:db8:5:7::%")).count() == 60
+    assert recorded.filter(AuditLog.client_ip == "2001:db8:5:8::1").count() == 1
 
 
 # --- Link validation -------------------------------------------------------------
@@ -821,6 +1033,54 @@ def test_nul_characters_in_requests_are_refused_or_stored_safely(keen):
     )
 
 
+def test_json_bodies_are_bounded_and_decoded_off_the_event_loop(keen, monkeypatch):
+    decode, decoded = errors.decode_json_body, []
+
+    def recorded(body):
+        try:
+            asyncio.get_running_loop()
+            decoded.append("event loop")
+        except RuntimeError:
+            decoded.append("worker thread")
+        return decode(body)
+
+    monkeypatch.setattr(errors, "decode_json_body", recorded)
+    nobody = keen.client(keen.user())  # signed in, with no permissions
+    decoded.clear()
+    path = "/v1/me/preferences"
+
+    def send(client, body, content_type, method="patch", to=path):
+        headers = {**unsafe(client), "Content-Type": content_type}
+        return getattr(client, method)(to, content=body, headers=headers)
+
+    # Empty objects cost many times their size to decode and check.
+    flood = b"[" + b"{}," * (MAX_JSON_BODY // 3) + b"{}]"
+    for content_type in ("application/json", "application/merge-patch+json"):
+        refused = send(nobody, flood, content_type)
+        assert (refused.status_code, refused.json()["detail"]) == (
+            413,
+            "Request body too large",
+        )
+    # A body sent as another type reaches the handler as bytes, undecoded.
+    assert send(nobody, flood, "text/plain").status_code == 422
+    assert decoded == []
+
+    # A document within the limit is decoded in a worker thread.
+    document = b'{"auto_apply_filters": true}'
+    padded = document + b" " * (MAX_JSON_BODY - len(document))
+    accepted = send(nobody, padded, "application/json")
+    assert accepted.status_code == 200, accepted.text
+    assert decoded == ["worker thread"]
+
+    # Administration requests, such as configuration imports, may send more.
+    admin = keen.client(keen.user(role="admin"))
+    decoded.clear()
+    large = b'{"version": -1, "changes": {}, "note": "%s"}' % (b"x" * MAX_JSON_BODY)
+    imported = send(admin, large, "application/json", "put", "/v1/admin/features")
+    assert imported.status_code == 422, imported.text
+    assert decoded == ["worker thread"]
+
+
 def test_out_of_range_request_values_are_client_errors(keen):
     client = keen.client(keen.user("events.read", "isms.read", "audits.read"))
     huge = "9" * 30
@@ -872,3 +1132,69 @@ def test_hand_parsed_bodies_must_be_json_objects(keen, contract_db):
         path, data={"body": "synthetic \x00 question"}, headers=unsafe(client)
     )
     assert form.status_code < 500, form.text
+
+
+# --- Audit managers read what audits examine -----------------------------------
+
+
+def test_audit_managers_read_events_and_isms_records_while_they_hold_it(keen):
+    event = Event(
+        timestamp=utc_now_naive(),
+        source="ci",
+        summary="Breach of payroll bucket",
+        raw_pointer={},
+        normalized_payload={},
+        external_id="implied-" + uuid.uuid4().hex,
+    )
+    document = IsmsDocument(
+        title="Incident response playbook", document_type="procedure"
+    )
+    keen.db.add_all([event, document, Framework(slug="fw-implied")])
+    keen.db.commit()
+    reads = (
+        "/v1/events",
+        f"/v1/events/{event.id}",
+        f"/v1/isms/documents/{document.id}",
+    )
+    for code in ("audits.manage", "audits.admin"):
+        client = keen.client(keen.user(code))
+        for path in reads:
+            assert client.get(path).status_code == 200, (code, path)
+        # The implied permissions read; managing ISMS records stays separate.
+        created = client.post(
+            "/v1/isms/documents",
+            params={"framework": settings.default_framework_slug},
+            json={"title": "Not mine to write"},
+            headers=unsafe(client),
+        )
+        assert created.status_code == 403, created.text
+    reader = keen.client(keen.user("audits.read"))
+    for path in reads:
+        assert reader.get(path).status_code == 403, path
+
+    # An audit manager samples events with no separate events.read.
+    manager_user = keen.user("audits.manage")
+    manager = keen.client(manager_user)
+    audit = manager.post(
+        "/v1/audits",
+        json={"title": "Q3", "framework_slug": "fw-implied"},
+        headers=unsafe(manager),
+    )
+    assert audit.status_code == 200, audit.text
+    sample = manager.post(
+        f"/v1/audits/{audit.json()['id']}/evidence",
+        json={"event_id": str(event.id)},
+        headers=unsafe(manager),
+    )
+    assert sample.status_code == 200, sample.text
+
+    # Removing audits.manage takes what it implied with it, at the next request.
+    admin = keen.client(keen.user(role="admin"))
+    changed = admin.put(
+        f"/v1/users/{manager_user.id}/access",
+        json={"explicit_permission_codes": [], "group_ids": []},
+        headers=unsafe(admin),
+    )
+    assert changed.status_code == 200, changed.text
+    for path in reads:
+        assert manager.get(path).status_code == 403, path

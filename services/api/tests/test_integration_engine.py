@@ -301,6 +301,27 @@ def test_requests_are_bounded_per_run_including_detail_requests():
         )
 
 
+@pytest.mark.parametrize("value", ["..", ".", "../tenant-b", "..\\tenant-b"])
+def test_upstream_values_cannot_steer_detail_requests_out_of_the_base_path(value):
+    upstream = Upstream([{"id": value, "created_at": "2026-01-01T12:00:00Z"}])
+    d = Definition(
+        path="/checks",
+        records_path="",
+        fields={
+            "id": {"path": "/id"},
+            "timestamp": {"path": "/created_at"},
+            "summary": {"path": "/id"},
+        },
+        enrichments=[{"name": "detail", "path": "/checks/{/id}/detail"}],
+    )
+
+    with pytest.raises(IntegrationError, match=r"forms a \. or \.\. path segment"):
+        collect(
+            d, BASE + "/tenant-a", {"kind": "bearer", "secret": "s"}, fetch=upstream
+        )
+    assert [call["url"] for call in upstream.calls] == [BASE + "/tenant-a/checks"]
+
+
 def test_runs_are_bounded_in_time_and_response_size(monkeypatch):
     clock = iter([0, 0, 200])
     monkeypatch.setattr(engine.time, "monotonic", lambda: next(clock))

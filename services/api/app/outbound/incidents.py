@@ -11,7 +11,7 @@ import httpx
 
 from app.core.config import settings
 from app.ingest.http import client as secure_http_client
-from app.outbound.signing import sign_body
+from app.outbound.signing import signature_headers
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +74,6 @@ class IncidentWebhookConfig:
     url: str
     headers: dict[str, str]
     signing_secret: str
-    signature_header: str
     timeout_seconds: float
 
     @classmethod
@@ -83,10 +82,6 @@ class IncidentWebhookConfig:
             url=settings.incident_webhook_url.strip(),
             headers=_parse_json_headers(settings.incident_webhook_headers_json),
             signing_secret=settings.incident_webhook_signing_secret.strip(),
-            signature_header=(
-                settings.incident_webhook_signature_header or "X-Keen-Signature"
-            ).strip()
-            or "X-Keen-Signature",
             timeout_seconds=float(settings.incident_webhook_timeout_seconds or 6.0),
         )
 
@@ -145,7 +140,7 @@ def post_incident_webhook(
     headers.setdefault("Content-Type", "application/json")
     headers.setdefault("User-Agent", "Keen Incident Webhook")
     if config.signing_secret:
-        headers[config.signature_header] = sign_body(config.signing_secret, body)
+        headers.update(signature_headers(config.signing_secret, body))
 
     with secure_http_client(
         timeout=timeout, follow_redirects=False, verify=True, trust_env=False

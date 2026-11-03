@@ -9,7 +9,7 @@ import app.services.agent_enrollment as enrollment_operations
 import pytest
 from app.agents import server_keys
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import AgentServerKey
+from app.db.models import AgentKey, AgentServerKey
 from app.security import request_limits
 from app.services.errors import DomainError
 from cryptography.exceptions import InvalidTag
@@ -403,11 +403,18 @@ def test_resetting_the_identity_strands_every_earlier_credential(keen, capsys):
             db.query(AgentServerKey).filter(AgentServerKey.state != "destroyed").count()
             == 2
         )
-    # Requests sealed to the old key cannot be opened...
-    assert agent.heartbeat().status_code == 421
+        # Every agent key Keen held is revoked, so none survives the reset.
+        assert {key.state for key in db.query(AgentKey)} == {"revoked"}
+    # The agent's key is refused before its request is opened...
+    assert agent.heartbeat().status_code == 401
     # ...and the new document fails the agent's pin.
     with pytest.raises(AssertionError):
         agent.fetch_server_key(pinned=old_pin)
+    # A holder of the old agent key that adopts the new identity is refused.
+    agent.fetch_server_key(pinned=new_pin)
+    assert agent.heartbeat().status_code == 401
+    r, *_ = agent.send(agent.observation("firewall", "ufw", {"enabled": True}))
+    assert r.status_code == 401
     # Credentials issued under the old identity are refused by KEEN as well.
     fresh = SimAgent(keen.client)
     body = {
@@ -417,11 +424,42 @@ def test_resetting_the_identity_strands_every_earlier_credential(keen, capsys):
     }
     fresh.fetch_server_key(pinned=new_pin)
     assert fresh.post_enrollment(profile["bootstrap_key"], body).status_code == 401
-    # A new code works.
+    # A new code works: the agent enrols again with a fresh key.
     rotated = keen.client.post(
         "/v1/admin/agents/" + info["agent"]["id"] + "/rotate", json={}
     ).json()
     assert rotated["enrollment_code"].endswith("." + new_pin)
+    again = SimAgent(keen.client)
+    assert again.enroll(rotated["enrollment_code"]).status_code == 201
+    assert again.heartbeat().status_code == 200
+
+
+@pytest.mark.parametrize("operation", ["enroll_with_code", "enroll_with_profile"])
+def test_a_reset_while_an_enrolment_waits_strands_its_credential(
+    keen, monkeypatch, operation
+):
+    info = register(keen)
+    profile = keen.client.post(
+        "/v1/admin/agent-enrollment-profiles", json={"name": "fleet"}
+    ).json()
+    locking = getattr(enrollment_operations, operation)
+
+    def reset_first(db, *args):
+        # The pin matched; a reset commits before this request takes its locks.
+        server_keys.reset_identity(db)
+        db.commit()
+        return locking(db, *args)
+
+    monkeypatch.setattr(enrollment_operations, operation, reset_first)
+    agent = SimAgent(keen.client)
+    if operation == "enroll_with_code":
+        refused = agent.enroll(info["enrollment_code"])
+    else:
+        refused = agent.enroll(profile["bootstrap_key"], name="web-02")
+    assert refused.status_code == 401, refused.text
+    assert "different KEEN identity key" in refused.json()["detail"]
+    with keen.db() as db:
+        assert db.query(AgentKey).filter_by(state="active").count() == 0
 
 
 def test_the_script_accepts_a_fingerprint_that_starts_with_a_dash(keen, capsys):

@@ -14,6 +14,7 @@ import {
   toast,
   getCurrentFramework,
   withFramework,
+  localPath,
   loadEntityChangelog,
   openAuditSampleModal,
   canSampleIntoAudit,
@@ -32,7 +33,7 @@ let layoutDirty = false;
 const flow = createFlowCanvas({
   host: $('flow'),
   editable: false,
-  linkFor: (item) => (item.url ? withFramework(item.url, framework) : ''),
+  linkFor: (item) => (item.url ? localPath(withFramework(item.url, framework)) : ''),
   onChange: (change) => {
     if (change.type === 'select') {
       $('linkEditor').hidden = !change.link;
@@ -61,8 +62,9 @@ export function timelineOrder(items) {
 
 function itemTitleHtml(item) {
   if (item.withheld) return `<span class="small-muted fst-italic">${esc(item.title)}</span>`;
-  if (!item.url) return `<span class="fw-semibold">${esc(item.title)}</span>`;
-  return `<a class="fw-semibold" href="${esc(withFramework(item.url, framework))}">${esc(item.title)}</a>`;
+  const href = item.url ? localPath(withFramework(item.url, framework)) : '';
+  if (!href) return `<span class="fw-semibold">${esc(item.title)}</span>`;
+  return `<a class="fw-semibold" href="${esc(href)}">${esc(item.title)}</a>`;
 }
 
 function itemHtml(item) {

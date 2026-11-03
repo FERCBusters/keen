@@ -1,4 +1,4 @@
-import { isoDateToDisplay, esc, withFramework } from '/app.js';
+import { isoDateToDisplay, esc, localPath, withFramework } from '/app.js';
 
 export const statuses = [
   'defined',
@@ -31,7 +31,7 @@ export function href(row, framework) {
 }
 function card(row, framework, editable) {
   return `<article class="card planning-card mb-2" ${editable ? `draggable="true" data-drag-id="${esc(row.id)}"` : ''}>
-    <div class="card-body p-3"><div class="small-muted">${esc(label(row.kind || 'objective'))}${row.significance ? ` · ${row.significance}/5` : ''}</div>
+    <div class="card-body p-3"><div class="small-muted">${esc(label(row.kind || 'objective'))}${row.significance ? ` · ${esc(row.significance)}/5` : ''}</div>
     <a class="fw-bold" href="${esc(href(row, framework))}">${esc(row.title)}</a>
     <div class="small-muted mt-2">${esc(isoDateToDisplay(row.target_date) || 'No target date')}</div>
     ${editable ? `<label class="small mt-2">Status<select class="form-select form-select-sm" data-status-id="${esc(row.id)}">${statuses.map((s) => `<option value="${s}" ${s === row.status ? 'selected' : ''}>${label(s)}</option>`).join('')}</select></label>` : `<div class="small">${esc(label(row.status))}</div>`}
@@ -254,7 +254,7 @@ export function renderGraph(host, row, framework) {
     ...(row.links || []).map((l) => ({
       title: l.title,
       type: l.target_type,
-      url: withFramework(l.url, framework),
+      url: localPath(withFramework(l.url, framework)),
     })),
     ...(row.controls || []).map((c) => ({
       title: `${c.ref} ${c.title || ''}`,
@@ -331,7 +331,7 @@ export function renderGraph(host, row, framework) {
       .attr('opacity', 0.55);
     const a = svg
       .append('a')
-      .attr('href', node.url)
+      .attr('href', node.url || null)
       .attr('aria-label', `${label(node.type)}: ${node.title}`);
     a.append('circle').attr('cx', 490).attr('cy', node.y).attr('r', 6).attr('fill', '#198754');
     textLines(a, node.lines, 505, node.y + 5);

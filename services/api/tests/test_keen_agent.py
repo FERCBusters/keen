@@ -5,7 +5,9 @@ test_ueu_evidence.py."""
 import asyncio
 import copy
 import gzip
+import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -181,6 +183,31 @@ def test_storage_failure_rolls_back_and_retry(setup, monkeypatch):
     assert c.post("/v1/otlp/logs", json=doc, headers=h).status_code == 200
     with f() as db:
         assert db.query(Event).count() == 2
+
+
+def test_a_failed_batch_is_logged_without_its_error_text(setup, monkeypatch, caplog):
+    c, _, h, info, _, _ = setup
+
+    def fail(**kw):
+        # Driver and storage errors can quote the values being written.
+        raise RuntimeError("synthetic stored value 4111-1111-1111-1111")
+
+    monkeypatch.setattr(common, "put_bytes", fail)
+    body = json.dumps(record()).encode()
+    with caplog.at_level(logging.INFO):
+        r = c.post(
+            "/v1/otlp/logs",
+            content=body,
+            headers={**h, "Content-Type": "application/json"},
+        )
+    assert r.status_code == 500 and "retry the batch" in r.text
+    batch = hashlib.sha256(body).hexdigest()[:16]
+    (logged,) = [x for x in caplog.records if x.name == "app.api.routes.agents"]
+    assert logged.getMessage() == (
+        f"OTLP batch {batch} from agent {info['agent']['id']} failed (RuntimeError)"
+    )
+    assert logged.exc_info is None
+    assert "4111" not in caplog.text
 
 
 def test_rotation_revocation_and_no_token_disclosure(setup):

@@ -33,7 +33,7 @@ def _json(response, status=200):
 
 
 def test_me_reports_identity_permissions_and_policy(keen):  # noqa: F811
-    user = keen.user("risk.read", "isms.read", "audittrail.read")
+    user = keen.user("risk.read", "isms.read")
     me = _json(keen.client(user).get("/v1/me"))
     assert me["user"] == user.username
     assert me["user_id"] == str(user.id)
@@ -42,7 +42,8 @@ def test_me_reports_identity_permissions_and_policy(keen):  # noqa: F811
     assert me["can_manage_risks"] is False
     assert me["can_view_isms"] is True
     assert me["can_sample_isms"] is True
-    assert me["can_audit_trail"] is True
+    # The audit trail is for administrators; no capability names it.
+    assert "can_audit_trail" not in me
     assert me["can_view_events"] is False
     assert me["preferences"]["landing_page"] == "/"
     # New accounts start on Ink, listed first; Sand stays selectable.
@@ -52,8 +53,22 @@ def test_me_reports_identity_permissions_and_policy(keen):  # noqa: F811
     admin = _json(keen.client(keen.user(role="admin")).get("/v1/me"))
     assert admin["is_admin"] is True
     assert admin["can_manage_risks"] is True
-    assert admin["can_audit_trail"] is True
     assert keen.client().get("/v1/me").status_code == 401
+
+
+def test_me_reflects_the_permissions_audit_managers_imply(keen):  # noqa: F811
+    for code in ("audits.manage", "audits.admin"):
+        me = _json(keen.client(keen.user(code)).get("/v1/me"))
+        assert me["can_manage_audits"] is True
+        assert me["can_view_events"] is True
+        assert me["can_view_isms"] is True
+        assert me["can_sample_isms"] is True
+        assert me["can_manage_isms"] is False
+        assert me["can_view_risks"] is False
+    reader = _json(keen.client(keen.user("audits.read")).get("/v1/me"))
+    assert reader["can_view_audits"] is True
+    assert reader["can_view_events"] is False
+    assert reader["can_view_isms"] is False
 
 
 # --- Preferences ----------------------------------------------------------------
@@ -330,6 +345,8 @@ def test_saved_searches_are_private_to_their_owner(keen):  # noqa: F811
         "//evil.example/x",
         "/\\evil.example/x",
         "/\tevil.example/x",
+        "/.//evil.example/x",
+        "/x/%2e%2e//evil.example/x",
         "/events.html?q=" + "x" * 2050,
     ],
 )
@@ -441,7 +458,7 @@ def admin_client(keen):  # noqa: F811
 
 
 def test_users_namespace_requires_an_administrator(keen):  # noqa: F811
-    reader = keen.client(keen.user("isms.manage", "audittrail.read"))
+    reader = keen.client(keen.user("isms.manage", "audits.admin"))
     for method, path in [
         ("GET", "/v1/users"),
         ("POST", "/v1/users"),

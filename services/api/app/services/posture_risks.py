@@ -109,6 +109,16 @@ def linked(db: Session, origin: str, origin_keys, *, titles: bool) -> dict:
     return out
 
 
+def unlink(db: Session, origin: str, origin_key: str) -> None:
+    """Detach the risks recorded against one origin's results.
+
+    The risks stay in the register; the results stop reading as accepted.
+    """
+    db.query(PostureRiskLink).filter(
+        PostureRiskLink.origin == origin, PostureRiskLink.origin_key == origin_key
+    ).delete(synchronize_session=False)
+
+
 def mapped_controls(db: Session, event_ids, framework: str) -> list[str]:
     """Control references the given evidence is mapped to in one framework."""
     ids = list(event_ids)

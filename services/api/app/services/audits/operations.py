@@ -105,6 +105,7 @@ def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):
     set_audit_scope(
         db,
         a,
+        user=user,
         control_values=payload.controls,
         clause_values=payload.clauses,
         document_values=payload.documents,
@@ -209,6 +210,7 @@ def replace_audit_scope(
     controls, clauses, documents = set_audit_scope(
         db,
         a,
+        user=user,
         control_values=payload.controls,
         clause_values=payload.clauses,
         document_values=payload.documents,
@@ -228,6 +230,7 @@ def replace_audit_controls(
     controls, _, _ = set_audit_scope(
         db,
         a,
+        user=user,
         control_values=payload.controls,
         clause_values=None,
         document_values=None,

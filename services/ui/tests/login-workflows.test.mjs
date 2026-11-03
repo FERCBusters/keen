@@ -161,6 +161,95 @@ test('a visitor already signed in goes to the requested page or their landing pa
   assert.deepEqual(offsite.navigated, [['replace', '/']]);
 });
 
+// Each next value resolves to the path "//evil.example/phish", which a browser
+// reads as another host, so sign-in falls back to the home page.
+const dotSegmentNext = [
+  '/.//evil.example/phish',
+  '/%2e//evil.example/phish',
+  '/x/..//evil.example/phish',
+];
+
+test('a signed-in visitor is never sent off-site by a dot-segment next value', async (t) => {
+  for (const next of dotSegmentNext) {
+    const ui = await login(t, { me: { preferences: {} }, next });
+    await settle(() => ui.navigated.length === 1);
+    assert.deepEqual(ui.navigated, [['replace', '/']], next);
+  }
+});
+
+test('password sign-in, the second factor and SSO keep a dot-segment next value on Keen', async (t) => {
+  const reply = (body) => () => ({ ok: true, status: 200, json: async () => body });
+  for (const next of dotSegmentNext) {
+    let signedIn = false;
+    const done = await login(t, {
+      methods: { local_enabled: true, sso_providers: providers },
+      me: () => (signedIn ? { preferences: {} } : null),
+      signIn: () => {
+        signedIn = true;
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      },
+      next,
+    });
+    await settle(() => done.el('ssoButtons').children.length === 2);
+    assert.equal(done.el('next').value, '/');
+    done.el('ssoButtons').children[0].click();
+    done.submit('ada', 'synthetic-password');
+    await settle(() => done.navigated.length === 2);
+    assert.deepEqual(
+      done.navigated,
+      [
+        ['assign', '/api/v1/auth/sso/github/start?next=%2F'],
+        ['replace', '/'],
+      ],
+      next,
+    );
+
+    const mfa = await login(t, {
+      methods: { local_enabled: true },
+      signIn: reply({ mfa_required: true }),
+      next,
+    });
+    await settle(() => mfa.el('loginFields').disabled === false);
+    mfa.submit('ada', 'synthetic-password');
+    await settle(() => mfa.navigated.length === 1);
+    assert.deepEqual(mfa.navigated, [['assign', '/mfa.html?next=%2F']], next);
+  }
+});
+
+test('a provider start address that resolves off-site is never followed', async (t) => {
+  const ui = await login(t, {
+    methods: {
+      local_enabled: true,
+      sso_providers: [
+        { key: 'oidc', label: 'IdP', start_url: '/.//evil.example/start' },
+        { key: 'broken', label: 'Broken <IdP>', start_url: 'https://[' },
+        providers[0],
+      ],
+    },
+  });
+  await settle(() => ui.el('ssoButtons').children.length === 3);
+  const [offsite, broken, github] = ui.el('ssoButtons').children;
+  const refusal = (label) =>
+    `Sign-in with ${label} cannot start. Ask an administrator to check the provider's settings.`;
+  // Each refusal says so, every time, and leaves the buttons usable.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    ui.el('status').textContent = '';
+    offsite.click();
+    assert.equal(ui.el('status').textContent, refusal('IdP'));
+    assert.equal(ui.el('status').dataset.tone, 'danger');
+    broken.click();
+    assert.equal(ui.el('status').textContent, refusal('Broken <IdP>'));
+    assert.equal(ui.el('status').querySelector('*'), null);
+  }
+  assert.deepEqual(ui.navigated, []);
+  assert.equal(offsite.disabled || broken.disabled || github.disabled, false);
+  // A usable provider still starts sign-in, and only once.
+  github.click();
+  offsite.click();
+  github.click();
+  assert.deepEqual(ui.navigated, [['assign', '/api/v1/auth/sso/github/start?next=%2F']]);
+});
+
 test('sign-in continues to the second factor or the landing page', async (t) => {
   const reply = (body) => () => ({ ok: true, status: 200, json: async () => body });
   const mfa = await login(t, {

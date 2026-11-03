@@ -16,10 +16,13 @@ import unittest
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import app.api.context as api_context
 import app.services.login as login_operations
 import app.services.me as me_operations
+import app.services.mfa_management as mfa_operations
 import cbor2
 import fakeredis
 import pyotp
@@ -29,7 +32,14 @@ from alembic.operations import Operations
 from app.api.routes import auth as login_routes
 from app.api.routes import mfa as routes
 from app.core.config import settings
-from app.db.models import MfaChallenge, MfaCredential, MfaRecoveryCode, User
+from app.db.models import (
+    AuditLog,
+    MfaChallenge,
+    MfaCredential,
+    MfaRecoveryCode,
+    SecurityNotification,
+    User,
+)
 from app.db.session import Base, get_db
 from app.security import auth as identity
 from app.security import mfa
@@ -44,6 +54,13 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from tests.db_helpers import schema_engine
+
+# Imported fixture: the assembled application with an in-memory session store.
+from tests.test_assembled_authority_regressions import (  # noqa: F401
+    BASE,
+    PASSWORD,
+    keen,
+)
 
 URL = os.environ.get("KEEN_MFA_TEST_DATABASE_URL")
 
@@ -88,7 +105,7 @@ class LocalMfaTests(unittest.TestCase):
             with cls.engine.begin() as conn:
                 conn.execute(
                     text(
-                        "ALTER TABLE users DROP COLUMN mfa_enabled,DROP COLUMN mfa_version,DROP COLUMN mfa_totp_secret,DROP COLUMN mfa_totp_last_step"
+                        "ALTER TABLE users DROP COLUMN mfa_enabled,DROP COLUMN mfa_version,DROP COLUMN mfa_totp_secret,DROP COLUMN mfa_totp_last_step,DROP COLUMN mfa_code_failures,DROP COLUMN mfa_code_failures_since"
                     )
                 )
                 spec = importlib.util.spec_from_file_location(
@@ -102,17 +119,26 @@ class LocalMfaTests(unittest.TestCase):
                     migration, "op", Operations(MigrationContext.configure(conn))
                 ):
                     migration.upgrade()
-                spec = importlib.util.spec_from_file_location(
-                    "notification_migration",
-                    Path(__file__).parents[1]
-                    / "tests/fixtures/historical_migrations/0085_security_notifications.py",
-                )
-                migration = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(migration)
-                with patch.object(
-                    migration, "op", Operations(MigrationContext.configure(conn))
+                for name, path in (
+                    (
+                        "notification_migration",
+                        "tests/fixtures/historical_migrations/0085_security_notifications.py",
+                    ),
+                    # The shipped migration counting each account's wrong codes.
+                    (
+                        "code_failures_migration",
+                        "alembic/versions/0041_mfa_code_failures.py",
+                    ),
                 ):
-                    migration.upgrade()
+                    spec = importlib.util.spec_from_file_location(
+                        name, Path(__file__).parents[1] / path
+                    )
+                    migration = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(migration)
+                    with patch.object(
+                        migration, "op", Operations(MigrationContext.configure(conn))
+                    ):
+                        migration.upgrade()
         cls.app = FastAPI()
         cls.app.include_router(login_routes.router)
         cls.app.include_router(routes.router)
@@ -493,7 +519,7 @@ class LocalMfaTests(unittest.TestCase):
             db.commit()
         with (
             patch.object(mail, "smtp_configured", return_value=True),
-            patch.object(login_routes, "_client_ip", return_value="203.0.113.7"),
+            patch.object(api_context, "request_ip", return_value="203.0.113.7"),
         ):
             self.enrol()
             self.client.cookies.clear()
@@ -598,11 +624,12 @@ class LocalMfaTests(unittest.TestCase):
         ):
             mail.deliver_pending()
             self.assertTrue(send.called)
+            self.assertIn("recovery codes", send.call_args.kwargs["body"])
         with self.Session() as db:
-            self.assertEqual(
-                db.query(SecurityNotification).filter_by(user_id=self.uid).one().status,
-                "sent",
-            )
+            row = db.query(SecurityNotification).filter_by(user_id=self.uid).one()
+            self.assertEqual(row.status, "sent")
+            # A sent message's text is not kept.
+            self.assertEqual(row.body, "")
 
     def test_password_routes_enqueue_security_alerts(self):
         from app.api.routes import me, users
@@ -914,3 +941,214 @@ def test_local_mfa_needs_an_https_public_origin():
         503,
         "Local MFA requires an HTTPS KEEN_PUBLIC_BASE_URL",
     )
+
+
+# --- Wrong codes through the assembled application ------------------------------
+
+
+@pytest.fixture
+def ceremony(keen, monkeypatch):  # noqa: F811 - fixture imported above
+    """An enrolled TOTP account whose sign-ins stop at the second factor."""
+    from app.services import security_notifications
+
+    key = Fernet.generate_key()
+    monkeypatch.setattr(settings, "mfa_encryption_key", key.decode())
+    monkeypatch.setattr(security_notifications, "smtp_configured", lambda: True)
+    secret = pyotp.random_base32()
+    user = keen.user()
+    user.email = "owner@example.test"
+    user.mfa_enabled = True
+    user.mfa_totp_secret = Fernet(key).encrypt(secret.encode()).decode()
+    codes = ["%032X" % n for n in range(1, 3)]
+    keen.db.add_all(
+        MfaRecoveryCode(user_id=user.id, code_hash=mfa.digest(code)) for code in codes
+    )
+    keen.db.commit()
+
+    def sign_in(client=None):
+        client = client or keen.client()
+        started = client.post(
+            "/v1/auth/login",
+            json={"username": user.username, "password": PASSWORD},
+            headers={"Origin": BASE},
+        )
+        assert started.json()["mfa_required"] is True, started.text
+        return client
+
+    def code(client, value, kind="totp"):
+        return client.post(
+            "/v1/auth/mfa/verify-code",
+            json={"code": value, "kind": kind},
+            headers={"Origin": BASE},
+        )
+
+    def mail():
+        keen.db.expire_all()
+        return keen.db.query(SecurityNotification).filter_by(user_id=user.id).all()
+
+    good = pyotp.TOTP(secret).now()
+    wrong = [c for c in ("000000", "111111", "222222", "333333", "444444") if c != good]
+    return SimpleNamespace(
+        keen=keen,
+        user=user,
+        secret=secret,
+        good=good,
+        wrong=wrong,
+        recovery=codes,
+        sign_in=sign_in,
+        code=code,
+        mail=mail,
+    )
+
+
+def test_five_wrong_codes_end_the_ceremony_and_tell_the_owner(ceremony):
+    client = ceremony.sign_in()
+    # TOTP and recovery-code guesses both count against the account.
+    guesses = [(c, "totp") for c in ceremony.wrong[:3]] + [("F" * 32, "recovery")]
+    for value, kind in guesses:
+        refused = ceremony.code(client, value, kind)
+        assert refused.status_code == 400
+        assert refused.json()["detail"] == "Invalid or already-used code"
+
+    ended = ceremony.code(client, ceremony.wrong[3])
+
+    assert ended.status_code == 401
+    assert ended.json()["detail"] == mfa_operations.CODES_REFUSED
+    # The right code no longer completes the ended ceremony.
+    assert ceremony.code(client, ceremony.good).status_code == 401
+    origin = {"Origin": BASE}
+    assert client.post("/v1/auth/mfa/finish", headers=origin).status_code == 401
+    assert client.get("/v1/auth/check").status_code == 401
+    db = ceremony.keen.db
+    assert db.query(MfaChallenge).filter_by(user_id=ceremony.user.id).count() == 0
+    (notice,) = ceremony.mail()
+    assert notice.subject == (
+        "Keen security: Keen ended a two-factor verification after repeated "
+        "incorrect codes"
+    )
+    assert "\n" not in notice.subject and notice.recipient == "owner@example.test"
+    assert "Keen installation: https://keen.example\n" in notice.body
+    for value in (*ceremony.wrong, ceremony.good, ceremony.secret):
+        assert value not in notice.body
+    actions = [
+        path
+        for (path,) in db.query(AuditLog.path)
+        .filter(AuditLog.method == "MFA", AuditLog.username == ceremony.user.username)
+        .order_by(AuditLog.ts)
+    ]
+    assert actions == [
+        *["/v1/auth/mfa/rejected-totp"] * 3,
+        "/v1/auth/mfa/rejected-recovery",
+        "/v1/auth/mfa/verification-ended",
+    ]
+
+    # A new sign-in accepts no code for an hour, the right one included, and
+    # sends no further mail.
+    client = ceremony.sign_in(client)
+    refused = ceremony.code(client, ceremony.good)
+    assert refused.status_code == 401
+    assert refused.json()["detail"] == mfa_operations.CODES_REFUSED
+    assert len(ceremony.mail()) == 1
+
+    # Once the hour has passed, the right code completes a new sign-in.
+    user = db.get(User, ceremony.user.id)
+    user.mfa_code_failures_since -= mfa.CODE_LOCKOUT
+    db.commit()
+    client = ceremony.sign_in(client)
+    assert ceremony.code(client, ceremony.good).status_code == 200
+    assert client.post("/v1/auth/mfa/finish", headers=origin).status_code == 200
+    assert client.get("/v1/auth/check").status_code == 204
+
+
+def test_wrong_codes_count_across_sign_ins(ceremony):
+    """Starting again does not reset the count, so guesses stay bounded."""
+    client = ceremony.sign_in()
+    for value in ceremony.wrong[:4]:
+        assert ceremony.code(client, value).status_code == 400
+
+    client = ceremony.sign_in(client)
+    ended = ceremony.code(client, ceremony.wrong[4 % len(ceremony.wrong)])
+
+    assert ended.status_code == 401
+    assert ended.json()["detail"] == mfa_operations.CODES_REFUSED
+    assert [n.subject for n in ceremony.mail()] == [
+        "Keen security: Keen ended a two-factor verification after repeated "
+        "incorrect codes"
+    ]
+    # A third sign-in gets no guess at all.
+    client = ceremony.sign_in(client)
+    assert ceremony.code(client, ceremony.wrong[0]).status_code == 401
+    ceremony.keen.db.expire_all()
+    assert ceremony.keen.db.get(User, ceremony.user.id).mfa_code_failures == 5
+
+
+def test_fewer_wrong_codes_leave_the_ceremony_usable(ceremony):
+    client = ceremony.sign_in()
+    for value in ceremony.wrong[:4]:
+        assert ceremony.code(client, value).status_code == 400
+    # Failed security-key assertions are not guesses: each consumes its own
+    # challenge, and a forged one needs the key's private half.
+    for _ in range(3):
+        failed = client.post(
+            "/v1/auth/mfa/webauthn/verify",
+            json={"credential": {"id": "unknown"}},
+            headers={"Origin": BASE},
+        )
+        assert failed.status_code == 400
+
+    assert ceremony.code(client, ceremony.good).status_code == 200
+    origin = {"Origin": BASE}
+    assert client.post("/v1/auth/mfa/finish", headers=origin).status_code == 200
+    assert not any("two-factor verification" in n.subject for n in ceremony.mail())
+    # The right code clears the count.
+    ceremony.keen.db.expire_all()
+    user = ceremony.keen.db.get(User, ceremony.user.id)
+    assert (user.mfa_code_failures, user.mfa_code_failures_since) == (0, None)
+    rows = (
+        ceremony.keen.db.query(AuditLog)
+        .filter_by(path="/action/sign-in", username=ceremony.user.username)
+        .order_by(AuditLog.ts)
+        .all()
+    )
+    assert [row.query_string for row in rows] == [
+        "method=local&outcome=mfa-required",
+        "method=local&outcome=signed-in&mfa=verified",
+    ]
+
+
+def test_using_a_recovery_code_tells_the_owner(ceremony):
+    client = ceremony.sign_in()
+
+    used = ceremony.code(client, ceremony.recovery[0], "recovery")
+
+    assert used.status_code == 200
+    notices = [n for n in ceremony.mail() if "recovery code was used" in n.subject]
+    assert [n.subject for n in notices] == [
+        "Keen security: A recovery code was used for your Keen account"
+    ]
+    assert ceremony.recovery[0] not in notices[0].body
+    assert ceremony.recovery[1] not in notices[0].body
+    # The code is single use: a second ceremony cannot reuse it.
+    client = ceremony.sign_in(ceremony.keen.client())
+    assert ceremony.code(client, ceremony.recovery[0], "recovery").status_code == 400
+
+
+def test_a_refused_second_factor_start_still_audits_the_account(ceremony):
+    """A right password whose second factor cannot start is still recorded."""
+    client = ceremony.keen.client()
+
+    refused = client.post(
+        "/v1/auth/login",
+        json={"username": ceremony.user.username, "password": PASSWORD},
+    )
+
+    assert refused.status_code == 403
+    db = ceremony.keen.db
+    db.expire_all()
+    rows = (
+        db.query(AuditLog)
+        .filter_by(path="/action/sign-in", username=ceremony.user.username)
+        .all()
+    )
+    assert [row.query_string for row in rows] == ["method=local&outcome=mfa-refused"]
+    assert db.query(MfaChallenge).filter_by(user_id=ceremony.user.id).count() == 0

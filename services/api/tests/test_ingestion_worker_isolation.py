@@ -1,5 +1,6 @@
 """Queue routing, manual-run authority and deployment isolation contracts."""
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -40,6 +41,44 @@ def test_every_polling_entry_point_routes_to_its_worker():
         tasks.evidence_retention_task,
     ):
         assert queue(task.name) == "celery"
+
+
+def test_every_ingest_http_task_ends_after_its_collection_budgets():
+    # The ingest-http worker runs one task at a time, so a run that never
+    # ends would hold back every other collection on it.
+    from app.ingest import http
+    from app.ingest.riskledger import RiskLedgerError, validate_config
+
+    routed = {
+        name
+        for name, route in celery_app.conf.task_routes.items()
+        if route["queue"] == "ingest-http"
+    }
+    assert routed >= {
+        *(
+            f"app.worker.tasks.ingest_{source}_all_task"
+            for source in HTTP_INGEST_SOURCES
+        ),
+        tasks.ingest_source_connection_task.name,
+        tasks.integration_run_task.name,
+        tasks.cloud_posture_refresh_task.name,
+        tasks.cloud_activity_task.name,
+    }
+    for name in routed:
+        task = celery_app.tasks[name]
+        assert 0 < task.soft_time_limit < task.time_limit, name
+    # The longest per-connection run Risk Ledger accepts, plus one request in
+    # flight, finishes before a built-in collection task is stopped.
+    validate_config({"max_run_seconds": 1800})
+    with pytest.raises(RiskLedgerError):
+        validate_config({"max_run_seconds": 1801})
+    for source in HTTP_INGEST_SOURCES:
+        task = getattr(tasks, f"ingest_{source}_all_task")
+        assert task.soft_time_limit > 1800 + http.MAX_RESPONSE_SECONDS
+    assert (
+        tasks.ingest_source_connection_task.soft_time_limit
+        > 1800 + http.MAX_RESPONSE_SECONDS
+    )
 
 
 @pytest.mark.parametrize("source", sorted(set(HTTP_INGEST_SOURCES) - {"elasticsearch"}))
@@ -122,6 +161,36 @@ def test_compose_workers_and_python_capability_policy():
     assert not http.get("ports") and not http.get("profiles")
     builds = yaml.safe_load((root / "docker-compose.build.yml").read_text())["services"]
     assert builds["keen-http-worker"]["build"] == builds["keen-api"]["build"]
+
+
+def test_compose_refuses_to_start_without_backing_service_passwords():
+    root = Path(__file__).resolve().parents[3]
+    compose = (root / "docker-compose.yml").read_text()
+    references = re.findall(
+        r"\$\{(POSTGRES_PASSWORD|KEEN_REDIS_PASSWORD)(\W[^}]*)?\}", compose
+    )
+    # Every use names no fallback and stops Compose when the value is unset.
+    assert {name for name, _ in references} == {
+        "POSTGRES_PASSWORD",
+        "KEEN_REDIS_PASSWORD",
+    }
+    assert all(rest.startswith(":?") for _, rest in references), references
+    services = yaml.safe_load(compose)["services"]
+    assert "${KEEN_REDIS_PASSWORD:?" in " ".join(services["valkey"]["command"])
+    # The example settings send cookies over HTTPS only, and keep SameSite=lax
+    # so the session cookie survives the return from SSO sign-in.
+    example = dict(
+        line.split("=", 1)
+        for line in (root / ".env.example").read_text().splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+    assert example["KEEN_COOKIE_SECURE"] == "true"
+    assert example["KEEN_COOKIE_SAMESITE"] == "lax"
+    # The example ships no password, so a copied .env cannot start the stack
+    # with a known one; the service URLs take whatever the operator sets.
+    assert example["POSTGRES_PASSWORD"] == example["KEEN_REDIS_PASSWORD"] == ""
+    assert "${POSTGRES_PASSWORD}@postgres:" in example["KEEN_DATABASE_URL"]
+    assert "${KEEN_REDIS_PASSWORD}@valkey:" in example["KEEN_REDIS_URL"]
 
 
 @pytest.mark.parametrize("configured,expected", [(120, 120), (0, 60), (-5, 1)])

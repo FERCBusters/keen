@@ -96,6 +96,17 @@ def signing_key(db, agent, key_id, *, retired_since=None):
     raise HTTPException(401, "Invalid agent credential")
 
 
+def revoke_keys(db, *criteria):
+    """Revoke the usable agent keys matching ``criteria``; the caller commits.
+
+    A revoked key authenticates nothing, renewal retries included.
+    """
+    db.query(AgentKey).filter(AgentKey.state != "revoked", *criteria).update(
+        {AgentKey.state: "revoked", AgentKey.retired_at: utc_now_naive()},
+        synchronize_session=False,
+    )
+
+
 SIGNED_PER_MINUTE = 180
 
 

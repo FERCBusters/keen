@@ -210,6 +210,37 @@ test('a reader sees the timeline in time order with withheld items marked', asyn
   );
 });
 
+test('record links that resolve to another host once the framework is added stay plain text', async (t) => {
+  const base = story();
+  // The design system writes a link out again as a path; each of these becomes "//evil.example/...".
+  const hostile = ['/.//evil.example/phish', '/x/..//evil.example/phish', 'javascript:alert(1)'];
+  const items = hostile.map((url, index) => ({
+    ...base.items[2],
+    id: `i-h${index}`,
+    position: 4 + index,
+    x: 40 + index * 240,
+    y: 240,
+    label: '',
+    title: `Record ${index}`,
+    url,
+  }));
+  const ui = await open(t, {
+    detail: story({
+      items: [...base.items, ...items],
+      item_count: base.items.length + items.length,
+    }),
+  });
+  for (const item of items) {
+    const row = ui.document.querySelector(`#timeline [data-item-id="${item.id}"]`);
+    assert.equal(row.querySelector('a'), null, item.url);
+    assert.match(row.textContent, new RegExp(item.title));
+    const node = ui.document.querySelector(`#flow [data-item-id="${item.id}"] .story-node-title`);
+    assert.equal(node.querySelector('a'), null, item.url);
+  }
+  const login = ui.document.querySelector('#flow [data-item-id="i-login"] .story-node-title a');
+  assert.equal(login.getAttribute('href'), '/event.html?id=e1&framework=A');
+});
+
 test('an author edits the story, adds notes and records, and saves the layout', async (t) => {
   const calls = { post: [], patch: [], put: [] };
   const detail = story({ can_edit: true });

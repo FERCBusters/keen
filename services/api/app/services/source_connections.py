@@ -16,6 +16,11 @@ from app.ingest.connections import FIELDS, connections, deployment_settings
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
 from app.services.errors import DomainError
+from app.services.managed_configurations import (
+    WITHHELD,
+    credential_name,
+    withheld_inputs,
+)
 
 
 class ConnectionInput(BaseModel):
@@ -30,6 +35,25 @@ class ConnectionInput(BaseModel):
     version: int = 0
 
 
+def shown_inputs(source, inputs):
+    """A connection's inputs as listed, with credential values withheld."""
+
+    def show(section, value):
+        if credential_name(section):
+            return WITHHELD
+        if isinstance(value, list):
+            return [withheld_inputs(source, section, entry) for entry in value]
+        if isinstance(value, dict):
+            # Named entries, such as webhook providers.
+            return {
+                name: withheld_inputs(source, section, entry)
+                for name, entry in value.items()
+            }
+        return value
+
+    return {section: show(section, value) for section, value in (inputs or {}).items()}
+
+
 def view(row):
     return {
         k: getattr(row, k)
@@ -39,10 +63,13 @@ def view(row):
             "name",
             "enabled",
             "configuration",
-            "inputs",
             "version",
         )
-    } | {"managed_by": "database", "has_credentials": bool(row.encrypted_credentials)}
+    } | {
+        "inputs": shown_inputs(row.source, row.inputs),
+        "managed_by": "database",
+        "has_credentials": bool(row.encrypted_credentials),
+    }
 
 
 def validate(payload):
@@ -134,7 +161,7 @@ def listing(*, db):
             "name": c.name,
             "enabled": c.enabled,
             "configuration": c.configuration,
-            "inputs": c.inputs or {},
+            "inputs": shown_inputs(c.source, c.inputs),
             "version": 0,
             "managed_by": c.managed_by,
             "has_credentials": bool(c.credential_references),

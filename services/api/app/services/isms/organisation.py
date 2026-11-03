@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive as _utcnow
-from app.db.models import IsmsOrgNode, IsmsOrgNodeUser, Risk, User
+from app.db.models import IsmsOrgNode, IsmsOrgNodeUser, QuizAudience, Risk, User
 from app.security.permissions import has_permission
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
@@ -19,6 +19,7 @@ from .schemas import OrgNodePayload
 from .serializers import _entity_out
 
 RISK_MANAGE_PERMISSION = "risk.manage"
+QUIZ_MANAGE_PERMISSION = "quiz.manage"
 
 
 def _require_risk_authority_for_owner_role(
@@ -36,6 +37,30 @@ def _require_risk_authority_for_owner_role(
         raise DomainError(
             status_code=403,
             detail=f"risk.manage permission is required to {action} a role that owns risks",
+        )
+
+
+def require_quiz_authority_for_audience_roles(
+    db: Session, user: User, node_ids, action: str
+) -> None:
+    """A quiz assigned to an organisation role is for the people in that role.
+
+    Who belongs to such a role decides who sits the quiz's next round and, where
+    the quiz allows it, who reviews its answers, so changing that membership,
+    through the role's accounts or a person's role, or deleting the role, needs
+    the authority to manage quizzes.
+    """
+    ids = {node_id for node_id in node_ids if node_id is not None}
+    if not ids or has_permission(db, user, QUIZ_MANAGE_PERMISSION):
+        return
+    assigned = (
+        db.query(QuizAudience.id).filter(QuizAudience.org_node_id.in_(ids)).first()
+        is not None
+    )
+    if assigned:
+        raise DomainError(
+            status_code=403,
+            detail=f"quiz.manage permission is required to {action} a role a quiz is assigned to",
         )
 
 
@@ -125,6 +150,9 @@ def update_org_node(
             _require_risk_authority_for_owner_role(
                 db, user, row, "change the members of"
             )
+            require_quiz_authority_for_audience_roles(
+                db, user, [row.id], "change the members of"
+            )
         _replace_org_node_users(
             db, row, payload.user_ids or [], payload.relationship_type
         )
@@ -142,6 +170,7 @@ def delete_org_node(
     fw = framework_parameter(framework)
     row = _by_id_or_404(db, IsmsOrgNode, node_id, "Organisation chart node")
     _require_risk_authority_for_owner_role(db, user, row, "delete")
+    require_quiz_authority_for_audience_roles(db, user, [row.id], "delete")
     before = _entity_out(db, "org_node", row, fw)
     _record(db, "org_node", row, "deleted", before, None, user, context)
     _delete_entity_links(db, "org_node", row.id, fw)

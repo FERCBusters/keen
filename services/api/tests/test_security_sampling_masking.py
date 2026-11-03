@@ -114,7 +114,7 @@ def sampling_client(contract_db, monkeypatch, tmp_path):
         )
         assert permissions.get_effective_permission_codes(
             db, user, use_cache=False
-        ) == {"audits.manage"}
+        ) == permissions.with_implied_permissions({"audits.manage"})
     (tmp_path / "test-section.json").write_bytes(
         b'{"private_policy":"SYNTHETIC RESTRICTED SNAPSHOT"}'
     )
@@ -147,7 +147,9 @@ def grant(factory, user_id, code):
 
 
 @pytest.mark.parametrize("via_url", [False, True])
-def test_event_sampling_requires_events_read(sampling_client, via_url):
+def test_event_sampling_requires_events_read(
+    without_implied_permissions, sampling_client, via_url
+):
     client, factory, ids = sampling_client
     target = (
         {"evidence_url": f"/event.html?id={ids.event}"}
@@ -167,7 +169,9 @@ def test_event_sampling_requires_events_read(sampling_client, via_url):
     assert permitted.json()["event"]["summary"] == "SYNTHETIC RESTRICTED EVENT"
 
 
-def test_sampling_cannot_grant_itself_bookstack_snapshot_read(sampling_client):
+def test_sampling_cannot_grant_itself_bookstack_snapshot_read(
+    without_implied_permissions, sampling_client
+):
     client, factory, ids = sampling_client
     download_url = f"/v1/isms/bookstack-sections/{ids.section}/snapshot"
     sample_url = f"/v1/audits/{ids.audit}/evidence"
@@ -215,7 +219,7 @@ def test_sampling_cannot_grant_itself_bookstack_snapshot_read(sampling_client):
     ],
 )
 def test_sampling_other_sources_requires_their_read_permission(
-    sampling_client, entity_type
+    without_implied_permissions, sampling_client, entity_type
 ):
     client, factory, ids = sampling_client
     grant(factory, ids.user, "events.read")
@@ -369,7 +373,9 @@ def test_risk_sampling_preserves_owner_visibility(sampling_client, owner):
 
 
 @pytest.mark.parametrize("entity_type", [None, "", "   "])
-def test_url_only_samples_also_require_events_read(sampling_client, entity_type):
+def test_url_only_samples_also_require_events_read(
+    without_implied_permissions, sampling_client, entity_type
+):
     client, factory, ids = sampling_client
     url = f"/v1/audits/{ids.audit}/evidence"
     target = {
@@ -398,7 +404,9 @@ def test_url_only_samples_also_require_events_read(sampling_client, entity_type)
 @pytest.mark.parametrize(
     "other_permission", ["events.read", "risk.read", "isms.manage"]
 )
-def test_isms_sampling_requires_explicit_isms_read(sampling_client, other_permission):
+def test_isms_sampling_requires_explicit_isms_read(
+    without_implied_permissions, sampling_client, other_permission
+):
     client, factory, ids = sampling_client
     grant(factory, ids.user, other_permission)
     url = f"/v1/audits/{ids.audit}/evidence"
@@ -408,6 +416,28 @@ def test_isms_sampling_requires_explicit_isms_read(sampling_client, other_permis
         assert db.query(AuditEvidence).count() == 0
     grant(factory, ids.user, "isms.read")
     assert client.post(url, json=target).status_code == 200
+
+
+def test_audit_managers_sample_the_events_and_isms_records_they_read(
+    sampling_client,
+):
+    client, factory, ids = sampling_client
+    url = f"/v1/audits/{ids.audit}/evidence"
+    # audits.manage alone includes events.read and isms.read.
+    assert client.get(f"/v1/events/{ids.event}").status_code == 200
+    event = client.post(url, json={"event_id": str(ids.event)})
+    assert event.status_code == 200, event.text
+    assert event.json()["event"]["summary"] == "SYNTHETIC RESTRICTED EVENT"
+    section = {"entity_type": "bookstack_section", "entity_id": str(ids.section)}
+    assert client.post(url, json=section).status_code == 200
+    # Records outside events and the ISMS still need their own read access.
+    for entity_type in ("risk", "pestle_item", "interested_party", "story"):
+        refused = client.post(
+            url, json={"entity_type": entity_type, "entity_id": str(uuid.uuid4())}
+        )
+        assert refused.status_code == 403, (entity_type, refused.text)
+    with factory() as db:
+        assert db.query(AuditEvidence).count() == 2
 
 
 @pytest.fixture
@@ -535,7 +565,7 @@ def test_audit_manager_runs_own_audit_but_cannot_delete_it(sampling_client):
 
 
 def test_audit_administrator_can_edit_and_delete_but_still_needs_source_read(
-    sampling_client, other_audits
+    without_implied_permissions, sampling_client, other_audits
 ):
     client, factory, ids = sampling_client
     grant(factory, ids.user, "audits.admin")

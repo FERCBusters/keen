@@ -7,11 +7,19 @@ asks /v1/auth/check-admin before serving the administration pages.
 
 from datetime import datetime
 
+import pytest
 from app.core.config import settings
-from app.db.models import MfaCredential, MfaRecoveryCode, UserSsoEmail
+from app.db.models import (
+    MfaCredential,
+    MfaRecoveryCode,
+    SecurityNotification,
+    SsoEmailChallenge,
+    UserSsoEmail,
+)
+from app.services import mailer
 
 # Imported fixture: the assembled application with an in-memory session store.
-from tests.test_assembled_authority_regressions import keen  # noqa: F401
+from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401
 
 
 def test_the_mfa_summary_lists_factors_without_their_secrets(keen):  # noqa: F811
@@ -89,29 +97,68 @@ def test_sso_linking_addresses_are_the_users_own(keen, monkeypatch):  # noqa: F8
     assert keen.client().get("/v1/me/sso-emails").status_code == 401
 
 
-def test_the_admin_page_gate_admits_administrators_and_auditors(keen):  # noqa: F811
+def test_requesting_a_linking_address_reveals_nothing_about_other_accounts(
+    keen,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "smtp_host", "smtp.invalid")
+    monkeypatch.setattr(settings, "smtp_from_email", "keen@keen.example")
+    monkeypatch.setattr(
+        mailer,
+        "send_email",
+        lambda **kw: pytest.fail("the request contacts the mail server"),
+    )
+    victim = keen.user()
+    victim.email = "Victim.Person@corp.example"
+    keen.db.add(UserSsoEmail(email="alias.person@corp.example", user_id=keen.user().id))
+    keen.db.commit()
+    requester = keen.user()
+    client = keen.client(requester)  # a fresh sign-in satisfies the five-minute rule
+
+    def request(email):
+        return client.post(
+            "/v1/me/sso-emails/request", json={"email": email}, headers=unsafe(client)
+        )
+
+    def challenge():
+        keen.db.expire_all()
+        return keen.db.query(SsoEmailChallenge).filter_by(user_id=requester.id).one()
+
+    free = request("nobody@corp.example")
+    first = challenge().token_hash
+    answers = [free, request("victim.person@corp.example")]
+    after_primary = challenge().token_hash
+    answers.append(request("alias.person@corp.example"))
+
+    # Another account's email or linking address gets the answer a free
+    # address gets, and replaces the outstanding link just the same.
+    assert {(r.status_code, r.text) for r in answers} == {(200, '{"ok":true}')}
+    assert len({first, after_primary, challenge().token_hash}) == 3
+    queued = keen.db.query(SecurityNotification).filter_by(user_id=requester.id)
+    assert [n.recipient for n in queued] == ["nobody@corp.example"]
+    assert keen.db.query(UserSsoEmail).filter_by(user_id=requester.id).count() == 0
+
+
+def test_the_admin_page_gate_admits_administrators_only(keen):  # noqa: F811
     path = "/v1/auth/check-admin"
     assert keen.client().get(path).status_code == 401
 
-    member = keen.client(keen.user("events.read", "isms.manage"))
-    refused = member.get(path)
-    assert (refused.status_code, refused.json()["detail"]) == (
-        403,
-        "Admin or audit access required",
-    )
-
-    auditor_user = keen.user("audittrail.read")
-    auditor = keen.client(auditor_user).get(path)
-    assert auditor.status_code == 204 and not auditor.content
-    assert (auditor.headers["x-keen-user"], auditor.headers["x-keen-role"]) == (
-        auditor_user.username,
-        "normal",
-    )
+    # Audit managers, and a permission named after the retired audit trail
+    # permission, are refused like any other account.
+    for codes in (("events.read", "isms.manage"), ("audittrail.read", "audits.admin")):
+        refused = keen.client(keen.user(*codes)).get(path)
+        assert (refused.status_code, refused.json()["detail"]) == (
+            403,
+            "Admin role required",
+        )
 
     admin_user = keen.user(role="admin")
     admin = keen.client(admin_user).get(path)
-    assert admin.status_code == 204
-    assert admin.headers["x-keen-role"] == "admin"
+    assert admin.status_code == 204 and not admin.content
+    assert (admin.headers["x-keen-user"], admin.headers["x-keen-role"]) == (
+        admin_user.username,
+        "admin",
+    )
 
 
 def test_every_documentation_page_renders_for_a_signed_in_user(keen):  # noqa: F811

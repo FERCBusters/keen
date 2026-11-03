@@ -17,6 +17,10 @@ Rules:
 - either({...}, {...}): an administrator, or an account holding every
   permission of at least one set.
 
+A permission that implies others (IMPLIED_PERMISSIONS, resolved the same way by
+services/api/app/security/permissions.py) counts as each permission it implies,
+so every rule also admits the sets that hold its permissions that way.
+
 Administrators pass every rule except PUBLIC, which does not depend on accounts.
 Ownership and object visibility add to these rules for some operations; see
 OBJECT_RULES. The deployment check covers the permission gate of those
@@ -40,7 +44,6 @@ PERMISSIONS = (
     "audits.read",
     "audits.manage",
     "audits.admin",
-    "audittrail.read",
     "incident.create",
     "incident.delete",
     "question.create",
@@ -51,6 +54,14 @@ PERMISSIONS = (
     "quiz.read",
     "quiz.manage",
 )
+
+
+# Whoever samples evidence into an audit reads the events and ISMS records audits
+# examine.
+IMPLIED_PERMISSIONS = {
+    "audits.manage": frozenset({"events.read", "isms.read"}),
+    "audits.admin": frozenset({"events.read", "isms.read"}),
+}
 
 
 @dataclass(frozen=True)
@@ -94,7 +105,6 @@ PARTIES_MANAGE = any_of("interested_parties.manage", "risk.manage")
 AUDITS_READ = any_of("audits.read", "audits.manage", "audits.admin")
 AUDITS_MANAGE = any_of("audits.manage", "audits.admin")
 AUDITS_ADMIN = any_of("audits.admin")
-AUDIT_TRAIL = any_of("audittrail.read")
 # stories.manage and stories.admin include story reads; see OBJECT_RULES for
 # the ownership rule that limits stories.manage to its holder's own stories.
 STORIES_READ = any_of("stories.read", "stories.manage", "stories.admin")
@@ -108,14 +118,37 @@ QUIZ_MANAGE = any_of("quiz.manage")
 # operations are checked with their permission gate only.
 OBJECT_RULES = {
     "GET /v1/risks/{risk_id}": "Members of the risk's owning organisation role can read it.",
-    "PATCH /v1/isms/org-nodes/{node_id}": "Changing members of a role that owns risks needs risk.manage.",
+    "PATCH /v1/isms/org-nodes/{node_id}": (
+        "Changing members of a role that owns risks needs risk.manage, and of a "
+        "role a quiz is assigned to, quiz.manage."
+    ),
+    "DELETE /v1/isms/org-nodes/{node_id}": (
+        "Deleting a role that owns risks needs risk.manage, and a role a quiz is "
+        "assigned to, quiz.manage."
+    ),
+    "POST /v1/isms/people": (
+        "Placing a person in a role a quiz is assigned to needs quiz.manage."
+    ),
+    "PATCH /v1/isms/people/{person_id}": (
+        "Moving a person into or out of a role a quiz is assigned to, or changing "
+        "the account of someone who sits or is assigned quizzes, needs quiz.manage."
+    ),
+    "GET /v1/audits/scope-coverage": (
+        "ISMS documents and their counts appear only for ISMS readers."
+    ),
+    "POST /v1/audits": "Scoping ISMS documents needs ISMS read access.",
+    "PUT /v1/audits/{audit_id}/scope": "As above, for the audit's own scope.",
+    "POST /v1/audits/scheduled": "Scoping ISMS documents needs ISMS read access.",
     "PATCH /v1/audits/{audit_id}": "audits.manage can edit audits its holder created.",
     "POST /v1/audits/{audit_id}/report": "audits.manage can upload reports to audits its holder created.",
     "POST /v1/audits/{audit_id}/evidence": (
         "audits.manage can sample into audits its holder created; sampling an event "
         "needs events.read and sampling a record needs read access to it."
     ),
-    "PATCH /v1/audits/scheduled/{audit_id}": "audits.manage can edit templates its holder created.",
+    "PATCH /v1/audits/scheduled/{audit_id}": (
+        "audits.manage can edit templates its holder created; scoping ISMS "
+        "documents needs ISMS read access."
+    ),
     "DELETE /v1/questions/{thread_id}": "The question's target must be visible to the account.",
     "POST /v1/questions/{thread_id}/posts": "The question's author can reply as well as administrators.",
     "POST /v1/questions/entities/{entity_type}/{entity_id}": (
@@ -229,8 +262,7 @@ POLICY = {
     "POST /v1/webhooks/isms/effectiveness-metrics/{metric_key}": PUBLIC,
     # --- Session checks used by nginx before serving pages -------------------------
     "GET /v1/auth/check": SIGNED_IN,
-    # Audit-trail readers reach the administration page's audit-trail view.
-    "GET /v1/auth/check-admin": AUDIT_TRAIL,
+    "GET /v1/auth/check-admin": ADMIN,
     # --- Administration ------------------------------------------------------------
     "GET /v1/admin/adapter-settings/{adapter}": ADMIN,
     "PUT /v1/admin/adapter-settings/{adapter}": ADMIN,
@@ -243,7 +275,7 @@ POLICY = {
     "POST /v1/admin/agents/{agent_id}/revoke": ADMIN,
     "POST /v1/admin/agents/{agent_id}/rotate": ADMIN,
     "PATCH /v1/admin/agents/{agent_id}/evidence": ADMIN,
-    "GET /v1/admin/audit": AUDIT_TRAIL,
+    "GET /v1/admin/audit": ADMIN,
     "GET /v1/admin/bookstack/catalog": ADMIN,
     "PATCH /v1/admin/clauses/{clause_id}/controls": ADMIN,
     "PATCH /v1/admin/clauses/{clause_id}/evidence-urls": ADMIN,
@@ -259,7 +291,7 @@ POLICY = {
     "PATCH /v1/admin/controls/{control_id}/upstream-url": ADMIN,
     "POST /v1/admin/diary": ADMIN,
     "PATCH /v1/admin/diary/{event_id}": ADMIN,
-    "GET /v1/admin/entity-changelog": AUDIT_TRAIL,
+    "GET /v1/admin/entity-changelog": ADMIN,
     "GET /v1/admin/evidence-connections/{key}/removal": ADMIN,
     "POST /v1/admin/evidence-connections/{key}/remove": ADMIN,
     "GET /v1/admin/evidence-definitions": ADMIN,
@@ -697,3 +729,22 @@ POLICY = {
     "POST /v1/me/sso-emails/remove": SIGNED_IN,
     "POST /v1/me/sso-emails/request": SIGNED_IN,
 }
+
+
+def _with_implications(rule):
+    """The rule with every permission set that holds an alternative through
+    IMPLIED_PERMISSIONS, keeping only the smallest sets."""
+    if rule.kind != "permissions":
+        return rule
+    found = list(dict.fromkeys(rule.alternatives))
+    for alternative in found:  # variants join the list and are expanded in turn
+        for holder, implied in IMPLIED_PERMISSIONS.items():
+            covered = alternative & implied
+            variant = (alternative - covered) | {holder}
+            if covered and variant not in found:
+                found.append(variant)
+    smallest = tuple(a for a in found if not any(other < a for other in found))
+    return Rule(rule.kind, smallest)
+
+
+POLICY = {key: _with_implications(rule) for key, rule in POLICY.items()}

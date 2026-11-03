@@ -13,6 +13,9 @@ from app.core.valkey import get_valkey
 from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import current_connection, load_document, namespace
 
+# The providers defined in the webhooks.yml Keen ships. Each has its own
+# delivery allowance per client address; any other provider name shares one.
+BUILT_IN_PROVIDERS = frozenset({"cloudtrail_source_ip", "enroll"})
 _MAX_WEBHOOK_PAYLOAD_BYTES = 10 * 1024 * 1024  # 10MB
 # Replay protection: reject webhooks older than 15 minutes
 _WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 900

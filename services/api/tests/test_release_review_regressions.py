@@ -220,10 +220,12 @@ def test_integration_origin_change_requires_credential(monkeypatch):
                 created["id"], body.model_copy(update=update), db
             )
 
-        with pytest.raises(DomainError) as rejected:
-            save(base_url="https://other.example.org")
-        assert rejected.value.status_code == 422
-        save(base_url="https://api.example.org/v2")  # same origin
+        # A new origin, or a new path on the same origin, moves the secret.
+        for moved in ("https://other.example.org", "https://api.example.org/v2"):
+            with pytest.raises(DomainError) as rejected:
+                save(base_url=moved)
+            assert rejected.value.status_code == 422
+        save(base_url="https://api.example.org/")  # the same destination
         save(base_url="https://other.example.org", secret="REPLACEMENT")
     finally:
         generator.close()
@@ -375,6 +377,8 @@ def test_admin_removing_operations_take_the_lock_before_counting(monkeypatch):
         admin.admin_update_group,
         admin.admin_delete_group,
         admin.admin_set_group_members,
+        # Permission replacement reads the members it invalidates under the lock.
+        admin.admin_set_group_permissions,
     ):
         source = inspect.getsource(function)
         assert source.index("lock_admin_changes(db)") < min(
@@ -383,3 +387,89 @@ def test_admin_removing_operations_take_the_lock_before_counting(monkeypatch):
             if token in source
         ), function.__name__
     assert datetime  # imported for fixtures that seed timestamps
+
+
+def test_a_group_permission_change_waits_for_a_membership_change(
+    contract_postgres_engine,
+):
+    # A member joining while the group's permissions are replaced must not
+    # keep a permission snapshot computed from the old permissions.
+    import threading
+    import time
+
+    from app.db.models import Group, Permission, User, user_groups
+    from app.schemas import GroupPermissionsPayload
+    from app.security.roles import lock_admin_changes
+    from app.services import admin
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+
+    engine = contract_postgres_engine
+    if engine is None:
+        pytest.skip("Needs separate PostgreSQL connections")
+    tag = uuid.uuid4().hex[:10]
+    with Session(engine) as db:
+        actor = User(username="admin-" + tag, password_hash="x", role="admin")
+        member = User(username="member-" + tag, password_hash="x", role="inherit")
+        group = Group(name="group-" + tag)
+        db.add_all([actor, member, group, Permission(code="perm." + tag)])
+        db.commit()
+        actor_id, member_id, group_id = actor.id, member.id, group.id
+
+    joining = Session(engine)
+    finished = threading.Event()
+    failures, worker_pid = [], []
+
+    def replace_permissions():
+        try:
+            with Session(engine) as db:
+                db.execute(text("SET lock_timeout = '10s'"))
+                worker_pid.append(db.execute(text("SELECT pg_backend_pid()")).scalar())
+                admin.admin_set_group_permissions(
+                    group_id=str(group_id),
+                    payload=GroupPermissionsPayload(permission_codes=["perm." + tag]),
+                    user=db.get(User, actor_id),
+                    db=db,
+                )
+        except Exception as error:  # reported by the assertion below
+            failures.append(error)
+        finally:
+            finished.set()
+
+    try:
+        # The membership change holds the administrator lock, as
+        # admin_set_group_members does, until it commits.
+        lock_admin_changes(joining)
+        joining.execute(
+            user_groups.insert(), [{"user_id": member_id, "group_id": group_id}]
+        )
+        joining.query(User).filter(User.id == member_id).update(
+            {User.authz_version: User.authz_version + 1}, synchronize_session=False
+        )
+        joining.flush()
+        worker = threading.Thread(target=replace_permissions)
+        worker.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not finished.is_set():
+            with engine.connect() as probe:
+                waiting = (
+                    worker_pid
+                    and probe.execute(
+                        text(
+                            "SELECT count(*) FROM pg_locks WHERE pid = :pid AND NOT granted"
+                        ),
+                        {"pid": worker_pid[0]},
+                    ).scalar()
+                )
+            if waiting:
+                break
+            time.sleep(0.05)
+        joining.commit()
+        worker.join(15)
+    finally:
+        joining.close()
+
+    assert not failures, failures
+    with Session(engine) as db:
+        # One increment for joining and one for the permission replacement.
+        assert db.get(User, member_id).authz_version == 2

@@ -11,6 +11,9 @@ from app.api.routes import agent_enrollment as api
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
 from app.services.errors import DomainError
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from tests.test_keen_agent import record
@@ -108,6 +111,73 @@ def test_lost_response_retry_quota_and_agent_revocation(fleet):
     assert enroll(c, p, n, agent=first.sim).status_code == 409
     with f() as db:
         assert db.get(AgentEnrollmentProfile, p["profile"]["id"]).enrollment_count == 2
+
+
+HELD = "Agent name is in use outside this enrollment profile; choose another name"
+
+
+def test_profile_keys_cannot_enrol_under_another_devices_name(fleet):
+    c, f, p, _ = fleet
+    # An administrator registers the production database server; its code is
+    # not used yet. The fixture's OTLP collector holds its name too.
+    registered = c.post("/v1/admin/agents", json={"name": "prod-db-01"})
+    assert registered.status_code == 201, registered.text
+    other = c.post("/v1/admin/agent-enrollment-profiles", json={"name": "Batch"})
+    other = other.json()
+    assert enroll(c, other, name="batch-01").status_code == 201
+    # Whoever holds the fleet key cannot take those names, in any case.
+    for name in ("prod-db-01", "PROD-DB-01", "trusted-server", "batch-01"):
+        refused = enroll(c, p, name=name)
+        assert (refused.status_code, refused.json()["detail"]) == (409, HELD), name
+    with f() as db:
+        fleet_agents = db.query(KeenAgent).filter_by(
+            enrollment_profile_id=p["profile"]["id"]
+        )
+        assert fleet_agents.count() == 0
+        assert db.get(AgentEnrollmentProfile, p["profile"]["id"]).enrollment_count == 0
+
+    # Machines in one profile share a name, and a retry with the saved nonce
+    # returns the same agent even once the name is held elsewhere.
+    nonce = secrets.token_urlsafe(32)
+    first = enroll(c, p, nonce, name="web-01")
+    assert first.status_code == 201, first.text
+    assert enroll(c, p, name="web-01").status_code == 201
+    assert c.post("/v1/admin/agents", json={"name": "web-01"}).status_code == 201
+    again = enroll(c, p, nonce, name="web-01", agent=first.sim)
+    assert again.status_code == 201, again.text
+    assert again.json()["key_id"] == first.json()["key_id"]
+
+    # Revoked and expired devices give up their names.
+    c.post("/v1/admin/agents/" + registered.json()["agent"]["id"] + "/revoke")
+    assert enroll(c, other, name="prod-db-01").status_code == 201
+    with f() as db:
+        collector = db.query(KeenAgent).filter_by(name="trusted-server").one()
+        collector.expires_at = utc_now_naive() - timedelta(minutes=1)
+        db.commit()
+    assert enroll(c, other, name="trusted-server").status_code == 201
+
+
+def test_agent_name_claims_are_serialised_on_postgres(contract_postgres_engine):
+    if contract_postgres_engine is None:
+        pytest.skip("Requires PostgreSQL for advisory-lock concurrency")
+    with (
+        Session(contract_postgres_engine) as first,
+        Session(contract_postgres_engine) as second,
+    ):
+        agent_enrollment_operations.lock_agent_name(first, "prod-db-01")
+        second.execute(text("SET LOCAL lock_timeout='100ms'"))
+        # The same name in another case waits for the first claim to end ...
+        with pytest.raises(OperationalError):
+            agent_enrollment_operations.lock_agent_name(second, "PROD-DB-01")
+        second.rollback()
+        # ... while another name proceeds, and the name is free once it ends.
+        second.execute(text("SET LOCAL lock_timeout='100ms'"))
+        agent_enrollment_operations.lock_agent_name(second, "web-01")
+        second.rollback()
+        first.rollback()
+        second.execute(text("SET LOCAL lock_timeout='100ms'"))
+        agent_enrollment_operations.lock_agent_name(second, "prod-db-01")
+        second.rollback()
 
 
 def test_pause_rotate_revoke_and_manual_independence(fleet):

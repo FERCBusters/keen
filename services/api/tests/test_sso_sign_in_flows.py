@@ -19,7 +19,7 @@ import httpx2
 import pytest
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
+from app.db.models import AuditLog, OidcLoginState, User, UserIdentity, UserSsoEmail
 from app.security import oidc
 from joserfc import jwt
 from joserfc.jwk import RSAKey
@@ -341,6 +341,18 @@ def test_a_replayed_callback_is_refused_even_with_the_original_binding(sso):
         "javascript:alert(1)",
         "controls.html",
         "/redirect?to=https://attacker.example",
+        # Dot segments, which browsers resolve to //attacker.example.
+        "/.//attacker.example",
+        "/./attacker.example",
+        "/a/..//attacker.example",
+        "/..//attacker.example",
+        "/a/.",
+        "/a/..",
+        "/%2e//attacker.example",
+        "/%2E%2E//attacker.example",
+        "/x/%2e%2e/%2fattacker.example",
+        "/%2f/attacker.example",
+        "/%5Cattacker.example",
     ],
 )
 def test_sign_in_never_lands_off_site(sso, target):
@@ -370,6 +382,19 @@ def test_a_tampered_stored_destination_is_checked_again_at_the_callback(sso):
     landed = sso.finish(browser, query["state"])
 
     assert landed.status_code == 302 and landed.headers["location"] == "/"
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["/controls.html?framework=iso", "/event.html?id=1#notes", "/search?q=a/../b"],
+)
+def test_ordinary_destinations_are_kept(sso, target):
+    sso.account(subject="idp-subject")
+    browser = sso.keen.client()
+
+    landed = sso.sign_in(browser, target)
+
+    assert landed.status_code == 302 and landed.headers["location"] == target
 
 
 # --- Linking the identity to an account ---------------------------------------
@@ -464,6 +489,127 @@ def test_the_email_domain_allowlist_applies_before_linking(sso, monkeypatch):
     browser = sso.keen.client()
     assert sso.sign_in(browser).status_code == 302
     assert _signed_in_as(browser) == allowed.username
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"email": "ada@partner.example", "email_verified": True},
+        {"email": "ada@company.example", "email_verified": False},
+        {},
+    ],
+    ids=["other-domain", "unverified", "no-email"],
+)
+def test_the_email_domain_allowlist_applies_to_every_sign_in(sso, monkeypatch, claims):
+    # An identity linked while its address was allowed stops signing in once
+    # the address leaves the allowed domains or the list is tightened.
+    user = sso.account(subject="idp-subject")
+    sso.provider.claims = {"email": "ada@company.example", "email_verified": True}
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+    monkeypatch.setattr(settings, "oidc_allowed_email_domains", "Company.example")
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+
+    sso.provider.claims = claims
+    browser = sso.keen.client()
+    refused = sso.sign_in(browser)
+
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "Email domain is not allowed"
+    assert not _sets_session(refused) and _signed_in_as(browser) is None
+    # The refused identity keeps its last accepted profile.
+    sso.db.expire_all()
+    assert sso.db.query(UserIdentity).one().email == "ada@company.example"
+    row = _sign_in_rows(sso)[-1]
+    assert row == (user.username, {"method": ["oidc"], "outcome": ["failed"]})
+
+
+def test_a_github_sign_in_rechecks_the_allowed_domains(github, monkeypatch):
+    user = github.account(email="ada@company.example")
+    github.provider.github_emails = httpx2.Response(
+        200, json=[{"email": "ada@company.example", "primary": True, "verified": True}]
+    )
+    browser, _, landed = _github_sign_in(github)
+    assert landed.status_code == 302 and _signed_in_as(browser) == user.username
+
+    monkeypatch.setattr(settings, "github_allowed_email_domains", "corp.example")
+    browser, _, refused = _github_sign_in(github)
+
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "Email domain is not allowed"
+    assert _signed_in_as(browser) is None
+
+
+# --- Sign-in audit and issuance --------------------------------------------------
+
+
+def _sign_in_rows(sso):
+    sso.db.expire_all()
+    return [
+        (row.username, parse_qs(row.query_string or ""))
+        for row in sso.db.query(AuditLog)
+        .filter_by(path="/action/sign-in")
+        .order_by(AuditLog.ts)
+        .all()
+    ]
+
+
+def test_sso_sign_in_attempts_are_audited(sso):
+    user = sso.account(subject="idp-subject")
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+    sso.provider.subject = "unlinked-subject"
+    assert sso.sign_in(sso.keen.client()).status_code == 403
+    user.is_active = False
+    sso.db.commit()
+    sso.provider.subject = "idp-subject"
+    assert sso.sign_in(sso.keen.client()).status_code == 403
+    # A callback that never consumed a sign-in this browser began is no attempt.
+    _, query = sso.authorize(sso.keen.client())
+    assert sso.finish(sso.keen.client(), query["state"]).status_code == 400
+
+    assert _sign_in_rows(sso) == [
+        (user.username, {"method": ["oidc"], "outcome": ["signed-in"]}),
+        (None, {"method": ["oidc"], "outcome": ["failed"]}),
+        (user.username, {"method": ["oidc"], "outcome": ["failed"]}),
+    ]
+
+
+def test_a_deactivation_during_sign_in_issues_no_session(sso, monkeypatch):
+    # The account is deactivated after its identity is checked and before the
+    # session is issued. A session carrying the post-deactivation version
+    # would become valid again when the account is reactivated.
+    from app.db.models import User as Account
+
+    user = sso.account(subject="idp-subject")
+    resolve = oidc._get_or_create_user_for_identity
+
+    def deactivated_meanwhile(db, **kwargs):
+        resolved = resolve(db, **kwargs)
+        db.query(Account).filter(Account.id == resolved.id).update(
+            {
+                Account.is_active: False,
+                Account.session_version: Account.session_version + 1,
+            },
+            synchronize_session=False,
+        )
+        db.commit()
+        return resolved
+
+    monkeypatch.setattr(oidc, "_get_or_create_user_for_identity", deactivated_meanwhile)
+    browser = sso.keen.client()
+
+    refused = sso.sign_in(browser)
+
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "User is inactive"
+    assert not _sets_session(refused)
+    sso.db.expire_all()
+    sso.db.get(Account, user.id).is_active = True
+    sso.db.commit()
+    assert _signed_in_as(browser) is None
+    assert _sign_in_rows(sso)[-1] == (
+        user.username,
+        {"method": ["oidc"], "outcome": ["failed"]},
+    )
 
 
 # --- Provider failures ---------------------------------------------------------

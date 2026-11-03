@@ -49,6 +49,23 @@ celery_app.conf.task_routes = {
     "app.worker.tasks.integration_run_task": {"queue": "ingest-http"},
     "keen.ingest_imap_connection": {"queue": "imap"},
 }
+# The ingest-http worker runs one task at a time, so a collection that never
+# ends would hold back every other collector and custom API run. Each request
+# already ends within its transport budget (two minutes for built-in
+# collectors), and the longest per-connection run budget, Risk Ledger's
+# max_run_seconds, is at most 30 minutes; these limits stop a run that still
+# continues an hour later. The soft limit ends the whole run of a source's
+# connections, and its next run starts one connection further along, so the
+# connections a stopped run missed are not always last. Cloud posture tasks
+# and custom API runs keep their own, shorter limits.
+HTTP_COLLECTION_LIMITS = {"soft_time_limit": 3300, "time_limit": 3600}
+celery_app.conf.task_annotations = {
+    **{
+        f"app.worker.tasks.ingest_{source}_all_task": HTTP_COLLECTION_LIMITS
+        for source in HTTP_INGEST_SOURCES
+    },
+    "keen.ingest_source_connection": HTTP_COLLECTION_LIMITS,
+}
 
 # Beat schedules
 celery_app.conf.beat_schedule = {
@@ -132,6 +149,11 @@ celery_app.conf.beat_schedule = {
     "inbox-housekeeping-daily": {
         "task": "app.worker.tasks.inbox_housekeeping_task",
         "schedule": crontab(hour=1, minute=40),
+    },
+    # Remove audit-trail records older than KEEN_AUDIT_LOG_RETENTION_DAYS.
+    "audit-log-retention-daily": {
+        "task": "app.worker.tasks.audit_log_retention_task",
+        "schedule": crontab(hour=1, minute=50),
     },
     "recover-rule-backfills": {
         "task": "app.worker.tasks.recover_rule_backfills_task",

@@ -109,6 +109,11 @@ REFUSED = [
         "action_regex: Nested repetition can stall ingestion",
     ),
     (
+        "expanded-mode",
+        _rule("r", action_regex="(?x)(a{1, 2}){1, 1000}$"),
+        "action_regex: Expanded mode (the x flag) is unsupported; write the pattern without it",
+    ),
+    (
         "bad-cidr",
         _rule(
             "r",

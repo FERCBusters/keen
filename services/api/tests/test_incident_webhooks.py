@@ -7,6 +7,7 @@ builds, signs and sends each message.
 import hashlib
 import hmac
 import json
+import time
 import uuid
 from datetime import datetime
 from types import SimpleNamespace
@@ -52,7 +53,6 @@ def incident(keen, monkeypatch):  # noqa: F811 - fixture imported above
     for name, value in {
         "incident_webhook_url": HOOK,
         "incident_webhook_signing_secret": SECRET,
-        "incident_webhook_signature_header": "X-Keen-Signature",
         "incident_webhook_headers_json": json.dumps(
             {"X-Team": "soc", "Bad Header": "dropped", "": "dropped"}
         ),
@@ -132,8 +132,12 @@ def test_an_incident_posts_a_signed_redacted_summary_linking_to_keen(incident):
     assert sent.headers["user-agent"] == "Keen Incident Webhook"
     assert sent.headers["x-team"] == "soc"
     assert "bad header" not in {k.lower() for k in sent.headers}
-    expected = hmac.new(SECRET.encode(), sent.content, hashlib.sha256).hexdigest()
-    assert sent.headers["x-keen-signature"] == f"sha256={expected}"
+    # Signed over the delivery's timestamp and body, as signed submissions are.
+    timestamp = sent.headers["x-keen-timestamp"]
+    assert abs(int(timestamp) - time.time()) < 60
+    message = timestamp.encode() + b"." + sent.content
+    expected = hmac.new(SECRET.encode(), message, hashlib.sha256).hexdigest()
+    assert sent.headers["x-keen-signature"] == f"v1={expected}"
 
     body = json.loads(sent.content)
     assert body["type"] == "keen.incident.created"
@@ -307,7 +311,8 @@ def test_an_unsigned_webhook_carries_no_signature_header(incident, monkeypatch):
     response = incident.create()
     assert response.status_code == 200, response.text
     (sent,) = incident.receiver.requests
-    assert "x-keen-signature" not in {k.lower() for k in sent.headers}
+    names = {k.lower() for k in sent.headers}
+    assert "x-keen-signature" not in names and "x-keen-timestamp" not in names
     assert sent.headers["x-team"] == "soc"
 
 
@@ -325,7 +330,7 @@ def test_webhook_text_and_header_configuration_are_bounded_and_tolerant():
         json.dumps({"X-Ok": "1", "Dropped": None, " ": "x", "Tab\tName": "x"})
     ) == {"X-Ok": "1"}
     config = incidents.IncidentWebhookConfig(
-        url="", headers={}, signing_secret="", signature_header="X", timeout_seconds=1
+        url="", headers={}, signing_secret="", timeout_seconds=1
     )
     with pytest.raises(ValueError, match="not configured"):
         config.validate()
@@ -373,3 +378,23 @@ def test_action_records_bound_their_metadata_and_client_details(incident):
     ]
     assert all(len(r.user_agent) == 256 and len(r.referer) == 512 for r in rows)
     assert all(r.client_ip == "203.0.113.9" and r.method == "ACTION" for r in rows)
+
+
+def test_action_records_redact_secrets_in_the_referring_address(incident):
+    # A sign-in row's referring address can be an identity provider's redirect
+    # carrying tokens; action records redact it as the request audit trail does.
+    from app.services.activity_log import record_action
+    from app.services.context import ChangeContext
+
+    secret = "eyJhbGciOiJIUzI1NiJ9.c2VjcmV0.c2lnbmF0dXJl"
+    context = ChangeContext(
+        method="GET",
+        path="/v1/auth/sso/oidc/callback",
+        client_ip="203.0.113.9",
+        referer=f"https://idp.example/authorize?access_token={secret}&state=s",
+    )
+    record_action(incident.db, context, None, "sign-in", {"outcome": "failed"})
+    incident.db.commit()
+    (row,) = incident.db.query(AuditLog).filter_by(path="/action/sign-in").all()
+    assert row.referer.startswith("https://idp.example/authorize?")
+    assert secret not in row.referer

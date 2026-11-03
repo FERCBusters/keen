@@ -2,7 +2,7 @@
 // labelled links drawn between them. The canvas keeps the layout in memory and
 // reports every change so the page can offer to save it. A box's title opens
 // its record in a new tab.
-import { fmtTs, esc, safeExternalHref } from '/app.js';
+import { fmtTs, esc, localPath } from '/app.js';
 
 export const NODE_WIDTH = 200;
 export const NODE_HEIGHT = 90;
@@ -35,12 +35,6 @@ export function linkPath(from, to) {
   const [x1, y1] = trim(ax, ay, 1);
   const [x2, y2] = trim(bx, by, -1);
   return { x1, y1, x2, y2, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 };
-}
-
-// Record pages are same-origin paths; anything else stays plain text.
-export function recordHref(url) {
-  const safe = safeExternalHref(url);
-  return safe.startsWith('/') ? safe : '';
 }
 
 // Places items on a grid in their given order, as the server does for new items.
@@ -149,7 +143,8 @@ export function createFlowCanvas({
   }
 
   function titleHtml(item, title) {
-    const href = item.withheld ? '' : recordHref(linkFor(item));
+    // Record pages are same-origin paths; anything else stays plain text.
+    const href = item.withheld ? '' : localPath(linkFor(item));
     if (!href) return esc(title);
     const name = `Open ${item.kind_label || item.kind}: ${item.title || title} (opens in a new tab)`;
     return `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" draggable="false" title="${esc(name)}" aria-label="${esc(name)}">${esc(title)}</a>`;

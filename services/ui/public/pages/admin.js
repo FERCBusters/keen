@@ -81,8 +81,6 @@ async function loadSourceCatalogue() {
 document
   .getElementById('tab-evidence-config')
   ?.addEventListener('shown.bs.tab', loadSourceCatalogue);
-const canAudit = !!me?.can_audit_trail;
-
 const status = document.getElementById('status');
 const out = document.getElementById('out');
 
@@ -258,37 +256,6 @@ function setOut(msg) {
   if (!shouldOpen || !window.bootstrap?.Collapse) return;
   try {
     window.bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false }).show();
-  } catch {
-    // ignore
-  }
-}
-
-// If the user is not an admin but has audit-trail access, restrict this page
-// to the Audit trail tab (and avoid calling admin-only APIs).
-function restrictToAuditOnly() {
-  const tabs = document.getElementById('adminTabs');
-  if (!tabs) return;
-
-  // Hide all tabs except Audit.
-  tabs.querySelectorAll('button.nav-link').forEach((b) => {
-    if ((b.id || '').toLowerCase() !== 'tab-audit') {
-      b.style.display = 'none';
-    }
-  });
-
-  // Hide all panes except Audit.
-  document.querySelectorAll('.tab-pane').forEach((p) => {
-    if ((p.id || '').toLowerCase() !== 'pane-audit') {
-      p.style.display = 'none';
-    }
-  });
-
-  // Force audit tab.
-  if ((location.hash || '').toLowerCase() !== '#audit') {
-    history.replaceState(null, '', '#audit');
-  }
-  try {
-    activateTabFromHash();
   } catch {
     // ignore
   }
@@ -1410,16 +1377,10 @@ if (autoApplyFilters) {
 // Init
 // ------------------------------------------------------------------
 
-if (!isAdmin && !canAudit) {
+if (!isAdmin) {
   // The navbar usually hides the link, but don't assume.
   setOut('You do not have access to this page.');
-} else if (!isAdmin && canAudit) {
-  // Audit-only mode for e.g. an "auditors" group.
-  restrictToAuditOnly();
-  await refreshEntityChanges();
-  await refreshAudit();
 } else {
-  // Full admin
   await loadControls();
   chooseLinkedDiaryControl();
   renderSelected();

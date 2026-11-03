@@ -39,6 +39,7 @@ from app.outbound.question_webhooks import (
     send_question_created_webhooks,
     send_question_reply_webhooks,
 )
+from app.services.audit_retention import remove_expired as remove_expired_audit_logs
 from app.services.audit_schedules import (
     materialize_due_scheduled_audits,
     send_audit_reminders,
@@ -662,6 +663,15 @@ def evidence_retention_task():
 
     if run_retention():
         evidence_retention_task.apply_async(countdown=1)
+
+
+@celery_app.task(name="app.worker.tasks.audit_log_retention_task")
+def audit_log_retention_task() -> dict:
+    """Delete audit-trail records older than the configured retention."""
+    removed, more = remove_expired_audit_logs()
+    if more:
+        audit_log_retention_task.apply_async(countdown=1)
+    return {"removed": removed, "more": more}
 
 
 @celery_app.task

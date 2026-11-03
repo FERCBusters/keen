@@ -192,7 +192,7 @@ def test_links_require_target_access_and_do_not_leak_in_history(keen):
     )
 
 
-def test_swot_questions_and_audit_scope_permissions(keen):
+def test_swot_questions_and_audit_scope_permissions(without_implied_permissions, keen):
     from app.core.datetime_utils import utc_now_naive
     from app.db.models import Audit
 

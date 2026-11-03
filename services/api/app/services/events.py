@@ -5,11 +5,13 @@ from __future__ import annotations
 import csv
 import io
 import json
+import time
 import uuid
 from datetime import datetime
+from functools import partial
 from typing import Any, Optional
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session, load_only
 
 from app.core.cache import cached_json, user_cache_scope
@@ -73,6 +75,17 @@ INCIDENT_DELETE_PERMISSION = "incident.delete"
 # Question attachments are discussion material uploaded by Keen users. They stay
 # with their question thread and never appear as the event's collected evidence.
 QUESTION_ATTACHMENT_KIND = "question_attachment"
+# An export reads its events in pages of this many, and stops after this long
+# however many remain: each page's statements run within the time left.
+EXPORT_PAGE_ROWS = 1000
+EXPORT_TIME_LIMIT_SECONDS = 60
+# Closes an export that stopped at its time limit: its last line, or its last
+# members in JSON.
+EXPORT_INCOMPLETE = (
+    "Export incomplete: {exported} of {returned} events were exported before the "
+    "export reached its time limit; narrow the date range or filters and export "
+    "again"
+)
 
 
 def _mask_event_data_for_sample_exports(sample_export: bool) -> bool:
@@ -680,6 +693,54 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
     return resp
 
 
+def _export_page(db: Session, framework: str, qry, after, take: int):
+    """The next ``take`` exported events after the ``(timestamp, id)`` key.
+
+    Events run newest first, and by identifier within a timestamp, as the
+    ``(timestamp DESC, id)`` index reads them; each page starts where the last
+    ended, so the filter is never re-run over the events already exported.
+    Returns the events, their control references and their artefact counts.
+    """
+    page = qry
+    if after is not None:
+        timestamp, event_id = after
+        page = page.filter(
+            Event.timestamp <= timestamp,
+            or_(Event.timestamp < timestamp, Event.id > event_id),
+        )
+    batch = page.order_by(desc(Event.timestamp), Event.id).limit(take).all()
+
+    event_ids = [e.id for e in batch]
+    controls_by_event: dict[uuid.UUID, list[str]] = {}
+    evidenced = event_evidence(db, framework, event_ids)
+    if evidenced:
+        # The database orders the references, as everywhere else.
+        labels = db.execute(
+            select(ControlItem.id, ControlItem.ref)
+            .where(ControlItem.id.in_(set().union(*evidenced.values())))
+            .order_by(ControlItem.ref.asc())
+        ).all()
+        place = {control_id: n for n, (control_id, _) in enumerate(labels)}
+        # The crosswalk is read once per export; a control removed since then
+        # has no reference to show.
+        for ev_id, found in evidenced.items():
+            controls_by_event[ev_id] = [
+                labels[n].ref for n in sorted(place[c] for c in found if c in place)
+            ]
+
+    artifact_counts: dict[uuid.UUID, int] = {}
+    if event_ids:
+        rows = (
+            db.query(Artifact.event_id, func.count(Artifact.id))
+            .filter(Artifact.event_id.in_(event_ids))
+            .filter(Artifact.kind != QUESTION_ATTACHMENT_KIND)
+            .group_by(Artifact.event_id)
+            .all()
+        )
+        artifact_counts = {ev_id: int(n) for ev_id, n in rows}
+    return batch, controls_by_event, artifact_counts
+
+
 def export_events(
     *,
     filters: EventFilters,
@@ -691,7 +752,10 @@ def export_events(
     """Export events matching filters in CSV/JSON/NDJSON.
 
     This is intended for audit/export workflows (e.g., export all events mapped to a control
-    over a time period). Exports are capped to avoid accidental huge downloads.
+    over a time period). Exports are capped to avoid accidental huge downloads, and
+    each export has ``EXPORT_TIME_LIMIT_SECONDS``: a count that outlasts it is an
+    error response, and an export that runs out once it has started ends with
+    ``EXPORT_INCOMPLETE``.
     """
 
     framework = filters.framework
@@ -703,12 +767,18 @@ def export_events(
 
     # Hard cap (defense in depth)
     max_rows = max(1, min(int(max_rows or 50000), 50000))
+    deadline = time.monotonic() + EXPORT_TIME_LIMIT_SECONDS
+
+    def remaining_ms() -> int:
+        return int((deadline - time.monotonic()) * 1000)
 
     qry = db.query(Event).filter(diary_filter_condition(db, user))
     qry = qry.filter(*event_time_filters(filters))
     qry = qry.filter(*event_predicates(filters, db))
 
-    scan_budget(db, filters)
+    # The count runs before the response starts, so a count that outlasts the
+    # budget is an ordinary error response.
+    scan_budget(db, filters, within_ms=remaining_ms())
     total = run_scan(db, filters, lambda: qry.order_by(None).count())
     returned = min(total, max_rows)
 
@@ -740,7 +810,6 @@ def export_events(
     }
 
     def iter_chunks():
-        chunk = 1000
         yielded = 0
 
         if fmt == "csv":
@@ -773,43 +842,25 @@ def export_events(
             )
             first = True
 
-        offset = 0
+        after = None
+        incomplete = False
         while yielded < returned:
-            take = min(chunk, returned - yielded)
-            batch = qry.order_by(desc(Event.timestamp)).limit(take).offset(offset).all()
-            offset += take
+            left = remaining_ms()
+            if left <= 0:
+                incomplete = True
+                break
+            take = min(EXPORT_PAGE_ROWS, returned - yielded)
+            # Each page's statements end with the export's budget.
+            scan_budget(db, filters, within_ms=left)
+            page = partial(_export_page, db, framework, qry, after, take)
+            try:
+                batch, controls_by_event, artifact_counts = run_scan(db, filters, page)
+            except DomainError:
+                incomplete = True
+                break
             if not batch:
                 break
-
-            event_ids = [e.id for e in batch]
-            controls_by_event: dict[uuid.UUID, list[str]] = {}
-            evidenced = event_evidence(db, framework, event_ids)
-            if evidenced:
-                # The database orders the references, as everywhere else.
-                labels = db.execute(
-                    select(ControlItem.id, ControlItem.ref)
-                    .where(ControlItem.id.in_(set().union(*evidenced.values())))
-                    .order_by(ControlItem.ref.asc())
-                ).all()
-                place = {control_id: n for n, (control_id, _) in enumerate(labels)}
-                # The crosswalk is read once per export; a control removed
-                # since then has no reference to show.
-                for ev_id, found in evidenced.items():
-                    controls_by_event[ev_id] = [
-                        labels[n].ref
-                        for n in sorted(place[c] for c in found if c in place)
-                    ]
-
-            artifact_counts: dict[uuid.UUID, int] = {}
-            if event_ids:
-                rows = (
-                    db.query(Artifact.event_id, func.count(Artifact.id))
-                    .filter(Artifact.event_id.in_(event_ids))
-                    .filter(Artifact.kind != QUESTION_ATTACHMENT_KIND)
-                    .group_by(Artifact.event_id)
-                    .all()
-                )
-                artifact_counts = {ev_id: int(n) for ev_id, n in rows}
+            after = (batch[-1].timestamp, batch[-1].id)
 
             for e in batch:
                 item = {
@@ -865,11 +916,25 @@ def export_events(
                     yield buf.getvalue()
 
                 yielded += 1
-                if yielded >= returned:
-                    break
 
+        # Headers are already sent, so an export that stops early says so in
+        # its last line, or in its last members for JSON.
+        detail = EXPORT_INCOMPLETE.format(exported=yielded, returned=returned)
+        if incomplete and fmt == "csv":
+            buf = io.StringIO()
+            csv.writer(buf).writerow([detail])
+            yield buf.getvalue()
+        elif incomplete and fmt == "ndjson":
+            marker = {"incomplete": True, "exported": yielded, "detail": detail}
+            yield json.dumps(marker) + "\n"
         if fmt == "json":
-            yield "]}"
+            tail = "]"
+            if incomplete:
+                tail += (
+                    f',"incomplete":true,"exported":{yielded},'
+                    f'"detail":{json.dumps(detail)}'
+                )
+            yield tail + "}"
 
     media = (
         "text/csv"

@@ -1,9 +1,11 @@
 """Webhook secrets, replay windows and payload limits without external services."""
 
+from pathlib import Path
 from unittest.mock import Mock
 
 import fakeredis
 import pytest
+import yaml
 from app.ingest import webhooks
 
 
@@ -37,6 +39,12 @@ def policy(monkeypatch):
 )
 def test_secret_header_validation(policy, headers, expected):
     assert webhooks.verify_secret("monitor", headers) is expected
+
+
+def test_built_in_providers_are_those_keen_ships():
+    shipped = Path(__file__).resolve().parents[3] / "config" / "webhooks.yml"
+    providers = yaml.safe_load(shipped.read_text(encoding="utf-8"))["providers"]
+    assert webhooks.BUILT_IN_PROVIDERS == set(providers)
 
 
 def test_unconfigured_and_missing_secret_fail_closed(policy, monkeypatch):

@@ -19,6 +19,33 @@ from app.security.roles import (
 )
 from app.security.sessions import update_session_authz
 
+EVENTS_READ_PERMISSION = "events.read"
+ISMS_READ_PERMISSION = "isms.read"
+
+# Permissions that include others. Whoever samples evidence into an audit is an
+# auditor, who reads the events and ISMS records an audit examines. Implied
+# permissions imply nothing further.
+PERMISSION_IMPLICATIONS: dict[str, frozenset[str]] = {
+    "audits.manage": frozenset({EVENTS_READ_PERMISSION, ISMS_READ_PERMISSION}),
+    "audits.admin": frozenset({EVENTS_READ_PERMISSION, ISMS_READ_PERMISSION}),
+}
+
+
+def with_implied_permissions(codes) -> set[str]:
+    """The codes held, together with the codes they imply."""
+    held = {str(c) for c in codes if c}
+    implied = set(held)
+    for code in held:
+        implied |= PERMISSION_IMPLICATIONS.get(code, frozenset())
+    return implied
+
+
+def _granting_codes(code: str) -> set[str]:
+    """The codes that grant ``code``: the code itself and any that imply it."""
+    return {code} | {
+        holder for holder, implied in PERMISSION_IMPLICATIONS.items() if code in implied
+    }
+
 
 def _normalise_cached_permission_codes(raw) -> set[str] | None:
     # Sessions attach a set of codes; None means no snapshot is attached.
@@ -35,7 +62,8 @@ def _attach_permission_snapshot(user: User, *, role: str, codes: set[str]) -> No
 def get_effective_permission_codes(
     db: Session, user: User, *, use_cache: bool = True
 ) -> set[str]:
-    """Return the set of permission codes the user has (direct + via groups).
+    """Return the set of permission codes the user has (direct + via groups),
+    with the codes they imply.
 
     Admin role implicitly has all permissions.
     """
@@ -45,7 +73,7 @@ def get_effective_permission_codes(
     if use_cache:
         cached = _normalise_cached_permission_codes(user.effective_permission_codes)
         if cached is not None:
-            return cached
+            return with_implied_permissions(cached)
 
     eff = user.effective_role if use_cache else None
     if not eff:
@@ -75,7 +103,7 @@ def get_effective_permission_codes(
     )
     via_group = {c for (c,) in group_codes if c}
 
-    return direct_codes | via_group
+    return with_implied_permissions(direct_codes | via_group)
 
 
 def ensure_session_authorization_current(db: Session, user: User) -> None:
@@ -130,22 +158,26 @@ def ensure_session_authorization_current(db: Session, user: User) -> None:
             permission_codes=codes,
             authz_version=current_version,
             ttl_seconds=settings.session_ttl_seconds,
+            max_age_seconds=settings.session_max_age_seconds,
         )
     except Exception:
         pass
 
 
 def has_permission(db: Session, user: User | None, code: str) -> bool:
-    """Check whether a user has a given permission code."""
+    """Check whether a user has a given permission code, directly, through a
+    group or through a permission that implies it."""
     c = code.strip()
     if not c:
         return False
     if not is_active_user(user):
         return False
 
+    granting = _granting_codes(c)
     cached = _normalise_cached_permission_codes(user.effective_permission_codes)
     if cached is not None:
-        return "*" in cached or c in cached
+        # Snapshots made before an implication was added still resolve it.
+        return "*" in cached or not cached.isdisjoint(granting)
 
     eff = user.effective_role
     if not eff:
@@ -162,7 +194,7 @@ def has_permission(db: Session, user: User | None, code: str) -> bool:
         db.query(Permission.id)
         .join(user_permissions, Permission.id == user_permissions.c.permission_id)
         .filter(user_permissions.c.user_id == uid)
-        .filter(Permission.code == c)
+        .filter(Permission.code.in_(sorted(granting)))
         .first()
     )
     if hit:
@@ -174,7 +206,7 @@ def has_permission(db: Session, user: User | None, code: str) -> bool:
         .join(group_permissions, Permission.id == group_permissions.c.permission_id)
         .join(user_groups, user_groups.c.group_id == group_permissions.c.group_id)
         .filter(user_groups.c.user_id == uid)
-        .filter(Permission.code == c)
+        .filter(Permission.code.in_(sorted(granting)))
         .first()
     )
     return bool(hit2)
@@ -183,9 +215,6 @@ def has_permission(db: Session, user: User | None, code: str) -> bool:
 def has_any_permission(db: Session, user: User | None, *codes: str) -> bool:
     """Whether an active user holds at least one of ``codes`` (admins hold all)."""
     return any(has_permission(db, user, code) for code in codes)
-
-
-EVENTS_READ_PERMISSION = "events.read"
 
 
 def can_read_events(db: Session, user: User | None) -> bool:

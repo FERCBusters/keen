@@ -78,8 +78,9 @@ def schedule_out(quiz: Quiz) -> dict[str, Any]:
 def quiz_snapshot(quiz: Quiz) -> dict[str, Any]:
     """A quiz's state for its change history.
 
-    The answer key stays out: the history is open to audit trail readers, who
-    may also sit the quiz.
+    The history is read by administrators in the audit trail. The answer key
+    stays with the quiz itself, so the history records the questions and their
+    options and leaves out which options are right.
     """
     return {
         "title": quiz.title,

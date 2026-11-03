@@ -1,9 +1,26 @@
 """Portable, bounded HTTP collector definitions. No executable expressions."""
 
 from typing import Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+def has_dot_segment(path: str) -> bool:
+    """Whether a server could read ``path`` as climbing out of the base path.
+
+    Requests join paths to the connection's base URL and send them as written,
+    and servers resolve ``.`` and ``..`` after decoding. Percent-encoded forms,
+    backslashes and encoded slashes or backslashes within a segment, and a
+    segment's ``;`` parameters, which some servers drop first, all count.
+    """
+    decoded = path
+    while (next_form := unquote(decoded)) != decoded:
+        decoded = next_form
+    return any(
+        segment.split(";", 1)[0] in {".", ".."}
+        for segment in decoded.replace("\\", "/").split("/")
+    )
 
 
 class Strict(BaseModel):
@@ -43,6 +60,10 @@ class Enrichment(Strict):
         ):
             raise ValueError(
                 "Detail request must use a relative path without query or fragment"
+            )
+        if has_dot_segment(self.path):
+            raise ValueError(
+                "Detail request path cannot contain . or .. segments, encoded or not"
             )
         return self
 
@@ -87,6 +108,10 @@ class Definition(Strict):
         if urlsplit(self.path).query or urlsplit(self.path).fragment:
             raise ValueError(
                 "Move query parameters to Query; the path holds no query or fragment"
+            )
+        if has_dot_segment(self.path):
+            raise ValueError(
+                "Request path cannot contain . or .. segments, encoded or not"
             )
         if any(
             k.lower()

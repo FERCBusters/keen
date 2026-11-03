@@ -17,12 +17,14 @@ from app.db.models import (
     IsmsPersonAssurance,
     IsmsVendor,
     QuizAttempt,
+    QuizAudience,
     QuizParticipant,
     RiskAsset,
     User,
 )
 from app.security.permissions import has_permission
 from app.services.errors import DomainError
+from app.services.isms.organisation import require_quiz_authority_for_audience_roles
 from app.services.people import ensure_person_for_user as ensure_person_for_user
 from app.services.people import person_for_user as person_for_user
 
@@ -158,9 +160,10 @@ def list_people(*, user, db: Session):
 
 
 def _sits_quizzes(db: Session, person_id: uuid.UUID) -> bool:
+    """Whether the person is assigned a quiz, or takes part in its rounds."""
     return any(
         db.query(model.id).filter(model.person_id == person_id).first() is not None
-        for model in (QuizParticipant, QuizAttempt)
+        for model in (QuizAudience, QuizParticipant, QuizAttempt)
     )
 
 
@@ -177,6 +180,19 @@ def _save_person(db: Session, row: IsmsPerson, payload: PersonInput, user: User)
         raise DomainError(
             403,
             "Changing the Keen account of someone who sits quizzes needs quiz.manage",
+        )
+    # People placed in a role sit the quizzes assigned to it, through the
+    # account linked to them.
+    if payload.org_node_id != row.org_node_id:
+        require_quiz_authority_for_audience_roles(
+            db,
+            user,
+            [row.org_node_id, payload.org_node_id],
+            "move someone into or out of",
+        )
+    elif row.id is not None and payload.user_id != row.user_id:
+        require_quiz_authority_for_audience_roles(
+            db, user, [row.org_node_id], "change the Keen account of someone in"
         )
     if payload.user_id:
         _row(db, User, payload.user_id)
@@ -229,7 +245,14 @@ def update_person(*, person_id: uuid.UUID, payload: PersonInput, user, db: Sessi
 
 
 def delete_person(*, person_id: uuid.UUID, user, db: Session):
-    db.delete(_row(db, IsmsPerson, person_id))
+    row = _row(db, IsmsPerson, person_id)
+    # Deleting a person takes them out of their quizzes, rounds and attempts.
+    if _sits_quizzes(db, row.id) and not has_permission(db, user, QUIZ_MANAGE):
+        raise DomainError(403, "Deleting someone who sits quizzes needs quiz.manage")
+    require_quiz_authority_for_audience_roles(
+        db, user, [row.org_node_id], "delete someone in"
+    )
+    db.delete(row)
     db.commit()
 
 

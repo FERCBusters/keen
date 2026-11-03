@@ -195,7 +195,6 @@ app/services/control_suggestions.py: Incompatible types in assignment (expressio
 app/services/control_suggestions.py: Need type annotation for "frequency"  [var-annotated]
 app/services/controls.py: Unsupported operand type for unary - ("int | Any | str | None")  [operator]
 app/services/event_filters.py: Argument 1 to "append" of "list" has incompatible type "Any | False_"; expected "BinaryExpression[bool]"  [arg-type]
-app/services/events.py: Argument 1 to "join" of "str" has incompatible type "list[str] | str | int"; expected "Iterable[str]"  [arg-type]
 app/services/events.py: Argument 2 to "diary_filter_condition" has incompatible type "User | None"; expected "User"  [arg-type]
 app/services/events.py: Argument 2 to "is_diary_event_visible" has incompatible type "User | None"; expected "User"  [arg-type]
 app/services/events.py: Argument 2 to "is_effective_admin" has incompatible type "User | None"; expected "User"  [arg-type]

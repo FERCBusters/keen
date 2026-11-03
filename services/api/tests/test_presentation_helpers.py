@@ -161,6 +161,12 @@ def test_timezones_and_themes_are_validated():
         ("events.html?q=&source=jenkins", "/events.html?source=jenkins"),
         ("?q=ssh", "/?q=ssh"),
         ("/controls.html", "/controls.html"),
+        # Dots elsewhere than a whole path segment resolve to nothing.
+        ("/events.html?q=../..&next=/.//x", "/events.html?q=..%2F..&next=%2F.%2F%2Fx"),
+        ("/v1.2/events.html", "/v1.2/events.html"),
+        ("/.well-known/x", "/.well-known/x"),
+        ("/x/...", "/x/..."),
+        ("/x/%252e%252e/y", "/x/%252e%252e/y"),
     ],
 )
 def test_saved_search_urls_are_normalised(raw, expected):
@@ -179,6 +185,21 @@ def test_saved_search_urls_are_normalised(raw, expected):
         "/events.html\\..\\evil",
         "/events.html?q=a\tb",
         "/events.html?q=a\x7fb",
+        # Browsers resolve these dot segments to the path //evil.example/phish,
+        # which names another host.
+        "/.//evil.example/phish",
+        "/././/evil.example/phish",
+        ".//evil.example/phish",
+        "/%2e//evil.example/phish",
+        "/%2E//evil.example/phish?q=1",
+        "/%2e%2E//evil.example/phish",
+        "/.%2e//evil.example/phish",
+        "/%2e.//evil.example/phish",
+        "/x/..//evil.example/phish",
+        "/x/%2e%2e//evil.example/phish",
+        "/..//evil.example/phish",
+        "/events.html/..",
+        "/./events.html",
     ],
 )
 def test_unsafe_or_oversized_saved_search_urls_are_rejected(raw):

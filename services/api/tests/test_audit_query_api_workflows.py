@@ -274,7 +274,7 @@ def test_scope_maps_relate_scoped_clauses_and_controls(audits):
 
 
 def test_scope_coverage_combines_completed_and_scheduled_audits(audits):
-    reader = audits.keen.client(audits.keen.user("audits.read"))
+    reader = audits.keen.client(audits.keen.user("audits.read", "isms.read"))
     window = {
         "framework": "A",
         "start": (date.today() - timedelta(days=60)).isoformat(),
@@ -314,6 +314,140 @@ def test_scope_coverage_combines_completed_and_scheduled_audits(audits):
         assert response["detail"] == detail
     default = _get(reader, "/v1/audits/scope-coverage", framework="A")
     assert default["end"] == date.today().isoformat()
+
+
+def test_scope_coverage_lists_isms_documents_for_isms_readers_only(audits):
+    secret = IsmsDocument(
+        title="Merger insider list handling procedure",
+        document_type="procedure",
+        external_url="https://drive.example/d/abc123?usp=sharing",
+        filename="insider-list.docx",
+    )
+    audits.db.add(secret)
+    audits.db.commit()
+    assembled = audits.keen
+    # An audit reader without ISMS read access cannot open the register ...
+    reader = assembled.client(assembled.user("audits.read"))
+    assert reader.get("/v1/isms/documents").status_code == 403
+    # ... and coverage leaves its documents out, with their counts.
+    coverage = _get(reader, "/v1/audits/scope-coverage", framework="A")
+    assert coverage["summary"]["documents"] is None
+    assert coverage["included"]["documents"] == []
+    assert coverage["gaps"]["documents"] == []
+    for text in ("Merger insider", "drive.example", "insider-list", "Security policy"):
+        assert text not in str(coverage)
+    # Controls and clauses stay with every audit reader.
+    assert coverage["summary"]["controls"]["total"] == 2
+    assert coverage["summary"]["clauses"]["total"] == 2
+    # ISMS readers, audit managers and risk readers among them, see them all.
+    for codes in (("audits.read", "isms.read"), ("audits.read", "risk.read")):
+        seen = _get(
+            assembled.client(assembled.user(*codes)),
+            "/v1/audits/scope-coverage",
+            framework="A",
+        )
+        assert seen["summary"]["documents"]["total"] == 3
+        assert "insider-list.docx" in str(seen["gaps"]["documents"])
+    managed = _get(
+        assembled.client(audits.owner), "/v1/audits/scope-coverage", framework="A"
+    )
+    assert managed["summary"]["documents"]["total"] == 3
+
+
+def test_scoping_documents_needs_isms_read_and_refuses_guesses_alike(
+    audits, monkeypatch
+):
+    from app.security import permissions
+
+    assembled = audits.keen
+    # Audit managers read ISMS records, so they scope documents by title or id,
+    # and a wrong title is named back to them.
+    manager = assembled.client(audits.owner)
+    created = manager.post(
+        "/v1/audits",
+        json={
+            "title": "Scoped",
+            "framework_slug": "A",
+            "documents": ["Security policy"],
+        },
+        headers=unsafe(manager),
+    )
+    assert created.status_code == 200, created.text
+    detail = _get(manager, f"/v1/audits/{created.json()['id']}")
+    assert [d["id"] for d in detail["scoped_documents"]] == [str(audits.document.id)]
+    miss = manager.post(
+        "/v1/audits",
+        json={"title": "Scoped", "framework_slug": "A", "documents": ["No such"]},
+        headers=unsafe(manager),
+    )
+    assert miss.status_code == 404 and "No such" in miss.json()["detail"]
+
+    # An account that manages audits without ISMS read access (as an audit
+    # manager would be without the implication) is refused before any lookup:
+    # an existing document and a guess fail alike, and nothing is scoped.
+    monkeypatch.setattr(permissions, "PERMISSION_IMPLICATIONS", {})
+    outsider = assembled.user("audits.manage")
+    client = assembled.client(outsider)
+    assert client.get("/v1/isms/documents").status_code == 403
+    own = client.post(
+        "/v1/audits",
+        json={"title": "Own", "framework_slug": "A"},
+        headers=unsafe(client),
+    )
+    assert own.status_code == 200, own.text
+    template = client.post(
+        "/v1/audits/scheduled",
+        json={"title": "Own", "framework_slug": "A", "start_date": "2030-01-01"},
+        headers=unsafe(client),
+    )
+    assert template.status_code == 200, template.text
+    guesses = (
+        "Security policy",
+        "No such",
+        str(audits.document.id),
+        str(uuid.uuid4()),
+    )
+    for value in guesses:
+        for method, path, body in (
+            ("POST", "/v1/audits", {"title": "Probe", "framework_slug": "A"}),
+            ("PUT", f"/v1/audits/{own.json()['id']}/scope", {}),
+            (
+                "POST",
+                "/v1/audits/scheduled",
+                {"title": "Probe", "framework_slug": "A", "start_date": "2030-01-01"},
+            ),
+            ("PATCH", f"/v1/audits/scheduled/{template.json()['id']}", {}),
+        ):
+            response = client.request(
+                method,
+                path,
+                json={**body, "documents": [value]},
+                headers=unsafe(client),
+            )
+            assert response.status_code == 403, (path, value, response.text)
+            assert response.json()["detail"] == (
+                "ISMS read access is required to scope documents"
+            )
+            assert value not in response.text
+    audits.db.expire_all()
+    assert audits.db.query(Audit).filter_by(title="Probe").count() == 0
+    assert (
+        audits.db.query(AuditScopedIsmsDocument)
+        .filter(
+            AuditScopedIsmsDocument.audit_id.in_(
+                [own.json()["id"], template.json()["id"]]
+            )
+        )
+        .count()
+        == 0
+    )
+    # Scope without documents needs no ISMS access.
+    scoped = client.put(
+        f"/v1/audits/{own.json()['id']}/scope",
+        json={"controls": ["A.5.1"]},
+        headers=unsafe(client),
+    )
+    assert scoped.status_code == 200, scoped.text
 
 
 def test_reverse_lookups_list_audits_that_sampled_an_item(audits):

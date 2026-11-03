@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
+from app.api.context import change_context
 from app.api.routing import Router
 from app.core.config import settings
 from app.core.valkey import get_valkey
@@ -14,7 +15,6 @@ from app.db.session import get_db
 from app.schemas import LoginPayload
 from app.security.auth import (
     ROLE_ADMIN,
-    authenticate_user,
     clear_session_cookie,
     require_authenticated,
     set_session_cookie,
@@ -31,14 +31,16 @@ from app.security.oidc import (
     configured_sso_providers,
     get_sso_provider,
     handle_callback,
+    linked_account_id,
     set_sso_binding,
+    sso_attempt,
     sso_binding_cookie,
 )
-from app.security.permissions import has_permission
 from app.security.rate_limit import client_ip as _client_ip
-from app.security.rate_limit import fixed_window_allow
+from app.security.rate_limit import fixed_window_allow, login_limit_key
 from app.security.sessions import get_session, revoke_session
 from app.services import login as login_service
+from app.services.errors import DomainError
 
 router = Router()
 
@@ -64,8 +66,6 @@ def auth_methods() -> dict:
 def login(
     payload: LoginPayload, request: Request, db: Session = Depends(get_db)
 ) -> Response:
-    from app.security.csrf import request_origin_allowed
-
     if not request_origin_allowed(request, require_origin=settings.hosted_mode):
         raise HTTPException(403, "Authentication request origin is not allowed")
     if not (
@@ -84,7 +84,6 @@ def login(
         per_user = settings.login_rate_limit_per_username
 
         ip = _client_ip(request) or "unknown"
-        uname = (payload.username or "").strip().lower() or "unknown"
 
         if per_ip > 0:
             ok, retry = fixed_window_allow(
@@ -98,9 +97,14 @@ def login(
                 resp.headers["Retry-After"] = str(retry)
                 return resp
 
-        if per_user > 0 and uname != "unknown":
+        # Every username draws on an allowance; the payload refuses blank ones.
+        if per_user > 0:
             ok, retry = fixed_window_allow(
-                r, f"keen:rl:login:user:{uname}", per_user, window, fail_closed=True
+                r,
+                login_limit_key(payload.username),
+                per_user,
+                window,
+                fail_closed=True,
             )
             if not ok:
                 resp = JSONResponse(
@@ -117,19 +121,35 @@ def login(
         )
         return resp
 
-    if payload.method == "ldap":
-        from app.security.ldap import authenticate_ldap
-
-        user = authenticate_ldap(db, payload.username, payload.password)
-    else:
-        user = authenticate_user(db, payload.username, payload.password)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+    context = change_context(request)
+    user = login_service.authenticate_password(
+        db,
+        context,
+        username=payload.username,
+        password=payload.password,
+        method=payload.method,
+    )
 
     from app.security import mfa
 
     if user.mfa_enabled or mfa.required(db, user):
-        return mfa.start(db, user, request)
+        # Committed with the challenge that mfa.start issues.
+        login_service.record_sign_in(
+            db, context, method=payload.method, outcome="mfa-required", account=user
+        )
+        account_id = user.id
+        try:
+            return mfa.start(db, user, request)
+        except HTTPException:
+            # The password was right, so the refusal names the account.
+            login_service.record_refused_sign_in(
+                db,
+                context,
+                method=payload.method,
+                account_id=account_id,
+                outcome="mfa-refused",
+            )
+            raise
     return complete_local_login(db, user, request)
 
 
@@ -141,7 +161,7 @@ def complete_local_login(
         db,
         user,
         existing_sid=request.cookies.get(settings.session_cookie_name),
-        client_ip=_client_ip(request),
+        context=change_context(request),
         mfa_verified=mfa_verified,
         verified_version=verified_version,
     )
@@ -184,18 +204,33 @@ async def oidc_callback(request: Request, db: Session = Depends(get_db)) -> Resp
 async def _complete_sso_callback(
     request: Request, db: Session, *, provider_key: str
 ) -> Response:
-
-    user, next_url, id_token, provider = await handle_callback(
-        request, db, provider_key=provider_key
-    )
-    sid = login_service.complete_sso_login(
-        db,
-        user,
-        provider=provider,
-        id_token=id_token,
-        existing_sid=request.cookies.get(settings.session_cookie_name),
-        client_ip=_client_ip(request),
-    )
+    context = change_context(request)
+    account_id = None
+    try:
+        user, next_url, id_token, provider = await handle_callback(
+            request, db, provider_key=provider_key
+        )
+        account_id = user.id
+        sid = login_service.complete_sso_login(
+            db,
+            user,
+            provider=provider,
+            id_token=id_token,
+            existing_sid=request.cookies.get(settings.session_cookie_name),
+            context=context,
+        )
+    except (HTTPException, DomainError) as error:
+        # Audit attempts that consumed a sign-in started in this browser, naming
+        # the account only when the provider's identity reached one.
+        attempted = sso_attempt(request)
+        if attempted is not None:
+            login_service.record_refused_sign_in(
+                db,
+                context,
+                method=attempted,
+                account_id=linked_account_id(error) or account_id,
+            )
+        raise
 
     dest = next_url or "/"
     resp = RedirectResponse(dest, status_code=302)
@@ -327,23 +362,20 @@ def auth_check(request: Request) -> Response:
 
 
 @router.get("/v1/auth/check-admin")
-def auth_check_admin(request: Request, db: Session = Depends(get_db)) -> Response:
+def auth_check_admin(request: Request) -> Response:
     """Used by nginx auth_request to hide the admin UI.
 
     Returns:
-      - 204 if authenticated AND (effective_role==admin OR user has audittrail.read)
+      - 204 if authenticated AND effective_role==admin
       - 401 if not authenticated
-      - 403 if authenticated but not allowed
+      - 403 if authenticated but not an administrator
     """
 
     user = require_authenticated(request)
 
     eff = user.effective_role or user.role
     if eff != ROLE_ADMIN:
-        if not has_permission(db, user, "audittrail.read"):
-            raise HTTPException(
-                status_code=403, detail="Admin or audit access required"
-            )
+        raise HTTPException(status_code=403, detail="Admin role required")
 
     resp = Response(status_code=204)
     # Optional metadata headers (see /v1/auth/check).

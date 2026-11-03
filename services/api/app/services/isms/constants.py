@@ -15,9 +15,6 @@ from app.db.models import (
     RiskAsset,
 )
 
-ISMS_READ_PERMISSION = "isms.read"
-
-
 ISMS_MANAGE_PERMISSION = "isms.manage"
 
 

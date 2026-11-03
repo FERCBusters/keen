@@ -146,6 +146,8 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0041_mfa_code_failures",
+        "0040_remove_audittrail_read",
         "0039_measure_submission_secrets",
         "0038_builtin_host_rules",
         "0037_builtin_rules",
@@ -854,6 +856,130 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
             assert installed(conn)[1:] == (statistics, options)
             assert retention_upkeep(conn)[1] is True
             assert theme_default(conn) == "'ink'::character varying"
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_audit_trail_permission_is_removed_and_its_holders_refresh():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "audittrail_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def versions(conn):
+        rows = conn.execute(text("SELECT username, authz_version FROM users")).all()
+        return {username: version for username, version in rows}
+
+    def description(conn, code):
+        return conn.scalar(
+            text("SELECT description FROM permissions WHERE code = :code"),
+            {"code": code},
+        )
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0039_measure_submission_secrets")
+            ids = {
+                name: uuid.uuid4()
+                for name in ("trail", "manage", "direct", "member", "bystander")
+            }
+            for code, key, text_ in (
+                ("audittrail.read", "trail", "Audit trail"),
+                ("audits.manage", "manage", "Sampling requires source read access."),
+            ):
+                conn.execute(
+                    text(
+                        "INSERT INTO permissions (id, code, description, created_at)"
+                        " VALUES (:id, :code, :d, now())"
+                    ),
+                    {"id": ids[key], "code": code, "d": text_},
+                )
+            for name in ("direct", "member", "bystander"):
+                conn.execute(
+                    text(
+                        "INSERT INTO users (id, username, password_hash, created_at,"
+                        " updated_at, pref_auto_apply_filters, pref_source_colors,"
+                        " pref_landing_page, pref_date_format, authz_version)"
+                        " VALUES (:id, :name, 'unused', now(), now(), false, '{}',"
+                        " '/', 'dmy', 3)"
+                    ),
+                    {"id": ids[name], "name": name},
+                )
+            group = uuid.uuid4()
+            conn.execute(
+                text(
+                    "INSERT INTO groups (id, name, created_at)"
+                    " VALUES (:id, 'auditors', now())"
+                ),
+                {"id": group},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO group_permissions (group_id, permission_id)"
+                    " VALUES (:g, :p)"
+                ),
+                {"g": group, "p": ids["trail"]},
+            )
+            conn.execute(
+                text("INSERT INTO user_groups (user_id, group_id) VALUES (:u, :g)"),
+                {"u": ids["member"], "g": group},
+            )
+            for user, permission in (
+                (ids["direct"], ids["trail"]),
+                (ids["bystander"], ids["manage"]),
+            ):
+                conn.execute(
+                    text(
+                        "INSERT INTO user_permissions (user_id, permission_id)"
+                        " VALUES (:u, :p)"
+                    ),
+                    {"u": user, "p": permission},
+                )
+            conn.commit()
+
+            command.upgrade(config, "0040_remove_audittrail_read")
+            assert description(conn, "audittrail.read") is None
+            for table in ("user_permissions", "group_permissions"):
+                assert (
+                    conn.scalar(
+                        text(f"SELECT count(*) FROM {table} WHERE permission_id = :p"),
+                        {"p": ids["trail"]},
+                    )
+                    == 0
+                )
+            # Holders, directly or through a group, refresh their snapshots;
+            # other accounts and assignments are untouched.
+            assert versions(conn) == {"direct": 4, "member": 4, "bystander": 3}
+            assert conn.scalar(text("SELECT count(*) FROM user_groups")) == 1
+            assert conn.scalar(text("SELECT count(*) FROM user_permissions")) == 1
+            assert "Includes events.read and isms.read" in description(
+                conn, "audits.manage"
+            )
+            assert "Includes events.read and isms.read" in description(
+                conn, "audits.admin"
+            )
+
+            command.downgrade(config, "0039_measure_submission_secrets")
+            assert description(conn, "audittrail.read").startswith("Can view")
+            assert description(conn, "audits.manage").endswith(
+                "Sampling requires source read access."
+            )
+            assert description(conn, "audits.admin") == (
+                "Edit and delete any audit or scheduled audit template."
+            )
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

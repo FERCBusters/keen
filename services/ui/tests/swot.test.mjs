@@ -768,3 +768,102 @@ test('a second status change while one is saving is ignored, and a failed refres
   assert.equal(doc.getElementById('planningView').hasAttribute('aria-busy'), false);
   assert.equal(doc.querySelector('[data-status-id="s1"]').value, 'defined');
 });
+
+// The design system writes a framework link out again as a path, as the page fixture does,
+// so a link whose dot segments resolve to "//host" comes back protocol-relative.
+const reserialise = (url, fw) => {
+  const u = new URL(url, 'https://keen.example');
+  u.searchParams.set('framework', fw);
+  return u.pathname + u.search + u.hash;
+};
+
+test('planning cards escape their significance and graphs never link to another host', async (t) => {
+  const ui = await loadUi('pages/planning-views.js', {
+    vendor: { withFramework: reserialise },
+    html: '<main id="host"></main>',
+    setup(window) {
+      window.d3 = d3;
+    },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  const hostile = '<img src=x onerror=alert(1)>';
+  ui.api.renderBoard(
+    host,
+    [{ id: 's1', kind: 'threat', title: 'Team', status: 'planned', significance: hostile }],
+    { view: 'kanban', framework: 'A' },
+  );
+  assert.equal(host.querySelectorAll('img').length, 0);
+  assert.match(host.textContent, /· <img src=x onerror=alert\(1\)>\/5/);
+  ui.api.renderGraph(
+    host,
+    {
+      title: 'Root',
+      significance: 3,
+      links: [
+        { title: 'Dots', target_type: 'document', url: '/.//evil.example/phish' },
+        { title: 'Parent', target_type: 'document', url: '/x/..//evil.example/phish' },
+        { title: 'Script', target_type: 'document', url: 'javascript:alert(1)' },
+        { title: 'Policy', target_type: 'document', url: '/isms-document.html?id=d1' },
+      ],
+    },
+    'A',
+  );
+  assert.deepEqual(
+    [...host.querySelectorAll('svg a')].map((a) => [
+      a.getAttribute('aria-label'),
+      a.getAttribute('href'),
+    ]),
+    [
+      ['Document: Dots', null],
+      ['Document: Parent', null],
+      ['Document: Script', null],
+      ['Document: Policy', '/isms-document.html?id=d1&framework=A'],
+    ],
+  );
+});
+
+test('SWOT relationships that resolve to another host link nowhere', async (t) => {
+  const link = (target_id, title, url) => ({ target_type: 'document', target_id, title, url });
+  const item = {
+    id: 's1',
+    title: 'Team',
+    kind: 'threat',
+    significance: 4,
+    status: 'planned',
+    version: 2,
+    links: [
+      link('d1', 'Dots', '/.//evil.example/phish'),
+      link('d2', 'Encoded', '/%2e//evil.example/phish'),
+      link('d3', 'Script', 'javascript:alert(1)'),
+      link('d4', 'Policy', '/isms-document.html?id=d4'),
+    ],
+    controls: [],
+    clauses: [],
+  };
+  const ui = await page(t, 'swot', {
+    query: '&id=s1',
+    get(url) {
+      if (url.pathname === '/api/v1/isms/swot/s1') return item;
+      if (url.pathname === '/api/v1/isms/meta') return { users: [] };
+      if (url.pathname === '/api/v1/isms/swot') return { items: [item], total: 1 };
+      if (url.pathname.includes('/changelog')) return { items: [] };
+      if (url.pathname.startsWith('/api/v1/isms/swot-choices/')) return { items: [] };
+      if (url.pathname.startsWith('/api/v1/questions/entities/')) return { threads: [] };
+      throw Error('Unexpected GET ' + url);
+    },
+  });
+  await settle(() => ui.el('pageTitle').textContent === item.title);
+  assert.deepEqual(
+    [...ui.el('relatedList').querySelectorAll('a.text-break')].map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+    ]),
+    [
+      ['Dots', '#'],
+      ['Encoded', '#'],
+      ['Script', '#'],
+      ['Policy', '/isms-document.html?id=d4&framework=A'],
+    ],
+  );
+});

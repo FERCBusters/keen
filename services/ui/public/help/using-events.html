@@ -21,8 +21,9 @@
 <tr><td>matches regex / does not match regex</td><td>the field matches, or escapes, a regular expression</td></tr>
 </tbody></table>
 <p>The address bar, saved searches and exports carry every filter, so a filtered view can be shared or saved as it stands.</p>
+<p>An export holds up to 50,000 events, newest first, and runs for at most 60 seconds. An export that reaches its time limit ends with a line beginning <em>Export incomplete</em> that gives the number of events it holds (in JSON, the closing <code>incomplete</code>, <code>exported</code> and <code>detail</code> members); narrow the date range or filters and export again.</p>
 <details class="more"><summary>Going deeper: regular expressions in text filters</summary>
-<p>A regular expression uses the database's syntax and runs with a time budget. If a pattern is refused, simplify it or narrow the date range first.</p>
+<p>A regular expression uses the database's syntax and runs with a time budget, in the list, exports and charts alike. Back-references (a backslash followed by a digit) and lookahead or lookbehind are refused, because they take the database longest to match; write a character code as a hexadecimal escape such as <code>\x41</code>. Expanded mode, the <code>x</code> flag as in <code>(?x)</code>, is refused too. If a pattern is refused or takes too long, simplify it or narrow the date range first.</p>
 </details>
 <h4 id="read-one-event">Read one event</h4>
 <p>Click an event in the list to open a panel beside it with the summary, the mapped controls (reference and title) and the structured fields that identify the event. <strong>View full event</strong> opens the event page, which adds the timestamp, source, system, actor, action, outcome, severity and the normalised payload.</p>

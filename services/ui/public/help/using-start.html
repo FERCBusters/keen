@@ -47,12 +47,12 @@
 <details class="more"><summary>Going deeper: the permission families</summary>
 <ul>
 <li><code>events.read</code> for evidence.</li>
-<li><code>audits.read</code>, <code>audits.manage</code> and <code>audits.admin</code> for audits.</li>
+<li><code>audits.read</code>, <code>audits.manage</code> and <code>audits.admin</code> for audits; <code>audits.manage</code> and <code>audits.admin</code> include <code>events.read</code> and <code>isms.read</code>, since sampling evidence makes their holder an auditor.</li>
 <li><code>risk.read</code> and <code>risk.manage</code> for risks; risk permissions also extend to the ISMS, PESTLE(E) and interested-party registers.</li>
 <li><code>pestle.read</code> and <code>pestle.manage</code>; <code>interested_parties.read</code> and <code>interested_parties.manage</code>; <code>isms.read</code> and <code>isms.manage</code>.</li>
 <li><code>stories.read</code>, <code>stories.manage</code> and <code>stories.admin</code> for stories.</li>
 <li><code>quiz.read</code> and <code>quiz.manage</code> for quizzes. Anyone sits the quizzes assigned to them.</li>
-<li>Separate permissions for creating and deleting questions and incidents, and <code>audittrail.read</code> for the administration audit trail.</li>
+<li>Separate permissions for creating and deleting questions and incidents. The administration audit trail is for administrators.</li>
 </ul>
 <p>An inherited role is resolved from group membership.</p>
 </details>

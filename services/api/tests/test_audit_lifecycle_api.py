@@ -413,7 +413,29 @@ def test_attendees_name_one_person_or_one_active_user(aud):
     )
 
 
-def test_people_in_the_register_need_isms_read_access_to_attend(aud):
+def test_audit_managers_name_attendees_from_the_people_register(aud):
+    person = IsmsPerson(name="Pat Auditor", email="pat@example.org")
+    aud.db.add(person)
+    aud.db.commit()
+    # audits.manage includes isms.read, so its holder reads the register.
+    manager = aud.keen.client(aud.keen.user("audits.manage"))
+    own = manager.post(
+        "/v1/audits",
+        json={"title": "Staffed audit", "framework_slug": FW},
+        headers=unsafe(manager),
+    ).json()
+    added = manager.post(
+        f"/v1/audits/{own['id']}/attendees",
+        json={"person_id": str(person.id)},
+        headers=unsafe(manager),
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["name"] == "Pat Auditor"
+
+
+def test_people_in_the_register_need_isms_read_access_to_attend(
+    without_implied_permissions, aud
+):
     person = IsmsPerson(name="Pat Auditor", email="pat@example.org")
     aud.db.add(person)
     aud.db.commit()

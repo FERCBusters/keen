@@ -52,6 +52,7 @@ from app.services.audits.validation import (
     try_uuid,
 )
 from app.services.errors import DomainError
+from app.services.isms.access import can_read_isms
 from app.services.mailer import user_email
 from app.services.schedules import occurrences_between
 
@@ -235,6 +236,8 @@ def get_audit_scope_coverage(
     control_sources: dict[uuid.UUID, list[dict[str, Any]]] = {}
     clause_sources: dict[uuid.UUID, list[dict[str, Any]]] = {}
     document_sources: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    # ISMS documents, and how many there are, are for ISMS readers.
+    isms_reader = can_read_isms(db, user)
 
     if audit_ids:
         for audit_id, control_id in (
@@ -266,6 +269,7 @@ def get_audit_scope_coverage(
                 clause_sources.setdefault(leaf.id, []).extend(
                     source_by_audit_id.get(audit_id, [])
                 )
+    if audit_ids and isms_reader:
         for audit_id, document_id in (
             db.query(
                 AuditScopedIsmsDocument.audit_id, AuditScopedIsmsDocument.document_id
@@ -298,6 +302,8 @@ def get_audit_scope_coverage(
         db.query(IsmsDocument)
         .order_by(IsmsDocument.document_type.asc(), IsmsDocument.title.asc())
         .all()
+        if isms_reader
+        else []
     )
 
     def split(items: list[Any], source_map: dict[uuid.UUID, list[dict[str, Any]]]):
@@ -338,7 +344,9 @@ def get_audit_scope_coverage(
                 "total": len(documents),
                 "included": len(included_documents),
                 "gaps": len(gap_documents),
-            },
+            }
+            if isms_reader
+            else None,
         },
         "included": {
             "controls": included_controls,

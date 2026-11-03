@@ -1,7 +1,15 @@
 // Notifications: the records that concern the signed-in person, changed by
 // someone else. Opening one marks it as read and goes to its record; Mark all
 // as read clears the rest without opening them.
-import { apiGet, apiPost, errorText, fmtTs, initNavbar, isoDateToDisplay } from '/app.js';
+import {
+  apiGet,
+  apiPost,
+  errorText,
+  fmtTs,
+  initNavbar,
+  isoDateToDisplay,
+  localPath,
+} from '/app.js';
 
 const apiRoot = '/api/v1/me/inbox';
 const ICONS = {
@@ -28,11 +36,6 @@ function notice(message, tone = 'danger') {
   box.className = message ? `alert alert-${tone} small py-2` : '';
   box.setAttribute('role', message && tone === 'danger' ? 'alert' : 'status');
 }
-// Links stay on this site: a path, never another origin or a script.
-export function localHref(href) {
-  const value = String(href || '');
-  return value.startsWith('/') && !value.startsWith('//') ? value : '#';
-}
 export function describe(item) {
   const parts = [];
   if (item.date) parts.push(`${item.date_label} ${isoDateToDisplay(item.date)}`);
@@ -45,7 +48,8 @@ function row(item) {
     'a',
     `list-group-item list-group-item-action d-flex gap-3 align-items-start${unread ? ' inbox-unread' : ''}`,
   );
-  link.href = localHref(item.href);
+  // Links stay on this site: a path, never another origin or a script.
+  link.href = localPath(item.href) || '#';
   link.dataset.item = item.id;
   const icon = element('i', `bi ${ICONS[item.kind] || 'bi-bell'} fs-5 mt-1`);
   icon.setAttribute('aria-hidden', 'true');

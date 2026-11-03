@@ -194,6 +194,30 @@ test('risk details render scores, types, controls and mitigator context as text'
   assert.match(swot.textContent, /Explore in SWOT analysis \(1\)/);
 });
 
+test('affected parties never link to another host, whatever path they name', async (t) => {
+  const party = (id, href) => ({ kind: 'group', id, label: 'Party ' + id, href });
+  const { ui } = await riskPage(t, {
+    risk: risk({
+      interested_parties: [
+        // Its dot segments resolve to "//evil.example/phish" once the framework is added.
+        party('dots', '/.//evil.example/phish'),
+        party('encoded', '/%2e//evil.example/phish'),
+        party('backslash', '/\\evil.example/phish'),
+        party('tab', '/\t/evil.example/phish'),
+        party('relative', 'isms.html'),
+        party('none', ''),
+        party('local', '/isms.html?tab=people'),
+      ],
+    }),
+  });
+  const parties = ui.el('riskParties');
+  assert.deepEqual(
+    [...parties.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
+    [['Party local', '/isms.html?tab=people&framework=A']],
+  );
+  assert.equal(parties.querySelectorAll('span.badge').length, 6);
+});
+
 test('risks without optional data show fallbacks and readers lose edit and sampling actions', async (t) => {
   const { ui } = await riskPage(t, {
     me: { can_view_risks: true },

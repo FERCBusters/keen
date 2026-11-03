@@ -12,16 +12,16 @@
 </tbody></table>
 <p>Admin ingest runners queue collection and return a task ID. A queued confirmation means the job was accepted, so check the worker results and logs to see it finish.</p>
 <p>Artefacts live in the configured local storage or S3-compatible storage, and the API and worker must see the same artefacts. PostgreSQL holds the references, mappings and configuration that give those objects meaning, so a complete backup includes both.</p>
-<div class="callout callout-caution"><p><strong>Expose only the UI listener.</strong> The external HTTPS proxy forwards to the UI listener (127.0.0.1:8081 in the supplied Compose file). PostgreSQL, Valkey and the API are never exposed directly, and the proxy scrubs client-supplied identity headers.</p></div>
+<div class="callout callout-caution"><p><strong>Expose only the UI listener.</strong> The external HTTPS proxy forwards to the UI listener (127.0.0.1:8081 in the supplied Compose file). It passes each request URI on as the browser sent it, which with nginx means a <code>proxy_pass</code> address without a URI part, such as <code>http://127.0.0.1:8081</code> with no trailing slash. PostgreSQL, Valkey and the API are never exposed directly, and the proxy scrubs client-supplied identity headers.</p></div>
 <details class="more"><summary>Going deeper: resources, capabilities and upgrades</summary>
-<p>The ordinary and HTTP workers each default to one child process; the HTTP worker is limited to 768 MiB, one CPU and 128 PIDs. Monitor host capacity and queue age when tuning concurrency. Python containers drop all Linux capabilities and prevent privilege escalation; normal network connections need none. Keep the artifact and scheduler volumes writable by the image user, UID 10001.</p>
+<p>The ordinary and HTTP workers each default to one child process; the HTTP worker is limited to 768 MiB, one CPU and 128 PIDs. Each collection request ends within its time budget, including while response headers arrive (two minutes for built-in collectors), and a built-in collection task still running after an hour is stopped. Monitor host capacity and queue age when tuning concurrency. Python containers drop all Linux capabilities and prevent privilege escalation; normal network connections need none. Keep the artifact and scheduler volumes writable by the image user, UID 10001.</p>
 <p>During an upgrade, stop scheduling and manual submissions and let collection jobs on the old default queue finish. Routing changes apply to new jobs only; do not purge existing jobs. Deploy matching API, worker and scheduler images and start <code>keen-http-worker</code> with them. Hosted demo provisioning also includes this worker. The standard Compose configuration includes pgdata, beatdata and artifacts volumes.</p>
 </details>
 <h2 id="2-deploy-a-self-managed-installation">Deploy a self-managed installation</h2>
 <p>You need a supported Docker Engine and Compose plugin, DNS for the application, a trusted TLS certificate, and storage for the database and artefacts. The supplied Compose file uses the published Keen images and pins the PostgreSQL and Valkey images by digest, so <code>docker compose pull</code> fetches the builds reviewed for that release.</p>
 <ol class="steps">
 <li>Place the release files in the deployment directory and record the release or commit you used.</li>
-<li>Create a protected <code>.env</code> from the release's settings: database, Valkey, public URL, authentication and artefact backend, with unique secrets.</li>
+<li>Create a protected <code>.env</code> from the release's settings: database, Valkey, public URL, authentication and artefact backend, with unique secrets. Compose refuses to start until <code>POSTGRES_PASSWORD</code> and <code>KEEN_REDIS_PASSWORD</code> are set; give each a separate random value, for example from <code>openssl rand -hex 24</code>.</li>
 <li>Configure the HTTPS proxy and firewall, keeping internal services on the private Compose network.</li>
 <li>Pull the images, start the backing services, apply the migrations, then start the application services.</li>
 <li>Verify HTTPS, sign-in, the framework catalogues, an artefact round trip, one ingestion, and a restore into a separate test environment.</li>
@@ -49,9 +49,9 @@ docker compose logs --tail=100 keen-api keen-worker keen-beat</pre>
 <tr><td><code>KEEN_PUBLIC_BASE_URL</code></td><td>Required. The externally reachable origin, without a path, used for links in e-mails and messages and for browser origin checks. Keen does not start without it.</td></tr>
 <tr><td><code>KEEN_TIMEZONE</code>, <code>KEEN_UI_DATE_FORMAT</code></td><td>Installation defaults; users can set their own presentation preferences.</td></tr>
 <tr><td><code>KEEN_LOCAL_AUTH_ENABLED</code></td><td>Whether local sign-in is offered.</td></tr>
-<tr><td><code>KEEN_COOKIE_SECURE</code>, <code>KEEN_COOKIE_SAMESITE</code>, <code>KEEN_CSRF_COOKIE_SAMESITE</code>, <code>KEEN_COOKIE_DOMAIN</code></td><td>Cookie policy. Keep Secure on in production, pick SameSite values that suit your sign-in flow and test the full cross-site OIDC flow, and leave the domain empty for host-only cookies unless a reviewed deployment needs otherwise.</td></tr>
-<tr><td><code>KEEN_SESSION_TTL_SECONDS</code> and the session-cookie name</td><td>Session lifetime.</td></tr>
-<tr><td><code>KEEN_SECURITY_TRUSTED_PROXY_CIDRS</code></td><td>The proxies in front of the API, including the supplied UI proxy. Without it every client shares the proxy address and per-address login limits apply to the whole installation.</td></tr>
+<tr><td><code>KEEN_COOKIE_SECURE</code>, <code>KEEN_COOKIE_SAMESITE</code>, <code>KEEN_CSRF_COOKIE_SAMESITE</code>, <code>KEEN_COOKIE_DOMAIN</code></td><td>Cookie policy. Secure is on in the supplied settings; turn it off only for a local test over plain HTTP. Pick SameSite values that suit your sign-in flow (the session cookie's <code>lax</code> setting lets it accompany the return from SSO sign-in) and test the full cross-site OIDC flow, and leave the domain empty for host-only cookies unless a reviewed deployment needs otherwise.</td></tr>
+<tr><td><code>KEEN_SESSION_TTL_SECONDS</code>, <code>KEEN_SESSION_MAX_AGE_SECONDS</code> and the session-cookie name</td><td>How long an unused session lasts, and the absolute lifetime from sign-in (30 days by default) after which every session ends however recently it was used.</td></tr>
+<tr><td><code>KEEN_SECURITY_TRUSTED_PROXY_CIDRS</code></td><td>The proxies in front of the API, including the supplied UI proxy. Without it every client shares the proxy address and per-address login limits apply to the whole installation; the API then logs a warning the first time a proxy on a private address forwards a request.</td></tr>
 </tbody></table>
 <h4 id="oidc-settings">Native OIDC, Google and GitHub</h4>
 <p>Native OIDC uses <code>KEEN_OIDC_ENABLED</code>, the issuer, authorisation and token endpoints, the JWKS URI, client ID, client secret, scopes and an exact redirect URI. The redirect URI sits on <code>KEEN_PUBLIC_BASE_URL</code> and ends in <code>/api/v1/auth/sso/oidc/callback</code>, <code>/api/v1/auth/sso/google/callback</code> or <code>/api/v1/auth/sso/github/callback</code> for the provider concerned. Register the same address with the provider; Keen refuses provider sign-in until each enabled provider has its redirect URI set.</p>
@@ -77,6 +77,39 @@ docker compose logs --tail=100 keen-api keen-worker keen-beat</pre>
 <p><code>KEEN_SENSITIVE_KEYS</code> removes the whole value of named fields instead. Sample PDF header and footer and the evidence filename prefix control export presentation; review an exported sample to confirm the wording and data treatment. Collect only what assurance needs, and treat automatic secret redaction as a safeguard that can miss an unusual secret.</p>
 <details class="more"><summary>Going deeper: scheduling and outbound webhooks</summary>
 <p><code>KEEN_SCHEDULED_AUDIT_CREATE_DAYS_AHEAD</code> controls how far ahead scheduled audits are materialised. <code>KEEN_REMINDER_DAYS_BEFORE</code> (2 by default; 0 turns reminders off) sets how many days before an audit starts, or a quiz round falls due, its attendees and participants are reminded by email. The worker sends reminders once a day at 06:45 UTC, each recipient at most once and only to people whose account is active. It sends quiz invitations as rounds start, opens and closes quiz rounds daily at 00:20 UTC, and then invites anyone an open round has missed. Outbound question, reply and incident webhooks require HTTPS, validate and pin destination addresses, and follow <code>KEEN_INGESTION_ALLOWED_CIDRS</code> for private destinations; loopback and link-local destinations are rejected. Signing secrets and timeouts are configurable. Store them as secrets and test delivery without putting credentials in audit notes.</p>
+<p>With a signing secret set, each generic question, reply or incident delivery carries <code>X-Keen-Timestamp</code>, the Unix time in seconds when Keen sent it, and <code>X-Keen-Signature</code>, which is <code>v1=</code> followed by the hexadecimal HMAC-SHA256 of the timestamp, a full stop and the exact request body, keyed with the secret. A receiver checks the signature over the raw body before parsing it, refuses a timestamp more than five minutes from its own clock, and refuses a signature it has already accepted, so a captured delivery cannot be replayed. Keep the record of accepted signatures for at least ten minutes, in storage every receiving process shares. In Python:</p>
+<pre>import hashlib
+import hmac
+import re
+import time
+
+SECRET = b"the signing secret configured in Keen"
+WINDOW = 300  # five minutes either side of the receiver's clock
+accepted = {}  # signature: when it may be forgotten; share between processes
+
+
+def accept(headers, body):
+    """True for an authentic, current delivery seen for the first time."""
+    timestamp = headers.get("X-Keen-Timestamp", "")
+    signature = headers.get("X-Keen-Signature", "")
+    if not re.fullmatch(r"[0-9]{1,12}", timestamp):
+        return False
+    now = time.time()
+    if abs(now - int(timestamp)) &gt; WINDOW:
+        return False
+    message = timestamp.encode() + b"." + body
+    expected = "v1=" + hmac.new(SECRET, message, hashlib.sha256).hexdigest()
+    # Compare bytes: compare_digest refuses text with non-ASCII characters.
+    if not hmac.compare_digest(
+        expected.encode(), signature.encode("utf-8", "surrogatepass")
+    ):
+        return False
+    for old in [s for s, until in accepted.items() if until &lt; now]:
+        del accepted[old]
+    if signature in accepted:
+        return False  # a replay
+    accepted[signature] = now + 2 * WINDOW
+    return True</pre>
 </details>
 <h2 id="installation-features">Choose the features available in Keen</h2>
 <p>Open <strong>Administration → Features</strong> to switch workspaces and tools on or off for the whole installation. Everything starts enabled, each switch saves immediately, and the status message confirms the change. Only administrators can change these settings.</p>

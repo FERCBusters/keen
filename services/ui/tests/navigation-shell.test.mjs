@@ -253,6 +253,41 @@ test('a framework no longer enabled gives way to the default, everywhere on the 
   });
 });
 
+// The URL parser resolves dot segments, so "/.//host" and "/x/%2e%2e//host"
+// have the path "//host"; written out as a path again, that names the host.
+test('framework reconciliation keeps dot-segment links and the page itself on Keen', async (t) => {
+  for (const url of [
+    'https://keen.example/controls.html?framework=bogus',
+    'https://keen.example//evil.example/phish?framework=bogus#part',
+  ]) {
+    const ui = await shell(t, {
+      url,
+      links: [
+        ['Controls', '/controls.html?framework=OLD'],
+        ['Dots', '/.//evil.example/phish?framework=OLD', ''],
+        ['Encoded', '/x/%2e%2e//evil.example/phish', 'data-nav-fw="1"'],
+      ],
+    });
+    // The page keeps its own path, on Keen, with the default framework.
+    const page = new URL(ui.window.location.href);
+    assert.equal(page.origin, 'https://keen.example', url);
+    assert.equal(page.pathname, new URL(url).pathname, url);
+    assert.equal(page.searchParams.get('framework'), 'A', url);
+    assert.equal(page.hash, new URL(url).hash, url);
+    const links = Object.fromEntries(
+      [...ui.nav.querySelectorAll('ul.navbar-nav a')].map((a) => [a.textContent.trim(), a]),
+    );
+    assert.equal(links.Controls.getAttribute('href'), '/controls.html?framework=A');
+    for (const name of ['Dots', 'Encoded']) {
+      const target = new URL(links[name].href);
+      assert.equal(target.origin, 'https://keen.example', name);
+      assert.equal(target.pathname, '//evil.example/phish', name);
+      assert.equal(target.searchParams.get('framework'), 'A', name);
+      assert.equal(links[name].getAttribute('href').startsWith('//'), false, name);
+    }
+  }
+});
+
 test('a saved organisation catalogue updates the navigation without a reload', async (t) => {
   const ui = await shell(t);
   const clauses = ui.nav.querySelector('a[href^="/clauses.html"]').closest('li');

@@ -196,6 +196,7 @@ def create_scheduled_audit(*, payload: ScheduledAuditPayload, db: Session, user:
     set_audit_scope(
         db,
         a,
+        user=user,
         control_values=payload.controls,
         clause_values=payload.clauses,
         document_values=payload.documents,
@@ -243,6 +244,7 @@ def update_scheduled_audit(
         set_audit_scope(
             db,
             a,
+            user=user,
             control_values=payload.controls or [],
             clause_values=payload.clauses or [],
             document_values=payload.documents or [],

@@ -7,7 +7,7 @@ from app.api.context import change_context
 from app.api.routing import Router
 from app.core.valkey import get_valkey
 from app.db.session import get_db
-from app.ingest.webhooks import ingest_webhook, verify_secret
+from app.ingest.webhooks import BUILT_IN_PROVIDERS, ingest_webhook, verify_secret
 from app.security.rate_limit import fixed_window_allow
 from app.security.signed_webhooks import SIGNATURE_HEADER, TIMESTAMP_HEADER
 from app.services import webhooks as service
@@ -22,12 +22,25 @@ def _require_webhook_enabled():
         raise HTTPException(503, "Webhook ingestion is disabled")
 
 
-def _limit_webhook(request: Request, provider: str):
+# Each built-in provider has its own allowance per client address, so one
+# busy sender leaves the others theirs. Every other provider name shares one
+# "other" allowance per address, so a made-up provider never opens a fresh
+# allowance or adds a counter. Metric submissions have their own.
+METRIC_LIMIT = "keen:rl:webhook:isms_metrics:ip:"
+
+
+def _generic_limit(provider: str) -> str:
+    if provider in BUILT_IN_PROVIDERS:
+        return f"keen:rl:webhook:provider:{provider}:ip:"
+    return "keen:rl:webhook:other:ip:"
+
+
+def _limit_webhook(request: Request, prefix: str):
     from app.security.client_ip import request_ip
 
     ok, retry = fixed_window_allow(
         get_valkey(),
-        f"keen:rl:webhook:{provider}:ip:{request_ip(request)}",
+        prefix + str(request_ip(request)),
         100,
         60,
         fail_closed=True,
@@ -59,7 +72,7 @@ async def isms_effectiveness_metric_webhook(
     }
     """
     _require_webhook_enabled()
-    _limit_webhook(request, "isms_metrics")
+    _limit_webhook(request, METRIC_LIMIT)
     body = await request.body()
     return service.submit_signed_metric(
         db=db,
@@ -86,7 +99,7 @@ async def webhook_ingest(
     _require_webhook_enabled()
     # Throttle before any database work; an unauthenticated caller learns
     # nothing about connections or ingestion state before its secret is verified.
-    _limit_webhook(request, provider)
+    _limit_webhook(request, _generic_limit(provider))
     key = connection_id or "env:webhooks"
     connection = next(
         (c for c in connections(db, "webhooks") if c.id == key and c.enabled), None

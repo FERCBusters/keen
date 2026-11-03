@@ -117,7 +117,7 @@ function render() {
                   : 'scheduled';
     const div = document.createElement('article');
     div.className = 'ig-card';
-    div.innerHTML = `<div class="d-flex justify-content-between gap-2 flex-wrap"><h3>${esc(c.name)}</h3>${state(status)}</div><p class="small-muted mb-2">${esc(data.connections.find((x) => x.id === c.connection_id)?.name || 'Connection')} · ${c.live_revision ? 'Live revision ' + c.live_revision : 'Unpublished'} · Draft ${c.version}</p><div class="row small g-2"><div class="col-md-6">Last success: ${esc(date(c.last_success))}</div><div class="col-md-6">Next run: ${c.enabled ? esc(date(c.next_run)) : 'Paused'}</div></div>${run ? `<p class="small mt-2 mb-0">${esc(run.message || 'Waiting for worker')}</p>` : ''}<div class="d-flex flex-wrap gap-2 mt-3 ig-actions"></div>`;
+    div.innerHTML = `<div class="d-flex justify-content-between gap-2 flex-wrap"><h3>${esc(c.name)}</h3>${state(status)}</div><p class="small-muted mb-2">${esc(data.connections.find((x) => x.id === c.connection_id)?.name || 'Connection')} · ${c.live_revision ? 'Live revision ' + esc(c.live_revision) : 'Unpublished'} · Draft ${esc(c.version)}</p><div class="row small g-2"><div class="col-md-6">Last success: ${esc(date(c.last_success))}</div><div class="col-md-6">Next run: ${c.enabled ? esc(date(c.next_run)) : 'Paused'}</div></div>${run ? `<p class="small mt-2 mb-0">${esc(run.message || 'Waiting for worker')}</p>` : ''}<div class="d-flex flex-wrap gap-2 mt-3 ig-actions"></div>`;
     const a = div.querySelector('.ig-actions');
     a.append(
       button('Edit / test', () => open(c)),
@@ -171,7 +171,7 @@ function render() {
   for (const r of data.runs.slice(0, 30)) {
     const div = document.createElement('div');
     div.className = 'ig-run';
-    div.innerHTML = `<div class="d-flex flex-wrap justify-content-between gap-2"><strong>${esc(data.collectors.find((c) => c.id === r.collector_id)?.name || r.collector_id)} ${r.preview ? '· Preview' : ''}</strong>${state(r.status)}</div><div class="small-muted">${esc(date(r.created_at))} · revision ${r.revision}</div><div class="small">${esc(r.message || 'Waiting for worker')}</div>${r.status === 'running' && r.result?.records ? `<progress class="w-100 mt-2" max="${Number(r.result.records)}" value="${Number(r.result.processed || 0)}" aria-label="Records processed"></progress>` : ''}`;
+    div.innerHTML = `<div class="d-flex flex-wrap justify-content-between gap-2"><strong>${esc(data.collectors.find((c) => c.id === r.collector_id)?.name || r.collector_id)} ${r.preview ? '· Preview' : ''}</strong>${state(r.status)}</div><div class="small-muted">${esc(date(r.created_at))} · revision ${esc(r.revision)}</div><div class="small">${esc(r.message || 'Waiting for worker')}</div>${r.status === 'running' && r.result?.records ? `<progress class="w-100 mt-2" max="${Number(r.result.records)}" value="${Number(r.result.processed || 0)}" aria-label="Records processed"></progress>` : ''}`;
     if (r.preview && r.result?.samples)
       div.append(
         button('View preview', () => {

@@ -33,7 +33,12 @@ from app.services.control_inheritance import (
     recorded_control_evidence,
 )
 from app.services.errors import DomainError
-from app.services.event_filters import EventFilters, event_predicates
+from app.services.event_filters import (
+    EventFilters,
+    event_predicates,
+    run_scan,
+    scan_budget,
+)
 
 
 def _event_visibility_cache_scope(user) -> str:
@@ -637,6 +642,8 @@ def _stats_events_timeseries(
         )
 
     bucket_expr = func.date_trunc(interval_eff, Event.timestamp).label("b")
+    # The chart applies the Events page filters, so it scans with their budget.
+    scan_budget(db, scope)
 
     # Optional per-source breakdown (used by the stacked histogram). When it
     # is on, its grouped rows already partition every event in the window, so
@@ -660,7 +667,8 @@ def _stats_events_timeseries(
         )
         by_q = by_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
 
-        for b, src, n in by_q.group_by("b", "src").order_by("b").all():
+        by_rows = run_scan(db, scope, by_q.group_by("b", "src").order_by("b").all)
+        for b, src, n in by_rows:
             if b is None:
                 continue
             s = str(src)
@@ -698,7 +706,7 @@ def _stats_events_timeseries(
             .filter(diary_filter_condition(db, user))
         )
         total_q = total_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
-        for b, n in total_q.group_by("b").order_by("b").all():
+        for b, n in run_scan(db, scope, total_q.group_by("b").order_by("b").all):
             if b is None:
                 continue
             total_by_bucket[b] = int(n or 0)
@@ -715,7 +723,7 @@ def _stats_events_timeseries(
             .filter(diary_filter_condition(db, user))
         )
         mapped_q = mapped_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
-        mapped_rows = mapped_q.group_by("b").order_by("b").all()
+        mapped_rows = run_scan(db, scope, mapped_q.group_by("b").order_by("b").all)
     mapped_by_bucket: dict[datetime, int] = {}
     for b, n in mapped_rows:
         if b is None:

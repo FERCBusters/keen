@@ -10,6 +10,7 @@ the administrator check; upstream BookStack is faked at the HTTP transport.
 
 import json
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -20,7 +21,7 @@ from app.db.models import ControlItem, Event, Framework, SourceConnection
 from app.ingest import bookstack
 from app.ingest.connections import FIELDS as CONNECTION_FIELDS
 from app.integrations.transport import encrypt
-from app.services.managed_configurations import CONNECTORS
+from app.services.managed_configurations import CONNECTORS, credential_name
 from app.worker import tasks
 from cryptography.fernet import Fernet
 
@@ -241,6 +242,27 @@ def test_collection_documents_are_saved_against_the_version_read(defs):
         ({"Authorization": SECRET}, "Authorization"),
         ({"jobs": [{"name": "deploy", "client_secret": SECRET}]}, "jobs.client_secret"),
         ({"jobs": [{"name": "deploy", "Api-Token": SECRET}]}, "jobs.Api-Token"),
+        ({"jobs": [{"name": "deploy", "X-Api-Key": SECRET}]}, "jobs.X-Api-Key"),
+        ({"jobs": [{"name": "deploy", "Private-Token": SECRET}]}, "jobs.Private-Token"),
+        ({"jobs": [{"name": "deploy", "x_auth_token": SECRET}]}, "jobs.x_auth_token"),
+        ({"defaults": {"Proxy-Authorization": SECRET}}, "defaults.Proxy-Authorization"),
+        ({"defaults": {"Cookie": SECRET}}, "defaults.Cookie"),
+        ({"jobs": [{"name": "deploy", "secret_key": SECRET}]}, "jobs.secret_key"),
+        (
+            {"jobs": [{"name": "deploy", "aws_access_key": SECRET}]},
+            "jobs.aws_access_key",
+        ),
+        ({"jobs": [{"name": "deploy", "Passphrase": SECRET}]}, "jobs.Passphrase"),
+        ({"jobs": [{"name": "deploy", "db_passwd": SECRET}]}, "jobs.db_passwd"),
+        ({"jobs": [{"name": "deploy", "credentials": SECRET}]}, "jobs.credentials"),
+        ({"jobs": [{"name": "deploy", "Bearer": SECRET}]}, "jobs.Bearer"),
+        ({"jobs": [{"name": "deploy", "X-Signature": SECRET}]}, "jobs.X-Signature"),
+        (
+            {"defaults": {"Ocp-Apim-Subscription-Key": SECRET}},
+            "defaults.Ocp-Apim-Subscription-Key",
+        ),
+        ({"defaults": {"subscription_key": SECRET}}, "defaults.subscription_key"),
+        ({"defaults": {"x-functions-key": SECRET}}, "defaults.x-functions-key"),
     ],
     ids=[
         "token",
@@ -249,6 +271,21 @@ def test_collection_documents_are_saved_against_the_version_read(defs):
         "authorization",
         "client-secret",
         "hyphenated",
+        "api-key-header",
+        "private-token-header",
+        "auth-token-suffix",
+        "proxy-authorization",
+        "cookie",
+        "secret-key",
+        "access-key-suffix",
+        "passphrase",
+        "passwd-suffix",
+        "credentials",
+        "bearer",
+        "signature-header",
+        "subscription-key-header",
+        "subscription-key",
+        "functions-key-header",
     ],
 )
 def test_credentials_never_enter_collection_documents(defs, document, path):
@@ -260,6 +297,34 @@ def test_credentials_never_enter_collection_documents(defs, document, path):
     )
     assert SECRET not in refused.text
     assert defs.versions()["jenkins"] == 0
+
+
+def test_shipped_collection_documents_hold_no_credential_names():
+    """The YAML Keen ships, and its examples, still save as they are."""
+    root = Path(__file__).resolve().parents[3]
+
+    def names(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                yield str(key)
+                yield from names(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from names(child)
+
+    shipped = [
+        path
+        for path in sorted((root / "config").glob("*.yml"))
+        + sorted((root / "docs" / "config-examples").glob("*.yml"))
+        if path.name != "source-connections.example.yml"
+    ]
+    assert shipped
+    for path in shipped:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        assert not [n for n in names(document) if credential_name(n)], path
+    # Names collectors read that only resemble credentials stay readable.
+    for name in ("user_key", "secret_header", "secret_env", "signature_header"):
+        assert not credential_name(name)
 
 
 # Every credential a source connection can hold, under the name Keen reads it
@@ -342,6 +407,153 @@ def test_documents_holding_credentials_are_withheld_from_the_editors(defs):
         "https://git.example/team.rss"
     ]
     assert viewed.status_code == 400
+
+
+def test_listings_withhold_rss_feed_headers_and_credentials(defs, monkeypatch):
+    from app.ingest.connections import connections
+
+    monkeypatch.setattr(settings, "rss_enabled", True)
+    # A credential header under a qualified name keeps the document out of the
+    # listing, as other credentials do.
+    defs.shipped(
+        "rss",
+        {
+            "feeds": [
+                {
+                    "url": "https://vendor.example/a.atom",
+                    "headers": {"X-Api-Key": SECRET},
+                }
+            ]
+        },
+    )
+    listing = defs.admin.get("/v1/admin/evidence-definitions")
+    assert SECRET not in listing.text
+    assert listing.json()["warnings"] == [
+        "rss contains sensitive settings that require server administrator review"
+    ]
+    # Other feed headers are withheld whatever their names.
+    defs.shipped(
+        "rss",
+        {
+            "feeds": [
+                {
+                    "url": "https://vendor.example/b.atom",
+                    "headers": {"X-Tenant": "tenant-7741"},
+                }
+            ]
+        },
+    )
+    listing = defs.admin.get("/v1/admin/evidence-definitions")
+    assert "tenant-7741" not in listing.text
+    (feed,) = [c for c in listing.json()["collectors"] if c["adapter"] == "rss"]
+    assert feed["entry"] == {
+        "url": "https://vendor.example/b.atom",
+        "headers": {"X-Tenant": "[withheld]"},
+    }
+
+    # Deployment-managed connection inputs are withheld in both listings.
+    managed = defs.tmp_path / "connections.yml"
+    managed.write_text(
+        yaml.safe_dump(
+            {
+                "connections": [
+                    {
+                        "id": "vendor-feeds",
+                        "source": "rss",
+                        "name": "Vendor feeds",
+                        "configuration": {},
+                        "credentials": {},
+                        "inputs": {
+                            "feeds": [
+                                {
+                                    "url": "https://vendor.example/private.atom",
+                                    "auth": {
+                                        "username": "feed-reader",
+                                        "password": SECRET,
+                                    },
+                                    "headers": {"X-Region": "region-5520"},
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setenv("KEEN_SOURCE_CONNECTIONS_FILE", str(managed))
+    sources = defs.admin.get("/v1/admin/source-connections")
+    definitions = defs.admin.get("/v1/admin/evidence-definitions")
+    withheld = {
+        "url": "https://vendor.example/private.atom",
+        "auth": {"username": "[withheld]", "password": "[withheld]"},
+        "headers": {"X-Region": "[withheld]"},
+    }
+    for response in (sources, definitions):
+        assert response.status_code == 200
+        for value in (SECRET, "feed-reader", "region-5520"):
+            assert value not in response.text
+    (listed,) = [
+        c for c in sources.json()["connections"] if c["id"] == "file:vendor-feeds"
+    ]
+    assert listed["inputs"] == {"feeds": [withheld]}
+    (defined,) = [
+        c
+        for c in definitions.json()["collectors"]
+        if c.get("connection_id") == "file:vendor-feeds"
+    ]
+    assert defined["entry"] == withheld
+    # The listed entry still names the input when a rule is linked to it...
+    linked = defs.definition(
+        "vendor-advisories",
+        adapter="rss",
+        section="feeds",
+        entry=defined["entry"],
+        connection_id="file:vendor-feeds",
+    )
+    assert linked.status_code == 200, linked.text
+    # ...and collection still reads the stored entry.
+    (connection,) = [c for c in connections(None, "rss") if c.id == "file:vendor-feeds"]
+    (stored,) = connection.inputs["feeds"]
+    assert stored["auth"]["password"] == SECRET
+    assert stored["headers"] == {"X-Region": "region-5520"}
+
+
+def test_database_connection_inputs_withhold_credential_values(defs):
+    # Saved before qualified credential names were refused.
+    defs.db.add(
+        SourceConnection(
+            id="legacy-ci",
+            source="jenkins",
+            name="Legacy CI",
+            configuration={"base_url": "https://ci.example"},
+            inputs={"jobs": [{"name": "deploy", "X-Api-Key": SECRET}]},
+            version=1,
+        )
+    )
+    defs.db.commit()
+    sources = defs.admin.get("/v1/admin/source-connections")
+    assert SECRET not in sources.text
+    (listed,) = [c for c in sources.json()["connections"] if c["id"] == "legacy-ci"]
+    assert listed["inputs"] == {"jobs": [{"name": "deploy", "X-Api-Key": "[withheld]"}]}
+    # An edit sending the withheld value back is refused before anything is saved.
+    refused = defs.admin.put(
+        "/v1/admin/source-connections/legacy-ci",
+        json={
+            "source": "jenkins",
+            "name": "Legacy CI",
+            "configuration": {"base_url": "https://ci.example"},
+            "inputs": listed["inputs"],
+            "version": 1,
+        },
+        headers=unsafe(defs.admin),
+    )
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == (
+        "Move credential jobs.X-Api-Key into a server environment variable"
+    )
+    defs.db.expire_all()
+    stored = defs.db.get(SourceConnection, "legacy-ci")
+    assert stored.inputs["jobs"][0]["X-Api-Key"] == SECRET
 
 
 def test_rss_documents_with_custom_headers_stay_out_of_the_web_editor(defs):

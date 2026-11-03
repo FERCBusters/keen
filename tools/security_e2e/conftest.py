@@ -34,7 +34,6 @@ ROLES = {
     "audit_manager": ["audits.manage"],
     "pestle_reader": ["pestle.read"],
     "parties_reader": ["interested_parties.read"],
-    "audit_trail_reader": ["audittrail.read"],
 }
 # Accounts used by individual checks rather than the authorisation matrix.
 EXTRA_ROLES = {"mfa_user": []}

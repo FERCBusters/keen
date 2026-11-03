@@ -6,12 +6,11 @@ from sqlalchemy import CompoundSelect, select
 from sqlalchemy.orm import Session
 
 from app.db.models import IsmsMeetingAttendee, IsmsMeetingPerson, IsmsPerson, User
-from app.security.permissions import has_any_permission
+from app.security.permissions import ISMS_READ_PERMISSION, has_any_permission
 from app.security.roles import is_active_user
 
 from .constants import (
     ISMS_MANAGE_PERMISSION,
-    ISMS_READ_PERMISSION,
     RISK_MANAGE_PERMISSION,
     RISK_READ_PERMISSION,
 )

@@ -1,6 +1,7 @@
 """Attack regressions and security contracts against the assembled application."""
 
 import asyncio
+import re
 import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -10,10 +11,12 @@ import app.services.login as login_operations
 import app.services.questions as questions_operations
 import fakeredis
 import pytest
+import regex as regex_engine
 from app.core.config import settings
 from app.ingest import bookstack
 from app.security import csrf, oidc, regex, sessions
 from app.security.route_policy import PUBLIC_HTTP_ROUTES, is_public_request
+from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from fastapi.testclient import TestClient
 from starlette.requests import Request
@@ -149,6 +152,27 @@ def test_mapping_runtime_uses_regex_boundary():
     assert _match_regex(r"(?i)\bfailed\b", "Operation FAILED")
     with pytest.raises(ValueError, match="65536"):
         _match_regex("x", "x" * 65537)
+
+
+def test_expanded_mode_is_refused_for_rules_and_event_filters():
+    # Under the x flag Python reads a{1, 2} as literal text, while the engines
+    # that run the pattern read a quantifier, so nested repetition passes the
+    # checks unseen.
+    hidden = "(?x)(a{1, 2}){1, 1000}$"
+    assert re.fullmatch("(?x)a{1, 2}", "aa") is None
+    assert regex_engine.fullmatch("(?x)a{1, 2}", "aa", regex_engine.VERSION0)
+    for pattern in (hidden, "(?ix)a", "(?xi)a", "(?x:a)", "(?i:b(?x:a))", "b|(?x:a)"):
+        for validate in (
+            regex.validate_pattern,
+            regex.validate_database_pattern,
+            regex.compile_pattern,
+        ):
+            with pytest.raises(ValueError, match=r"Expanded mode \(the x flag\)"):
+                validate(pattern)
+    # Turning the flag off, or an x that is only text, is ordinary.
+    for pattern in ("(?i-x:a)", "(?-x:a)", "[(?x)]", "(?i)x"):
+        regex.validate_database_pattern(pattern)
+        assert regex.compile_pattern(pattern)
 
 
 def test_regex_cache_is_bounded():
@@ -856,7 +880,7 @@ def test_login_completion_replaces_the_old_session_and_tolerates_bookkeeping_fai
         provider=SimpleNamespace(key="google"),
         id_token=None,
         existing_sid=stale,
-        client_ip="203.0.113.5",
+        context=ChangeContext(client_ip="203.0.113.5"),
     )
     assert sessions.get_session(redis, stale) is None
     assert sessions.get_session(redis, sid)["auth_method"] == "google"
@@ -877,7 +901,10 @@ def test_login_completion_replaces_the_old_session_and_tolerates_bookkeeping_fai
 
     monkeypatch.setattr(contract_db, "commit", flaky_commit)
     fresh, profile = login_operations.complete_local_login(
-        contract_db, user, existing_sid=sid, client_ip="203.0.113.5"
+        contract_db,
+        user,
+        existing_sid=sid,
+        context=ChangeContext(client_ip="203.0.113.5"),
     )
     assert fresh != sid
     assert sessions.get_session(redis, fresh)["user_id"] == str(user.id)

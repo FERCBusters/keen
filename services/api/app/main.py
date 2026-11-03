@@ -20,6 +20,7 @@ from app.api.routes import router as api_router
 from app.api.sql_trace import RequestLabelMiddleware
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
+from app.core.valkey import get_valkey
 from app.db.models import AuditLog, User
 from app.db.session import SessionLocal
 from app.realtime.notifications import (
@@ -40,7 +41,8 @@ from app.security.permissions import (
     ensure_session_authorization_current,
     has_permission,
 )
-from app.security.redaction import redact_query_string
+from app.security.rate_limit import address_allowance, fixed_window_allow
+from app.security.redaction import redact_query_string, redact_str
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.security.roles import attach_effective_role, lock_admin_changes
 from app.security.route_policy import (
@@ -229,6 +231,9 @@ async def auth_middleware(request: Request, call_next):
         user = get_current_user_from_request(request, db)
         if not user:
             return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+        # The audit trail names the account even when a check below refuses it;
+        # closing the session detaches the instance on those early returns.
+        request.state.user = user
 
         # Use the server-side session permission snapshot when current. This keeps
         # navbar/page rendering from querying RBAC tables on every navigation while
@@ -241,20 +246,10 @@ async def auth_middleware(request: Request, call_next):
             if effective_role != ROLE_ADMIN:
                 return JSONResponse({"detail": "Admin role required"}, status_code=403)
 
+        # The administration namespace, its audit trail included.
         if path.startswith("/v1/admin"):
-            # Special-case audit trail: allow users with audittrail.read.
-            if path in {"/v1/admin/audit", "/v1/admin/entity-changelog"}:
-                if effective_role != ROLE_ADMIN and not has_permission(
-                    db, user, "audittrail.read"
-                ):
-                    return JSONResponse(
-                        {"detail": "Audit access required"}, status_code=403
-                    )
-            else:
-                if effective_role != ROLE_ADMIN:
-                    return JSONResponse(
-                        {"detail": "Admin role required"}, status_code=403
-                    )
+            if effective_role != ROLE_ADMIN:
+                return JSONResponse({"detail": "Admin role required"}, status_code=403)
 
         # Default rule: only admin can mutate backend state, except for
         # explicitly user/permission-owned workflows checked below.
@@ -339,6 +334,27 @@ async def auth_middleware(request: Request, call_next):
 # while a sign-in is in progress; keep them out of the audit trail.
 _OAUTH_CALLBACK_PATH = re.compile(r"/v1/auth/(?:oidc|sso/[^/]+)/callback")
 _OAUTH_CALLBACK_QUERY_KEYS = frozenset({"code", "state"})
+# Public read-only documents that anyone may fetch at any rate.
+_UNAUDITED_PUBLIC_READS = frozenset(
+    {"/health", "/v1/auth/methods", "/v1/agents/server-key"}
+)
+# Refused requests without a signed-in account carry no identity, so each
+# client address (each /64 network for IPv6) adds at most this many such
+# records a minute, whatever the refusal's status.
+_UNAUTHENTICATED_REFUSAL_AUDIT_LIMIT = 60
+
+
+def _audits_unauthenticated_refusal(client_ip: str | None) -> bool:
+    # Fails closed: while Valkey is unavailable these refusals cannot be
+    # counted, so they go unrecorded and cannot fill the database.
+    allowed, _ = fixed_window_allow(
+        get_valkey(),
+        f"keen:rl:audit-refusal:ip:{address_allowance(client_ip)}",
+        _UNAUTHENTICATED_REFUSAL_AUDIT_LIMIT,
+        60,
+        fail_closed=True,
+    )
+    return allowed
 
 
 @app.middleware("http")
@@ -350,12 +366,16 @@ async def audit_trail_middleware(request: Request, call_next):
     """
     path = policy_path(request)
     # Keep noise down by skipping obvious non-UI endpoints.
-    if not path.startswith("/v1") or path in {
-        "/health",
-        "/v1/admin/questions/summary",  # admin bell badge poll,
-        "/v1/evidence/latest",  # homepage ambient evidence ticker,
-        "/v1/webhooks",  # webhook ingesters
-    }:
+    if (
+        not path.startswith("/v1")
+        or path
+        in {
+            "/v1/admin/questions/summary",  # admin bell badge poll,
+            "/v1/evidence/latest",  # homepage ambient evidence ticker,
+            "/v1/webhooks",  # webhook ingesters
+        }
+        or (request.method == "GET" and path in _UNAUDITED_PUBLIC_READS)
+    ):
         return await call_next(request)
 
     start = time.perf_counter()
@@ -372,46 +392,50 @@ async def audit_trail_middleware(request: Request, call_next):
 
             user = getattr(request.state, "user", None)
             username = getattr(user, "username", None) if user else None
+            client_ip = _client_ip(request)
 
-            qs = redact_query_string(
-                request.url.query,
-                _OAUTH_CALLBACK_QUERY_KEYS
-                if _OAUTH_CALLBACK_PATH.fullmatch(path)
-                else frozenset(),
-            )
-            if qs and len(qs) > 4096:
-                qs = qs[:4096]
-
-            ua = (request.headers.get("user-agent") or "").strip() or None
-            from app.security.redaction import redact_str
-
-            ref = redact_str((request.headers.get("referer") or "").strip()) or None
-
-            # Truncate potentially long strings for safety.
-            if ua and len(ua) > 256:
-                ua = ua[:256]
-            if ref and len(ref) > 512:
-                ref = ref[:512]
-
-            db = SessionLocal()
-            try:
-                db.add(
-                    AuditLog(
-                        ts=utc_now_naive(),
-                        username=username,
-                        method=request.method,
-                        path=path,
-                        query_string=qs,
-                        status_code=int(status_code or 0),
-                        duration_ms=dur_ms,
-                        client_ip=_client_ip(request),
-                        user_agent=ua,
-                        referer=ref,
-                    )
+            if (
+                username is not None
+                or status_code < 400
+                or _audits_unauthenticated_refusal(client_ip)
+            ):
+                qs = redact_query_string(
+                    request.url.query,
+                    _OAUTH_CALLBACK_QUERY_KEYS
+                    if _OAUTH_CALLBACK_PATH.fullmatch(path)
+                    else frozenset(),
                 )
-                db.commit()
-            finally:
-                db.close()
+                if qs and len(qs) > 4096:
+                    qs = qs[:4096]
+
+                ua = (request.headers.get("user-agent") or "").strip() or None
+                ref = redact_str((request.headers.get("referer") or "").strip()) or None
+
+                # Truncate potentially long strings for safety.
+                if ua and len(ua) > 256:
+                    ua = ua[:256]
+                if ref and len(ref) > 512:
+                    ref = ref[:512]
+
+                db = SessionLocal()
+                try:
+                    db.add(
+                        AuditLog(
+                            ts=utc_now_naive(),
+                            username=username,
+                            method=request.method,
+                            path=path,
+                            query_string=qs,
+                            status_code=int(status_code or 0),
+                            duration_ms=dur_ms,
+                            client_ip=client_ip,
+                            user_agent=ua,
+                            referer=ref,
+                        )
+                    )
+                    db.commit()
+                finally:
+                    db.close()
         except Exception:
             # Audit logging must never break the main request path.
             pass

@@ -450,24 +450,31 @@ def _normalize_next(next_url: str | None) -> str | None:
     raw = (next_url or "").strip()
     if not raw:
         return None
+    path = raw.split("?", 1)[0].split("#", 1)[0]
+    # Browsers resolve dot segments, including percent-encoded ones, so a path
+    # such as /.//host would become the network-path reference //host.
     if (
         raw.startswith("/")
         and not raw.startswith("//")
         and "://" not in raw
         and "\\" not in raw
         and not any(ord(c) < 32 for c in raw)
+        and not any(code in path.lower() for code in ("%2e", "%2f", "%5c"))
+        and not any(segment in {".", ".."} for segment in path.split("/"))
     ):
         return raw
     return None
 
 
-def _allowed_by_domain(provider: SsoProvider, email: str | None) -> bool:
+def _allowed_by_domain(provider: SsoProvider, claims: dict[str, Any]) -> bool:
+    """Whether the provider's current verified email is in an allowed domain."""
     domains = _split_csv(provider.allowed_email_domains or "")
     if not domains:
         return True
-    if not email or "@" not in email:
+    email = _claim_email(claims)
+    if not email or not _email_is_verified(provider, claims):
         return False
-    dom = email.split("@", 1)[1].lower()
+    dom = email.split("@", 1)[1]
     return any(dom == d.lower() for d in domains)
 
 
@@ -497,6 +504,24 @@ def _update_identity_metadata(identity: UserIdentity, claims: dict[str, Any]) ->
     identity.claims = claims or {}
 
 
+class LinkedAccountRefused(HTTPException):
+    """A refused sign-in whose provider identity is linked to an account."""
+
+    def __init__(self, account: User, detail: str) -> None:
+        super().__init__(status_code=403, detail=detail)
+        self.account_id = account.id
+
+
+def linked_account_id(error: Exception):
+    """The account a refused SSO sign-in reached, if its identity is linked."""
+    return error.account_id if isinstance(error, LinkedAccountRefused) else None
+
+
+def sso_attempt(request: Request) -> str | None:
+    """The provider of a sign-in this request's callback consumed, if any."""
+    return getattr(request.state, "sso_provider", None)
+
+
 def _get_or_create_user_for_identity(
     db: Session, *, provider: SsoProvider, subject: str, claims: dict[str, Any]
 ) -> User:
@@ -509,10 +534,17 @@ def _get_or_create_user_for_identity(
         .filter(UserIdentity.issuer == issuer, UserIdentity.subject == subject)
         .one_or_none()
     )
+    # The allowlist governs every sign-in, so an identity linked earlier stops
+    # signing in once its email leaves the allowed domains.
+    allowed = _allowed_by_domain(provider, claims)
     if identity:
         user = db.query(User).filter(User.id == identity.user_id).one_or_none()
-        if not user or not user.is_active:
+        if not user:
             raise HTTPException(status_code=403, detail="User is inactive")
+        if not allowed:
+            raise LinkedAccountRefused(user, "Email domain is not allowed")
+        if not user.is_active:
+            raise LinkedAccountRefused(user, "User is inactive")
         _update_identity_metadata(identity, claims)
         identity.provider = provider.key
         user.last_login_at = _now()
@@ -523,7 +555,7 @@ def _get_or_create_user_for_identity(
         return user
 
     email = _claim_email(claims)
-    if not _allowed_by_domain(provider, email):
+    if not allowed:
         raise HTTPException(status_code=403, detail="Email domain is not allowed")
     if not provider.auto_link_existing:
         raise HTTPException(
@@ -829,6 +861,8 @@ async def handle_callback(
     row = pop_login_state(db, state=state)
     if not row:
         raise HTTPException(status_code=400, detail="SSO state missing or expired")
+    # From here the callback completes or refuses a sign-in this browser began.
+    request.state.sso_provider = provider.key
 
     try:
         if provider.kind == "github":

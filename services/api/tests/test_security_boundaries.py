@@ -1,5 +1,7 @@
 """Security contracts at browser, proxy and session-cache boundaries."""
 
+import logging
+import threading
 from unittest.mock import Mock
 
 import fakeredis
@@ -121,6 +123,37 @@ def test_ip_normalisation(raw, expected):
 def test_forwarded_ip_stops_at_first_untrusted_hop(monkeypatch, peer, chain, expected):
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "10.0.0.0/8")
     assert request_ip(request({"x-forwarded-for": chain}, peer)) == expected
+
+
+def test_an_untrusted_forwarding_proxy_is_reported_once(monkeypatch, caplog):
+    from app.security import client_ip
+
+    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "")
+    monkeypatch.setattr(client_ip, "_untrusted_proxy_reported", threading.Event())
+    forwarded = {"x-forwarded-for": "198.51.100.7, synthetic-header-marker"}
+    with caplog.at_level(logging.WARNING, logger="app.security.client_ip"):
+        # Public peers, and private peers that forward nothing, are ordinary.
+        assert request_ip(request(forwarded, "93.184.216.34")) == "93.184.216.34"
+        assert request_ip(request({}, "172.18.0.5")) == "172.18.0.5"
+        assert caplog.records == []
+        # A private peer forwarding addresses is a proxy Keen does not trust;
+        # its address stays the client address, and the operator is told once.
+        for _ in range(3):
+            assert request_ip(request(forwarded, "172.18.0.5")) == "172.18.0.5"
+        assert request_ip(request(forwarded, "127.0.0.1")) == "127.0.0.1"
+    (record,) = caplog.records
+    message = record.getMessage()
+    assert "KEEN_SECURITY_TRUSTED_PROXY_CIDRS" in message and "172.18.0.5" in message
+    assert "198.51.100.7" not in message and "synthetic-header-marker" not in message
+
+    caplog.clear()
+    monkeypatch.setattr(client_ip, "_untrusted_proxy_reported", threading.Event())
+    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "172.18.0.0/16")
+    with caplog.at_level(logging.WARNING, logger="app.security.client_ip"):
+        assert request_ip(request(forwarded, "172.18.0.5")) == "172.18.0.5"
+        chain = request({"x-forwarded-for": "198.51.100.7"}, "172.18.0.5")
+        assert request_ip(chain) == "198.51.100.7"
+    assert caplog.records == []
 
 
 def test_rate_limit_window_and_key_isolation():

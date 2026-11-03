@@ -4,6 +4,8 @@ export * from '/vendor/mosp-design-system/app.js';
 export { confirmAction } from './pages/confirm-modal.js';
 export { unsavedGuard } from './pages/unsaved-guard.js';
 import { initContextHelp } from './help-launcher.js';
+import { localPath } from './pages/navigation-security.js';
+export { localPath };
 
 // Design-system helpers this module uses itself; pages reach every
 // design-system export through the re-export above.
@@ -184,9 +186,12 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
   window.mospFrameworkDefault = catalog.default || '';
   if (!allowed.has(selected) && catalog.default) {
     selected = catalog.default;
+    // The URL parser resolves dot segments, so a path it writes out again can
+    // begin with "//" and name another host. Full addresses stay on Keen, and
+    // a link keeps its path form only while that is a local path.
     const url = new URL(location.href);
     url.searchParams.set('framework', selected);
-    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    history.replaceState(history.state, '', url.href);
     window.mospFramework = selected;
     try {
       localStorage.setItem(cfg.storage.frameworkKey, selected);
@@ -199,7 +204,7 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
       )
         continue;
       target.searchParams.set('framework', selected);
-      link.href = target.pathname + target.search + target.hash;
+      link.href = localPath(target.pathname + target.search + target.hash) || target.href;
     }
   }
   const picker = navRoot?.querySelector('#navFrameworkSelect');
@@ -1033,7 +1038,7 @@ export function safeExternalHref(url) {
   const raw = String(url ?? '').trim();
   if (!raw || raw.length > 2048) return '';
   if (/[\\\u0000-\u001f\u007f]/.test(raw)) return '';
-  if (raw.startsWith('/')) return raw.startsWith('//') ? '' : raw;
+  if (raw.startsWith('/')) return localPath(raw);
   try {
     const parsed = new URL(raw);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;

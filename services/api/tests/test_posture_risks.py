@@ -205,6 +205,57 @@ def test_recorded_risk_is_linked_and_its_acceptance_lapses(keen):
     assert check(client, person)[1]["status"] == "attention"
 
 
+def test_reassigning_a_workstation_detaches_its_recorded_risks(keen):
+    admin, client, person_a, agent = person_with_workstation(keen)
+    observe(keen, agent)
+    today = utc_now_naive().date()
+    recorded = client.post(
+        f"/v1/isms/people/{person_a.id}/workstation-posture/risks",
+        json=body(
+            agent,
+            treatment_strategy="accept",
+            risk_owner_user_id=str(admin.id),
+            treatment_due_at=(today + timedelta(days=30)).isoformat(),
+        ),
+        headers=unsafe(client),
+    )
+    assert recorded.status_code == 201, recorded.text
+    assert check(client, person_a)[1]["status"] == "accepted"
+
+    # Saving the same assignment keeps the risk with the device.
+    same = client.patch(
+        f"/v1/admin/agents/{agent.id}",
+        json={"agent_type": "workstation", "person_id": str(person_a.id)},
+        headers=unsafe(client),
+    )
+    assert same.status_code == 200, same.text
+    assert keen.db.query(PostureRiskLink).count() == 1
+
+    # The administrator hands the device to someone else, who reports the same
+    # failing check: the previous holder's acceptance does not follow it.
+    person_b = IsmsPerson(name="Blake Example")
+    keen.db.add(person_b)
+    keen.db.commit()
+    moved = client.patch(
+        f"/v1/admin/agents/{agent.id}",
+        json={"agent_type": "workstation", "person_id": str(person_b.id)},
+        headers=unsafe(client),
+    )
+    assert moved.status_code == 200, moved.text
+    keen.db.expire_all()
+    agent = keen.db.get(KeenAgent, agent.id)
+    agent.posture_assigned_at = utc_now_naive() - timedelta(minutes=5)
+    keen.db.commit()
+    observe(keen, agent)
+    _, found = check(client, person_b)
+    assert found["status"] == "attention"
+    assert found["risks"] == []
+    assert keen.db.query(PostureRiskLink).count() == 0
+    # The risk itself stays in the register.
+    risk = keen.db.get(Risk, uuid.UUID(recorded.json()["risk_id"]))
+    assert risk is not None and risk.treatment_strategy == "accept"
+
+
 def test_risk_recording_permissions_and_title_visibility(keen):
     admin, client, person, agent = person_with_workstation(keen)
     observe(keen, agent)

@@ -286,7 +286,6 @@ def _capabilities(db: Session, user: User, *, is_admin: bool) -> dict[str, bool]
     create_questions = allowed("question.create")
     incident_webhook_enabled = bool(settings.incident_webhook_url.strip())
     return {
-        "can_audit_trail": allowed("audittrail.read"),
         "can_view_audits": manage_audits or allowed("audits.read"),
         "can_manage_audits": manage_audits,
         "can_admin_audits": admin_audits,

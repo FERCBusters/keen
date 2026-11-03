@@ -176,3 +176,85 @@ def test_malformed_password_hash_fails_closed(raw):
 def test_short_password_rejected(password):
     with pytest.raises(ValueError):
         passwords.hash_password(password)
+
+
+def _permission(db, code):
+    row = db.query(Permission).filter_by(code=code).one_or_none()
+    if row is None:
+        row = Permission(code=code, description=code)
+        db.add(row)
+        db.flush()
+    return row
+
+
+def test_audit_managers_hold_event_and_isms_reads_directly_or_by_group(people):
+    db, _ = people
+    direct, grouped, reader = (
+        User(username=name, password_hash="unused", role="normal", is_active=True)
+        for name in ("audit-manager", "audit-admin", "audit-reader")
+    )
+    group = Group(name="audit-admins")
+    db.add_all([direct, grouped, reader, group])
+    db.flush()
+    db.execute(
+        user_permissions.insert(),
+        [
+            {
+                "user_id": direct.id,
+                "permission_id": _permission(db, "audits.manage").id,
+            },
+            {"user_id": reader.id, "permission_id": _permission(db, "audits.read").id},
+        ],
+    )
+    db.execute(
+        group_permissions.insert(),
+        {"group_id": group.id, "permission_id": _permission(db, "audits.admin").id},
+    )
+    db.execute(user_groups.insert(), {"user_id": grouped.id, "group_id": group.id})
+    db.commit()
+    for user, held in ((direct, "audits.manage"), (grouped, "audits.admin")):
+        assert get_effective_permission_codes(db, user) == {
+            held,
+            "events.read",
+            "isms.read",
+        }
+        assert has_permission(db, user, "events.read")
+        assert has_permission(db, user, "isms.read")
+        # Reads only: nothing else comes with them.
+        for code in ("isms.manage", "risk.read", "stories.read", "audits.read"):
+            assert not has_permission(db, user, code)
+    assert get_effective_permission_codes(db, reader) == {"audits.read"}
+    assert not has_permission(db, reader, "events.read")
+    assert not has_permission(db, reader, "isms.read")
+    direct.is_active = False
+    assert not has_permission(db, direct, "events.read")
+
+
+def test_snapshots_resolve_implied_permissions_without_queries(people, monkeypatch):
+    db, users = people
+    user = users["reader"]
+    user.session_id = "s"
+    user.effective_role = "normal"
+    # A snapshot taken before the implication existed holds only the code itself.
+    user.effective_permission_codes = {"audits.manage"}
+    user.session_authz_version = user.authz_version
+    compute = Mock(side_effect=AssertionError("unexpected query"))
+    monkeypatch.setattr(permissions, "compute_effective_role", compute)
+    ensure_session_authorization_current(db, user)
+    assert has_permission(db, user, "events.read")
+    assert has_permission(db, user, "isms.read")
+    assert not has_permission(db, user, "isms.manage")
+    assert get_effective_permission_codes(db, user) == {
+        "audits.manage",
+        "events.read",
+        "isms.read",
+    }
+    compute.assert_not_called()
+
+
+def test_implied_permissions_are_declared_once_and_imply_nothing_further():
+    implications = permissions.PERMISSION_IMPLICATIONS
+    assert set(implications) == {"audits.manage", "audits.admin"}
+    for implied in implications.values():
+        assert implied == {"events.read", "isms.read"}
+        assert not implied & set(implications)

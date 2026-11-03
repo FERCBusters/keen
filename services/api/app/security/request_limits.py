@@ -7,6 +7,11 @@ import anyio
 from starlette.responses import JSONResponse
 
 MAX_BODY = 40 * 1024 * 1024
+# A decoded JSON document costs many times its size in memory and processor
+# time, so the application parses at most this much JSON from one request.
+# Administration routes, which hold configuration and control imports, may
+# send a whole request body of JSON.
+MAX_JSON_BODY = 2 * 1024 * 1024
 # ISMS document files and audit final reports accept a single file up to this
 # size; their operations check the file itself against the same figure.
 MAX_FILE_UPLOAD = 100 * 1024 * 1024
@@ -32,6 +37,17 @@ def body_limit(path):
     if _FILE_UPLOADS.fullmatch(path):
         return MAX_FILE_UPLOAD + _MULTIPART_ROOM
     return MAX_BODY
+
+
+def json_body_limit(path):
+    """The most JSON the application parses from one request to this path.
+
+    The check applies where a body is parsed as JSON, whatever its declared
+    content type; webhooks and agents read their bodies under their own limits.
+    """
+    if path.startswith("/v1/admin/"):
+        return MAX_BODY
+    return MAX_JSON_BODY
 
 
 def target_has_nul(scope) -> bool:

@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as now
 from app.db.models import SecurityNotification, UserLoginIP
 from app.db.session import SessionLocal
+from app.security.mfa import CODE_ATTEMPTS
 from app.services.mailer import send_email, smtp_configured
 
 log = logging.getLogger(__name__)
@@ -29,11 +30,17 @@ def enqueue(db, user, event, *, ip=None):
         "factor-removed": "An authenticator was removed from your Keen account",
         "recovery-codes-regenerated": "Your Keen recovery codes were replaced",
         "operator-reset": "Your Keen two-factor authentication was reset by an operator",
+        "verified-recovery": "A recovery code was used for your Keen account",
+        "verification-ended": "Keen ended a two-factor verification after repeated incorrect codes",
     }
     title = titles[event]
     body = f"{title}.\n\nAccount: {user.username}\nKeen installation: {settings.public_base_url}\nTime (UTC): {now().isoformat(timespec='seconds')}Z\nIP address: {address}\n\n"
     if event == "login-ip":
         body += "This address has not previously been recorded for a successful sign-in to this account. A VPN, mobile connection or changing ISP address can cause this alert.\n\n"
+    elif event == "verification-ended":
+        body += f"Your password was accepted and {CODE_ATTEMPTS} incorrect authenticator or recovery codes were entered within an hour, so Keen accepts no code for this account for the next hour; a security key still signs you in. If this was not you, someone may know your password: change it and contact your Keen administrator.\n\n"
+    elif event == "verified-recovery":
+        body += "Each recovery code works once. Replace your recovery codes under Account, Security when few remain.\n\n"
     body += "If this was you, no action is needed. If you do not recognise this activity, open your known Keen address directly and contact your Keen administrator. Review your password and authenticators.\n"
     queue_email(
         db,
@@ -106,6 +113,8 @@ def deliver_pending(limit=10):
                 row.status = "sent"
                 row.sent_at = now()
                 row.last_error = None
+                # A sent message's text, a verification link included, is not kept.
+                row.body = ""
                 sent += 1
             db.commit()
     # Bound mail-body retention; known IPs remain until the account is deleted.

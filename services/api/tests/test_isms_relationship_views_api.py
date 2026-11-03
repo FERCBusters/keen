@@ -159,8 +159,9 @@ def test_measures_recorded_against_a_source_are_listed_for_it(isms):  # noqa: F8
 def test_relationship_views_need_isms_read_access(isms, path):  # noqa: F811
     clause = isms.db.query(FrameworkClause).filter_by(framework_slug="A").first()
     url = path.format(control=_control(isms, "A.5.2").id, clause=clause.id)
-    # Risk permissions also read the ISMS, so the outsider holds neither.
-    outsider = isms.keen.client(isms.keen.user("events.read", "audits.manage"))
+    # Risk permissions and audit management also read the ISMS, so the outsider
+    # holds none of them.
+    outsider = isms.keen.client(isms.keen.user("events.read", "audits.read"))
 
     refused = _send(outsider, "GET", url, status=403)
 

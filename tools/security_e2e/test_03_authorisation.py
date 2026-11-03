@@ -2,7 +2,8 @@
 
 Each row names the roles that must be allowed; every other role must be denied.
 The permission model follows SECURITY.md: risk.read implies PESTLE, interested
-party and ISMS read access, and risk.manage implies their management.
+party and ISMS read access, risk.manage implies their management, and
+audits.manage implies events.read and isms.read.
 """
 
 from __future__ import annotations
@@ -10,9 +11,9 @@ from __future__ import annotations
 import pytest
 from conftest import ROLES
 
-EVENTS = {"events_reader", "questioner"}
+EVENTS = {"events_reader", "questioner", "audit_manager"}
 RISK = {"risk_reader", "risk_manager"}
-ISMS = {"isms_reader", "isms_manager"} | RISK
+ISMS = {"isms_reader", "isms_manager", "audit_manager"} | RISK
 PESTLE = {"pestle_reader"} | RISK
 PARTIES = {"parties_reader"} | RISK
 AUDITS = {"audit_reader", "audit_manager"}
@@ -54,7 +55,8 @@ READS = [
     ("/api/v1/admin/agent-enrollment-profiles", set()),
     ("/api/v1/admin/managed-configurations", set()),
     ("/api/v1/admin/evidence-retention", set()),
-    ("/api/v1/admin/audit", {"audit_trail_reader"}),
+    ("/api/v1/admin/audit", set()),
+    ("/api/v1/admin/entity-changelog", set()),
     ("/api/v1/admin/questions", set()),
 ]
 

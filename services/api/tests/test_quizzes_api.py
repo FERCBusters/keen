@@ -1396,6 +1396,157 @@ def test_only_quiz_managers_move_the_account_of_someone_who_sits_quizzes(world):
         )
 
 
+def test_only_quiz_managers_change_who_holds_a_role_a_quiz_is_assigned_to(world):
+    db, assembled = world.db, world.keen
+    ada, ben, cleo, dev = world.students
+    role = IsmsOrgNode(name="Engineering", node_type="role")
+    spare = IsmsOrgNode(name="Facilities", node_type="role")
+    db.add_all([role, spare])
+    db.flush()
+    db.add_all(
+        [
+            IsmsOrgNodeUser(org_node_id=role.id, user_id=ada.user.id),
+            IsmsOrgNodeUser(org_node_id=role.id, user_id=ben.user.id),
+        ]
+    )
+    cleo.person.org_node_id = role.id
+    db.commit()
+    quiz = world.create(reveal_answers="after_submit")
+    assigned = world.put(
+        world.manager,
+        f"/v1/quizzes/{quiz['id']}/audience",
+        {"org_node_ids": [str(role.id)]},
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    def members():
+        db.expire_all()
+        holders = {
+            uid
+            for (uid,) in db.query(IsmsOrgNodeUser.user_id).filter_by(
+                org_node_id=role.id
+            )
+        }
+        placed = {
+            pid for (pid,) in db.query(IsmsPerson.id).filter_by(org_node_id=role.id)
+        }
+        return holders, placed
+
+    before = members()
+    # An ISMS manager without quiz permissions cannot join the role, drop
+    # someone from it or delete it, so cannot decide who sits the quiz.
+    isms_user = assembled.user("isms.manage")
+    isms = assembled.client(isms_user)
+    assert isms.get(f"/v1/quizzes/{quiz['id']}").status_code == 403
+    node = f"/v1/isms/org-nodes/{role.id}"
+    for user_ids in ([ada.user.id, ben.user.id, isms_user.id], [ada.user.id]):
+        refused = world.patch(isms, node, {"user_ids": [str(u) for u in user_ids]})
+        assert refused.status_code == 403, refused.text
+        assert refused.json()["detail"] == (
+            "quiz.manage permission is required to change the members of a role "
+            "a quiz is assigned to"
+        )
+    deleter = assembled.client(assembled.user("risk.manage"))
+    refused = deleter.delete(node, headers=unsafe(deleter))
+    assert refused.status_code == 403, refused.text
+    assert "delete a role a quiz is assigned to" in refused.json()["detail"]
+    # Nor can it place someone in the role, move them out, or relink the
+    # account of someone in it.
+    people = "/v1/isms/people"
+    for path, payload in (
+        (
+            f"{people}/{dev.person.id}",
+            {"name": "Dev", "user_id": str(dev.user.id), "org_node_id": str(role.id)},
+        ),
+        (
+            f"{people}/{cleo.person.id}",
+            {
+                "name": "Cleo",
+                "user_id": str(cleo.user.id),
+                "org_node_id": str(spare.id),
+            },
+        ),
+        (f"{people}/{cleo.person.id}", {"name": "Cleo", "user_id": str(cleo.user.id)}),
+        (
+            f"{people}/{cleo.person.id}",
+            {"name": "Cleo", "user_id": str(isms_user.id), "org_node_id": str(role.id)},
+        ),
+    ):
+        refused = world.patch(isms, path, payload)
+        assert refused.status_code == 403, (payload, refused.text)
+        assert "a role a quiz is assigned to" in refused.json()["detail"]
+    created = world.post(
+        isms,
+        people,
+        {"name": "Eve", "user_id": str(isms_user.id), "org_node_id": str(role.id)},
+    )
+    assert created.status_code == 403, created.text
+    # Deleting someone in the role would also take them out of the quiz.
+    refused = isms.delete(f"{people}/{cleo.person.id}", headers=unsafe(isms))
+    assert refused.status_code == 403, refused.text
+    assert refused.json()["detail"] == (
+        "quiz.manage permission is required to delete someone in a role a quiz "
+        "is assigned to"
+    )
+    assert members() == before
+    assert db.query(IsmsPerson).filter_by(user_id=isms_user.id).count() == 0
+    assert db.get(IsmsOrgNode, role.id) is not None
+
+    # Other edits of the role, and roles no quiz is assigned to, stay with ISMS
+    # managers.
+    assert world.patch(isms, node, {"name": "Platform"}).status_code == 200
+    same = [str(ada.user.id), str(ben.user.id)]
+    assert world.patch(isms, node, {"user_ids": same}).status_code == 200
+    assert (
+        world.patch(
+            isms, f"/v1/isms/org-nodes/{spare.id}", {"user_ids": [str(isms_user.id)]}
+        ).status_code
+        == 200
+    )
+    moved = world.patch(
+        isms,
+        f"{people}/{dev.person.id}",
+        {"name": "Dev", "user_id": str(dev.user.id), "org_node_id": str(spare.id)},
+    )
+    assert moved.status_code == 200, moved.text
+
+    # Quiz managers who manage the ISMS make the same changes.
+    both = assembled.client(assembled.user("isms.manage", "quiz.manage"))
+    assert world.patch(both, node, {"user_ids": [str(ada.user.id)]}).status_code == 200
+    assert (
+        world.patch(
+            both,
+            f"{people}/{dev.person.id}",
+            {"name": "Dev", "user_id": str(dev.user.id), "org_node_id": str(role.id)},
+        ).status_code
+        == 200
+    )
+    deleted = both.delete(f"{people}/{cleo.person.id}", headers=unsafe(both))
+    assert deleted.status_code == 204, deleted.text
+    remover = assembled.client(assembled.user("risk.manage", "quiz.manage"))
+    assert remover.delete(node, headers=unsafe(remover)).status_code == 200
+
+
+def test_only_quiz_managers_delete_someone_who_sits_a_quiz(world):
+    ada, ben = world.students[:2]
+    world.ready(people=[ada])
+    isms = world.keen.client(world.keen.user("isms.manage"))
+    path = f"/v1/isms/people/{ada.person.id}"
+
+    refused = isms.delete(path, headers=unsafe(isms))
+
+    assert refused.status_code == 403, refused.text
+    assert refused.json()["detail"] == (
+        "Deleting someone who sits quizzes needs quiz.manage"
+    )
+    assert world.db.get(IsmsPerson, ada.person.id) is not None
+    # Someone with no quizzes stays with ISMS managers.
+    other = f"/v1/isms/people/{ben.person.id}"
+    assert isms.delete(other, headers=unsafe(isms)).status_code == 204
+    both = world.keen.client(world.keen.user("isms.manage", "quiz.manage"))
+    assert both.delete(path, headers=unsafe(both)).status_code == 204
+
+
 def test_only_participants_of_an_open_round_can_sit_it(world):
     ada, ben = world.students[:2]
     quiz = world.ready(people=[ada])

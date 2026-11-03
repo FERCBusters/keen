@@ -117,10 +117,12 @@ def _clause(db, ref="4.1", framework="A", parent=None):
         ("POST", "/v1/admin/remap/run"),
         ("POST", "/v1/admin/diary"),
         ("PATCH", f"/v1/admin/controls/{uuid.uuid4()}/justification"),
+        ("GET", "/v1/admin/audit"),
+        ("GET", "/v1/admin/entity-changelog"),
     ],
 )
 def test_admin_routes_reject_non_administrators(keen, method, path):  # noqa: F811
-    reader = keen.client(keen.user("audittrail.read", "isms.manage"))
+    reader = keen.client(keen.user("audits.admin", "isms.manage"))
     response = reader.request(method, path, headers=unsafe(reader), json={})
     assert response.status_code == 403
     assert response.json()["detail"] == "Admin role required"
@@ -128,7 +130,10 @@ def test_admin_routes_reject_non_administrators(keen, method, path):  # noqa: F8
     assert anonymous.request(method, path, json={}).status_code in (401, 403)
 
 
-def test_audit_views_need_audit_permission_or_administrator(keen):  # noqa: F811
+MINUTES = "Board agreed to dismiss J. Smith pending fraud inquiry"
+
+
+def test_audit_views_are_for_administrators(keen):  # noqa: F811
     keen.db.add_all(
         [
             AuditLog(
@@ -151,56 +156,92 @@ def test_audit_views_need_audit_permission_or_administrator(keen):  # noqa: F811
         ]
     )
     keen.db.commit()
-    plain = keen.client(keen.user("isms.read"))
-    assert plain.get("/v1/admin/audit").status_code == 403
-    assert plain.get("/v1/admin/entity-changelog").status_code == 403
-
-    auditor = keen.client(keen.user("audittrail.read"))
-    response = auditor.get(
-        "/v1/admin/audit",
-        params={
-            "username": "DAN",
-            "method": "post",
-            "path": "risks",
-            "status_min": 200,
-            "status_max": 299,
+    # Every register's history reaches the entity changelog, ISMS minutes included.
+    manager = keen.client(keen.user("isms.manage"))
+    meeting = manager.post(
+        "/v1/isms/meetings",
+        params={"framework": settings.default_framework_slug},
+        json={
+            "title": "Confidential HR review",
+            "date": "2026-10-01",
+            "agenda_minutes_notes": MINUTES,
         },
+        headers=unsafe(manager),
     )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["total"] == 1
-    assert body["items"][0]["query_string"] == "q=1"
+    assert meeting.status_code in (200, 201), meeting.text
+    meeting_id = meeting.json()["id"]
+
+    # A permission named after the retired audit trail permission, as an
+    # administrator could create it, grants nothing; nor does every other one.
+    for codes in (
+        ("audittrail.read",),
+        ("audits.admin", "events.read", "isms.manage", "stories.admin", "quiz.manage"),
+    ):
+        refused = keen.client(keen.user(*codes))
+        for params in ({}, {"limit": 200}, {"entity_id": meeting_id}):
+            for path in ("/v1/admin/audit", "/v1/admin/entity-changelog"):
+                response = refused.get(path, params=params)
+                assert response.status_code == 403, (codes, path, response.text)
+                assert response.json()["detail"] == "Admin role required"
+                assert MINUTES not in response.text
+                assert "dana" not in response.text
+    assert keen.client().get("/v1/admin/entity-changelog").status_code == 401
+
+    # Administrators, including those whose role comes from a group, read both.
+    group = Group(name="admins-" + uuid.uuid4().hex[:8], role="admin")
+    inherited = keen.user(role="inherit")
+    keen.db.add(group)
+    keen.db.flush()
+    keen.db.execute(
+        user_groups.insert().values(user_id=inherited.id, group_id=group.id)
+    )
+    keen.db.commit()
+    for account in (keen.user(role="admin"), inherited):
+        auditor = keen.client(account)
+        listing = auditor.get("/v1/admin/entity-changelog", params={"limit": 200})
+        assert listing.status_code == 200, listing.text
+        assert MINUTES in listing.text
+        response = auditor.get(
+            "/v1/admin/audit",
+            params={
+                "username": "DAN",
+                "method": "post",
+                "path": "risks",
+                "status_min": 200,
+                "status_max": 299,
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["query_string"] == "q=1"
     paged = auditor.get("/v1/admin/audit", params={"limit": 999, "offset": -5}).json()
     assert paged["limit"] == 200
     assert paged["offset"] == 0
     failures = auditor.get("/v1/admin/audit", params={"status_min": 500}).json()
     assert {row["username"] for row in failures["items"]} >= {"sam"}
     assert all(row["status_code"] >= 500 for row in failures["items"])
-    # Auditing remains read-only.
-    assert (
-        auditor.post(
-            "/v1/admin/groups", headers=unsafe(auditor), json={"name": "x"}
-        ).status_code
-        == 403
-    )
 
 
 def test_audit_views_check_access_in_the_operation_itself(keen):  # noqa: F811
     from app.services.errors import DomainError
 
-    reader = keen.user("isms.read")
-    for operation in (
-        admin_service.admin_audit_trail,
-        admin_service.admin_entity_changelog,
-    ):
-        with pytest.raises(DomainError) as refused:
-            operation(user=reader, db=keen.db)
-        assert (refused.value.status_code, refused.value.detail) == (
-            403,
-            "Audit access required",
-        )
-    auditor = keen.user("audittrail.read")
-    assert admin_service.admin_entity_changelog(user=auditor, db=keen.db)["items"] == []
+    for reader in (keen.user("isms.read"), keen.user("audittrail.read")):
+        for operation in (
+            admin_service.admin_audit_trail,
+            admin_service.admin_entity_changelog,
+        ):
+            with pytest.raises(DomainError) as refused:
+                operation(user=reader, db=keen.db)
+            assert (refused.value.status_code, refused.value.detail) == (
+                403,
+                "Admin role required",
+            )
+    administrator = keen.user(role="admin")
+    assert (
+        admin_service.admin_entity_changelog(user=administrator, db=keen.db)["total"]
+        == keen.db.query(EntityChangelog).count()
+    )
 
 
 def test_entity_changelog_filters_are_validated(admin):

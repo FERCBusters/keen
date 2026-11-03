@@ -1,4 +1,4 @@
-import { safeNext } from './navigation-security.js';
+import { localPath, safeNext } from './navigation-security.js';
 import { errorText, qs, toast } from '/vendor/mosp-design-system/app.js';
 
 const status = document.getElementById('status');
@@ -57,11 +57,23 @@ async function maybeAlreadyLoggedIn() {
   }
 }
 
+// Set once a provider's sign-in has begun, so a second click starts no other.
+let ssoStarting = false;
+
+// Start sign-in at the provider's start address on Keen. Returns false, having
+// gone nowhere, when that address is not a path on Keen.
 function startOidc(startUrl) {
   const n = computeNext();
-  const u = new URL(startUrl, location.origin);
-  if (n) u.searchParams.set('next', n);
-  location.assign(u.pathname + u.search);
+  let target = '';
+  try {
+    const u = new URL(startUrl, location.origin);
+    if (n) u.searchParams.set('next', n);
+    target = localPath(u.pathname + u.search);
+  } catch {
+    // An address the URL parser refuses starts nothing.
+  }
+  if (target) location.assign(target);
+  return !!target;
 }
 
 function iconForProvider(key) {
@@ -86,7 +98,17 @@ function renderSsoButtons(providers) {
     const text = document.createElement('span');
     text.textContent = `Continue with ${label}`;
     button.append(icon, text);
-    button.addEventListener('click', () => startOidc(provider.start_url), { once: true });
+    // A refused start address shows why and leaves every button usable.
+    button.addEventListener('click', () => {
+      if (ssoStarting) return;
+      ssoStarting = startOidc(provider.start_url);
+      if (!ssoStarting)
+        toast(
+          status,
+          `Sign-in with ${label} cannot start. Ask an administrator to check the provider's settings.`,
+          'danger',
+        );
+    });
     ssoButtons.appendChild(button);
   }
   ssoSection.classList.remove('d-none');

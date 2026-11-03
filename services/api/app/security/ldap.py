@@ -1,6 +1,7 @@
 """Read-only directory authentication. Credentials are never persisted."""
 
 import base64
+import hashlib
 import re
 import ssl
 import uuid
@@ -14,7 +15,28 @@ from ldap3.utils.dn import parse_dn
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
+from app.core.valkey import get_valkey
 from app.db.models import User, UserIdentity
+from app.security.rate_limit import fixed_window_allow
+
+
+def _entry_allowed(issuer, subject) -> bool:
+    """Count a password tried against the directory entry a search matched.
+
+    Directories match a name regardless of case, width and spacing, so the
+    username limit alone gives each spelling its own allowance. Every spelling
+    that reaches the same entry shares this one. A spent allowance is answered
+    as a wrong password, so it cannot show that a spelling reached an entry.
+    """
+    entry = hashlib.sha256(f"{issuer}\0{subject}".encode()).hexdigest()
+    allowed, _ = fixed_window_allow(
+        get_valkey(),
+        f"keen:rl:login:ldap:{entry}",
+        settings.login_rate_limit_per_username,
+        settings.login_rate_limit_window_seconds,
+        fail_closed=True,
+    )
+    return allowed
 
 
 def directory_identity(username, password):
@@ -127,12 +149,14 @@ def directory_identity(username, password):
             or len(uid) > 128
         ):
             return None
-        bound = connect(entry.entry_dn, password)
-        if bound is None:
-            return None
         issuer = f"ldap:{url.scheme}://{url.hostname.lower()}:{url.port or (636 if url.scheme == 'ldaps' else 389)}"
         if len(issuer) > 512:
             raise ValueError("LDAP URL too long")
+        if not _entry_allowed(issuer, subject):
+            return None
+        bound = connect(entry.entry_dn, password)
+        if bound is None:
+            return None
         return {
             "issuer": issuer,
             "subject": subject,

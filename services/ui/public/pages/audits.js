@@ -349,11 +349,16 @@ function coverageMatches(row, query) {
   return haystack.includes(query);
 }
 
+// Documents and their counts come only to accounts with ISMS read access.
+function coverageTypes(data) {
+  return ['controls', 'clauses', 'documents'].filter((key) => data?.summary?.[key] !== null);
+}
+
 function renderCoverageSummary(data) {
   if (!coverageSummary) return;
   const summary = data?.summary || {};
   coverageSummary.innerHTML =
-    ['controls', 'clauses', 'documents']
+    coverageTypes(data)
       .map((key) => {
         const row = summary[key] || {};
         const label = key.charAt(0).toUpperCase() + key.slice(1);
@@ -372,7 +377,7 @@ function renderCoverageSummary(data) {
 
 function coverageSummaryRows(data) {
   const summary = data?.summary || {};
-  return ['controls', 'clauses', 'documents'].map((key) => {
+  return coverageTypes(data).map((key) => {
     const row = summary[key] || {};
     const included = Number(row.included || 0);
     const gaps = Number(row.gaps || 0);
@@ -515,7 +520,7 @@ function renderCoverageVisualisations(data) {
   const cell = 16;
   const cellGap = 4;
   const columns = Math.max(12, Math.floor((matrixWidth - 160) / (cell + cellGap)));
-  const grouped = ['controls', 'clauses', 'documents'].map((type) => ({
+  const grouped = coverageTypes(data).map((type) => ({
     type,
     label: coverageTypeLabel(type),
     items: allItems.filter((row) => row.type === type),
