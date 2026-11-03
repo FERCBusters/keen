@@ -97,6 +97,12 @@ Be as comprehensive in any security review of your completed work as you possibl
 
 ## Frontend source and domain boundaries
 
+- Keep `bash lint-ui.sh --check` passing: insert HTML through `esc()`, the
+  shared sanitiser or a listed escaping helper, and run `bash lint-ui.sh --prune`
+  when a change removes a suppressed site. Never add entries to
+  `services/ui/tests/eslint-suppressions.json` by hand.
+- Exempt a ruff security rule only on the line concerned, as
+  `# noqa: <rule>` with the reason beside it, and only where the code is safe.
 - Keep first-party JavaScript and CSS formatted with `bash format-ui.sh --write`;
   verify with `bash format-ui.sh --check`. Install its pinned tools using
   `npm ci --prefix services/ui/tests`. Minification belongs in generated UI build

@@ -375,7 +375,8 @@ def https_fetch(method: str, url: str, headers: Mapping[str, str]) -> Response:
         _RefuseRedirects(),
         urllib.request.HTTPSHandler(context=ssl.create_default_context()),
     )
-    request = urllib.request.Request(url, headers=dict(headers), method=method)
+    # The scheme is checked as HTTPS above, and redirects are refused.
+    request = urllib.request.Request(url, headers=dict(headers), method=method)  # noqa: S310
     try:
         with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
             return _read(response.status, response.headers, response)

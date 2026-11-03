@@ -139,6 +139,20 @@ Run `bash format-ui.sh --write` to format first-party JavaScript and CSS, and
 staged files; CI checks all first-party source, build scripts and UI tests.
 Generated files, dependencies and vendored code are excluded.
 
+`bash lint-ui.sh` checks first-party JavaScript for HTML inserted without
+`esc()`, the shared rich-text sanitiser or the other escaping helpers listed in
+`services/ui/tests/eslint.config.js`. Pre-commit and CI run it too. Insertion
+sites that predate the check are counted per file in
+`services/ui/tests/eslint-suppressions.json`; new code adds none. When a change
+removes or escapes one of them, the check asks for `bash lint-ui.sh --prune`,
+which shrinks the list. Leave the list otherwise unedited.
+
+`poetry run ruff check ../..` includes a set of security rules, listed in
+`ruff.toml`, for evaluated code or data, unsafe parsers and loaders, disabled
+TLS, shell commands, SQL assembled from strings, weak hashes and
+non-cryptographic random numbers. A line that is safe nonetheless carries
+`# noqa: <rule>` with the reason beside it.
+
 The UI build writes minified JavaScript and CSS into `services/ui/dist/`.
 The files under `services/ui/public/` remain readable source. The Docker image
 serves the generated `dist/` directory.

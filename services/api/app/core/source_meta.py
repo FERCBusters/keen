@@ -120,7 +120,8 @@ def _hsl_to_rgb(h: float, s: float, light: float) -> tuple[int, int, int]:
 
 def _auto_color(source: str) -> str:
     # Deterministic but pleasant colors.
-    h = int(hashlib.sha1(source.encode("utf-8")).hexdigest()[:8], 16) % 360
+    digest = hashlib.sha1(source.encode("utf-8"), usedforsecurity=False)
+    h = int(digest.hexdigest()[:8], 16) % 360
     # tuned for readable text with a light background tint in the UI
     r, g, b = _hsl_to_rgb(float(h), 0.62, 0.42)
     return f"#{r:02X}{g:02X}{b:02X}"

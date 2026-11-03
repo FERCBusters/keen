@@ -56,7 +56,8 @@ def is_referenced(db, event_id) -> bool:
     from app.db.models import Event
 
     statement = text(
-        f"SELECT 1 FROM events e WHERE e.id = :event_id AND NOT ({UNREFERENCED})"
+        # UNREFERENCED is a module constant; the event id is bound.
+        f"SELECT 1 FROM events e WHERE e.id = :event_id AND NOT ({UNREFERENCED})"  # noqa: S608
     ).bindparams(bindparam("event_id", type_=Event.__table__.c.id.type))
     return db.execute(statement, {"event_id": event_id}).first() is not None
 
@@ -88,8 +89,9 @@ def candidates(mode, value, cutoff, overrides=None):
                 "cutoff": cutoff,
                 "oldest": cutoff - timedelta(days=value),
             }
+        # The predicate joins constant SQL fragments; every value is bound.
         return (
-            predicate
+            predicate  # noqa: S608
             + """ AND e.id NOT IN (
             SELECT newest.id FROM events newest
             WHERE newest.created_at<=:cutoff AND NOT EXISTS (
@@ -101,6 +103,8 @@ def candidates(mode, value, cutoff, overrides=None):
     if overrides is not None:
         override_table = "jsonb_to_recordset(CAST(:overrides AS jsonb)) AS supplied(scope text, key text, mode text, value bigint)"
         params["overrides"] = json.dumps(overrides)
+    # The SQL below names only constants: override_table is one of two fixed
+    # table expressions, and every value is bound.
     # Only recorded automatic mappings establish rule ownership. DISTINCT keeps
     # multiple controls/frameworks from counting the same event twice per rule.
     # Each explicit rule allowance must expire before an overlapping event goes.
@@ -131,7 +135,7 @@ def candidates(mode, value, cutoff, overrides=None):
         SELECT event_id FROM ranked GROUP BY event_id HAVING bool_and(
             CASE mode WHEN 'age' THEN timestamp < CAST(:cutoff AS timestamp) - value * INTERVAL '1 day'
                       WHEN 'count' THEN position > value ELSE false END)
-    )"""
+    )"""  # noqa: S608
     return predicate, params
 
 
@@ -143,7 +147,9 @@ def preview(db, mode, value, cutoff=None, overrides=None):
     ).scalar_one()
     where, params = candidates(mode, value, cutoff, overrides)
     count = db.execute(
-        text(f"SELECT count(*) FROM events e WHERE {where}"), params
+        # `where` joins this module's constant SQL fragments; values are bound.
+        text(f"SELECT count(*) FROM events e WHERE {where}"),  # noqa: S608
+        params,
     ).scalar_one()
     return {
         "total_events": total,
@@ -254,7 +260,9 @@ def _settled_without_purge(db):
         job["mode"], job["value"], job["cutoff"], job["policy_overrides"]
     )
     if db.execute(
-        text(f"SELECT EXISTS (SELECT 1 FROM events e WHERE {where})"), params
+        # `where` joins this module's constant SQL fragments; values are bound.
+        text(f"SELECT EXISTS (SELECT 1 FROM events e WHERE {where})"),  # noqa: S608
+        params,
     ).scalar():
         return False
     db.execute(
@@ -303,8 +311,9 @@ def database_batch():
         # conflicts with this lock; a second protection check uses a fresh snapshot.
         ids = list(
             db.execute(
+                # `where` joins this module's constant SQL fragments; values are bound.
                 text(f"""SELECT e.id FROM events e WHERE {where}
-            ORDER BY e.timestamp,e.id LIMIT :batch FOR UPDATE OF e"""),
+            ORDER BY e.timestamp,e.id LIMIT :batch FOR UPDATE OF e"""),  # noqa: S608
                 {**params, "batch": BATCH_SIZE},
             ).scalars()
         )
@@ -312,7 +321,8 @@ def database_batch():
         batches = set()
         for event_id in ids:
             if not db.execute(
-                text(f"SELECT 1 FROM events e WHERE e.id=:id AND {UNPROTECTED}"),
+                # UNPROTECTED is a module constant; the event id is bound.
+                text(f"SELECT 1 FROM events e WHERE e.id=:id AND {UNPROTECTED}"),  # noqa: S608
                 {"id": event_id},
             ).scalar():
                 continue

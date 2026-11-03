@@ -273,7 +273,7 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
             coalesce(tags::text, '') || ' ' ||
             coalesce("metadata"::text, '')
           ) @@ ({any_word})
-        """)
+        """)  # noqa: S608
     params = {"framework": framework}
     params.update({f"w{index}": word for index, word in enumerate(words)})
     if db.get_bind().dialect.name != "postgresql":

@@ -107,6 +107,11 @@ jobs:
           if [ -f keen/format-ui.sh ]; then cd keen; fi
           bash format-ui.sh --check
 
+      - name: Check frontend HTML insertion
+        run: |
+          if [ -f keen/lint-ui.sh ]; then cd keen; fi
+          bash lint-ui.sh --check
+
       - name: Run tests
         run: |
           set -eu

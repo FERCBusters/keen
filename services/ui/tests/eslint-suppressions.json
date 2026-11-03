@@ -1,0 +1,364 @@
+{
+  "services/ui/public/app.js": {
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/account.js": {
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/admin.js": {
+    "no-unsanitized/property": {
+      "count": 9
+    }
+  },
+  "services/ui/public/pages/agent-enrollment.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/agents.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    }
+  },
+  "services/ui/public/pages/assurance-record.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/assurance.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/audit-wizard.js": {
+    "no-unsanitized/property": {
+      "count": 9
+    }
+  },
+  "services/ui/public/pages/audit.js": {
+    "no-unsanitized/property": {
+      "count": 11
+    }
+  },
+  "services/ui/public/pages/audits.js": {
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/bipartite-graph.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/bookstack-sections.js": {
+    "no-unsanitized/method": {
+      "count": 2
+    },
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  },
+  "services/ui/public/pages/clause.js": {
+    "no-unsanitized/method": {
+      "count": 2
+    },
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/clauses.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/cloud-posture.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    }
+  },
+  "services/ui/public/pages/control-requirements.js": {
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  },
+  "services/ui/public/pages/control.js": {
+    "no-unsanitized/property": {
+      "count": 9
+    }
+  },
+  "services/ui/public/pages/controls.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/documents.js": {
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/event-filter-conditions.js": {
+    "no-unsanitized/method": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/event-panel.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/event-selection.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/event.js": {
+    "no-unsanitized/property": {
+      "count": 12
+    }
+  },
+  "services/ui/public/pages/events.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/evidence-retention.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/filter-pill-multiselect.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/framework-compare.js": {
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  },
+  "services/ui/public/pages/home.js": {
+    "no-unsanitized/property": {
+      "count": 6
+    }
+  },
+  "services/ui/public/pages/integrations.js": {
+    "no-unsanitized/property": {
+      "count": 5
+    }
+  },
+  "services/ui/public/pages/interested_parties.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/interested_party.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    }
+  },
+  "services/ui/public/pages/isms-access.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    }
+  },
+  "services/ui/public/pages/isms-asset.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/isms-document.js": {
+    "no-unsanitized/property": {
+      "count": 5
+    }
+  },
+  "services/ui/public/pages/isms-effectiveness-measure.js": {
+    "no-unsanitized/property": {
+      "count": 9
+    }
+  },
+  "services/ui/public/pages/isms-effectiveness-metric.js": {
+    "no-unsanitized/property": {
+      "count": 6
+    }
+  },
+  "services/ui/public/pages/isms-meeting.js": {
+    "no-unsanitized/property": {
+      "count": 6
+    }
+  },
+  "services/ui/public/pages/isms-objective.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    }
+  },
+  "services/ui/public/pages/isms.js": {
+    "no-unsanitized/method": {
+      "count": 1
+    },
+    "no-unsanitized/property": {
+      "count": 47
+    }
+  },
+  "services/ui/public/pages/mitigator.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    }
+  },
+  "services/ui/public/pages/my-quizzes.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/owners.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/person-quizzes.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/pestle.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/pestle_item.js": {
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/planning-views.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/question-threads.js": {
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  },
+  "services/ui/public/pages/questions.js": {
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  },
+  "services/ui/public/pages/quiz-take.js": {
+    "no-unsanitized/property": {
+      "count": 6
+    }
+  },
+  "services/ui/public/pages/quiz.js": {
+    "no-unsanitized/property": {
+      "count": 19
+    }
+  },
+  "services/ui/public/pages/quizzes.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/related-controls.js": {
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  },
+  "services/ui/public/pages/risk-visualisations.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/risk-wizard.js": {
+    "no-unsanitized/property": {
+      "count": 23
+    }
+  },
+  "services/ui/public/pages/risk.js": {
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/risks.js": {
+    "no-unsanitized/property": {
+      "count": 13
+    }
+  },
+  "services/ui/public/pages/schedule-calendar.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/schedule-fields.js": {
+    "no-unsanitized/method": {
+      "count": 1
+    },
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  },
+  "services/ui/public/pages/source.js": {
+    "no-unsanitized/property": {
+      "count": 5
+    }
+  },
+  "services/ui/public/pages/sources.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/statement-of-applicability.js": {
+    "no-unsanitized/property": {
+      "count": 15
+    }
+  },
+  "services/ui/public/pages/stories.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/story-flow.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/story-related.js": {
+    "no-unsanitized/property": {
+      "count": 3
+    }
+  },
+  "services/ui/public/pages/story.js": {
+    "no-unsanitized/property": {
+      "count": 4
+    }
+  },
+  "services/ui/public/pages/swot-related.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/swot.js": {
+    "no-unsanitized/property": {
+      "count": 7
+    }
+  },
+  "services/ui/public/pages/visualisation.js": {
+    "no-unsanitized/property": {
+      "count": 5
+    }
+  },
+  "services/ui/public/pages/visualisation/embedded-markup.js": {
+    "no-unsanitized/property": {
+      "count": 1
+    }
+  },
+  "services/ui/public/pages/workstation-posture.js": {
+    "no-unsanitized/property": {
+      "count": 2
+    }
+  }
+}
