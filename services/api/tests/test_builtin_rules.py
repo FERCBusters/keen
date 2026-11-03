@@ -154,10 +154,16 @@ def test_host_rules_match_the_later_catalogues_events():
     assert refs("dns.lookup.failed") == ["NET-92"]
     assert refs("application.error.logged") == ["MON-120"]
     assert refs("user.account.changed", "success") == ["IAC-198", "IAC-200"]
-    # Only completed patching runs count; other tasks and failures map nothing.
+    # Only completed patching and renewal runs count; other tasks and failures
+    # map nothing.
     task = "routine.task.completed"
     assert refs(task, "success", task="patching", tool="apt") == ["VPM-1"]
     assert refs(task, "failure", task="patching", tool="apt") == []
+    assert refs(task, "success", task="certificate_renewal", tool="certbot") == [
+        "CRY-92",
+        "NET-1",
+    ]
+    assert refs(task, "failure", task="certificate_renewal") == []
     assert refs(task, "success", task="backup") == []
     assert refs(task, "success") == []
     protection = "system.protection.activated"

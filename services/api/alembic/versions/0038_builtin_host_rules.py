@@ -1,11 +1,12 @@
 """Built-in mapping rules for the host events of KEEN's 2026.11 catalogue.
 
 The Keen Agent recognises host faults, clock synchronisation, name-resolution
-problems, application errors, account changes, the daily apt upgrade job
-completing and protections taking effect once KEEN grants it the 2026.11
-catalogue. These rules map them to the Keen Assurance Framework beside the
-rules of 0037, without sharing a control with them. Rules an installation
-already has are kept as they are; see app/core/builtin_rules.py.
+problems, application errors, account changes, the daily apt upgrade job and
+certificate renewals completing, and protections taking effect once KEEN
+grants it the 2026.11 catalogue. These rules map them to the Keen Assurance
+Framework beside the rules of 0037, without sharing a control with them. Rules
+an installation already has are kept as they are; see
+app/core/builtin_rules.py.
 """
 
 from alembic import op
@@ -101,6 +102,19 @@ RULES = [
             "routine.task.completed", "task", "equals", "patching", outcome="success"
         ),
         "VPM-1",
+    ),
+    _rule(
+        "keen-server-certificates",
+        "Certificate renewal checks on servers complete without failures",
+        _attribute(
+            "routine.task.completed",
+            "task",
+            "equals",
+            "certificate_renewal",
+            outcome="success",
+        ),
+        "CRY-92",
+        "NET-1",
     ),
     _rule(
         "keen-server-protections",
