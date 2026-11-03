@@ -798,3 +798,43 @@ def test_a_vendor_id_conflict_without_a_name_match_is_raised(keen, monkeypatch):
     )
     with pytest.raises(IntegrityError):
         runner.link_vendor(db, aws.PROVIDER, row)
+
+
+def test_checks_with_nothing_to_examine_are_left_out(keen, cloud):
+    # An account with no databases has no database result: no row, no "met" and
+    # no event that a mapping rule could count as evidence.
+    db = keen.db
+
+    def databases(examined):
+        result = scope()
+        result.checks.append(
+            Check(
+                "network.databases",
+                "Databases open to the internet",
+                "met",
+                f"0 of {examined} RDS instances accept connections from anywhere",
+                examined=examined,
+            )
+        )
+        return [result]
+
+    cloud["results"] = databases(0)
+    runner.refresh(db, "aws")
+    stored = db.query(CloudPostureScope).one()
+    assert "network.databases" not in {c["key"] for c in stored.checks}
+    assert "posture.network.databases" not in {e.action for e in posture_events(db)}
+
+    cloud["results"] = databases(2)
+    runner.refresh(db, "aws")
+    db.expire_all()
+    assert "network.databases" in {
+        c["key"] for c in db.query(CloudPostureScope).one().checks
+    }
+    assert "posture.network.databases" in {e.action for e in posture_events(db)}
+
+    # Once the databases are gone, so is their result.
+    cloud["results"] = databases(0)
+    runner.refresh(db, "aws")
+    db.expire_all()
+    stored = db.query(CloudPostureScope).one()
+    assert "network.databases" not in {c["key"] for c in stored.checks}

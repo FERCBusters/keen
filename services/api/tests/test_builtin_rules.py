@@ -95,11 +95,14 @@ def test_built_in_rules_match_keens_own_evidence():
     rules = parse_rules({"rules": RULES})
     assert len(rules) == len(RULES)
 
-    def refs(source, action, outcome="info"):
-        hits = evaluate_by_framework(
-            {"source": source, "action": action, "outcome": outcome}, rules
-        )
-        return sorted(hits.get(FRAMEWORK, []))
+    def refs(source, action, outcome="info", asset="server"):
+        event = {
+            "source": source,
+            "action": action,
+            "outcome": outcome,
+            "normalized_payload": {"ueu": {"asset": {"asset_type": asset}}},
+        }
+        return sorted(evaluate_by_framework(event, rules).get(FRAMEWORK, []))
 
     assert refs("aws", "posture.identity.mfa", "attention") == [
         "CLD-7",
@@ -118,12 +121,26 @@ def test_built_in_rules_match_keens_own_evidence():
     # Other sources and cloud activity map nothing.
     assert refs("github", "posture.identity.mfa", "met") == []
     assert refs("aws", "ConsoleLogin", "success") == []
-    assert refs("keen-agent", "endpoint.disk_encryption.observed") == [
+    # Workstations' posture also counts for user devices and portable media;
+    # servers' posture counts for the controls both share.
+    disks = "endpoint.disk_encryption.observed"
+    assert refs("keen-agent", disks, asset="workstation") == [
         "CRY-3",
         "CRY-4",
         "END-40",
     ]
-    assert refs("keen-agent", "endpoint.session_inventory.observed") == ["END-40"]
+    assert refs("keen-agent", disks) == ["CRY-4"]
+    for asset, expected in (
+        ("workstation", ["END-40", "NET-4"]),
+        ("server", ["NET-4"]),
+    ):
+        assert refs("keen-agent", "endpoint.firewall.observed", asset=asset) == expected
+    assert refs("keen-agent", "endpoint.automatic_updates.observed") == ["VPM-75"]
+    assert refs("keen-agent", "endpoint.antivirus.observed") == ["END-1", "END-41"]
+    sessions = "endpoint.session_inventory.observed"
+    assert refs("keen-agent", sessions, asset="workstation") == ["END-40"]
+    assert refs("keen-agent", sessions) == []
+    assert refs("keen-agent", "endpoint.screen_lock.observed") == []
     assert refs("keen-agent", "user.authenticated", "failure") == ["IAC-203", "IAC-5"]
     assert refs("keen-agent", "security.alert.generated") == ["MON-1", "MON-121"]
     assert refs("keen-agent", "software.package.changed") == ["CHG-38"]

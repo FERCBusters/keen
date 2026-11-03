@@ -614,7 +614,11 @@ def apps(api: Azure, now: datetime) -> Check:
                 old.append(name)
     if not total:
         return Check(
-            "credentials.key_age", label, "info", "No live secrets or certificates"
+            "credentials.key_age",
+            label,
+            "info",
+            "No live secrets or certificates",
+            examined=0,
         )
     detail = (
         f"{len(old)} of {plural(total, 'live secret or certificate', 'live secrets and certificates')} "
@@ -623,7 +627,12 @@ def apps(api: Azure, now: datetime) -> Check:
     if expiring:
         detail += f"; {expiring} expire within 30 days"
     return Check(
-        "credentials.key_age", label, "attention" if old else "met", detail, old
+        "credentials.key_age",
+        label,
+        "attention" if old else "met",
+        detail,
+        old,
+        examined=total,
     )
 
 
@@ -760,6 +769,7 @@ def public_storage(api: Azure, sub: str) -> Check:
         "attention" if public else "met",
         f"{len(public)} of {plural(len(accounts), 'storage account')} allow public blob access",
         public,
+        examined=len(accounts),
     )
 
 
@@ -830,6 +840,7 @@ def exposure(api: Azure, sub: str) -> Check:
         f"{len(exposing)} of {plural(attached, 'network security group')} in use admit "
         "SSH or RDP from anywhere",
         exposing,
+        examined=attached,
     )
 
 
@@ -867,6 +878,7 @@ def databases(api: Azure, sub: str) -> Check:
         "attention" if exposed else "met",
         f"{len(exposed)} of {plural(len(servers), 'database server')} admit every address",
         exposed,
+        examined=len(servers),
     )
 
 

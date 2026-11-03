@@ -184,6 +184,7 @@ def network(api: DigitalOcean) -> list[Check]:
             f"{len(exposing)} of {plural(len(firewalls), 'firewall')} let SSH or RDP in "
             "from anywhere",
             exposing,
+            examined=len(firewalls),
         ),
         Check(
             "network.firewall_coverage",
@@ -191,6 +192,7 @@ def network(api: DigitalOcean) -> list[Check]:
             "attention" if unprotected else "met",
             f"{len(unprotected)} of {plural(len(droplets), 'Droplet')} have no Cloud Firewall",
             unprotected,
+            examined=len(droplets),
         ),
     ]
 
@@ -223,6 +225,7 @@ def databases(api: DigitalOcean) -> Check:
         f"{len(exposed)} of {plural(len(found), 'managed database')} accept connections "
         "from anywhere",
         exposed,
+        examined=len(found),
     )
 
 
@@ -239,6 +242,7 @@ def backups(api: DigitalOcean) -> Check:
         "attention" if without else "met",
         f"{len(without)} of {plural(len(droplets), 'Droplet')} without backups",
         without,
+        examined=len(droplets),
     )
 
 
@@ -262,6 +266,7 @@ def kubernetes(api: DigitalOcean) -> Check:
         f"{len(flagged)} of {plural(len(clusters), 'cluster')} lack high availability or "
         "automatic upgrades",
         flagged,
+        examined=len(clusters),
     )
 
 

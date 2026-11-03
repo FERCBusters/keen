@@ -105,6 +105,8 @@ test('failed loading is retryable and empty devices have useful instructions', a
   host.querySelector('button').click();
   await tick();
   assert.match(host.textContent, /No workstation agents linked/);
+  // With no devices there is no tally of checks to show.
+  assert.doesNotMatch(host.textContent, /checks met/);
 });
 test('revoked agents are hidden until Show revoked agents is ticked', async (t) => {
   const requests = [];

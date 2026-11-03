@@ -194,7 +194,9 @@ def _record_check(db, provider, scope, check: dict, now: datetime) -> str:
 
 def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
     """Keep each scope's latest result and record changed results as events;
-    scopes the provider no longer returns are removed."""
+    scopes the provider no longer returns are removed, and so are checks that
+    found nothing to examine, such as Kubernetes checks in an account with no
+    clusters."""
     row = provider_row(db, provider)
     link_vendor(db, provider, row)
     today = now.date().isoformat()
@@ -212,7 +214,7 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
         before = {c.get("key"): c for c in (current.checks if current else [])}
         checks = []
         for check in scope.checks:
-            if check.key not in provider.checks:
+            if check.key not in provider.checks or check.examined == 0:
                 continue
             item = check.as_dict()
             old = before.get(item["key"]) or {}

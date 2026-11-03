@@ -530,6 +530,7 @@ def identity_checks(aws: Session, now: datetime) -> tuple[list[Check], list[Iden
                 CHECKS["credentials.key_age"],
                 "info",
                 "No active access keys",
+                examined=0,
             )
         )
     elif old:
@@ -541,6 +542,7 @@ def identity_checks(aws: Session, now: datetime) -> tuple[list[Check], list[Iden
                 f"{len(old)} of {plural(total, 'active access key')} older than "
                 f"{limit} days",
                 old,
+                examined=total,
             )
         )
     else:
@@ -550,6 +552,7 @@ def identity_checks(aws: Session, now: datetime) -> tuple[list[Check], list[Iden
                 CHECKS["credentials.key_age"],
                 "met",
                 f"0 of {plural(total, 'active access key')} older than {limit} days",
+                examined=total,
             )
         )
     checks.append(root_check(summary, root))
@@ -853,6 +856,7 @@ def network(aws: Session) -> list[Check]:
             f"{len(exposing)} of {plural(groups_used, 'security group')} in use admit "
             "SSH or RDP from anywhere",
             exposing,
+            examined=groups_used,
         )
         if exposing
         else Check(
@@ -861,6 +865,7 @@ def network(aws: Session) -> list[Check]:
             "met",
             f"0 of {plural(groups_used, 'security group')} in use admit SSH or RDP "
             "from anywhere",
+            examined=groups_used,
         )
     ]
     label = CHECKS["network.databases"]
@@ -872,6 +877,7 @@ def network(aws: Session) -> list[Check]:
             f"{len(exposed)} of {plural(databases, 'RDS instance')} accept connections "
             "from anywhere",
             exposed,
+            examined=databases,
         )
         if exposed
         else Check(
@@ -879,6 +885,7 @@ def network(aws: Session) -> list[Check]:
             label,
             "met",
             f"0 of {plural(databases, 'RDS instance')} accept connections from anywhere",
+            examined=databases,
         )
     )
     return out

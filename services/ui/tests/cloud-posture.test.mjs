@@ -291,6 +291,32 @@ test('warnings, failures and empty states explain themselves', async (t) => {
   assert.match(host.textContent, /No activity recorded\. View all AWS activity/);
 });
 
+test('a scope with nothing to judge shows no tally, and one with no checks says so', async (t) => {
+  // Checks that examined nothing are left out when the scope is stored, so a
+  // scope can have only unjudged checks, or none.
+  const unjudged = provider({}, [check({ status: 'info', detail: '1 unrestricted user of 3' })]);
+  unjudged.scopes[0].judged = 0;
+  const empty = provider({ provider: 'linode', label: 'Linode' }, []);
+  empty.scopes[0].judged = 0;
+  const { host, controller } = await fixture(t, { data: posture({}, [unjudged, empty]) });
+  controller.select({ id: 'v1', name: 'Cloud' });
+  await tick();
+  const scopes = [...host.querySelectorAll('[data-cloud-scope]')];
+  assert.equal(scopes.length, 2);
+  for (const scope of scopes)
+    assert.doesNotMatch(scope.querySelector('summary').textContent, /met/);
+  assert.match(scopes[0].textContent, /1 unrestricted user of 3/);
+  assert.equal(scopes[0].querySelector('[data-cloud-nothing]'), null);
+  const headings = (scope) => [...scope.querySelectorAll('th')].map((th) => th.textContent);
+  assert.ok(headings(scopes[0]).includes('Check'));
+  // The scope's identities are still listed.
+  assert.ok(!headings(scopes[1]).includes('Check') && headings(scopes[1]).includes('Identity'));
+  assert.equal(
+    scopes[1].querySelector('[data-cloud-nothing]').textContent,
+    'Nothing in this account to check yet.',
+  );
+});
+
 test('without risk management there is no risk column; no providers says so', async (t) => {
   let data = posture({ can_create_risk: false }, [provider({}, [check({ subjects: [] })])]);
   const { host, controller } = await fixture(t, { data: () => data });

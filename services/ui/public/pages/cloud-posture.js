@@ -185,7 +185,15 @@ export function cloudPosture(host, allowed) {
       .join('');
     const key =
       scope.label !== scope.key ? `<span class="mono small-muted">${esc(scope.key)}</span>` : '';
-    article.innerHTML = `<details class="collapsible-card" data-cloud-scope><summary class="d-flex align-items-center gap-2"><i class="bi bi-chevron-right collapse-chevron" aria-hidden="true"></i><i class="bi bi-cloud" aria-hidden="true"></i><h4 class="h6 mb-0">${esc(scope.label)}</h4>${key}<span class="badge badge-soft">${Number(scope.met)} / ${Number(scope.judged)} met</span></summary><p class="small-muted mt-2">Checked ${esc(fmtTs(scope.checked_at))}</p><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Check</th><th>Result</th><th>Detail</th><th>Evidence</th>${showRisks ? '<th>Risks</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>${identitiesTable(scope, framework)}</details>`;
+    // Checks with nothing to examine are left out, so a scope may have no
+    // judged checks, or none at all.
+    const tally = scope.judged
+      ? `<span class="badge badge-soft">${Number(scope.met)} / ${Number(scope.judged)} met</span>`
+      : '';
+    const table = scope.checks.length
+      ? `<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Check</th><th>Result</th><th>Detail</th><th>Evidence</th>${showRisks ? '<th>Risks</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<p class="small-muted mb-0" data-cloud-nothing>Nothing in this ${esc(scope.kind || provider.scope_noun)} to check yet.</p>`;
+    article.innerHTML = `<details class="collapsible-card" data-cloud-scope><summary class="d-flex align-items-center gap-2"><i class="bi bi-chevron-right collapse-chevron" aria-hidden="true"></i><i class="bi bi-cloud" aria-hidden="true"></i><h4 class="h6 mb-0">${esc(scope.label)}</h4>${key}${tally}</summary><p class="small-muted mt-2">Checked ${esc(fmtTs(scope.checked_at))}</p>${table}${identitiesTable(scope, framework)}</details>`;
     const details = article.querySelector('details');
     opened.apply(details, `${provider.provider}:${scope.key}`, single);
     for (const button of article.querySelectorAll('[data-cloud-risk]'))

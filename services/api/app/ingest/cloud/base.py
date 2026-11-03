@@ -85,6 +85,9 @@ class Check:
     # Names of the identities or resources that need attention.
     subjects: list[str] = field(default_factory=list)
     reason: str = ""
+    # How many identities or resources the check examined, where it counts
+    # them. A check that examined none has nothing to report and is left out.
+    examined: int | None = None
 
     def as_dict(self) -> dict:
         names = sorted({clip(s) for s in self.subjects if s})
@@ -203,7 +206,7 @@ def mfa_check(key, label, people: list[Identity], *, who="users") -> Check:
     known = [p for p in people if p.mfa is not None]
     missing = [p.name for p in known if not p.mfa]
     if not known:
-        return Check(key, label, "info", f"No {who} to check")
+        return Check(key, label, "info", f"No {who} to check", examined=0)
     noun = who if len(known) != 1 else who[:-1]
     if missing:
         return Check(
@@ -212,8 +215,15 @@ def mfa_check(key, label, people: list[Identity], *, who="users") -> Check:
             "attention",
             f"MFA off for {len(missing)} of {len(known)} {noun}",
             missing,
+            examined=len(known),
         )
-    return Check(key, label, "met", f"MFA on for {len(known)} of {len(known)} {noun}")
+    return Check(
+        key,
+        label,
+        "met",
+        f"MFA on for {len(known)} of {len(known)} {noun}",
+        examined=len(known),
+    )
 
 
 def inactive_check(key, label, people: list[Identity], days: int, now) -> Check:
@@ -225,8 +235,15 @@ def inactive_check(key, label, people: list[Identity], days: int, now) -> Check:
         if last is not None and (now - last.replace(tzinfo=None)).days >= days:
             stale.append(person.name)
     if not people:
-        return Check(key, label, "info", "No users to check")
+        return Check(key, label, "info", "No users to check", examined=0)
     detail = (
         f"{len(stale)} of {plural(len(people), 'user')} unused for {days} days or more"
     )
-    return Check(key, label, "attention" if stale else "met", detail, stale)
+    return Check(
+        key,
+        label,
+        "attention" if stale else "met",
+        detail,
+        stale,
+        examined=len(people),
+    )

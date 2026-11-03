@@ -124,6 +124,7 @@ def collect() -> list[ScopeResult]:
                 "attention" if unenforced else "met",
                 f"Not enforced for {len(unenforced)} of {plural(len(people), 'user')}",
                 unenforced,
+                examined=len(people),
             ),
             mfa_check(
                 "identity.admin_mfa",

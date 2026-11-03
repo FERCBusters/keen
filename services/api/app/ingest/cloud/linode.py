@@ -138,6 +138,7 @@ def identity(api: Linode, now: datetime) -> tuple[list[Check], list[Identity]]:
             "info",
             f"{plural(len(admins), 'unrestricted user')} of {len(people)}",
             [p.name for p in admins],
+            examined=len(people),
         ),
         inactive_check(
             "identity.inactive",
@@ -244,6 +245,7 @@ def network(api: Linode) -> list[Check]:
             f"{len(exposing)} of {plural(len(firewalls), 'enabled firewall')} let SSH or "
             "RDP in from anywhere",
             exposing,
+            examined=len(firewalls),
         ),
         Check(
             "network.firewall_coverage",
@@ -252,6 +254,7 @@ def network(api: Linode) -> list[Check]:
             f"{len(unprotected)} of {plural(len(instances), 'Linode')} have no enabled "
             "Cloud Firewall",
             unprotected,
+            examined=len(instances),
         ),
     ]
 
@@ -271,6 +274,7 @@ def databases(api: Linode) -> Check:
         "attention" if exposed else "met",
         f"{len(exposed)} of {plural(len(found), 'managed database')} allow every address",
         exposed,
+        examined=len(found),
     )
 
 
@@ -293,6 +297,7 @@ def backups(api: Linode) -> Check:
         "attention" if without else "met",
         detail,
         without,
+        examined=len(instances),
     )
 
 
@@ -328,6 +333,7 @@ def kubernetes(api: Linode) -> Check:
         f"{len(flagged)} of {plural(len(clusters), 'cluster')} lack high availability or "
         "an access list",
         flagged,
+        examined=len(clusters),
     )
 
 

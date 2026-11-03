@@ -308,7 +308,9 @@ def keys(api: Scaleway, named: dict, now: datetime) -> Check:
         old.add(named.get(bearer) or clip(key.get("access_key") or "unknown", 64))
     label = CHECKS["credentials.key_age"]
     if not found:
-        return Check("credentials.key_age", label, "info", "No live API keys")
+        return Check(
+            "credentials.key_age", label, "info", "No live API keys", examined=0
+        )
     return Check(
         "credentials.key_age",
         label,
@@ -317,6 +319,7 @@ def keys(api: Scaleway, named: dict, now: datetime) -> Check:
         f"keys older than {settings.cloud_key_age_days} days, of "
         f"{plural(len(found), 'live key')}",
         sorted(old),
+        examined=len(found),
     )
 
 
@@ -382,6 +385,7 @@ def network(api: Scaleway) -> Check:
         f"{len(exposing)} of {plural(in_use, 'security group')} in use let SSH or RDP "
         "in from anywhere",
         exposing,
+        examined=in_use,
     )
 
 
@@ -427,6 +431,7 @@ def databases(api: Scaleway) -> list[Check]:
             "attention" if exposed else "met",
             f"{len(exposed)} of {total} accept connections from anywhere",
             exposed,
+            examined=len(found),
         ),
         Check(
             "resilience.backups",
@@ -434,6 +439,7 @@ def databases(api: Scaleway) -> list[Check]:
             "attention" if without else "met",
             f"{len(without)} of {total} without automatic backups",
             without,
+            examined=len(found),
         ),
     ]
 
@@ -476,6 +482,7 @@ def kubernetes(api: Scaleway) -> Check:
         f"{len(flagged)} of {plural(len(clusters), 'cluster')} lack automatic upgrades "
         "or an access list",
         flagged,
+        examined=len(clusters),
     )
 
 

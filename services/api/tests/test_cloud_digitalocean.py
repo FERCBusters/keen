@@ -340,3 +340,16 @@ def test_help_documents_scopes_checks_and_settings():
         assert label in text and f"posture.{key}" in text, key
     for name in ("KEEN_DIGITALOCEAN_ENABLED", "DIGITALOCEAN_TOKEN"):
         assert f"<code>{name}</code>" in text, name
+
+
+def test_checks_count_what_they_examine(use):
+    data = default_data()
+    data["/v2/kubernetes/clusters"] = []
+    data["/v2/databases"] = []
+    use(Api(data))
+    [scope] = do.collect()
+    checks = by_key(scope.checks)
+    # Nothing to examine: the refresh leaves these out.
+    assert checks["kubernetes.control_plane"].examined == 0
+    assert checks["network.databases"].examined == 0
+    assert checks["resilience.backups"].examined == len(data["/v2/droplets"])

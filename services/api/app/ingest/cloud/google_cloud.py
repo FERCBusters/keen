@@ -240,7 +240,11 @@ def keys(api: Api, now: datetime) -> Check:
             old.add(clip(match.group(1)))
     if not total:
         return Check(
-            "credentials.key_age", label, "info", "No user-managed service account keys"
+            "credentials.key_age",
+            label,
+            "info",
+            "No user-managed service account keys",
+            examined=0,
         )
     return Check(
         "credentials.key_age",
@@ -249,6 +253,7 @@ def keys(api: Api, now: datetime) -> Check:
         f"{plural(len(old), 'service account')} with keys older than "
         f"{settings.cloud_key_age_days} days, of {plural(total, 'live key')}",
         sorted(old),
+        examined=total,
     )
 
 
@@ -467,6 +472,7 @@ def network(api: Api) -> list[Check]:
             "attention" if exposing else "met",
             f"{len(exposing)} of {plural(len(by_network), 'VPC network')} let SSH or RDP in from anywhere",
             exposing,
+            examined=len(by_network),
         ),
         Check(
             "network.databases",
@@ -474,6 +480,7 @@ def network(api: Api) -> list[Check]:
             "attention" if exposed else "met",
             f"{len(exposed)} of {plural(len(instances), 'Cloud SQL instance')} authorise every address",
             sorted(exposed),
+            examined=len(instances),
         ),
     ]
 

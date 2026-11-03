@@ -385,3 +385,15 @@ def test_help_documents_scopes_checks_and_settings():
         assert label in text and f"posture.{key}" in text, key
     for name in ("KEEN_LINODE_ENABLED", "LINODE_TOKEN"):
         assert f"<code>{name}</code>" in text, name
+
+
+def test_checks_count_what_they_examine(use):
+    data = default_data()
+    data["/v4/lke/clusters"] = []
+    data["/v4/databases/instances"] = []
+    use(Api(data))
+    [scope] = ln.collect()
+    checks = {c.key: c for c in scope.checks}
+    assert checks["kubernetes.control_plane"].examined == 0
+    assert checks["network.databases"].examined == 0
+    assert checks["resilience.backups"].examined == len(data["/v4/linode/instances"])

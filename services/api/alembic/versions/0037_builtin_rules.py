@@ -1,10 +1,12 @@
-"""Built-in mapping rules for cloud posture, workstation posture and server events.
+"""Built-in mapping rules for cloud posture, host posture and server events.
 
 Each rule maps evidence Keen collects itself to the Keen Assurance Framework:
-cloud vendors' posture checks, the Keen Agent's workstation observations, and
-the sign-ins, privileged commands, refused access, software changes and
-security alerts it recognises on servers. Rules an installation already has
-are kept as they are; see app/core/builtin_rules.py.
+cloud vendors' posture checks, the Keen Agent's posture observations from
+workstations and servers, and the sign-ins, privileged commands, refused
+access, software changes and security alerts it recognises on servers.
+Controls that concern user devices map workstations' observations only.
+Rules an installation already has are kept as they are; see
+app/core/builtin_rules.py.
 """
 
 from alembic import op
@@ -33,11 +35,22 @@ def _cloud(rule_id: str, description: str, checks: str | None, *refs: str) -> di
     }
 
 
-def _agent(rule_id: str, description: str, action: str, *refs: str) -> dict:
+# Observations from agents Keen enrolled as workstations; the agent reports the
+# type Keen gave it at enrolment.
+WORKSTATION = [
+    {
+        "path": ["ueu", "asset", "asset_type"],
+        "operator": "equals",
+        "value": "workstation",
+    }
+]
+
+
+def _agent(rule_id: str, description: str, action: str, *refs: str, **when) -> dict:
     return {
         "id": rule_id,
         "description": description,
-        "when": {"source": AGENT, "action": action},
+        "when": {"source": AGENT, "action": action, **when},
         "map_to": targets(*refs),
     }
 
@@ -133,7 +146,11 @@ RULES = [
     {
         "id": "keen-workstation-posture",
         "description": "Workstation posture is observed on each device",
-        "when": {"source": AGENT, "action_regex": r"^endpoint\.[a-z_]+\.observed$"},
+        "when": {
+            "source": AGENT,
+            "action_regex": r"^endpoint\.[a-z_]+\.observed$",
+            "fields": WORKSTATION,
+        },
         "map_to": targets("END-40"),
     },
     _agent(
@@ -141,30 +158,37 @@ RULES = [
         "Workstation disks are encrypted",
         "endpoint.disk_encryption.observed",
         "CRY-3",
-        "CRY-4",
+        fields=WORKSTATION,
     ),
     _agent(
         "keen-workstation-screen-lock",
         "Workstation screens lock when left idle",
         "endpoint.screen_lock.observed",
         "PES-78",
+        fields=WORKSTATION,
     ),
     _agent(
-        "keen-workstation-antivirus",
-        "Workstations run anti-malware protection",
+        "keen-host-disk-encryption",
+        "Workstation and server disks are encrypted",
+        "endpoint.disk_encryption.observed",
+        "CRY-4",
+    ),
+    _agent(
+        "keen-host-antivirus",
+        "Workstations and servers run anti-malware protection",
         "endpoint.antivirus.observed",
         "END-1",
         "END-41",
     ),
     _agent(
-        "keen-workstation-firewall",
-        "Workstation firewalls are on",
+        "keen-host-firewall",
+        "Workstation and server firewalls are on",
         "endpoint.firewall.observed",
         "NET-4",
     ),
     _agent(
-        "keen-workstation-updates",
-        "Workstations install updates automatically",
+        "keen-host-updates",
+        "Workstations and servers install updates automatically",
         "endpoint.automatic_updates.observed",
         "VPM-75",
     ),
