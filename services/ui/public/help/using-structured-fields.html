@@ -22,7 +22,7 @@
 <ul>
 <li>Enter the pattern without surrounding slashes.</li>
 <li>A missing field or a non-scalar value does not match a regex condition.</li>
-<li>Patterns follow Keen's shared rules: a 512-character limit, restricted constructions and bounded execution. The editor rejects a pattern that would run the matcher for too long; simplify it and try again.</li>
+<li>Patterns follow Keen's shared rules: a 512-character limit, restricted constructions and bounded execution. The editor rejects a pattern that would run the matcher for too long; simplify it and try again. A pattern reads at most the first 4,096 characters of a value, so evidence of any length is stored and mapped. A rule whose pattern still runs out of time on an event does not match that event; the event is stored, the other rules still apply, and the API log names the rule. Simplify its pattern, then apply the rule to earlier evidence to map those events.</li>
 </ul>
 <h3 id="structured-condition-editor">Work in the focused rule editor</h3>
 <p>The editor opens as a focused view, and <strong>Back to mappings</strong> returns to the catalogue. A new rule starts with one optional row, <strong>Summary / contains</strong>. Summary refers to the event's displayed summary, so the wording there is what your text sees.</p>

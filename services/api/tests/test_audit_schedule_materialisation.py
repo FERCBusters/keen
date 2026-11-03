@@ -19,6 +19,7 @@ from app.db.models import (
     AuditScopedControl,
     ControlItem,
     FrameworkClause,
+    IsmsPerson,
     ManagedConfiguration,
     User,
 )
@@ -467,6 +468,41 @@ def test_an_attendee_whose_account_is_deactivated_gets_no_reminder(
     db.commit()
     assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 1
     assert [m["to_email"] for m in reminders] == ["guest@example.test"]
+
+
+def test_an_attendee_named_through_people_is_reminded_by_their_account(
+    contract_db, reminders
+):
+    # A People record names its account: the reminder reaches that account's
+    # address, and none goes once the account is deactivated.
+    db = contract_db
+    audit = _audit(db, date(2026, 4, 11))
+    active = User(
+        username="person-active", password_hash="x", role="normal", is_active=True
+    )
+    active.email = "active@example.test"
+    gone = User(
+        username="person-gone", password_hash="x", role="normal", is_active=False
+    )
+    gone.email = "gone@example.test"
+    db.add_all([active, gone])
+    db.flush()
+    present = IsmsPerson(name="Present", user_id=active.id)
+    departed = IsmsPerson(name="Departed", user_id=gone.id)
+    db.add_all([present, departed])
+    db.flush()
+    db.add(AuditAttendee(audit_id=audit.id, name="Present", person_id=present.id))
+    db.add(
+        AuditAttendee(
+            audit_id=audit.id,
+            name="Departed",
+            person_id=departed.id,
+            email="departed@example.test",
+        )
+    )
+    db.commit()
+    assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 1
+    assert [m["to_email"] for m in reminders] == ["active@example.test"]
 
 
 def test_reminders_need_smtp_a_lead_time_and_audits(

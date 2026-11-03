@@ -22,6 +22,7 @@ from app.db.models import (
     User,
 )
 from app.services.audits.access import (
+    attends,
     audit_or_404,
     can_read_audit,
     can_see_event,
@@ -64,10 +65,7 @@ def list_my_attendee_audits(*, limit: int, offset: int, db: Session, user: User)
     offset = max(0, int(offset or 0))
 
     attendee_audit_ids = (
-        db.query(AuditAttendee.audit_id)
-        .filter(AuditAttendee.user_id == user.id)
-        .distinct()
-        .subquery()
+        db.query(AuditAttendee.audit_id).filter(attends(user)).distinct().subquery()
     )
 
     total = int(
@@ -93,10 +91,7 @@ def list_my_attendee_audits(*, limit: int, offset: int, db: Session, user: User)
 
     attendee_rows = (
         db.query(AuditAttendee)
-        .filter(
-            AuditAttendee.user_id == user.id,
-            AuditAttendee.audit_id.in_([x.id for x in rows]),
-        )
+        .filter(attends(user), AuditAttendee.audit_id.in_([x.id for x in rows]))
         .order_by(AuditAttendee.created_at.asc())
         .all()
         if rows

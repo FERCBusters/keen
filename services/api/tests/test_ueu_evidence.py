@@ -39,6 +39,9 @@ def keen(setup, monkeypatch):
     monkeypatch.setattr(
         enrollment_operations, "fixed_window_allow", lambda *a, **k: (True, 0)
     )
+    monkeypatch.setattr(
+        enrollment_operations, "address_window_allow", lambda *a, **k: (True, 0)
+    )
     objects = {}
 
     def put(**k):

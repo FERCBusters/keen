@@ -183,8 +183,13 @@ def test_structured_regex_is_bounded_and_combines_with_summary_using_and():
         "operator": "regex",
         "value": "gills|systemd",
     }
-    with pytest.raises(ValueError, match="65536"):
-        field_matches({"fields": {"process.name": "x" * 65537}}, condition)
+    # A long value is read up to the match window; it never stops the run.
+    assert field_matches(
+        {"fields": {"process.name": "systemd" + "x" * 65537}}, condition
+    )
+    assert not field_matches(
+        {"fields": {"process.name": "x" * 65537 + "systemd"}}, condition
+    )
     rules = parse_rules(
         {
             "rules": [

@@ -127,7 +127,7 @@ def test_webhooks_retry_before_ingest(db, monkeypatch, path):
     app.dependency_overrides[get_db] = lambda: db
     monkeypatch.setattr(webhooks, "verify_secret", lambda *a: True)
     monkeypatch.setattr(webhooks, "get_valkey", lambda: None)
-    monkeypatch.setattr(webhooks, "fixed_window_allow", lambda *a, **kw: (True, 0))
+    monkeypatch.setattr(webhooks, "address_window_allow", lambda *a, **kw: (True, 0))
     ingest = Mock()
     monkeypatch.setattr(webhooks, "ingest_webhook", ingest)
     pause(db, "webhooks")

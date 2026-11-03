@@ -19,6 +19,7 @@ from app.schemas import IncidentCreatePayload
 from app.services import events as service
 from app.services.event_filters import parse_event_filters
 from app.services.exports import Export
+from app.storage.filenames import attachment_media_type
 
 router = Router()
 
@@ -158,7 +159,9 @@ def export_events(
     )
     if isinstance(result, Export):
         return StreamingResponse(
-            result.content, media_type=result.content_type, headers=result.attributes
+            result.content,
+            media_type=attachment_media_type(result.content_type),
+            headers=result.attributes,
         )
     return result
 

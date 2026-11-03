@@ -55,9 +55,10 @@ _SYNTAX = re.compile(r"([\\.^$*+?{}\[\]|()])")
 
 # Conditions that hold one value, in exact and pattern forms, and that two
 # rules can share as one pattern. The exact form compares the whole value.
-# A pattern stops a rule's run on input over 65,536 characters or past its time
-# budget, where an exact comparison never fails, so exact values join a pattern
-# only for the event columns that hold at most 128 characters.
+# A pattern reads only the first 4,096 characters of a value and can exhaust its
+# time budget, while an exact comparison reads the whole value and always
+# answers, so exact values join a pattern only for the event columns that hold
+# at most 128 characters.
 _BOUNDED = {"system", "actor", "action", "outcome"}
 _COMBINABLE = {
     "system": "System",

@@ -16,7 +16,11 @@ from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as now
 from app.core.valkey import get_valkey
 from app.db.models import AuditLog, MfaChallenge, MfaCredential, MfaRecoveryCode, User
-from app.security.rate_limit import client_ip, fixed_window_allow
+from app.security.rate_limit import (
+    address_window_allow,
+    client_ip,
+    fixed_window_allow,
+)
 from app.security.roles import attach_effective_role
 
 COOKIE = "keen_mfa_pending"
@@ -93,19 +97,15 @@ def local_session_allowed(db, user, session):
 def limit(request, user_id=None):
     try:
         r = get_valkey()
-        for key, maximum in [
-            (f"ip:{client_ip(request) or 'unknown'}", 40),
-            (f"user:{user_id}", 15),
-        ]:
-            if user_id is None and key.startswith("user:"):
-                continue
+        allowed, _ = address_window_allow(
+            r, "mfa", client_ip(request), 40, 300, fail_closed=True
+        )
+        if allowed and user_id is not None:
             allowed, _ = fixed_window_allow(
-                r, "keen:rl:mfa:" + key, maximum, 300, fail_closed=True
+                r, f"keen:rl:mfa:user:{user_id}", 15, 300, fail_closed=True
             )
-            if not allowed:
-                raise HTTPException(
-                    429, "Too many verification attempts; try again later"
-                )
+        if not allowed:
+            raise HTTPException(429, "Too many verification attempts; try again later")
     except HTTPException:
         raise
     except Exception:

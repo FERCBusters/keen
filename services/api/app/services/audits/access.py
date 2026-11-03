@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Audit, AuditAttendee, Event, Risk, User
+from app.db.models import Audit, AuditAttendee, Event, IsmsPerson, Risk, User
 from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
 from app.security.roles import is_active_user
@@ -35,12 +36,19 @@ def can_manage_audits(db: Session, user: User | None) -> bool:
     )
 
 
+def attends(user: User) -> ColumnElement[bool]:
+    """Attendee rows naming a person, by their account or a People record linked
+    to it. Every check of who attends an audit uses this one condition."""
+    people = select(IsmsPerson.id).where(IsmsPerson.user_id == user.id)
+    return or_(AuditAttendee.user_id == user.id, AuditAttendee.person_id.in_(people))
+
+
 def is_audit_attendee(db: Session, user: User | None, audit_id: uuid.UUID) -> bool:
     if not is_active_user(user):
         return False
     return bool(
         db.query(AuditAttendee.id)
-        .filter(AuditAttendee.audit_id == audit_id, AuditAttendee.user_id == user.id)
+        .filter(AuditAttendee.audit_id == audit_id, attends(user))
         .first()
     )
 

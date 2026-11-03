@@ -25,11 +25,13 @@ from app.security.errors import collection_error
 from app.security.regex import (
     MATCH_CONCURRENTLY,
     MATCH_TIMEOUT_SECONDS,
-    MAX_INPUT_CHARS,
     BoundedPattern,
     compile_pattern,
 )
 from app.services.ingestion_pause import pausable
+
+# The optional plain-text preview reads at most this much of a page's HTML.
+_PREVIEW_INPUT_CHARS = 65536
 
 
 def _utcnow() -> datetime:
@@ -544,7 +546,7 @@ def _strip_html_to_text(html_text: str) -> str:
         return ""
     # Preview generation is optional. Bound fixed patterns too: hostile HTML
     # with repeated opening tags can otherwise cause quadratic backtracking.
-    html_text = html_text[:MAX_INPUT_CHARS]
+    html_text = html_text[:_PREVIEW_INPUT_CHARS]
     try:
         html_text = _SCRIPT_STYLE_RE.sub(
             " ",

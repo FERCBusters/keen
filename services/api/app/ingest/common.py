@@ -225,13 +225,20 @@ def normalise_ingested_fields(
         storable(normalized_payload),
     )
 
-    # Upstream display labels can exceed PostgreSQL's indexed column widths.
-    # Apply bounds after redaction/masking, which can expand the text. Keep full
-    # evidence in the normalised payload/artifact and never truncate dedupe IDs.
-    if system is not None:
-        system = system[: Event.__table__.c.system.type.length]
-    if actor is not None:
-        actor = actor[: Event.__table__.c.actor.type.length]
+    # Upstream labels can exceed PostgreSQL's indexed column widths, and a value
+    # the column refuses would fail its whole collection run. Apply bounds after
+    # redaction/masking, which can expand the text. Keep full evidence in the
+    # normalised payload/artifact and never truncate dedupe IDs.
+    columns = Event.__table__.c
+    system, actor, action, outcome = (
+        None if value is None else value[: column.type.length]
+        for value, column in (
+            (system, columns.system),
+            (actor, columns.actor),
+            (action, columns.action),
+            (outcome, columns.outcome),
+        )
+    )
     return NormalisedFields(
         system,
         actor,

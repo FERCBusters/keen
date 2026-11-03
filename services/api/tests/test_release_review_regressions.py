@@ -53,6 +53,7 @@ def agent_client(monkeypatch):
     redis = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(api, "get_valkey", lambda: redis)
     monkeypatch.setattr(api, "fixed_window_allow", rate_limit.fixed_window_allow)
+    monkeypatch.setattr(api, "address_window_allow", rate_limit.address_window_allow)
     try:
         yield client, headers
     finally:

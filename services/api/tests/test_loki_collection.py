@@ -591,8 +591,8 @@ def test_long_labels_are_bounded_to_the_event_columns(lk):
         lk.query(
             event={
                 "system": "s" * 300,
-                "action": "login",
-                "outcome": "success",
+                "action": "a" * 300,
+                "outcome": "o" * 300,
                 "severity": 4,
             }
         )
@@ -611,8 +611,132 @@ def test_long_labels_are_bounded_to_the_event_columns(lk):
 
     assert result["created_events"] == 1
     (event,) = lk.events()
-    assert len(event.system) == Event.__table__.c.system.type.length
-    assert len(event.actor) == Event.__table__.c.actor.type.length
+    for column in ("system", "actor", "action", "outcome"):
+        value = getattr(event, column)
+        assert len(value) == getattr(Event.__table__.c, column).type.length, column
+
+
+def _failed_login(user):
+    # An OSSEC-style line; `srcuser` is whatever a client typed as its username.
+    return json.dumps(
+        {
+            "rule": {"sidid": 5716, "comment": "SSHD authentication failed."},
+            "agent_name": "web-1",
+            "srcuser": user,
+            "full_log": f"Failed password for {user[:20]} from 198.51.100.7",
+        }
+    )
+
+
+def _write_rules(rules):
+    with open(settings.rules_path, "w") as handle:
+        handle.write(yaml.safe_dump({"rules": rules}))
+
+
+def test_one_oversized_value_never_stalls_the_stream(lk, caplog):
+    # Anyone who can reach a login prompt chooses the username in a log line.
+    # A username far longer than any pattern reads is stored and mapped, and
+    # the cursor moves past it, so the lines after it still arrive.
+    target = [{"framework": FW, "ref": "A.8.5", "kind": "control"}]
+    _write_rules(
+        [
+            {
+                "id": "failures",
+                "when": {"source": "loki", "summary_regex": "authentication failed"},
+                "map_to": target,
+            },
+            {
+                # Written for another source: its field pattern never reads
+                # Loki payloads.
+                "id": "elsewhere",
+                "when": {
+                    "source": "webhook:other",
+                    "fields": [
+                        {
+                            "path": ["json", "srcuser"],
+                            "operator": "regex",
+                            "value": ".{0,1000}A.*b",
+                        }
+                    ],
+                },
+                "map_to": target,
+            },
+        ]
+    )
+    lk.upstream.replies.append(
+        [
+            {
+                "stream": {"app": "sshd"},
+                "values": [_line(NOW - timedelta(minutes=9), _failed_login("alice"))],
+            }
+        ]
+    )
+    (first,) = lk.run()
+    assert first["created_events"] == 1, first
+
+    lk.clock.now = NOW + timedelta(minutes=10)
+    lk.upstream.replies.append(
+        [
+            {
+                "stream": {"app": "sshd"},
+                "values": [
+                    _line(NOW + timedelta(minutes=1), _failed_login("A" * 70_000)),
+                    _line(NOW + timedelta(minutes=2), _failed_login("root")),
+                ],
+            }
+        ]
+    )
+    with caplog.at_level("WARNING", logger="app.mapping.rules"):
+        (second,) = lk.run()
+
+    assert "error" not in second, second
+    assert "elsewhere" not in caplog.text  # never evaluated against Loki
+    assert second["created_events"] == 2
+    assert lk.cursor().last_ts == (NOW + timedelta(minutes=10)).replace(tzinfo=None)
+    events = lk.events()
+    assert len(events) == 3
+    assert all(len(event.mappings) == 1 for event in events)
+    # The full username stays in the evidence.
+    assert events[1].normalized_payload["json"]["srcuser"] == "A" * 70_000
+
+
+def test_a_pattern_over_its_budget_does_not_match_and_the_run_continues(lk, caplog):
+    # Only a rule's own pattern can exhaust its budget once input is bounded.
+    # That rule does not match, the other rules still apply, the event is
+    # stored and the cursor advances.
+    _write_rules(
+        [
+            {
+                "id": "slow",
+                "when": {"source": "loki", "summary_regex": ".{0,1000}A.*b"},
+                "map_to": [{"framework": FW, "ref": "A.8.5", "kind": "control"}],
+            },
+            {
+                "id": "fast",
+                "when": {"source": "loki", "action": "login"},
+                "map_to": [{"framework": FW, "ref": "A.8.5", "kind": "control"}],
+            },
+        ]
+    )
+    lk.upstream.replies.append(
+        [
+            {
+                "stream": {"app": "sshd"},
+                "values": [
+                    _line(NOW - timedelta(minutes=5), _failed_login("A" * 3000)),
+                    _line(NOW - timedelta(minutes=4), _failed_login("root")),
+                ],
+            }
+        ]
+    )
+    with caplog.at_level("WARNING", logger="app.mapping.rules"):
+        (result,) = lk.run()
+
+    assert "error" not in result, result
+    assert result["created_events"] == 2
+    assert all(len(event.mappings) == 1 for event in lk.events())
+    assert "Mapping rule slow exceeded its pattern time budget" in caplog.text
+    assert "AAAA" not in caplog.text
 
 
 def test_a_retry_after_a_failed_chunk_stores_every_line(lk, monkeypatch):

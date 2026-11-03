@@ -11,6 +11,7 @@ from app.security.client_ip import request_ip as client_ip
 
 __all__ = [
     "address_allowance",
+    "address_window_allow",
     "client_ip",
     "fixed_window_allow",
     "login_limit_key",
@@ -82,10 +83,36 @@ def address_allowance(address: str | None) -> str | None:
     """
     if address is None:
         return None
-    ip = ipaddress.ip_address(address)
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return None
     if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped:
+            return str(ip.ipv4_mapped)
         return str(ipaddress.IPv6Network((ip, 64), strict=False))
     return str(ip)
+
+
+def address_window_allow(
+    r: Redis,
+    scope: str,
+    address: str | None,
+    limit: int,
+    window_seconds: int,
+    fail_closed: bool = False,
+) -> Tuple[bool, int]:
+    """A fixed-window allowance for one client address.
+
+    Every per-address limit goes through here, so each counts an IPv6 /64
+    network as one address. Clients whose address is unknown share one
+    allowance. The contract tests refuse a client address in any other
+    allowance key.
+    """
+    allowance = address_allowance(address) or "unknown"
+    return fixed_window_allow(
+        r, f"keen:rl:{scope}:ip:{allowance}", limit, window_seconds, fail_closed
+    )
 
 
 def fixed_window_allow(

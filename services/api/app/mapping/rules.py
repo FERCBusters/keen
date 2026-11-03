@@ -11,6 +11,7 @@ from typing import Any
 from app.core.config import settings
 from app.mapping.collector import matches_collector
 from app.mapping.fields import field_matches, validate_fields
+from app.security.regex import MatchBudgetExceeded
 
 log = logging.getLogger(__name__)
 
@@ -449,6 +450,123 @@ def parse_rules(raw: Any) -> list[Rule]:
     return rules
 
 
+def _conditions_hold(
+    c: Condition,
+    event: dict[str, Any],
+    *,
+    source: str,
+    system: str,
+    actor: str,
+    action: str,
+    outcome: str,
+    severity: int | None,
+    labels: list[str],
+    summary: str,
+) -> bool:
+    """Whether every condition of a rule holds for one event.
+
+    Exact comparisons on the event's origin come first, so a rule written for
+    another source never runs its patterns on this event's payload.
+    """
+    if c.connection_id and c.connection_id != event.get("connection_id"):
+        return False
+    if c.collector and not matches_collector(c.collector, event):
+        return False
+    if c.source and str(c.source) != str(source):
+        return False
+    if not all(
+        field_matches(
+            event
+            if item.get("scope") == "event"
+            else event.get("normalized_payload") or {},
+            item,
+        )
+        for item in (c.fields or [])
+    ):
+        return False
+    if any(
+        (
+            c.bookstack_book_id is not None,
+            c.bookstack_book_slug,
+            c.bookstack_page_id is not None,
+            c.bookstack_page_slug,
+            c.bookstack_page_slug_regex,
+            c.bookstack_page_title,
+            c.bookstack_page_title_regex,
+        )
+    ):
+        page = (event.get("raw_pointer") or {}).get("bookstack") or {}
+        normal = (event.get("normalized_payload") or {}).get("bookstack") or {}
+        if not isinstance(page, dict) or not isinstance(normal, dict):
+            return False
+
+        def val(name):
+            return page.get(name) if page.get(name) is not None else normal.get(name)
+
+        slug = str(val("page_slug") or "")
+        book_slug = str(val("book_slug") or "")
+        candidates = (slug, f"{book_slug}-{slug}") if book_slug and slug else (slug,)
+        title = str(normal.get("page_title") or "")
+        if c.bookstack_book_id is not None and str(val("book_id")) != str(
+            c.bookstack_book_id
+        ):
+            return False
+        if (
+            c.bookstack_book_slug
+            and c.bookstack_book_slug.casefold() != book_slug.casefold()
+        ):
+            return False
+        if c.bookstack_page_id is not None and str(val("page_id")) != str(
+            c.bookstack_page_id
+        ):
+            return False
+        if c.bookstack_page_slug and not any(
+            c.bookstack_page_slug.casefold() == s.casefold() for s in candidates
+        ):
+            return False
+        if c.bookstack_page_slug_regex and not any(
+            _match_regex(c.bookstack_page_slug_regex, s) for s in candidates
+        ):
+            return False
+        if (
+            c.bookstack_page_title
+            and c.bookstack_page_title.casefold() != title.casefold()
+        ):
+            return False
+        if c.bookstack_page_title_regex and not _match_regex(
+            c.bookstack_page_title_regex, title
+        ):
+            return False
+    if not _match_regex(c.source_regex, source):
+        return False
+    if c.system and str(c.system) != str(system):
+        return False
+    if not _match_regex(c.system_regex, system):
+        return False
+    if c.actor and str(c.actor) != str(actor):
+        return False
+    if not _match_regex(c.actor_regex, actor):
+        return False
+    if c.action and str(c.action) != str(action):
+        return False
+    if not _match_regex(c.action_regex, action):
+        return False
+    if c.outcome and str(c.outcome) != str(outcome):
+        return False
+    if not _match_regex(c.outcome_regex, outcome):
+        return False
+    if c.severity is not None and c.severity != severity:
+        return False
+    if not _match_any_exact(c.label, labels):
+        return False
+    if not _match_any_regex(c.label_regex, labels):
+        return False
+    if not _match_regex(c.summary_regex, summary):
+        return False
+
+    return True
+
+
 def evaluate_by_framework(
     event: dict[str, Any],
     rules: list[Rule],
@@ -482,105 +600,31 @@ def evaluate_by_framework(
     hits: dict[str, list[Any]] = {}
 
     for r in rules:
-        c = r.when
-        if not all(
-            field_matches(
-                event
-                if item.get("scope") == "event"
-                else event.get("normalized_payload") or {},
-                item,
+        try:
+            held = _conditions_hold(
+                r.when,
+                event,
+                source=source,
+                system=system,
+                actor=actor,
+                action=action,
+                outcome=outcome,
+                severity=severity,
+                labels=labels,
+                summary=summary,
             )
-            for item in (c.fields or [])
-        ):
-            continue
-        if c.connection_id and c.connection_id != event.get("connection_id"):
-            continue
-        if c.collector and not matches_collector(c.collector, event):
-            continue
-        if any(
-            (
-                c.bookstack_book_id is not None,
-                c.bookstack_book_slug,
-                c.bookstack_page_id is not None,
-                c.bookstack_page_slug,
-                c.bookstack_page_slug_regex,
-                c.bookstack_page_title,
-                c.bookstack_page_title_regex,
+        except MatchBudgetExceeded:
+            # Patterns read a bounded window of each value, so only the rule's
+            # own pattern can exhaust its budget. That rule does not match this
+            # event; the event is stored and every other rule still applies, and
+            # rules applied to earlier evidence map it once the rule is fixed.
+            log.warning(
+                "Mapping rule %s exceeded its pattern time budget and was "
+                "treated as not matching; simplify its pattern",
+                r.id,
             )
-        ):
-            page = (event.get("raw_pointer") or {}).get("bookstack") or {}
-            normal = (event.get("normalized_payload") or {}).get("bookstack") or {}
-            if not isinstance(page, dict) or not isinstance(normal, dict):
-                continue
-
-            def val(name):
-                return (
-                    page.get(name) if page.get(name) is not None else normal.get(name)
-                )
-
-            slug = str(val("page_slug") or "")
-            book_slug = str(val("book_slug") or "")
-            candidates = (
-                (slug, f"{book_slug}-{slug}") if book_slug and slug else (slug,)
-            )
-            title = str(normal.get("page_title") or "")
-            if c.bookstack_book_id is not None and str(val("book_id")) != str(
-                c.bookstack_book_id
-            ):
-                continue
-            if (
-                c.bookstack_book_slug
-                and c.bookstack_book_slug.casefold() != book_slug.casefold()
-            ):
-                continue
-            if c.bookstack_page_id is not None and str(val("page_id")) != str(
-                c.bookstack_page_id
-            ):
-                continue
-            if c.bookstack_page_slug and not any(
-                c.bookstack_page_slug.casefold() == s.casefold() for s in candidates
-            ):
-                continue
-            if c.bookstack_page_slug_regex and not any(
-                _match_regex(c.bookstack_page_slug_regex, s) for s in candidates
-            ):
-                continue
-            if (
-                c.bookstack_page_title
-                and c.bookstack_page_title.casefold() != title.casefold()
-            ):
-                continue
-            if c.bookstack_page_title_regex and not _match_regex(
-                c.bookstack_page_title_regex, title
-            ):
-                continue
-        if c.source and str(c.source) != str(source):
             continue
-        if not _match_regex(c.source_regex, source):
-            continue
-        if c.system and str(c.system) != str(system):
-            continue
-        if not _match_regex(c.system_regex, system):
-            continue
-        if c.actor and str(c.actor) != str(actor):
-            continue
-        if not _match_regex(c.actor_regex, actor):
-            continue
-        if c.action and str(c.action) != str(action):
-            continue
-        if not _match_regex(c.action_regex, action):
-            continue
-        if c.outcome and str(c.outcome) != str(outcome):
-            continue
-        if not _match_regex(c.outcome_regex, outcome):
-            continue
-        if c.severity is not None and c.severity != severity:
-            continue
-        if not _match_any_exact(c.label, labels):
-            continue
-        if not _match_any_regex(c.label_regex, labels):
-            continue
-        if not _match_regex(c.summary_regex, summary):
+        if not held:
             continue
 
         for t in r.targets:

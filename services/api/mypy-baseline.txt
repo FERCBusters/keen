@@ -87,7 +87,6 @@ app/ingest/cloud/scaleway.py: Argument 1 to "get" of "dict" has incompatible typ
 app/ingest/cloud/scaleway.py: Incompatible return value type (got "Any | int | None", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")  [return-value]
 app/ingest/cloud/scaleway.py: Item "None" of "Match[str] | None" has no attribute "group"  [union-attr]
 app/ingest/common.py: "TypeEngine[Any]" has no attribute "length"  [attr-defined]
-app/ingest/common.py: "TypeEngine[Any]" has no attribute "length"  [attr-defined]
 app/ingest/common.py: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
 app/ingest/common.py: Invalid index type "str" for "str"; expected type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]"  [index]
 app/ingest/common.py: Invalid index type "str" for "str"; expected type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]"  [index]

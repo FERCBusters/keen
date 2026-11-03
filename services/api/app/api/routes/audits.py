@@ -31,7 +31,10 @@ from app.services.audits.schemas import (
     ScheduledAuditPayload,
     ScheduledAuditUpdatePayload,
 )
-from app.storage.filenames import content_disposition_attachment
+from app.storage.filenames import (
+    attachment_media_type,
+    content_disposition_attachment,
+)
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
 router = Router()
@@ -400,4 +403,6 @@ def download_final_report(
     fname = a.final_report_filename or "audit-report"
     media = a.final_report_content_type or "application/octet-stream"
     headers = {"Content-Disposition": content_disposition_attachment(fname)}
-    return StreamingResponse(iter_stream(body), media_type=media, headers=headers)
+    return StreamingResponse(
+        iter_stream(body), media_type=attachment_media_type(media), headers=headers
+    )

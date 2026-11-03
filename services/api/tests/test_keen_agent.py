@@ -107,6 +107,7 @@ def setup(monkeypatch):
     nonces = FakeValkey()
     monkeypatch.setattr(credentials, "get_valkey", lambda: nonces)
     monkeypatch.setattr(api, "fixed_window_allow", lambda *a, **k: (True, 0))
+    monkeypatch.setattr(api, "address_window_allow", lambda *a, **k: (True, 0))
     stored = []
 
     def put(**k):
@@ -207,7 +208,9 @@ def test_a_failed_batch_is_logged_without_its_error_text(setup, monkeypatch, cap
         f"OTLP batch {batch} from agent {info['agent']['id']} failed (RuntimeError)"
     )
     assert logged.exc_info is None
-    assert "4111" not in caplog.text
+    # The whole value: a random agent identifier can contain any four digits.
+    assert "4111-1111-1111-1111" not in caplog.text
+    assert "synthetic stored value" not in caplog.text
 
 
 def test_rotation_revocation_and_no_token_disclosure(setup):

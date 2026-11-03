@@ -48,6 +48,46 @@ def download_filename_for_artifact(artifact: Any, storage_key: str | None) -> st
     return f"artifact-{getattr(artifact, 'id')}{ext}"
 
 
+# Media types a browser only displays or saves. A download keeps its recorded
+# type only when it is one of these. Any other type, such as script, style sheet
+# or markup, is served as application/octet-stream: with nosniff, a browser then
+# refuses the file as same-origin script or style, whatever an uploader declared.
+PASSIVE_DOWNLOAD_TYPES = frozenset(
+    {
+        "application/json",
+        "application/msword",
+        "application/pdf",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.ms-word.document.82",
+        "application/vnd.oasis.opendocument.presentation",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/x-ndjson",
+        "application/zip",
+        "image/gif",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "text/csv",
+        "text/plain",
+    }
+)
+
+
+def attachment_media_type(content_type: str | None) -> str:
+    """The media type a download is served with.
+
+    Every route that streams a stored or computed file sets its type through
+    this function; a contract test refuses any other non-constant media type.
+    """
+    base = (content_type or "").split(";", 1)[0].strip().lower()
+    return base if base in PASSIVE_DOWNLOAD_TYPES else "application/octet-stream"
+
+
 def content_disposition_attachment(filename: str) -> str:
     """RFC 5987-friendly Content-Disposition for downloads."""
     safe = "".join(ch for ch in filename if ord(ch) >= 32 and ord(ch) != 127)

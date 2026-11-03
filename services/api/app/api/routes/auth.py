@@ -36,8 +36,12 @@ from app.security.oidc import (
     sso_attempt,
     sso_binding_cookie,
 )
+from app.security.rate_limit import (
+    address_window_allow,
+    fixed_window_allow,
+    login_limit_key,
+)
 from app.security.rate_limit import client_ip as _client_ip
-from app.security.rate_limit import fixed_window_allow, login_limit_key
 from app.security.sessions import get_session, revoke_session
 from app.services import login as login_service
 from app.services.errors import DomainError
@@ -83,11 +87,9 @@ def login(
         per_ip = settings.login_rate_limit_per_ip
         per_user = settings.login_rate_limit_per_username
 
-        ip = _client_ip(request) or "unknown"
-
         if per_ip > 0:
-            ok, retry = fixed_window_allow(
-                r, f"keen:rl:login:ip:{ip}", per_ip, window, fail_closed=True
+            ok, retry = address_window_allow(
+                r, "login", _client_ip(request), per_ip, window, fail_closed=True
             )
             if not ok:
                 resp = JSONResponse(

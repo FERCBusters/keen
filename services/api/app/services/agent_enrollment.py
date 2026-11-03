@@ -20,7 +20,7 @@ from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
 from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
 from app.security.agent_signatures import SignatureError, key_id, verify_proof
-from app.security.rate_limit import fixed_window_allow
+from app.security.rate_limit import address_window_allow, fixed_window_allow
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.ueu_evidence import catalogue_grant
@@ -188,14 +188,24 @@ def new_key(db, profile):
 
 
 def rate(context: ChangeContext, suffix="ip", ident=None, limit=60):
-    key = ident or context.client_ip or "unknown"
-    allowed, retry = fixed_window_allow(
-        get_valkey(),
-        "keen:enrollment:" + suffix + ":" + key,
-        limit,
-        60,
-        fail_closed=True,
-    )
+    """Limit enrolment work by credential or agent, or else by client address."""
+    if ident:
+        allowed, retry = fixed_window_allow(
+            get_valkey(),
+            f"keen:enrollment:{suffix}:{ident}",
+            limit,
+            60,
+            fail_closed=True,
+        )
+    else:
+        allowed, retry = address_window_allow(
+            get_valkey(),
+            f"enrollment:{suffix}",
+            context.client_ip,
+            limit,
+            60,
+            fail_closed=True,
+        )
     if not allowed:
         raise DomainError(
             429,

@@ -8,7 +8,7 @@ from app.api.routing import Router
 from app.core.valkey import get_valkey
 from app.db.session import get_db
 from app.ingest.webhooks import BUILT_IN_PROVIDERS, ingest_webhook, verify_secret
-from app.security.rate_limit import fixed_window_allow
+from app.security.rate_limit import address_window_allow
 from app.security.signed_webhooks import SIGNATURE_HEADER, TIMESTAMP_HEADER
 from app.services import webhooks as service
 
@@ -26,24 +26,20 @@ def _require_webhook_enabled():
 # busy sender leaves the others theirs. Every other provider name shares one
 # "other" allowance per address, so a made-up provider never opens a fresh
 # allowance or adds a counter. Metric submissions have their own.
-METRIC_LIMIT = "keen:rl:webhook:isms_metrics:ip:"
+METRIC_LIMIT = "webhook:isms_metrics"
 
 
 def _generic_limit(provider: str) -> str:
     if provider in BUILT_IN_PROVIDERS:
-        return f"keen:rl:webhook:provider:{provider}:ip:"
-    return "keen:rl:webhook:other:ip:"
+        return f"webhook:provider:{provider}"
+    return "webhook:other"
 
 
-def _limit_webhook(request: Request, prefix: str):
+def _limit_webhook(request: Request, scope: str):
     from app.security.client_ip import request_ip
 
-    ok, retry = fixed_window_allow(
-        get_valkey(),
-        prefix + str(request_ip(request)),
-        100,
-        60,
-        fail_closed=True,
+    ok, retry = address_window_allow(
+        get_valkey(), scope, request_ip(request), 100, 60, fail_closed=True
     )
     if not ok:
         raise HTTPException(

@@ -64,7 +64,9 @@ def request_ip(request):
         ):
             _report_untrusted_proxy(peer)
         return peer
-    chain = request.headers.get("x-forwarded-for", "")
+    # Repeated field lines form one list in order (RFC 9110 §5.3); a proxy that
+    # appends its own line after the client's must still be the nearest hop.
+    chain = ",".join(request.headers.getlist("x-forwarded-for"))
     current = peer
     # Walk back from the nearest hop while each hop is a trusted proxy. Entries
     # beyond the first untrusted hop are client-supplied, so their length or

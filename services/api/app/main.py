@@ -41,7 +41,7 @@ from app.security.permissions import (
     ensure_session_authorization_current,
     has_permission,
 )
-from app.security.rate_limit import address_allowance, fixed_window_allow
+from app.security.rate_limit import address_window_allow
 from app.security.redaction import redact_query_string, redact_str
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.security.roles import attach_effective_role, lock_admin_changes
@@ -347,9 +347,10 @@ _UNAUTHENTICATED_REFUSAL_AUDIT_LIMIT = 60
 def _audits_unauthenticated_refusal(client_ip: str | None) -> bool:
     # Fails closed: while Valkey is unavailable these refusals cannot be
     # counted, so they go unrecorded and cannot fill the database.
-    allowed, _ = fixed_window_allow(
+    allowed, _ = address_window_allow(
         get_valkey(),
-        f"keen:rl:audit-refusal:ip:{address_allowance(client_ip)}",
+        "audit-refusal",
+        client_ip,
         _UNAUTHENTICATED_REFUSAL_AUDIT_LIMIT,
         60,
         fail_closed=True,

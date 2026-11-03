@@ -879,6 +879,28 @@ def test_password_change_attempts_are_limited_per_account(keen, monkeypatch):
     assert limited.status_code == 429, limited.text
 
 
+def test_sign_in_attempts_from_one_ipv6_network_share_one_allowance(keen, monkeypatch):
+    # Every address in a client's /64 draws on the same per-address allowance;
+    # another network, and an IPv4 client, keep their own.
+    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 3)
+    monkeypatch.setattr(settings, "login_rate_limit_per_username", 0)
+
+    def attempt(address):
+        return client_from(address).post(
+            "/v1/auth/login",
+            json={"username": "someone", "password": "wrong"},
+            headers={"Origin": BASE},
+        )
+
+    for host in range(1, 4):
+        assert attempt(f"2001:db8:1:2::{host}").status_code == 401
+    refused = attempt("2001:db8:1:2:abcd:ef01:2345:6789")
+    assert refused.status_code == 429 and refused.headers["Retry-After"]
+    assert attempt("2001:db8:1:3::1").status_code == 401
+    assert attempt("198.51.100.9").status_code == 401
+    assert keen.store.get("keen:rl:login:ip:2001:db8:1:2::/64") == "4"
+
+
 # --- Unauthenticated webhook callers learn nothing before verification --------
 
 

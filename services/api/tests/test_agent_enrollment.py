@@ -32,6 +32,9 @@ def fleet(setup, monkeypatch):
     monkeypatch.setattr(
         agent_enrollment_operations, "fixed_window_allow", lambda *a, **k: (True, 0)
     )
+    monkeypatch.setattr(
+        agent_enrollment_operations, "address_window_allow", lambda *a, **k: (True, 0)
+    )
     r = client.post(
         "/v1/admin/agent-enrollment-profiles",
         json={
@@ -247,6 +250,9 @@ def test_expiry_network_limits_and_limiter_failure(fleet, monkeypatch):
     ready.fetch_server_key(p["bootstrap_key"])
     monkeypatch.setattr(
         agent_enrollment_operations, "fixed_window_allow", lambda *a, **k: (False, 60)
+    )
+    monkeypatch.setattr(
+        agent_enrollment_operations, "address_window_allow", lambda *a, **k: (False, 60)
     )
     assert enroll(c, p, agent=ready).status_code == 429
     assert c.get("/v1/agents/server-key").status_code == 429

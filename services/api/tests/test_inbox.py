@@ -151,11 +151,18 @@ def test_attendees_of_a_new_audit_hear_about_it_except_its_creator(people):
         who["linked"].id,
         who["reader"].id,
     }
-    # The linked account can open the audit only through audits.read.
-    assert _items(app.client(who["linked"]))["items"] == []
-    assert _unread(app.client(who["linked"])) == 0
+    # An attendee named through their People record attends as one named by
+    # account does: the notification shows, and the audit opens and is listed.
+    linked = app.client(who["linked"])
+    assert [i["title"] for i in _items(linked)["items"]] == ["Access review"]
+    assert _unread(linked) == 1
+    assert linked.get(f"/v1/audits/{audit_id}").status_code == 200
+    assert [a["id"] for a in linked.get("/v1/me/audits").json()["items"]] == [audit_id]
     for account in ("manager", "stranger"):
         assert _items(app.client(who[account]))["items"] == []
+    stranger = app.client(who["stranger"])
+    assert stranger.get(f"/v1/audits/{audit_id}").status_code == 403
+    assert stranger.get("/v1/me/audits").json()["items"] == []
 
 
 def test_someone_added_to_an_audit_under_way_hears_once(people):
@@ -870,8 +877,13 @@ def test_each_account_chooses_the_inbox_email_or_both(people, monkeypatch):
             SecurityNotification.subject.like("Keen: New audit%")
         )
     }
-    # Only those with an address, and who can open the audit, are emailed.
-    assert sorted(mail) == ["attendee@example.test", "reader@example.test"]
+    # Only those with an address, and who can open the audit, are emailed; an
+    # attendee named through their People record opens it as an attendee.
+    assert sorted(mail) == [
+        "attendee@example.test",
+        "linked@example.test",
+        "reader@example.test",
+    ]
     message = mail["attendee@example.test"]
     assert message.subject == "Keen: New audit: Access review"
     assert message.body.startswith(
@@ -884,7 +896,8 @@ def test_each_account_chooses_the_inbox_email_or_both(people, monkeypatch):
     # Email only lists the notification as read; both and no address keep it unread.
     assert (_unread(both), _unread(email_only), _unread(no_address)) == (1, 0, 1)
     assert _items(email_only)["items"][0]["read_at"] is not None
-    assert _items(linked)["items"] == []
+    assert [i["title"] for i in _items(linked)["items"]] == ["Access review"]
+    assert _unread(linked) == 1
 
     # Without mail set up, everything stays in Keen.
     monkeypatch.setattr(inbox, "smtp_configured", lambda: False)
@@ -892,7 +905,7 @@ def test_each_account_chooses_the_inbox_email_or_both(people, monkeypatch):
         app.client(who["manager"]), [{"user_id": str(who["reader"].id)}], title="Second"
     )
     assert _unread(email_only) == 1
-    assert db.query(SecurityNotification).count() == 2
+    assert db.query(SecurityNotification).count() == 3
 
     # The worker sends queued notification email like security email.
     sent = []
@@ -909,5 +922,9 @@ def test_each_account_chooses_the_inbox_email_or_both(people, monkeypatch):
             return False
 
     monkeypatch.setattr(security_notifications, "SessionLocal", Session)
-    assert security_notifications.deliver_pending() == 2
-    assert sorted(sent) == ["attendee@example.test", "reader@example.test"]
+    assert security_notifications.deliver_pending() == 3
+    assert sorted(sent) == [
+        "attendee@example.test",
+        "linked@example.test",
+        "reader@example.test",
+    ]

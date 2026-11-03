@@ -6,11 +6,21 @@ within the collection response limit could otherwise occupy gigabytes once its
 tree is built. Expat's own amplification limit covers entities only, and lets
 each entity grow up to a hundredfold. Feeds have no use for an internal subset,
 so such documents are refused before a tree is built. A declaration that names
-only an external DTD remains accepted; that DTD is never fetched.
+only an external DTD remains accepted; that DTD is never fetched. Without an
+internal subset a tree still costs many times its text, so documents are also
+bounded in size before parsing.
 """
 
 from xml.etree import ElementTree as ET
 from xml.parsers import expat
+
+# A tree costs many times the text it holds: each element is a Python object and
+# each attribute a dictionary entry with two strings. Whatever a document's
+# shape, its tree needs at most a few dozen times its size, so bounding the
+# document bounds the tree. Feeds run to hundreds of kilobytes; a document over
+# this size is refused before any parsing, and the largest tree an accepted
+# document builds stays near a hundred mebibytes.
+MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 
 
 class _PrologEnd(Exception):
@@ -29,6 +39,11 @@ def _end_prolog(name: str, attributes: dict[str, str]) -> None:
 
 
 def parse_untrusted_xml(data: str | bytes) -> ET.Element:
+    # Characters or bytes: a tree's object count follows either.
+    if len(data) > MAX_DOCUMENT_BYTES:
+        raise ET.ParseError(
+            f"XML documents over {MAX_DOCUMENT_BYTES // (1024 * 1024)} MiB are refused"
+        )
     prolog = expat.ParserCreate()
     prolog.StartDoctypeDeclHandler = _refuse_internal_subset
     prolog.StartElementHandler = _end_prolog

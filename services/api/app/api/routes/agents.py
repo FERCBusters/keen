@@ -27,7 +27,7 @@ from app.core.valkey import get_valkey
 from app.db.session import get_db
 from app.security.auth import require_admin
 from app.security.client_ip import request_ip
-from app.security.rate_limit import fixed_window_allow
+from app.security.rate_limit import address_window_allow, fixed_window_allow
 from app.services import agents as service
 from app.services.agents import Assignment, EvidencePolicy, Registration, Rotation
 from app.services.errors import DomainError
@@ -152,9 +152,7 @@ def evidence_policy(agent_id: str, body: EvidencePolicy, db: Session = Depends(g
 
 def _admit_batch(request, db):
     """Authenticate an evidence batch, check intake is open and apply its limit."""
-    auth = authenticate_agent(
-        request, db, "keen:agent:auth-failure:ip:", operation="otlp-logs"
-    )
+    auth = authenticate_agent(request, db, "agent:auth-failure", operation="otlp-logs")
     from app.services.ingestion_pause import require_receiving
 
     require_receiving(db, "keen-agent")
@@ -244,7 +242,7 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
     return result
 
 
-def authenticate_agent(request, db, failure_key, *, operation, allow_retired=False):
+def authenticate_agent(request, db, failure_scope, *, operation, allow_retired=False):
     """Authenticate before applying address limits.
 
     Agents commonly share one proxy address. Counting only rejected credentials
@@ -258,12 +256,8 @@ def authenticate_agent(request, db, failure_key, *, operation, allow_retired=Fal
     except HTTPException as exc:
         if exc.status_code != 401:
             raise
-        ok, retry = fixed_window_allow(
-            get_valkey(),
-            failure_key + (request_ip(request) or "unknown"),
-            120,
-            60,
-            fail_closed=True,
+        ok, retry = address_window_allow(
+            get_valkey(), failure_scope, request_ip(request), 120, 60, fail_closed=True
         )
         if not ok:
             raise HTTPException(
@@ -330,7 +324,7 @@ async def heartbeat(
 def _admit_heartbeat(request, db):
     """Authenticate a health report and apply its limit."""
     auth = authenticate_agent(
-        request, db, "keen:agent:health:auth-failure:ip:", operation="heartbeat"
+        request, db, "agent:health:auth-failure", operation="heartbeat"
     )
     db.rollback()
     ok, retry = fixed_window_allow(

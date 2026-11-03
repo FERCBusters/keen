@@ -24,6 +24,7 @@ from app.db.models import (
     AuditScopedControl,
     AuditScopedIsmsDocument,
     AuditSwotScope,
+    IsmsPerson,
     User,
 )
 from app.services import inbox
@@ -48,8 +49,13 @@ REMINDER_AUDIT_STATUSES = ("open", "in_progress")
 
 
 def _attendee_notification_email(db: Session, attendee: AuditAttendee) -> str | None:
-    """The attendee's address; an attendee whose account is deactivated gets none."""
-    user = db.get(User, attendee.user_id) if attendee.user_id else None
+    """The attendee's address; an attendee whose account, named directly or
+    through their People record, is deactivated gets none."""
+    account_id = attendee.user_id
+    if account_id is None and attendee.person_id is not None:
+        person = db.get(IsmsPerson, attendee.person_id)
+        account_id = person.user_id if person is not None else None
+    user = db.get(User, account_id) if account_id else None
     if user is not None and not user.is_active:
         return None
     email = str(attendee.email or "").strip()

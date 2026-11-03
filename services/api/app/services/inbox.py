@@ -37,7 +37,7 @@ from app.db.models import (
     QuizRound,
     User,
 )
-from app.services.audits.access import can_read_audits
+from app.services.audits.access import attends, can_read_audits
 from app.services.audits.validation import MUTABLE_AUDIT_STATUSES
 from app.services.errors import DomainError
 from app.services.features import state
@@ -276,7 +276,7 @@ def _audit_views(db: Session, user: User, ids: set, features) -> dict:
     attended = {
         aid
         for (aid,) in db.query(AuditAttendee.audit_id).filter(
-            AuditAttendee.audit_id.in_(ids), AuditAttendee.user_id == user.id
+            AuditAttendee.audit_id.in_(ids), attends(user)
         )
     }
     return {

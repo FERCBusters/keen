@@ -19,7 +19,10 @@ from app.services.isms.schemas import (
     DocumentFolderPayload,
     DocumentPayload,
 )
-from app.storage.filenames import content_disposition_attachment
+from app.storage.filenames import (
+    attachment_media_type,
+    content_disposition_attachment,
+)
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
 router = Router()
@@ -197,7 +200,7 @@ def download_document_file(
     obj = get_object_stream(bucket, key)
     return StreamingResponse(
         iter_stream(obj["Body"]),
-        media_type=media,
+        media_type=attachment_media_type(media),
         headers={"Content-Disposition": content_disposition_attachment(filename)},
     )
 

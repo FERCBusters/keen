@@ -8,6 +8,7 @@ from app.api.dependencies.events import require_events_read
 from app.api.routing import Router
 from app.db.session import get_db
 from app.services import artifacts as service
+from app.storage.filenames import attachment_media_type
 
 router = Router()
 
@@ -28,7 +29,9 @@ def download_artifact(
         user=user, artifact_id=artifact_id, sample_export=sample_export, db=db
     )
     return StreamingResponse(
-        result.content, media_type=result.content_type, headers=result.attributes
+        result.content,
+        media_type=attachment_media_type(result.content_type),
+        headers=result.attributes,
     )
 
 

@@ -612,14 +612,10 @@ async def build_authorize_redirect(
 ) -> str:
     provider = _require_provider_config(provider_key)
     from app.core.valkey import get_valkey
-    from app.security.rate_limit import client_ip, fixed_window_allow
+    from app.security.rate_limit import address_window_allow, client_ip
 
-    allowed, retry = fixed_window_allow(
-        get_valkey(),
-        f"keen:rl:sso-start:{client_ip(request) or 'unknown'}",
-        30,
-        300,
-        fail_closed=True,
+    allowed, retry = address_window_allow(
+        get_valkey(), "sso-start", client_ip(request), 30, 300, fail_closed=True
     )
     if not allowed:
         raise HTTPException(

@@ -196,3 +196,22 @@ def test_the_boundary_check_finds_direct_parser_use(tmp_path):
         "feeds.py:9: Tree.iterparse",
         "feeds.py:10: ET.fromstring",
     ]
+
+
+def test_a_document_over_the_size_bound_is_refused_before_parsing(monkeypatch):
+    # A tree costs many times its text whatever the document's shape, so size
+    # is the bound; the parser never sees a larger document.
+    from app.security import xml
+
+    def unreachable(*args, **kwargs):
+        raise AssertionError("parsed a document over the size bound")
+
+    limit = xml.MAX_DOCUMENT_BYTES
+    within = b"<rss>" + b"x" * (limit - 11) + b"</rss>"
+    assert len(within) == limit
+    assert parse_untrusted_xml(within).text == "x" * (limit - 11)
+    monkeypatch.setattr(xml.ET, "fromstring", unreachable)
+    monkeypatch.setattr(xml.expat, "ParserCreate", unreachable)
+    for document in (within + b" ", (within + b" ").decode()):
+        with pytest.raises(ET.ParseError, match="over 4 MiB are refused"):
+            parse_untrusted_xml(document)

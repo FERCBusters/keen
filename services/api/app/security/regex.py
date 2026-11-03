@@ -14,7 +14,11 @@ from typing import Any
 import regex
 
 MATCH_TIMEOUT_SECONDS = 0.025
-MAX_INPUT_CHARS = 65536
+# A pattern reads at most this many characters of a value: the length of the
+# field values rule suggestions offer and of a field condition's own value. A
+# search costs up to the square of its input, so evidence of any length leaves
+# an ordinary pattern far inside the time budget.
+MATCH_WINDOW_CHARS = 4096
 # The regex package measures a timeout in processor time for the whole process.
 # A match that released the interpreter lock would wait for it again while other
 # threads ran, and their work would count against its budget, so a trivial match
@@ -104,13 +108,21 @@ def validate_database_pattern(pattern):
         raise ValueError("Lookahead and lookbehind are unsupported")
 
 
+class MatchBudgetExceeded(ValueError):
+    """A match used its time budget: the pattern, not the input, needs changing.
+
+    The input is already bounded by MATCH_WINDOW_CHARS, so only a pattern whose
+    cost grows steeply with its input reaches this. Evidence callers treat it as
+    no match for that one rule, so one record never halts a collection run.
+    """
+
+
 @dataclass(frozen=True)
 class BoundedPattern:
     compiled: Any  # a regex.Pattern; the regex package ships no type hints
 
     def search(self, value):
-        if len(value) > MAX_INPUT_CHARS:
-            raise ValueError("Regex input exceeds 65536 characters; narrow the input")
+        value = value[:MATCH_WINDOW_CHARS]
         for _ in range(MATCH_ATTEMPTS):
             started = time.thread_time()
             try:
@@ -120,8 +132,9 @@ class BoundedPattern:
             except TimeoutError:
                 if time.thread_time() - started >= MATCH_TIMEOUT_SECONDS:
                     break
-        # Stop the run rather than silently dropping a required mapping.
-        raise ValueError("Regex match exceeded its time budget; simplify the rule")
+        raise MatchBudgetExceeded(
+            "Regex match exceeded its time budget; simplify the rule"
+        )
 
 
 @lru_cache(maxsize=256)

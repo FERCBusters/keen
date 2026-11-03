@@ -24,7 +24,7 @@ from app.schemas import (
 from app.security.auth import ROLE_ADMIN
 from app.security.passwords import hash_password, verify_password
 from app.security.permissions import has_permission
-from app.security.rate_limit import fixed_window_allow
+from app.security.rate_limit import address_window_allow, fixed_window_allow
 from app.security.roles import compute_effective_role, is_effective_admin
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
@@ -594,11 +594,10 @@ def change_my_password(
     # Rate limit password changes to prevent abuse (fail closed if Redis unavailable)
     try:
         r = get_valkey()
-        ip = context.client_ip or "unknown"
         window = settings.login_rate_limit_window_seconds
         limit = settings.login_rate_limit_per_ip
-        ok, retry = fixed_window_allow(
-            r, f"keen:rl:password_change:ip:{ip}", limit, window, fail_closed=True
+        ok, retry = address_window_allow(
+            r, "password_change", context.client_ip, limit, window, fail_closed=True
         )
         # A session holder must not be able to test many current passwords by
         # spreading attempts across addresses.

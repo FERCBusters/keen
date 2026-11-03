@@ -67,9 +67,22 @@ def test_session_refresh_cannot_resurrect_concurrent_logout(monkeypatch):
 def test_regex_accepted_polynomial_pattern_has_runtime_deadline():
     pattern = regex.compile_pattern("(a+)(a+)$")
     started = time.monotonic()
-    with pytest.raises(ValueError, match="time budget"):
-        pattern.search("a" * 20000 + "!")
+    # Within the match window, so the pattern itself exhausts its budget.
+    with pytest.raises(regex.MatchBudgetExceeded, match="time budget"):
+        pattern.search("a" * (regex.MATCH_WINDOW_CHARS - 1) + "!")
     assert time.monotonic() - started < 2
+
+
+def test_a_pattern_reads_a_bounded_window_of_any_value():
+    # Evidence of any length leaves an ordinary pattern far inside its budget:
+    # it reads the first MATCH_WINDOW_CHARS characters and never refuses input.
+    pattern = regex.compile_pattern("failed.*password")
+    window = regex.MATCH_WINDOW_CHARS
+    assert pattern.search("failed password" + "x" * 1_000_000)
+    assert not pattern.search("x" * window + "failed password")
+    started = time.thread_time()
+    assert not pattern.search("failed " * 1_000_000)
+    assert time.thread_time() - started < regex.MATCH_TIMEOUT_SECONDS
 
 
 def test_a_timeout_from_other_threads_work_is_retried():
@@ -150,8 +163,8 @@ def test_mapping_runtime_uses_regex_boundary():
     with pytest.raises(ValueError, match="Nested repetition"):
         _match_regex("(a+)+$", "a" * 100 + "!")
     assert _match_regex(r"(?i)\bfailed\b", "Operation FAILED")
-    with pytest.raises(ValueError, match="65536"):
-        _match_regex("x", "x" * 65537)
+    assert _match_regex("x", "x" * 65537)
+    assert not _match_regex("needle", "x" * 65537 + "needle")
 
 
 def test_expanded_mode_is_refused_for_rules_and_event_filters():
@@ -504,7 +517,7 @@ def test_sso_start_rate_limit_rejects_before_creating_state(monkeypatch):
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(valkey, "get_valkey", lambda: redis)
     monkeypatch.setattr(oidc, "_require_provider_config", lambda key: object())
-    redis.set("keen:rl:sso-start:unknown", 30, ex=300)
+    redis.set("keen:rl:sso-start:ip:unknown", 30, ex=300)
     db = Mock()
     from fastapi import HTTPException
 
@@ -726,7 +739,7 @@ def test_metric_webhook_rate_limit_precedes_credentials(production_client, monke
     monkeypatch.setattr(deployment_settings, "webhooks_enabled", True)
     monkeypatch.setattr(webhooks, "get_valkey", lambda: production_client[1])
     limiter = Mock(return_value=(False, 60))
-    monkeypatch.setattr(webhooks, "fixed_window_allow", limiter)
+    monkeypatch.setattr(webhooks, "address_window_allow", limiter)
     verify = Mock(side_effect=AssertionError("Must reject before credential check"))
     monkeypatch.setattr(webhooks.service, "submit_signed_metric", verify)
     response = production_client[0].post(
@@ -757,7 +770,7 @@ def test_enabled_metric_webhook_requires_a_signature(production_client, monkeypa
 
     monkeypatch.setattr(deployment_settings, "webhooks_enabled", True)
     monkeypatch.setattr(webhooks, "get_valkey", lambda: production_client[1])
-    monkeypatch.setattr(webhooks, "fixed_window_allow", Mock(return_value=(True, 0)))
+    monkeypatch.setattr(webhooks, "address_window_allow", Mock(return_value=(True, 0)))
     # The shared provider secret no longer authenticates measurements.
     monkeypatch.setattr(webhooks, "verify_secret", Mock(return_value=True))
     response = production_client[0].post(
