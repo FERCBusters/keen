@@ -48,7 +48,13 @@ def effective_mode(env) -> int:
 
 
 COVERAGE = "evidence.collection.completed"
-_TEMPLATE = scan_pattern(r"\{([a-z][a-z0-9_.]{0,80})\}")
+# A summary placeholder names a field, or up to four fields to try in turn,
+# and may end with quoted text for when the envelope carries none of them:
+# {attributes.package|attributes.packages|'no packages named'}.
+_TEMPLATE = scan_pattern(
+    r"\{([a-z][a-z0-9_.]{0,80}(?:\|[a-z][a-z0-9_.]{0,80}){0,3})(?:\|'([^'{}]{1,64})')?\}"
+)
+_ABSENT = object()
 _KEY_ID = scan_pattern(r"[0-9a-f-]{36}:[0-9a-f]{16}")
 _SIGNATURE = scan_pattern(r"[A-Za-z0-9_-]{86}")
 
@@ -154,27 +160,42 @@ def advance(agent, env: Envelope) -> str:
     return status
 
 
-def _value(doc, path):
-    aliases = {
-        "component": ("source", "component"),
-        "scope": ("observation", "scope"),
-        "reason_code": ("event", "reason_code"),
-        "outcome": ("event", "outcome"),
-        "action": ("event", "action"),
-    }
-    parts = aliases.get(path) or tuple(path.split("."))
-    if parts[0] == "facts":
-        parts = ("observation",) + parts
+_ALIASES = {
+    "component": ("source", "component"),
+    "scope": ("observation", "scope"),
+    "reason_code": ("event", "reason_code"),
+    "outcome": ("event", "outcome"),
+    "action": ("event", "action"),
+}
+
+
+def template_path(path):
+    """The envelope members a summary placeholder's field name reads."""
+    parts = _ALIASES.get(path) or tuple(path.split("."))
+    return ("observation",) + parts if parts[0] == "facts" else parts
+
+
+def _lookup(doc, path):
     value = doc
-    for part in parts:
+    for part in template_path(path):
         if not isinstance(value, dict) or part not in value:
-            return "unknown"
+            return _ABSENT
         value = value[part]
-    if isinstance(value, list):
-        return ", ".join(str(v) for v in value[:16])
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return str(value)
+    return value
+
+
+def _value(doc, paths, fallback):
+    """The first of a placeholder's fields the envelope carries, as text."""
+    for path in paths.split("|"):
+        value = _lookup(doc, path)
+        if value is _ABSENT:
+            continue
+        if isinstance(value, list):
+            return ", ".join(str(v) for v in value[:16])
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+    return fallback or "unknown"
 
 
 def summary(doc, spec) -> str:
@@ -182,7 +203,7 @@ def summary(doc, spec) -> str:
     if spec is None or not spec.summary:
         text = doc["event_type"] + ": " + doc["event"]["reason_code"]
     else:
-        text = _TEMPLATE.sub(lambda m: _value(doc, m[1]), spec.summary)
+        text = _TEMPLATE.sub(lambda m: _value(doc, m[1], m[2]), spec.summary)
     return text[:4096]
 
 

@@ -12,12 +12,14 @@ from types import SimpleNamespace
 
 import app.services.agent_enrollment as enrollment_operations
 import pytest
+from app.agents.ueu import catalogue as catalogues
 from app.agents.ueu.envelope import validate
 from app.agents.ueu.jcs import CanonicalError, canonical, parse, parse_canonical
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentKey, Artifact, Event, KeenAgent, UeuBatch, UeuEvidence
 from app.ingest import common
 from app.security import agent_signatures as signatures
+from app.services import ueu_evidence
 from app.services.ueu_evidence import display_payload, evidence_record
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -522,6 +524,128 @@ def test_agents_granted_the_later_catalogue_send_its_event_types(keen):
     agent.catalogue = {"id": "keen", "version": "2026.10"}
     r, _ = agent.send(agent.event("dns.lookup.failed", "name_resolution", {}))
     assert r.status_code == 400 and "UEU_EVENT_TYPE_UNKNOWN" in r.text
+
+
+def rendered(event_type, attributes, *, component="system", outcome="info"):
+    spec = catalogues.keen().event_types[event_type]
+    doc = {
+        "event_type": event_type,
+        "event": {"action": "x", "outcome": outcome, "reason_code": ""},
+        "source": {"component": component},
+        "attributes": attributes,
+    }
+    return ueu_evidence.summary(doc, spec)
+
+
+@pytest.mark.parametrize(
+    "event_type,attributes,component,expected",
+    [
+        # An apt transaction lists its packages; dpkg and dnf name one.
+        (
+            "software.package.changed",
+            {
+                "manager": "apt",
+                "action": "transaction",
+                "packages": ["upgrade:apt:amd64", "upgrade:tor:amd64"],
+            },
+            "apt",
+            "Package transaction via apt: upgrade:apt:amd64, upgrade:tor:amd64",
+        ),
+        (
+            "software.package.changed",
+            {"manager": "dpkg", "action": "upgrade", "package": "openssl"},
+            "dpkg",
+            "Package upgrade via dpkg: openssl",
+        ),
+        (
+            "software.package.changed",
+            {"manager": "apt", "action": "transaction"},
+            "apt",
+            "Package transaction via apt: no packages named",
+        ),
+        # A root shell's command is named only when it is an installed program.
+        (
+            "privileged.action.completed",
+            {"mechanism": "shell"},
+            "shell",
+            "Privileged action via shell: command not named",
+        ),
+        (
+            "privileged.action.completed",
+            {"mechanism": "sudo", "executable": "systemctl"},
+            "sudo",
+            "Privileged action via sudo: systemctl",
+        ),
+        (
+            "access.denied",
+            {"audit_type": "SYSCALL"},
+            "auditd",
+            "Access denied (SYSCALL): program not named",
+        ),
+        # Without its own fallback text a missing field reads as unknown.
+        (
+            "user.authenticated",
+            {"method": "user_auth"},
+            "auditd",
+            "Authentication via unknown (user_auth): info",
+        ),
+    ],
+    ids=[
+        "apt-transaction",
+        "single-package",
+        "no-packages",
+        "unnamed-command",
+        "named-command",
+        "unnamed-program",
+        "default-fallback",
+    ],
+)
+def test_summaries_name_what_each_envelope_carries(
+    event_type, attributes, component, expected
+):
+    assert rendered(event_type, attributes, component=component) == expected
+
+
+def template_faults(spec):
+    """Placeholders in a summary that its event type cannot fill."""
+    faults = []
+    rest = ueu_evidence._TEMPLATE.sub("", spec.summary)
+    if "{" in rest or "}" in rest:
+        faults.append("unparsed placeholder")
+    for match in ueu_evidence._TEMPLATE.finditer(spec.summary):
+        for path in match[1].split("|"):
+            parts = ueu_evidence.template_path(path)
+            declared = (
+                parts[1] in spec.attributes
+                if parts[0] == "attributes" and len(parts) == 2
+                else parts[1] in spec.facts
+                if parts[:2] == ("observation", "facts") and len(parts) == 3
+                else path in ueu_evidence._ALIASES
+            )
+            if not declared:
+                faults.append(path)
+    return faults
+
+
+def test_every_built_in_summary_names_fields_its_event_type_declares():
+    # A placeholder naming a field the type never carries, or one the template
+    # grammar cannot read, would show "unknown" or the raw braces on every event.
+    checked = 0
+    for (ident, version), held in catalogues.catalogues().items():
+        if held.origin != "built-in":
+            continue
+        for name, spec in held.event_types.items():
+            assert template_faults(spec) == [], f"{ident}@{version} {name}"
+            checked += 1
+    assert checked
+    # The check finds a misspelt field and an unreadable placeholder.
+    spec = catalogues.keen().event_types["software.package.changed"]
+    broken = SimpleNamespace(
+        summary="{attributes.pakage} {attributes.package | attributes.packages}",
+        attributes=spec.attributes,
+        facts=spec.facts,
+    )
+    assert template_faults(broken) == ["unparsed placeholder", "attributes.pakage"]
 
 
 def test_request_signatures_cannot_be_replayed_redirected_or_altered(keen):
