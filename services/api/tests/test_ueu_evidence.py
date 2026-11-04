@@ -526,15 +526,53 @@ def test_agents_granted_the_later_catalogue_send_its_event_types(keen):
     assert r.status_code == 400 and "UEU_EVENT_TYPE_UNKNOWN" in r.text
 
 
-def rendered(event_type, attributes, *, component="system", outcome="info"):
+def rendered(
+    event_type, attributes, *, component="system", outcome="info", facts=None, reason=""
+):
     spec = catalogues.keen().event_types[event_type]
     doc = {
         "event_type": event_type,
-        "event": {"action": "x", "outcome": outcome, "reason_code": ""},
+        "event": {"action": "x", "outcome": outcome, "reason_code": reason},
         "source": {"component": component},
         "attributes": attributes,
     }
+    if facts is not None:
+        doc["observation"] = {"facts": facts, "scope": "host"}
     return ueu_evidence.summary(doc, spec)
+
+
+@pytest.mark.parametrize(
+    "facts,reason,expected",
+    [
+        # A server with no desktop reports none; the count is the result.
+        (
+            {"graphical_session_count": 0},
+            "graphical_sessions_enumerated",
+            "Graphical sessions via logind: 0",
+        ),
+        (
+            {"graphical_session_count": 2},
+            "graphical_sessions_enumerated",
+            "Graphical sessions via logind: 2",
+        ),
+        # A listing that could not finish has no count, so its reason shows.
+        (
+            {},
+            "session_inventory_incomplete",
+            "Graphical sessions via logind: session_inventory_incomplete",
+        ),
+    ],
+    ids=["none", "two", "incomplete"],
+)
+def test_the_session_inventory_summary_shows_its_count(facts, reason, expected):
+    summary = rendered(
+        "endpoint.session_inventory.observed",
+        {},
+        component="logind",
+        facts=facts,
+        reason=reason,
+    )
+    assert summary == expected
 
 
 @pytest.mark.parametrize(
@@ -618,7 +656,7 @@ def template_faults(spec):
             declared = (
                 parts[1] in spec.attributes
                 if parts[0] == "attributes" and len(parts) == 2
-                else parts[1] in spec.facts
+                else parts[2] in spec.facts
                 if parts[:2] == ("observation", "facts") and len(parts) == 3
                 else path in ueu_evidence._ALIASES
             )
@@ -646,6 +684,13 @@ def test_every_built_in_summary_names_fields_its_event_type_declares():
         facts=spec.facts,
     )
     assert template_faults(broken) == ["unparsed placeholder", "attributes.pakage"]
+    sessions = catalogues.keen().event_types["endpoint.session_inventory.observed"]
+    misread = SimpleNamespace(
+        summary="{facts.graphical_sessions_count}",
+        attributes=sessions.attributes,
+        facts=sessions.facts,
+    )
+    assert template_faults(misread) == ["facts.graphical_sessions_count"]
 
 
 def test_request_signatures_cannot_be_replayed_redirected_or_altered(keen):
