@@ -6,6 +6,8 @@ import tempfile
 import anyio
 from starlette.responses import JSONResponse
 
+from app.security.regex import scan_pattern
+
 MAX_BODY = 40 * 1024 * 1024
 # A decoded JSON document costs many times its size in memory and processor
 # time, so the application parses at most this much JSON from one request.
@@ -24,7 +26,7 @@ MAX_METRIC_SUBMISSION = 256 * 1024
 # Room for the multipart boundary and part headers around that one file.
 _MULTIPART_ROOM = 64 * 1024
 _SEALED_OVERHEAD = 1120 + 32 + 16
-_FILE_UPLOADS = re.compile(r"/v1/(?:isms/documents/[^/]+/file|audits/[^/]+/report)")
+_FILE_UPLOADS = scan_pattern(r"/v1/(?:isms/documents/[^/]+/file|audits/[^/]+/report)")
 
 
 def body_limit(path):
@@ -76,8 +78,8 @@ def target_has_nul(scope) -> bool:
 # The routes whose last parameter may itself contain "/" (a ``:path``
 # parameter), and so may arrive with an encoded slash. Every such route is
 # listed here; tests/test_request_targets.py fails when another appears.
-ENCODED_SLASH_ROUTES = re.compile(r"/v1/admin/frameworks/[^/]+/nodes/[^/]+/.+")
-_ENCODED_SEPARATOR = re.compile(rb"%(?:2f|5c)", re.IGNORECASE)
+ENCODED_SLASH_ROUTES = scan_pattern(r"/v1/admin/frameworks/[^/]+/nodes/[^/]+/.+")
+_ENCODED_SEPARATOR = scan_pattern(rb"%(?:2f|5c)", re.IGNORECASE)
 
 
 def target_traverses(scope) -> bool:

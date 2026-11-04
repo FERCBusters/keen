@@ -1285,21 +1285,7 @@ a.schedule-calendar-event {
   stroke-width: 2px;
 }
 
-/* ISMS Access Control Matrix status cells */
-.isms-app-matrix-table .isms-access-cell-approved {
-  --bs-table-bg: #198754;
-  --bs-table-color: #fff;
-  background-color: #198754 !important;
-  color: #fff !important;
-}
-
-.isms-app-matrix-table .isms-access-cell-pending {
-  --bs-table-bg: #ffc107;
-  --bs-table-color: #111827;
-  background-color: #ffc107 !important;
-  color: #111827 !important;
-}
-
+/* ISMS Access Control Matrix role cells */
 .isms-app-matrix-table .isms-access-cell-linked {
   /* Linked rows read as the selected/accent wash, not a second hue. */
   --bs-table-bg: rgba(var(--keen-accent-rgb), 0.1);
@@ -1309,8 +1295,6 @@ a.schedule-calendar-event {
   font-weight: 700;
 }
 
-.isms-app-matrix-table .isms-access-status-head,
-.isms-app-matrix-table .isms-access-status,
 .isms-app-matrix-table .isms-access-role-heading,
 .isms-app-matrix-table .isms-access-role-cell,
 .isms-app-matrix-table .isms-access-actions-head,
@@ -1331,23 +1315,6 @@ a.schedule-calendar-event {
 
 .isms-app-matrix-table .isms-access-actions .btn {
   padding: 0.1rem 0.25rem;
-}
-
-.isms-app-matrix-table .isms-access-accounts-head,
-.isms-app-matrix-table .isms-access-accounts {
-  width: 13rem;
-  min-width: 13rem;
-  max-width: 13rem;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.isms-aws-account-pill-list {
-  justify-content: flex-start;
-}
-
-.isms-aws-account-pill {
-  text-align: left;
 }
 
 .isms-app-matrix-table .isms-access-notes-head,
@@ -1464,33 +1431,6 @@ a.eff-metric-value:focus {
   max-width: 3.15rem;
   padding-left: 0.15rem !important;
   padding-right: 0.15rem !important;
-}
-
-.isms-app-matrix-table.isms-access-matrix-table .isms-access-status-head,
-.isms-app-matrix-table.isms-access-matrix-table .isms-access-status {
-  width: 4rem;
-  min-width: 4rem;
-  max-width: 4rem;
-}
-
-.isms-app-matrix-table.isms-access-matrix-table .isms-access-accounts-head,
-.isms-app-matrix-table.isms-access-matrix-table .isms-access-accounts {
-  width: 8rem;
-  min-width: 8rem;
-  max-width: 8rem;
-}
-
-.isms-aws-account-pill-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.12rem;
-}
-
-.isms-aws-account-pill {
-  max-width: 7.2rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .isms-app-matrix-table.isms-access-matrix-table .isms-access-notes-head,

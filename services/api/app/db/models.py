@@ -2292,35 +2292,6 @@ class IsmsApplicationConfigurationEntry(Base):
     )
 
 
-class IsmsAwsAccount(Base):
-    __tablename__ = "isms_aws_accounts"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
-    account_id: Mapped[str | None] = mapped_column(
-        String(32), nullable=True, unique=True
-    )
-    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    created_by = relationship("User", foreign_keys=[created_by_user_id])
-    access_matrix_links = relationship(
-        "IsmsAccessControlMatrixAwsAccount",
-        back_populates="aws_account",
-        cascade="all, delete-orphan",
-    )
-
-
 class IsmsAccessControlMatrixEntry(Base):
     __tablename__ = "isms_access_control_matrix_entries"
 
@@ -2333,9 +2304,6 @@ class IsmsAccessControlMatrixEntry(Base):
         ForeignKey("risk_assets.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-    )
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="Pending Approval", index=True
     )
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -2355,41 +2323,6 @@ class IsmsAccessControlMatrixEntry(Base):
         back_populates="entry",
         cascade="all, delete-orphan",
     )
-    aws_account_links = relationship(
-        "IsmsAccessControlMatrixAwsAccount",
-        back_populates="entry",
-        cascade="all, delete-orphan",
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "status in ('Pending Approval','Approved')",
-            name="ck_isms_access_control_matrix_status",
-        ),
-    )
-
-
-class IsmsAccessControlMatrixAwsAccount(Base):
-    __tablename__ = "isms_access_control_matrix_aws_accounts"
-
-    entry_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("isms_access_control_matrix_entries.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    aws_account_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("isms_aws_accounts.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
-
-    entry = relationship(
-        "IsmsAccessControlMatrixEntry", back_populates="aws_account_links"
-    )
-    aws_account = relationship("IsmsAwsAccount", back_populates="access_matrix_links")
 
 
 class IsmsAccessControlMatrixRole(Base):

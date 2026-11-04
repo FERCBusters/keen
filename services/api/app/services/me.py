@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from sqlalchemy import desc
@@ -25,6 +24,7 @@ from app.security.auth import ROLE_ADMIN
 from app.security.passwords import hash_password, verify_password
 from app.security.permissions import has_permission
 from app.security.rate_limit import address_window_allow, fixed_window_allow
+from app.security.regex import scan_pattern
 from app.security.roles import compute_effective_role, is_effective_admin
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
@@ -39,7 +39,7 @@ from app.services.presentation import validate_timezone_name as _validate_timezo
 
 NOTIFICATION_DELIVERY = ("app", "email", "both")
 _VIZ_MODES = {"graph", "heatmap", "sunburst_source", "sunburst_control", "histogram"}
-_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO_DATE_RE = scan_pattern(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _normalize_source_colors(raw: dict[str, str]) -> dict[str, str]:
@@ -243,7 +243,7 @@ def _validate_default_framework(raw: str | None) -> str | None:
         return None
     if len(v) > 64:
         raise DomainError(status_code=400, detail="default_framework is too long")
-    if not re.match(r"^[A-Za-z0-9._:-]+$", v):
+    if not scan_pattern(r"^[A-Za-z0-9._:-]+$").match(v):
         raise DomainError(
             status_code=400,
             detail="default_framework may contain only letters, numbers, dot, underscore, colon and hyphen",

@@ -89,17 +89,9 @@ class BusinessProcessPayload(BaseModel):
     sort_order: int | None = None
 
 
-class AwsAccountPayload(BaseModel):
-    name: str | None = Field(default=None, max_length=256)
-    account_id: str | None = Field(default=None, max_length=32)
-    notes: str | None = Field(default=None, max_length=12000)
-
-
 class AccessControlMatrixPayload(BaseModel):
     task_action: str | None = Field(default=None, max_length=20000)
     service_asset_id: uuid.UUID | None = None
-    aws_account_ids: list[uuid.UUID] | None = None
-    status: str | None = Field(default=None, max_length=32)
     # One access row can apply to several organisation-chart roles.
     role_org_node_ids: list[uuid.UUID] | None = None
     notes: str | None = Field(default=None, max_length=12000)

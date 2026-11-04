@@ -10,10 +10,11 @@ shows both on the vendor's page.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+
+from app.security.regex import scan_pattern
 
 # met: the setting meets the check; attention: it does not; info: reported
 # without a judgement; unknown: KEEN could not read it (see ``reason``).
@@ -52,7 +53,7 @@ def text_field(value, limit: int = 128) -> str:
 
 def split_list(value) -> list[str]:
     """Split a comma- or space-separated setting into its values."""
-    return [v for v in re.split(r"[\s,]+", str(value or "").strip()) if v]
+    return [v for v in scan_pattern(r"[\s,]+").split(str(value or "").strip()) if v]
 
 
 def parse_time(value) -> datetime | None:
@@ -61,7 +62,7 @@ def parse_time(value) -> datetime | None:
     if not text:
         return None
     # Some vendors (e.g. Microsoft Graph) write seven fractional digits.
-    text = re.sub(r"(\.\d{6})\d+", r"\1", text.replace("Z", "+00:00"))
+    text = scan_pattern(r"(\.\d{6})\d+").sub(r"\1", text.replace("Z", "+00:00"))
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:

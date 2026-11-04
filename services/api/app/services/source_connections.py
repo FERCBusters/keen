@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from urllib.parse import urlsplit
 
@@ -15,6 +14,7 @@ from app.db.models import SourceConnection
 from app.ingest.connections import FIELDS, connections, deployment_settings
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 from app.services.managed_configurations import (
     WITHHELD,
@@ -135,11 +135,11 @@ def validate(payload):
         raise DomainError(422, "Choose a supported authentication mode")
     for key in ("header_name", "secret_header"):
         value = payload.configuration.get(key)
-        if value and not re.fullmatch(r"[A-Za-z0-9-]{1,128}", value):
+        if value and not scan_pattern(r"[A-Za-z0-9-]{1,128}").fullmatch(value):
             raise DomainError(422, "Enter a valid HTTP header name")
-    if payload.source == "webhooks" and not re.fullmatch(
-        r"[A-Za-z0-9_-]{1,100}", payload.configuration.get("provider", "")
-    ):
+    if payload.source == "webhooks" and not scan_pattern(
+        r"[A-Za-z0-9_-]{1,100}"
+    ).fullmatch(payload.configuration.get("provider", "")):
         raise DomainError(
             422,
             "Enter a webhook provider name using letters, numbers, hyphens or underscores",

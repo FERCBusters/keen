@@ -146,6 +146,60 @@ def test_refresh_keeps_the_latest_result_and_records_changes(keen, cloud, monkey
     assert len(posture_events(db)) == 5
 
 
+def test_each_scope_is_a_cloud_services_asset_of_the_providers_vendor(keen, cloud):
+    db = keen.db
+    owners = Check("identity.admins", "Owners", "info", "2 principals", ["a", "b"])
+    cloud["results"] = [
+        scope(),
+        ScopeResult("444455556666", "444455556666", [owners], kind="organisation"),
+    ]
+    runner.refresh(db, "aws")
+    vendor_id = vendor_of(keen)
+    production = db.get(RiskAsset, runner.scope_asset_id("aws", ACCOUNT))
+    shared = db.get(RiskAsset, runner.scope_asset_id("aws", "444455556666"))
+    assert (production.name, shared.name) == (
+        f"AWS account · Production ({ACCOUNT})",
+        "AWS organisation · 444455556666",
+    )
+    assert {production.category.name, shared.category.name} == {"Cloud services"}
+    assert (production.subcategory.name, shared.subcategory.name) == (
+        "AWS accounts",
+        "AWS organisations",
+    )
+    assert production.vendor_id == shared.vendor_id == vendor_id
+    # The access control matrix offers them as services.
+    reader = keen.client(keen.user("isms.read"))
+    meta = reader.get("/v1/isms/meta", params={"section": "access-control"}).json()
+    assert {a["name"] for a in meta["assets"]} >= {production.name, shared.name}
+
+    # An administrator's changes are kept, and a scope that goes keeps its asset.
+    production.name = "Production AWS"
+    db.commit()
+    cloud["results"] = [scope()]
+    runner.refresh(db, "aws")
+    assert db.get(RiskAsset, production.id).name == "Production AWS"
+    assert db.get(RiskAsset, shared.id) is not None
+    assert db.query(RiskAsset).count() == 2
+
+
+def test_a_scope_asset_added_meanwhile_leaves_the_run_whole(keen, cloud, monkeypatch):
+    db = keen.db
+    runner.refresh(db, "aws")
+    real = db.get
+    # The run misses the asset a risk recorded meanwhile has just added.
+    monkeypatch.setattr(
+        db,
+        "get",
+        lambda model, key, **kw: None if model is RiskAsset else real(model, key, **kw),
+    )
+    cloud["results"] = [scope(detail="MFA off for 2 of 2 console users")]
+    assert runner.refresh(db, "aws") == {"provider": "aws", "scopes": 1}
+    stored = db.query(CloudPostureScope).one()
+    mfa = next(c for c in stored.checks if c["key"] == "identity.mfa")
+    assert mfa["detail"] == "MFA off for 2 of 2 console users"
+    assert db.query(RiskAsset).count() == 1
+
+
 def test_scopes_no_longer_returned_are_removed_and_old_ones_expire(keen, cloud):
     db = keen.db
     cloud["results"] = [scope(), scope(key="444455556666")]
@@ -615,6 +669,14 @@ def test_demo_seed_stores_every_provider_and_teardown_removes_it(keen, monkeypat
     assert demo.seed(db) == len(KEYS)
     assert db.query(CloudProvider).count() == len(KEYS)
     assert db.query(CloudPostureScope).count() >= len(KEYS)
+    scope_assets = [
+        runner.scope_asset_id(provider, key)
+        for provider, key in db.query(
+            CloudPostureScope.provider, CloudPostureScope.scope_key
+        )
+    ]
+    assets = db.query(RiskAsset).filter(RiskAsset.id.in_(scope_assets))
+    assert assets.count() == len(scope_assets)
     activity = db.query(Event).filter(
         ~Event.action.like("posture.%"), Event.source == "aws"
     )
@@ -634,6 +696,7 @@ def test_demo_seed_stores_every_provider_and_teardown_removes_it(keen, monkeypat
     db.commit()
     assert db.query(CloudProvider).count() == 0
     assert db.query(CloudPostureScope).count() == 0
+    assert assets.count() == 0
     assert db.query(Event).filter(Event.source.in_(KEYS)).all() == [unrelated]
     assert (
         db.query(IsmsVendor).filter(IsmsVendor.name == "Amazon Web Services").count()

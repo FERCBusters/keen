@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import re
 import smtplib
 import ssl
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 
 from app.core.config import settings
+from app.security.regex import scan_pattern
 
 
 def looks_like_email(raw: str | None) -> bool:
@@ -182,7 +182,7 @@ def _ics_date(value: str | date | None, *, default: date) -> date:
 
 def _ics_uid(value: str | None, fallback: str, prefix: str) -> str:
     raw = (value or fallback).strip()
-    safe = re.sub(r"[^A-Za-z0-9._@-]+", "-", raw).strip("-") or prefix
+    safe = scan_pattern(r"[^A-Za-z0-9._@-]+").sub("-", raw).strip("-") or prefix
     return f"{safe}@keen"
 
 

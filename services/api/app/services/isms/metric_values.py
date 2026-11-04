@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import operator
-import re
 import uuid
 
 from sqlalchemy import func
@@ -19,6 +18,7 @@ from app.db.models import (
     User,
 )
 from app.security.permissions import can_read_events
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 from app.services.text import clean_text
 
@@ -33,7 +33,7 @@ def _metric_key_from_payload(raw: str | None) -> str | None:
     value = (raw or "").strip()
     if not value:
         return None
-    if len(value) > 128 or not re.match(r"^[A-Za-z0-9._:-]+$", value):
+    if len(value) > 128 or not scan_pattern(r"^[A-Za-z0-9._:-]+$").match(value):
         raise DomainError(
             status_code=400,
             detail="metric_key may only contain letters, numbers, dot, underscore, colon and hyphen",

@@ -9,30 +9,30 @@ carries a UEU error code; nothing is repaired or guessed.
 from __future__ import annotations
 
 import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, NoReturn
 
 from app.agents.ueu import catalogue as catalogues
 from app.agents.ueu.jcs import CanonicalError, parse_canonical
+from app.security.regex import scan_pattern
 
 SPEC_VERSION = "0.1-keen"
 MAX_ENVELOPE_BYTES = 65536
 MAX_PAYLOAD_BYTES = 60000
 OUTCOMES = {"observed", "unknown", "success", "failure", "info"}
 MODES = ("events", "events_with_lines", "all_lines")
-EVIDENCE_ID = re.compile(
+EVIDENCE_ID = scan_pattern(
     r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
-HASH = re.compile(r"sha256:[0-9a-f]{64}")
-PSEUDONYM = re.compile(r"hmac-sha256:[0-9a-f]{64}")
-TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z")
-TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@/+-]{0,63}")
-CONTEXT_VALUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@/+=-]{0,127}")
+HASH = scan_pattern(r"sha256:[0-9a-f]{64}")
+PSEUDONYM = scan_pattern(r"hmac-sha256:[0-9a-f]{64}")
+TIME = scan_pattern(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z")
+TOKEN = scan_pattern(r"[A-Za-z0-9][A-Za-z0-9_.:@/+-]{0,63}")
+CONTEXT_VALUE = scan_pattern(r"[A-Za-z0-9][A-Za-z0-9_.:@/+=-]{0,127}")
 # The fixed vocabulary of privacy transformations producers record. Values in
 # this shape name a field and a reason; they never hold the field's value.
-TRANSFORMATION = re.compile(
+TRANSFORMATION = scan_pattern(
     r"subject-pseudonymised|removed:[a-z][a-z0-9_.]{0,63}:[a-z_]{1,32}"
 )
 TOP = {

@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx
-import regex
 from sqlalchemy.orm import Session
 
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
@@ -28,6 +27,7 @@ from app.security.regex import (
     MATCH_TIMEOUT_SECONDS,
     BoundedPattern,
     compile_pattern,
+    scan_pattern,
 )
 from app.services.ingestion_pause import pausable
 
@@ -564,8 +564,10 @@ def _read_page(client: httpx.Client, page_id: int) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-_TAG_RE = regex.compile(r"<[^>]+>")
-_SCRIPT_STYLE_RE = regex.compile(r"(?is)<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>")
+_TAG_RE = scan_pattern(r"<[^>]+>", timed=True)
+_SCRIPT_STYLE_RE = scan_pattern(
+    r"(?is)<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>", timed=True
+)
 
 
 def _strip_html_to_text(html_text: str) -> str:

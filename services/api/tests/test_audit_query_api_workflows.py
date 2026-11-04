@@ -658,7 +658,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
         qualitative_value="On track",
     )
     access = IsmsAccessControlMatrixEntry(
-        task_action="Deploy to production", status="Approved"
+        task_action="Deploy to production", service_asset_id=risk.asset_id
     )
     app_config = IsmsApplicationConfigurationEntry(
         source_type="org_node",
@@ -759,7 +759,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
         "isms_asset": ("ISMS asset: Payroll", "Data / Databases", ["A.5.1"]),
         "isms_access_control_matrix": (
             "Access control matrix: Deploy to production",
-            "Approved",
+            "Payroll",
             [],
         ),
         "isms_application_configuration": (

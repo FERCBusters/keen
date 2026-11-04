@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from copy import deepcopy
 from typing import Any
 from urllib.parse import urlparse
@@ -41,6 +40,7 @@ from app.mapping.rules import (
 )
 from app.mapping.targets import resolve_targets
 from app.security.redaction import redact_url
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 from app.services.rule_sources import distinct_sources, reads_source, rule_sources
 
@@ -384,14 +384,11 @@ def _validate_connector(name: str, document: dict):
                 value = entry.get(field) if isinstance(entry, dict) else None
                 if (
                     not isinstance(value, str)
-                    or not re.fullmatch(
-                        (
-                            r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*"
-                            if name == "gitlab" and section == "groups"
-                            else r"[A-Za-z0-9_.-]{1,100}"
-                        ),
-                        value,
-                    )
+                    or not scan_pattern(
+                        r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*+"
+                        if name == "gitlab" and section == "groups"
+                        else r"[A-Za-z0-9_.-]{1,100}"
+                    ).fullmatch(value)
                     or value in (".", "..")
                 ):
                     raise DomainError(
@@ -424,7 +421,7 @@ def _validate_connector(name: str, document: dict):
             if not query.get("name") or not query.get("logql"):
                 raise DomainError(400, "Each Loki query needs a name and LogQL")
     if name == "jenkins" and any(
-        not re.fullmatch(r"[A-Za-z0-9_. -]{1,128}", j["name"]) for j in rows
+        not scan_pattern(r"[A-Za-z0-9_. -]{1,128}").fullmatch(j["name"]) for j in rows
     ):
         raise DomainError(400, "Jenkins job names must be simple top-level names")
     if name == "bookstack":
@@ -658,7 +655,9 @@ def _validate_collection_entry(adapter: str, section: str, entry: dict, key: str
             validate_config({"organizations": [entry]})
         except RiskLedgerError as exc:
             raise DomainError(400, str(exc)) from None
-    if adapter == "webhooks" and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", key):
+    if adapter == "webhooks" and not scan_pattern(r"[A-Za-z0-9_-]{1,64}").fullmatch(
+        key
+    ):
         raise DomainError(
             400,
             "Webhook provider name must use letters, numbers, underscores or hyphens",
@@ -677,7 +676,7 @@ def _validate_collection_entry(adapter: str, section: str, entry: dict, key: str
     if adapter == "github" and section in ("organizations", "repos"):
         parts = [key] if section == "organizations" else key.split("/")
         if len(parts) != (1 if section == "organizations" else 2) or any(
-            not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", part) for part in parts
+            not scan_pattern(r"[A-Za-z0-9_.-]{1,100}").fullmatch(part) for part in parts
         ):
             raise DomainError(
                 400, "Give a valid GitHub organisation or owner/repository name"
@@ -1286,9 +1285,9 @@ def _target_kind(db: Session, framework: str, ref: str, kind: Any) -> str:
 
 
 def _validate_rule(rule: dict, db: Session):
-    if not isinstance(rule.get("id"), str) or not re.fullmatch(
-        r"[a-zA-Z0-9_-]{1,96}", rule["id"]
-    ):
+    if not isinstance(rule.get("id"), str) or not scan_pattern(
+        r"[a-zA-Z0-9_-]{1,96}"
+    ).fullmatch(rule["id"]):
         raise DomainError(
             400, "Rule ID must be 1-96 letters, numbers, underscores or hyphens"
         )
@@ -2321,5 +2320,5 @@ def export_rules(*, source: str, db: Session):
             )
         ]
     document = {"rules": sorted(rules, key=lambda r: r.get("id", ""))}
-    filename = re.sub(r"[^a-zA-Z0-9_-]", "_", source)[:80] or "all"
+    filename = scan_pattern(r"[^a-zA-Z0-9_-]").sub("_", source)[:80] or "all"
     return yaml.safe_dump(document, sort_keys=False, allow_unicode=True), filename

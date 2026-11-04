@@ -10,6 +10,7 @@ from email import policy
 from email.parser import BytesHeaderParser
 
 from app.security.redaction import redact_str
+from app.security.regex import scan_pattern
 
 from .mime import body_part, decode_body, structure
 from .transport import Client
@@ -27,7 +28,11 @@ def checked(result):
 
 def number(client, key):
     _, values = client.response(key)
-    if not values or not values[0] or not re.fullmatch(rb"[0-9]{1,10}", values[0]):
+    if (
+        not values
+        or not values[0]
+        or not scan_pattern(rb"[0-9]{1,10}").fullmatch(values[0])
+    ):
         raise ValueError("IMAP UID metadata missing")
     if any(value != values[0] for value in values[1:]):
         raise ValueError("Conflicting IMAP UID metadata")
@@ -54,15 +59,14 @@ def literal(client, uid, section, limit):
     prefix, value = rows[pos]
     # UID may appear before or after the literal, but must be in this FETCH.
     # Never accept an unrelated FLAGS response or a quoted MIME value as its UID.
-    before = re.fullmatch(
+    before = scan_pattern(
         rb"[1-9][0-9]* \((?:UID ([0-9]+) )?BODY\["
         + re.escape(section.encode("ascii"))
         + rb"\](?:<0>)? \{([0-9]+)\}",
-        prefix,
         re.IGNORECASE,
-    )
+    ).fullmatch(prefix)
     after = (
-        re.fullmatch(rb"(?: UID ([0-9]+))?\)", rows[pos + 1], re.IGNORECASE)
+        scan_pattern(rb"(?: UID ([0-9]+))?\)", re.IGNORECASE).fullmatch(rows[pos + 1])
         if pos + 1 < len(rows) and isinstance(rows[pos + 1], bytes)
         else None
     )
@@ -79,7 +83,7 @@ def literal(client, uid, section, limit):
 
 
 def metadata(data, uid, *, include_body=True):
-    match = re.fullmatch(rb"[1-9][0-9]* (\(.*\))", data, re.DOTALL)
+    match = scan_pattern(rb"[1-9][0-9]* (\(.*\))", re.DOTALL).fullmatch(data)
     if not match:
         raise ValueError("Invalid IMAP metadata response")
     fields = structure(match[1])
@@ -94,7 +98,7 @@ def metadata(data, uid, *, include_body=True):
     if set(values) != expected or values["UID"] != str(uid):
         raise ValueError("IMAP metadata UID mismatch")
     size = values["RFC822.SIZE"]
-    if not isinstance(size, str) or not re.fullmatch(r"[0-9]{1,20}", size):
+    if not isinstance(size, str) or not scan_pattern(r"[0-9]{1,20}").fullmatch(size):
         raise ValueError("Invalid IMAP message size")
     return int(size), values.get("BODYSTRUCTURE")
 
@@ -139,7 +143,7 @@ def collect(config, cursor, allowed_cidrs):
             raise ValueError("Oversized IMAP search response")
         tokens = raw[0].split()
         if len(tokens) > 100 or any(
-            not re.fullmatch(rb"[0-9]{1,10}", x) for x in tokens
+            not scan_pattern(rb"[0-9]{1,10}").fullmatch(x) for x in tokens
         ):
             raise ValueError("Invalid IMAP search response")
         uids = sorted(set(int(x) for x in tokens))

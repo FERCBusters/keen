@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import mimetypes
 import os
-import re
 from typing import Any
 from urllib.parse import quote
+
+from app.security.regex import scan_pattern
 
 # ---------------------------------------------------------------------------
 # Display helpers
@@ -18,7 +19,7 @@ def safe_download_ext(ext: str) -> str:
     if not ext.startswith("."):
         ext = "." + ext
     ext = ext.strip().lower()
-    if re.fullmatch(r"\.[a-z0-9]{1,10}", ext):
+    if scan_pattern(r"\.[a-z0-9]{1,10}").fullmatch(ext):
         return ext
     return ""
 

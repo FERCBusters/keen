@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -20,6 +19,7 @@ from app.ingest.connections import (
 )
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
+from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
 
@@ -95,7 +95,7 @@ def _taiga_client() -> httpx.Client:
     return _base_client(headers={"Authorization": f"Bearer {token}"})
 
 
-_WS_RE = re.compile(r"\s+")
+_WS_RE = scan_pattern(r"\s+")
 
 
 def _clean_snippet(s: str, limit: int = 160) -> str:

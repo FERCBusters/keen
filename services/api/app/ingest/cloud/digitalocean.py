@@ -9,7 +9,6 @@ followed. DigitalOcean publishes no API for team members, so KEEN lists none.
 from __future__ import annotations
 
 import ipaddress
-import re
 from datetime import datetime, timedelta
 
 from app.core.config import settings
@@ -27,11 +26,12 @@ from app.ingest.cloud.base import (
     plural,
     text_field,
 )
+from app.security.regex import scan_pattern
 
 ORIGIN = "https://api.digitalocean.com"
 # Team and account IDs are 40 hexadecimal digits; UUIDs are accepted too.
-IDENT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
-TOKEN = re.compile(r"[A-Za-z0-9_.-]{16,512}")
+IDENT = scan_pattern(r"[0-9a-f]{40}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+TOKEN = scan_pattern(r"[A-Za-z0-9_.-]{16,512}")
 PAGE_SIZE = 200
 MAX_PAGES = 100
 ADMIN_PORTS = (22, 3389)
@@ -206,7 +206,7 @@ def databases(api: DigitalOcean) -> Check:
     exposed = []
     for database in found:
         ident = str(database.get("id") or "")
-        if not re.fullmatch(r"[0-9a-f-]{36}", ident):
+        if not scan_pattern(r"[0-9a-f-]{36}").fullmatch(ident):
             raise Unavailable("unavailable")
         rules = api.get(f"/v2/databases/{ident}/firewall").get("rules")
         if not isinstance(rules, list):

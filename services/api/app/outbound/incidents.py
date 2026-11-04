@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
@@ -12,11 +11,12 @@ import httpx
 from app.core.config import settings
 from app.ingest.http import client as secure_http_client
 from app.outbound.signing import signature_headers
+from app.security.regex import scan_pattern
 
 log = logging.getLogger(__name__)
 
 
-_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_CONTROL_CHARS_RE = scan_pattern(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def sanitize_plain_text(value: str | None, *, max_chars: int) -> str:

@@ -10,7 +10,6 @@ activity comes from the audit ingester, which records the Reports API.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 
 from app.core.config import settings
@@ -28,8 +27,9 @@ from app.ingest.cloud.base import (
     parse_time,
     plural,
 )
+from app.security.regex import scan_pattern
 
-EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
+EMAIL = scan_pattern(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
 DIRECTORY = "https://www.googleapis.com/auth/admin.directory.user.readonly"
 USER_PAGE = 500
 USER_PAGES = 60

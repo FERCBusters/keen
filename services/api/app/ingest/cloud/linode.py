@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import re
 from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
@@ -32,10 +31,11 @@ from app.ingest.cloud.base import (
     plural,
     text_field,
 )
+from app.security.regex import scan_pattern
 
 ORIGIN = "https://api.linode.com"
-TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{16,512}")
-EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
+TOKEN = scan_pattern(r"[A-Za-z0-9._~+/=-]{16,512}")
+EMAIL = scan_pattern(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
 PAGE_SIZE = 500
 MAX_PAGES = 50
 ADMIN_PORTS = (22, 3389)
@@ -308,7 +308,7 @@ def kubernetes(api: Linode) -> Check:
     flagged = []
     for cluster in clusters:
         ident = str(cluster.get("id"))
-        if not re.fullmatch(r"[0-9]{1,12}", ident):
+        if not scan_pattern(r"[0-9]{1,12}").fullmatch(ident):
             raise Unavailable("unavailable")
         plane = cluster.get("control_plane")
         plane = plane if isinstance(plane, dict) else {}
@@ -342,7 +342,7 @@ def collect() -> list[ScopeResult]:
     with connect() as api:
         account = api.get("/v4/account")
         key = clip(account.get("euuid"), 64).upper()
-        if not re.fullmatch(r"[0-9A-F][0-9A-F-]{15,63}", key):
+        if not scan_pattern(r"[0-9A-F][0-9A-F-]{15,63}").fullmatch(key):
             raise Unavailable("unavailable")
         people: list[Identity] = []
 

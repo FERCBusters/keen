@@ -38,7 +38,6 @@ const records = {
   ],
   assets: [{ id: 'a1', asset: 'Database', name: 'Database', controls: [], clauses: [] }],
   licenses: [{ id: 'l1', name: 'License' }],
-  aws_accounts: [{ id: 'aws1', name: 'Production' }],
   access_control_matrix: [],
   effectiveness_measures: [
     {
@@ -76,7 +75,6 @@ async function fixture(t, options = {}) {
           assets: [],
           asset_categories: [],
           licenses: [],
-          aws_accounts: [],
           business_processes: [],
           controls: [],
           clauses: [],

@@ -9,139 +9,19 @@ from sqlalchemy.orm import Session
 from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import (
     IsmsAccessControlMatrixEntry,
-    IsmsAwsAccount,
     IsmsOrgNode,
     RiskAsset,
     User,
 )
 from app.services.context import ChangeContext
-from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
 from app.services.text import clean_text
 
 from .common import _by_id_or_404, _record
-from .constants import ACCESS_STATUSES
-from .mutations import _replace_access_control_accounts, _replace_access_control_roles
-from .schemas import AccessControlMatrixPayload, AwsAccountPayload
-from .serializers import _access_control_matrix_out, _aws_account_out, _aws_accounts_out
-
-
-def create_aws_account(
-    *, payload: AwsAccountPayload, context: ChangeContext, user: User, db: Session
-):
-    name = clean_text(
-        payload.name, max_len=256, required=True, label="hosting account name"
-    )
-    account_id = clean_text(payload.account_id, max_len=32) or None
-    if (
-        account_id
-        and db.query(IsmsAwsAccount.id)
-        .filter(IsmsAwsAccount.account_id == account_id)
-        .first()
-    ):
-        raise DomainError(status_code=400, detail="Hosting account id already exists")
-    row = IsmsAwsAccount(
-        name=name,
-        account_id=account_id,
-        notes=clean_text(payload.notes, max_len=12000),
-        created_by_user_id=user.id,
-        created_at=_utcnow(),
-        updated_at=_utcnow(),
-    )
-    db.add(row)
-    db.flush()
-    after = _aws_account_out(row, include_entry_count=True)
-    record_entity_changelog(
-        db,
-        entity_type="isms_aws_account",
-        entity_id=row.id,
-        action="created",
-        before=None,
-        after=after,
-        user=user,
-        request_method=context.method,
-        request_path=context.path,
-    )
-    db.commit()
-    return after
-
-
-def list_aws_accounts(*, user: User, db: Session):
-    return {"items": _aws_accounts_out(db)}
-
-
-def update_aws_account(
-    *,
-    account_id: str,
-    payload: AwsAccountPayload,
-    context: ChangeContext,
-    user: User,
-    db: Session,
-):
-    row = _by_id_or_404(db, IsmsAwsAccount, account_id, "hosting account")
-    before = _aws_account_out(row, include_entry_count=True)
-    fields = set(payload.model_fields_set or set())
-    if "name" in fields:
-        row.name = clean_text(
-            payload.name, max_len=256, required=True, label="hosting account name"
-        )
-    if "account_id" in fields:
-        next_account_id = clean_text(payload.account_id, max_len=32) or None
-        if next_account_id:
-            existing = (
-                db.query(IsmsAwsAccount.id)
-                .filter(
-                    IsmsAwsAccount.account_id == next_account_id,
-                    IsmsAwsAccount.id != row.id,
-                )
-                .first()
-            )
-            if existing:
-                raise DomainError(
-                    status_code=400, detail="Hosting account id already exists"
-                )
-        row.account_id = next_account_id
-    if "notes" in fields:
-        row.notes = clean_text(payload.notes, max_len=12000)
-    row.updated_at = _utcnow()
-    db.add(row)
-    db.flush()
-    after = _aws_account_out(row, include_entry_count=True)
-    record_entity_changelog(
-        db,
-        entity_type="isms_aws_account",
-        entity_id=row.id,
-        action="updated",
-        before=before,
-        after=after,
-        user=user,
-        request_method=context.method,
-        request_path=context.path,
-    )
-    db.commit()
-    return after
-
-
-def delete_aws_account(
-    *, account_id: str, context: ChangeContext, user: User, db: Session
-):
-    row = _by_id_or_404(db, IsmsAwsAccount, account_id, "hosting account")
-    before = _aws_account_out(row, include_entry_count=True)
-    record_entity_changelog(
-        db,
-        entity_type="isms_aws_account",
-        entity_id=row.id,
-        action="deleted",
-        before=before,
-        after=None,
-        user=user,
-        request_method=context.method,
-        request_path=context.path,
-    )
-    db.delete(row)
-    db.commit()
-    return {"ok": True}
+from .mutations import _replace_access_control_roles
+from .schemas import AccessControlMatrixPayload
+from .serializers import _access_control_matrix_out
 
 
 def _validate_access_control_payload(
@@ -161,9 +41,6 @@ def _validate_access_control_payload(
     for role_id in set(role_ids):
         if not db.query(IsmsOrgNode.id).filter(IsmsOrgNode.id == role_id).first():
             raise DomainError(status_code=400, detail="Unknown organisation chart role")
-    if (not fields or "status" in fields) and payload.status:
-        if payload.status.strip() not in ACCESS_STATUSES:
-            raise DomainError(status_code=400, detail="Invalid access control status")
 
 
 def create_access_control_matrix_entry(
@@ -177,19 +54,12 @@ def create_access_control_matrix_entry(
     fw = framework_parameter(framework)
     if not payload.service_asset_id:
         raise DomainError(status_code=400, detail="service_asset_id is required")
-    if not payload.aws_account_ids:
-        raise DomainError(
-            status_code=400, detail="At least one hosting account is required"
-        )
     _validate_access_control_payload(db, payload)
-    # Validation has refused blank and unknown statuses.
-    status = (payload.status or "Pending Approval").strip()
     row = IsmsAccessControlMatrixEntry(
         task_action=clean_text(
             payload.task_action, max_len=20000, required=True, label="task/action"
         ),
         service_asset_id=payload.service_asset_id,
-        status=status,
         notes=clean_text(payload.notes, max_len=12000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
@@ -197,7 +67,6 @@ def create_access_control_matrix_entry(
     )
     db.add(row)
     db.flush()
-    _replace_access_control_accounts(db, row, payload.aws_account_ids)
     _replace_access_control_roles(db, row, payload.role_org_node_ids or [])
     db.flush()
     after = _access_control_matrix_out(db, row, fw)
@@ -256,18 +125,10 @@ def update_access_control_matrix_entry(
         if not payload.service_asset_id:
             raise DomainError(status_code=400, detail="service_asset_id is required")
         row.service_asset_id = payload.service_asset_id
-    if "status" in fields:
-        row.status = (payload.status or "Pending Approval").strip()
     if "role_org_node_ids" in fields:
         _replace_access_control_roles(db, row, payload.role_org_node_ids or [])
     if "notes" in fields:
         row.notes = clean_text(payload.notes, max_len=12000)
-    if "aws_account_ids" in fields:
-        if not payload.aws_account_ids:
-            raise DomainError(
-                status_code=400, detail="At least one hosting account is required"
-            )
-        _replace_access_control_accounts(db, row, payload.aws_account_ids)
     row.updated_at = _utcnow()
     db.add(row)
     db.flush()

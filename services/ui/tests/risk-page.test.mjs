@@ -81,6 +81,7 @@ async function riskPage(t, options = {}) {
     query: options.query ?? '&id=r1',
     me: options.me || { is_admin: true, user: 'root' },
     globals: options.globals,
+    confirm: options.confirm ?? true,
     get: async (u) => {
       const p = u.pathname;
       if (p === '/api/v1/risks/r1') {
@@ -148,6 +149,7 @@ test('risk details render scores, types, controls and mitigator context as text'
   );
   assert.equal(ui.el('riskMeta').textContent, 'A · updated 2026-04-01T00:00:00Z');
   assert.equal(ui.el('editRisk').getAttribute('href'), '/risk-wizard.html?id=r1&framework=A');
+  assert.equal(ui.el('deleteRisk').style.display, '');
   assert.match(ui.el('riskVisualisation').getAttribute('href'), /tab=visualisations/);
   assert.equal(ui.el('riskTypes').querySelector('b'), null);
   // The kind badge, then one badge per security property.
@@ -241,6 +243,7 @@ test('risks without optional data show fallbacks and readers lose edit and sampl
   assert.equal(ui.el('riskMitigatorContextWrap').style.display, 'none');
   assert.match(ui.el('linkedControls').textContent, /No controls are mapped/);
   assert.equal(ui.el('editRisk').style.display, 'none');
+  assert.equal(ui.el('deleteRisk').style.display, 'none');
   assert.equal(ui.el('sampleRiskAudit').style.display, 'none');
   assert.equal(ui.el('riskQuestions').querySelector('[data-question-ask]').hidden, true);
   assert.match(ui.el('swotRelatedPane').textContent, /No SWOT items linked/);
@@ -315,6 +318,44 @@ test('risks can be sampled into audits with a descriptive title', async (t) => {
   assert.equal(state.posted[0].path, '/api/v1/audits/au1/evidence');
   assert.equal(state.posted[0].body.entity_type, 'risk');
   assert.equal(state.posted[0].body.title, '<img src=x onerror=alert(1)>Payroll DB - Ransomware');
+});
+
+test('risk managers delete a risk after confirming it and return to the register', async (t) => {
+  const navigated = [];
+  const location = {
+    origin: 'https://keen.example',
+    pathname: '/risk.html',
+    search: '?framework=A&id=r1',
+    href: 'https://keen.example/risk.html?framework=A&id=r1',
+    assign: (url) => navigated.push(url),
+  };
+  const cancelled = await riskPage(t, { confirm: false, globals: { location } });
+  cancelled.ui.el('deleteRisk').click();
+  await settle(() => cancelled.ui.el('deleteRisk').disabled === false);
+  assert.deepEqual(cancelled.state.removed, []);
+
+  const asked = [];
+  const { ui, state } = await riskPage(t, {
+    confirm: (options) => (asked.push(options), true),
+    globals: { location },
+  });
+  ui.el('deleteRisk').click();
+  await settle(() => navigated.length === 1);
+  assert.deepEqual(state.removed, ['/api/v1/risks/r1']);
+  assert.deepEqual(navigated, ['/risks.html?framework=A']);
+  assert.equal(asked[0].danger, true);
+  assert.equal(
+    asked[0].message,
+    'Delete “<img src=x onerror=alert(1)>Payroll DB - Ransomware”? Its links to controls, ' +
+      'interested parties and posture checks are removed with it.',
+  );
+
+  const refused = await riskPage(t, { deleteFail: true, globals: { location } });
+  refused.ui.el('deleteRisk').click();
+  await settle(() => /Could not delete/.test(refused.ui.el('status').textContent));
+  assert.equal(refused.ui.el('status').textContent, 'Could not delete the risk: Delete refused');
+  assert.equal(refused.ui.el('deleteRisk').disabled, false);
+  assert.equal(navigated.length, 1);
 });
 
 test('load failures and a missing id are reported', async (t) => {

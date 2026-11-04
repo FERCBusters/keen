@@ -6,7 +6,6 @@ Only entry points establish a scope; upstream event payloads cannot choose it.
 
 import hashlib
 import os
-import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
@@ -23,6 +22,7 @@ from app.core.managed_configuration import load_document as deployment_document
 from app.core.valkey import get_valkey
 from app.db.models import SourceConnection
 from app.integrations.transport import decrypt
+from app.security.regex import scan_pattern
 
 # Public endpoint/account fields and secret fields are deliberately enumerated.
 FIELDS = {
@@ -213,7 +213,7 @@ def connections(db, source=None):
             ):
                 raise ValueError("Unsupported field in source connections file")
             key = str(entry.get("id", ""))
-            if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", key):
+            if not scan_pattern(r"[a-zA-Z0-9_-]{1,80}").fullmatch(key):
                 raise ValueError(
                     "Connection file IDs must be stable alphanumeric identifiers"
                 )

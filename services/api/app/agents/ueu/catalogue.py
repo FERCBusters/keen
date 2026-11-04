@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import lru_cache
@@ -20,21 +19,22 @@ from pathlib import Path
 from typing import Any
 
 from app.agents.ueu.jcs import MAX_SAFE_INTEGER
+from app.security.regex import scan_pattern
 
 MAX_STRING = 1024
 MAX_LIST_ITEMS = 64
 MAX_LIST_STRING = 256
 MAX_FIELDS = 48
 MAX_CATALOGUE_BYTES = 1024 * 1024
-FIELD_NAME = re.compile(r"[a-z][a-z0-9_.]{0,63}")
-EVENT_TYPE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){1,4}")
-CATALOGUE_ID = re.compile(r"[a-z][a-z0-9_.-]{0,31}")
-CATALOGUE_VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z_.-]{0,31}")
+FIELD_NAME = scan_pattern(r"[a-z][a-z0-9_.]{0,63}")
+EVENT_TYPE = scan_pattern(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*+){1,4}")
+CATALOGUE_ID = scan_pattern(r"[a-z][a-z0-9_.-]{0,31}")
+CATALOGUE_VERSION = scan_pattern(r"[0-9A-Za-z][0-9A-Za-z_.-]{0,31}")
 TYPES = {"boolean", "integer", "string", "timestamp", "string_list"}
 SENDABLE = {"", "evidence_metadata", "operational", "security_sensitive"}
 POLICIES = {"forbidden", "optional", "required"}
 BUILTIN = Path(__file__).with_name("catalogues")
-_TIMESTAMP = re.compile(
+_TIMESTAMP = scan_pattern(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?"
     r"(?:Z|[+-][0-9]{2}:[0-9]{2})"
 )

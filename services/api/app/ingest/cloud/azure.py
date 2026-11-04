@@ -9,7 +9,6 @@ results for one tenant never come from another. Tokens last for one read.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -37,12 +36,13 @@ from app.ingest.cloud.base import (
     text_field,
     unknown,
 )
+from app.security.regex import scan_pattern
 
 LOGIN = "https://login.microsoftonline.com"
 GRAPH = "https://graph.microsoft.com"
 ARM = "https://management.azure.com"
-GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
+GUID = scan_pattern(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+EMAIL = scan_pattern(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
 SECRET_LIMIT = 1024
 MAX_PAGES = 100
 # Each database server's firewall rules are one more request.

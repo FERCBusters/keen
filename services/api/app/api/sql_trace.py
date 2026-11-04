@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import re
 import time
 from urllib.parse import urlsplit
 
 from app.db import sql_trace
+from app.security.regex import scan_pattern
 
-_IDENTIFIER = re.compile(r"[0-9a-fA-F]{8}-?(?:[0-9a-fA-F]{4}-?){3}[0-9a-fA-F]{12}|\d+")
+_IDENTIFIER = scan_pattern(
+    r"[0-9a-fA-F]{8}-?(?:[0-9a-fA-F]{4}-?){3}[0-9a-fA-F]{12}|\d+"
+)
 
 
 def route_label(path: str) -> str:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlsplit
@@ -25,6 +24,7 @@ from app.ingest.log_pipeline import (
     try_parse_json_line,
 )
 from app.security.errors import collection_error
+from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
 
@@ -405,7 +405,9 @@ def ingest_cloudwatch_logs_all(db: Session) -> list[dict[str, Any]]:
             lg = str(
                 q.get("log_group") or q.get("logGroupName") or "cloudwatch"
             ).strip()
-            name = re.sub(r"[^a-zA-Z0-9._-]+", "-", lg.strip("/") or "cloudwatch")[:60]
+            name = scan_pattern(r"[^a-zA-Z0-9._-]+").sub(
+                "-", lg.strip("/") or "cloudwatch"
+            )[:60]
 
         try:
             out.append(ingest_cloudwatch_logs_once(db, name, q, defaults))

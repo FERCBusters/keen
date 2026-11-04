@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
-import re
 import secrets
 import time
 import uuid
@@ -27,6 +26,7 @@ from app.core.valkey import get_valkey
 from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
 from app.security.agent_signatures import SignatureError, key_id, verify_proof
 from app.security.rate_limit import address_window_allow, fixed_window_allow
+from app.security.regex import scan_pattern
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.ueu_evidence import catalogue_grant
@@ -414,7 +414,7 @@ def require_pinned_identity(db, pinned):
 def enroll(*, body: Enrollment, context: ChangeContext, db: Session):
     live_only()
     rate(context)
-    match = re.fullmatch(CREDENTIAL, body.credential)
+    match = scan_pattern(CREDENTIAL).fullmatch(body.credential)
     if not match:
         raise DomainError(401, "Invalid enrollment credential")
     credential = body.credential

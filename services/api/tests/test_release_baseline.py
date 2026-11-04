@@ -146,6 +146,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0043_access_matrix_fields",
         "0042_access_matrix_approver",
         "0041_mfa_code_failures",
         "0040_remove_audittrail_read",
@@ -374,6 +375,83 @@ def test_measure_method_text_is_folded_into_the_description():
             command.downgrade(config, "0013_events_source_timestamp")
             assert {"effectiveness_measure", "metric"} <= columns(conn)
             assert "source_type" not in columns(conn)
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_access_matrix_status_and_hosting_accounts_are_removed():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "matrix_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def catalogue(conn, query):
+        return set(conn.scalars(text(query), {"schema": schema}))
+
+    def tables(conn):
+        return catalogue(
+            conn,
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = :schema AND table_name LIKE 'isms_%'",
+        )
+
+    def columns(conn):
+        return catalogue(
+            conn,
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = :schema "
+            "AND table_name = 'isms_access_control_matrix_entries'",
+        )
+
+    accounts = {"isms_aws_accounts", "isms_access_control_matrix_aws_accounts"}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0042_access_matrix_approver")
+            conn.execute(
+                text(
+                    "INSERT INTO isms_access_control_matrix_entries"
+                    " (id, task_action, status) VALUES (:id, 'Deploy', 'Approved')"
+                ),
+                {"id": uuid.uuid4()},
+            )
+            conn.commit()
+
+            command.upgrade(config, "0043_access_matrix_fields")
+            assert not accounts & tables(conn)
+            assert "status" not in columns(conn)
+
+            command.downgrade(config, "0042_access_matrix_approver")
+            assert accounts <= tables(conn)
+            assert "status" in columns(conn)
+            # Rows saved without a status stand approved; a new row waits.
+            assert (
+                conn.scalar(
+                    text("SELECT status FROM isms_access_control_matrix_entries")
+                )
+                == "Approved"
+            )
+            added = conn.scalar(
+                text(
+                    "INSERT INTO isms_access_control_matrix_entries (id)"
+                    " VALUES (:id) RETURNING status"
+                ),
+                {"id": uuid.uuid4()},
+            )
+            assert added == "Pending Approval"
+            conn.rollback()
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

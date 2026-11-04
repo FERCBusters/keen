@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import uuid
 from functools import lru_cache
 from typing import Any, Optional
@@ -12,6 +11,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from app.core.config import settings
+from app.security.regex import scan_pattern
 
 log = logging.getLogger(__name__)
 
@@ -60,13 +60,13 @@ def control_justification(control: Any) -> str | None:
     return mapped
 
 
-_REF_NUMERIC_RE = re.compile(r"^\d+$")
+_REF_NUMERIC_RE = scan_pattern(r"^\d+$")
 
 
-_REF_ALPHA_RE = re.compile(r"^[A-Za-z]+$")
+_REF_ALPHA_RE = scan_pattern(r"^[A-Za-z]+$")
 
 
-_REF_ALNUM_RE = re.compile(r"^([A-Za-z]+)(\d+)$")
+_REF_ALNUM_RE = scan_pattern(r"^([A-Za-z]+)(\d+)$")
 
 
 def _ref_token_key(token: str) -> tuple:
@@ -134,7 +134,7 @@ def try_uuid(v: str) -> Optional[uuid.UUID]:
 
 # Control and clause references are stored in columns of this length.
 _LINK_REF_LIMIT = 64
-_FRAMEWORK_SLUG = re.compile(r"[A-Za-z0-9._:-]{1,64}")
+_FRAMEWORK_SLUG = scan_pattern(r"[A-Za-z0-9._:-]{1,64}")
 
 
 def _skip_link(path: str, entry: str, problem: str) -> None:

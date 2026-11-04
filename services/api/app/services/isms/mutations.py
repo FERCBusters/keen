@@ -10,10 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
-    IsmsAccessControlMatrixAwsAccount,
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
-    IsmsAwsAccount,
     IsmsDocument,
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
@@ -348,41 +346,6 @@ def _replace_objective_resources(
         )
     db.flush()
     db.expire(objective, ["resource_users"])
-
-
-def _replace_access_control_accounts(
-    db: Session,
-    row: IsmsAccessControlMatrixEntry,
-    aws_account_ids: list[uuid.UUID] | None,
-) -> None:
-    if aws_account_ids is None:
-        return
-    db.query(IsmsAccessControlMatrixAwsAccount).filter(
-        IsmsAccessControlMatrixAwsAccount.entry_id == row.id
-    ).delete(synchronize_session="fetch")
-    seen = set()
-    now = _utcnow()
-    for account_id in aws_account_ids or []:
-        if account_id in seen:
-            continue
-        if (
-            not db.query(IsmsAwsAccount.id)
-            .filter(IsmsAwsAccount.id == account_id)
-            .first()
-        ):
-            raise DomainError(
-                status_code=400, detail=f"Unknown hosting account: {account_id}"
-            )
-        seen.add(account_id)
-        db.add(
-            IsmsAccessControlMatrixAwsAccount(
-                entry_id=row.id,
-                aws_account_id=account_id,
-                created_at=now,
-            )
-        )
-    db.flush()
-    db.expire(row, ["aws_account_links"])
 
 
 def _replace_access_control_roles(

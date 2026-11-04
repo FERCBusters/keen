@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from urllib.parse import urlsplit
 
@@ -18,11 +17,12 @@ from app.db.models import (
     Mapping,
 )
 from app.schemas import FrameworkUpsert
+from app.security.regex import scan_pattern
 from app.services.control_evidence_stats import clear_stats_caches
 from app.services.errors import DomainError
 from app.services.framework_catalogue import _framework_selection
 
-_SLUG_RE = re.compile(r"[A-Za-z0-9._:-]{1,64}")
+_SLUG_RE = scan_pattern(r"[A-Za-z0-9._:-]{1,64}")
 
 
 def validate_framework_slug(slug: str) -> str:

@@ -14,6 +14,7 @@ import unicodedata
 from collections import Counter
 from functools import lru_cache
 
+from app.security.regex import scan_pattern
 from app.services.evidence_taxonomy import CONCEPTS
 
 _STOP = set(
@@ -39,7 +40,7 @@ _ALIASES = {
 
 
 # Boundaries inside code-style names: PullRequestEvent, TLSHandshake.
-_CASE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_CASE = scan_pattern(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 
 def activity_words(value) -> str:
@@ -54,7 +55,9 @@ def activity_words(value) -> str:
 
 
 def normalise(text: str) -> str:
-    words = re.findall(r"[^\W_]+", unicodedata.normalize("NFKC", text).casefold())
+    words = scan_pattern(r"[^\W_]+").findall(
+        unicodedata.normalize("NFKC", text).casefold()
+    )
     result = []
     for word in words:
         if len(word) > 4 and word.endswith("ies"):
@@ -103,7 +106,7 @@ def _names(text, phrase, excluded):
     if not _has(text, phrase):
         return False
     for longer in excluded:
-        text = re.sub(rf"(?<!\S){re.escape(longer)}(?!\S)", "|", text)
+        text = scan_pattern(rf"(?<!\S){re.escape(longer)}(?!\S)").sub("|", text)
     return _has(text, phrase)
 
 

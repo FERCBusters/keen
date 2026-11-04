@@ -10,7 +10,6 @@ clusters per region, and Audit Trail in the regions that offer it.
 from __future__ import annotations
 
 import ipaddress
-import re
 from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
@@ -34,11 +33,12 @@ from app.ingest.cloud.base import (
     split_list,
     text_field,
 )
+from app.security.regex import scan_pattern
 
 ORIGIN = "https://api.scaleway.com"
-UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-ZONE = re.compile(r"([a-z]{2}-[a-z]{3})-[1-9]")
-EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
+UUID = scan_pattern(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+ZONE = scan_pattern(r"([a-z]{2}-[a-z]{3})-[1-9]")
+EMAIL = scan_pattern(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
 DEFAULT_ZONES = (
     "fr-par-1,fr-par-2,fr-par-3,nl-ams-1,nl-ams-2,nl-ams-3,pl-waw-1,pl-waw-2,pl-waw-3"
 )

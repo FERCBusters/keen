@@ -9,7 +9,6 @@ shows its check or subject as Risk accepted until the acceptance lapses.
 
 from __future__ import annotations
 
-import uuid
 from datetime import timedelta
 
 from pydantic import Field
@@ -27,7 +26,7 @@ from app.db.models import (
 from app.ingest.cloud import KEYS
 from app.ingest.cloud import provider as cloud_provider
 from app.ingest.cloud.base import REASONS
-from app.ingest.cloud.runner import enabled
+from app.ingest.cloud.runner import enabled, scope_asset
 from app.security.auth import ROLE_ADMIN
 from app.security.permissions import has_permission
 from app.security.roles import compute_effective_role
@@ -39,8 +38,6 @@ from app.services.frameworks import framework_parameter
 ACTIVITY_SHOWN = 20
 # One refresh request per provider in this window.
 REFRESH_SPACING = timedelta(minutes=2)
-ASSET_NAMESPACE = uuid.UUID("0f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f")
-CATEGORY = "Cloud services"
 
 
 def _iso(value):
@@ -328,26 +325,6 @@ class CloudRiskInput(posture_risks.PostureRiskInput):
     subject_key: str = Field(default="", max_length=256)
 
 
-def _scope_asset(db, provider, scope: CloudPostureScope, vendor_id):
-    kind = scope.kind or provider.scope_noun
-    label = scope.label if scope.label != scope.scope_key else ""
-    name = f"{provider.label} {kind} · " + (
-        f"{label} ({scope.scope_key})" if label else scope.scope_key
-    )
-    return posture_risks.category_asset(
-        db,
-        asset_id=uuid.uuid5(ASSET_NAMESPACE, f"{provider.key}:{scope.scope_key}"),
-        name=name[:256],
-        category=CATEGORY,
-        subcategory=f"{provider.label} {kind}s",
-        description=(
-            f"{provider.label} {kind} {scope.scope_key}. KEEN created this asset "
-            "when a risk was recorded against its posture."
-        ),
-        vendor_id=vendor_id,
-    )
-
-
 def create_cloud_risk(*, db, user, vendor_id, body: CloudRiskInput):
     """Record a risk for a cloud check, or one subject within it."""
     _require_read(db, user)
@@ -375,7 +352,7 @@ def create_cloud_risk(*, db, user, vendor_id, body: CloudRiskInput):
     if body.subject_key and body.subject_key not in (check.get("subjects") or []):
         raise DomainError(404, "That subject is not listed for this check")
     framework = framework_parameter(body.framework)
-    asset = _scope_asset(db, provider, scope, vendor_id)
+    asset = scope_asset(db, provider, scope, vendor_id)
     risk = posture_risks.record(
         db,
         user,

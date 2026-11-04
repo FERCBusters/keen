@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import uuid
 from typing import Any
 
@@ -31,6 +30,7 @@ from app.db.models import (
     RiskControlLink,
     Story,
 )
+from app.security.regex import scan_pattern
 from app.services.audits.references import control_out
 from app.services.audits.validation import (
     AUDIT_SAMPLE_ENTITY_LABELS,
@@ -40,7 +40,7 @@ from app.services.errors import DomainError
 
 
 def short_text(raw: str | None, limit: int = 160) -> str:
-    text = re.sub(r"\s+", " ", (raw or "").strip())
+    text = scan_pattern(r"\s+").sub(" ", (raw or "").strip())
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 1)].rstrip() + "…"
@@ -330,7 +330,7 @@ def audit_sample_entity_reference(
         )
         if row:
             title = f"Access control matrix: {short_text(row.task_action, 180)}"
-            subtitle = row.status or ""
+            subtitle = row.service_asset.name if row.service_asset else ""
     elif entity_type == "isms_application_configuration":
         row = (
             db.query(IsmsApplicationConfigurationEntry)

@@ -14,7 +14,6 @@ review; nothing here changes a rule or a mapping.
 
 from __future__ import annotations
 
-import re
 from bisect import bisect_right
 from datetime import datetime, timedelta
 from itertools import accumulate
@@ -27,7 +26,7 @@ from sqlalchemy.orm import Session, aliased
 from app.core.cache import cached_json
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event, Mapping
-from app.security.regex import validate_pattern
+from app.security.regex import scan_pattern, validate_pattern
 from app.services.errors import DomainError
 from app.services.event_filters import statement_cancelled
 from app.services.managed_configurations import get_rules
@@ -51,7 +50,7 @@ QUERY_TIMEOUT_MS = 15000
 
 # Characters a pattern reads as syntax outside a character class; any other
 # character matches itself, so exact values escape only these and stay legible.
-_SYNTAX = re.compile(r"([\\.^$*+?{}\[\]|()])")
+_SYNTAX = scan_pattern(r"([\\.^$*+?{}\[\]|()])")
 
 # Conditions that hold one value, in exact and pattern forms, and that two
 # rules can share as one pattern. The exact form compares the whole value.

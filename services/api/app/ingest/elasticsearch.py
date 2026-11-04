@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlsplit
@@ -19,6 +18,7 @@ from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
+from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
 FIELD_DEFAULTS = {
@@ -50,7 +50,7 @@ def validate_input(entry):
     name = entry.get("name")
     if (
         not isinstance(name, str)
-        or not re.fullmatch(r"[A-Za-z0-9_. -]{1,128}", name)
+        or not scan_pattern(r"[A-Za-z0-9_. -]{1,128}").fullmatch(name)
         or not name.strip()
     ):
         raise ElasticsearchInputError(
@@ -60,7 +60,10 @@ def validate_input(entry):
     if not isinstance(indices, str) or not 1 <= len(indices) <= 512:
         raise ElasticsearchInputError("Enter an index, alias or data stream pattern")
     for part in indices.split(","):
-        if not re.fullmatch(r"[a-z0-9.*][a-z0-9._*-]*", part) or part in (".", ".."):
+        if not scan_pattern(r"[a-z0-9.*][a-z0-9._*-]*").fullmatch(part) or part in (
+            ".",
+            "..",
+        ):
             raise ElasticsearchInputError(
                 "Use comma-separated index patterns with lowercase names and optional * wildcards"
             )
@@ -72,9 +75,9 @@ def validate_input(entry):
     result["query"] = query.strip()
     for key, default in FIELD_DEFAULTS.items():
         value = entry.get(key) or default
-        if not isinstance(value, str) or not re.fullmatch(
-            r"[A-Za-z0-9_@][A-Za-z0-9_.@-]{0,255}", value
-        ):
+        if not isinstance(value, str) or not scan_pattern(
+            r"[A-Za-z0-9_@][A-Za-z0-9_.@-]{0,255}"
+        ).fullmatch(value):
             raise ElasticsearchInputError(
                 "Field mappings must be simple field names or dotted paths"
             )

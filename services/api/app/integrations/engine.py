@@ -3,10 +3,11 @@
 import hashlib
 import json
 import math
-import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote, urljoin, urlsplit
+
+from app.security.regex import scan_pattern
 
 from .errors import IntegrationError
 from .schema import Definition, has_dot_segment, pointer
@@ -171,7 +172,7 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
                             )
                         return quote(str(value), safe="")
 
-                    path = re.sub(r"\{([^}]+)\}", substitute, detail.path)
+                    path = scan_pattern(r"\{([^}]+)\}").sub(substitute, detail.path)
                     if has_dot_segment(path):
                         raise IntegrationError(
                             "A detail request value forms a . or .. path segment"
@@ -240,7 +241,7 @@ def next_link(headers) -> str | None:
     search takes time linear in the header's length.
     """
     link = next((v for k, v in headers.items() if k.lower() == "link"), "")
-    match = re.search(r'<([^<>]+)>\s*;\s*rel="?next"?', link)
+    match = scan_pattern(r'<([^<>]+)>\s*;\s*rel="?next"?').search(link)
     return match.group(1) if match else None
 
 

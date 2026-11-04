@@ -24,7 +24,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import re
 import uuid
 from collections import Counter, defaultdict
 from copy import deepcopy
@@ -48,7 +47,7 @@ from app.db.models import (
     RuleSuggestionRun,
     User,
 )
-from app.security.regex import compile_pattern
+from app.security.regex import compile_pattern, scan_pattern
 from app.services.control_inheritance import effective_framework_ids
 from app.services.control_suggestions import activity_words, rank_controls
 from app.services.errors import DomainError
@@ -413,7 +412,9 @@ def _rank(
 
 
 def _slug(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", activity_words(value).lower()).strip("_")
+    return (
+        scan_pattern(r"[^a-z0-9]+").sub("_", activity_words(value).lower()).strip("_")
+    )
 
 
 def _unique_id(stem: str, taken: set[str]) -> str:

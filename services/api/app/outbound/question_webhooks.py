@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 from urllib.parse import urlencode
@@ -12,11 +11,12 @@ import httpx
 from app.core.config import settings
 from app.ingest.http import client as secure_http_client
 from app.outbound.signing import signature_headers
+from app.security.regex import scan_pattern
 
 log = logging.getLogger(__name__)
 
 
-_SPLIT_RE = re.compile(r"[\s,]+")
+_SPLIT_RE = scan_pattern(r"[\s,]+")
 
 
 def _split_urls(raw: str | None) -> list[str]:
@@ -60,7 +60,7 @@ def _parse_json_headers(raw: str | None) -> dict[str, str]:
             if k is None or v is None:
                 continue
             key_str = str(k)
-            if not key_str or not re.match(r"^[a-zA-Z0-9_-]+$", key_str):
+            if not key_str or not scan_pattern(r"^[a-zA-Z0-9_-]+$").match(key_str):
                 continue
             out[key_str] = str(v)
         return out

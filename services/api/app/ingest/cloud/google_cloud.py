@@ -11,7 +11,6 @@ checks.
 from __future__ import annotations
 
 import ipaddress
-import re
 from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
@@ -33,10 +32,11 @@ from app.ingest.cloud.base import (
     split_list,
     text_field,
 )
+from app.security.regex import scan_pattern
 
-ORGANISATION = re.compile(r"[1-9][0-9]{0,19}")
-PROJECT = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")
-EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
+ORGANISATION = scan_pattern(r"[1-9][0-9]{0,19}")
+PROJECT = scan_pattern(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")
+EMAIL = scan_pattern(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
 MAX_PROJECTS = 50
 PAGE = 500
 MAX_PAGES = 40
@@ -229,8 +229,8 @@ def keys(api: Api, now: datetime) -> Check:
         ends = parse_time(key.get("validBeforeTime"))
         if ends is not None and ends <= now and ends.year < 9999:
             continue
-        match = re.search(
-            r"/serviceAccounts/([^/]+)/keys/", str(key.get("name") or key["_name"])
+        match = scan_pattern(r"/serviceAccounts/([^/]+)/keys/").search(
+            str(key.get("name") or key["_name"])
         )
         if not match:
             continue

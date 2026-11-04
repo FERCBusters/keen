@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -30,6 +29,7 @@ from app.ingest.connections import connection_runs, load_document, namespace, se
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
+from app.security.regex import scan_pattern
 from app.security.xml import parse_untrusted_xml
 from app.services.ingestion_pause import pausable
 
@@ -129,7 +129,7 @@ def _feed_cursor_name(url: str, name_hint: str | None = None) -> str:
     # Keep <= 128 chars and stable.
     h = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
     hint = (name_hint or "").strip().lower()
-    hint = re.sub(r"[^a-z0-9._-]+", "-", hint)[:40].strip("-")
+    hint = scan_pattern(r"[^a-z0-9._-]+").sub("-", hint)[:40].strip("-")
     if hint:
         return f"rss:{hint}:{h}"
     return f"rss:{h}"
@@ -263,7 +263,7 @@ def _safe_label_from_url(url: str) -> str:
     path = (u.path or "").strip("/")
     bits = [host] + ([path.split("/")[0]] if path else [])
     s = "-".join([b for b in bits if b])
-    s = re.sub(r"[^a-z0-9._-]+", "-", s)
+    s = scan_pattern(r"[^a-z0-9._-]+").sub("-", s)
     return (s or "rss")[:60]
 
 

@@ -50,9 +50,6 @@ OBJECTIVE_STATUSES = {
 APP_SOURCE_TYPES = {"document", "person", "asset", "org_node"}
 
 
-ACCESS_STATUSES = {"Pending Approval", "Approved"}
-
-
 MEETING_LINK_TYPES = {"isms_document", "external_url"}
 
 

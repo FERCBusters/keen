@@ -10,7 +10,6 @@ with a provenance row recording the result of each check.
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import timezone
@@ -24,6 +23,7 @@ from app.db.models import AgentKey, UeuBatch, UeuEvidence
 from app.ingest.common import store_event_with_artifact
 from app.security.agent_signatures import SignatureError, verify_detached
 from app.security.redaction import redact_obj
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 
 BATCH_CONTEXT = "keen-ueu-batch-v1"
@@ -48,9 +48,9 @@ def effective_mode(env) -> int:
 
 
 COVERAGE = "evidence.collection.completed"
-_TEMPLATE = re.compile(r"\{([a-z][a-z0-9_.]{0,80})\}")
-_KEY_ID = re.compile(r"[0-9a-f-]{36}:[0-9a-f]{16}")
-_SIGNATURE = re.compile(r"[A-Za-z0-9_-]{86}")
+_TEMPLATE = scan_pattern(r"\{([a-z][a-z0-9_.]{0,80})\}")
+_KEY_ID = scan_pattern(r"[0-9a-f-]{36}:[0-9a-f]{16}")
+_SIGNATURE = scan_pattern(r"[A-Za-z0-9_-]{86}")
 
 
 class Rejected(DomainError):

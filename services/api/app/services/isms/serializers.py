@@ -13,7 +13,6 @@ from app.db.models import (
     ControlItem,
     FrameworkClause,
     IsmsAccessControlMatrixEntry,
-    IsmsAwsAccount,
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
@@ -311,32 +310,6 @@ def _asset_out(
     return _attach_links(db, out, "asset", row.id, framework, include_links)
 
 
-def _aws_account_out(
-    row: IsmsAwsAccount | None, *, include_entry_count: bool = False
-) -> dict[str, Any] | None:
-    if row is None:
-        return None
-    out = {
-        "id": str(row.id),
-        "name": row.name,
-        "account_id": row.account_id or "",
-        "notes": row.notes or "",
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "display": f"{row.name}{f' ({row.account_id})' if row.account_id else ''}",
-    }
-    if include_entry_count:
-        out["entry_count"] = len(row.access_matrix_links or [])
-    return out
-
-
-def _aws_accounts_out(db: Session) -> list[dict[str, Any]]:
-    rows = (
-        db.query(IsmsAwsAccount).order_by(func.lower(IsmsAwsAccount.name).asc()).all()
-    )
-    return [_aws_account_out(row, include_entry_count=True) for row in rows]
-
-
 def _access_control_matrix_out(
     db: Session,
     row: IsmsAccessControlMatrixEntry,
@@ -344,17 +317,6 @@ def _access_control_matrix_out(
     *,
     include_links: bool = True,
 ) -> dict[str, Any]:
-    accounts = [
-        _aws_account_out(link.aws_account)
-        for link in sorted(
-            list(row.aws_account_links or []),
-            key=lambda link: (
-                (link.aws_account.name or "").lower() if link.aws_account else "",
-                link.aws_account.account_id or "" if link.aws_account else "",
-            ),
-        )
-        if link.aws_account
-    ]
     service = (
         _asset_out(db, row.service_asset, framework, include_links=False)
         if row.service_asset
@@ -376,9 +338,6 @@ def _access_control_matrix_out(
         "task_action": row.task_action or "",
         "service_asset_id": str(row.service_asset_id) if row.service_asset_id else None,
         "service": service,
-        "aws_accounts": accounts,
-        "aws_account_ids": [acct["id"] for acct in accounts if acct],
-        "status": row.status,
         "roles": roles,
         "role_org_node_ids": [role["id"] for role in roles if role],
         "notes": row.notes or "",

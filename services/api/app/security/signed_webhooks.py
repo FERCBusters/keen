@@ -9,15 +9,16 @@ replayed either.
 
 import hashlib
 import hmac
-import re
 import secrets
 import time
+
+from app.security.regex import scan_pattern
 
 TIMESTAMP_HEADER = "X-Keen-Timestamp"
 SIGNATURE_HEADER = "X-Keen-Signature"
 TOLERANCE_SECONDS = 300
-_TIMESTAMP = re.compile(r"[0-9]{1,12}")
-_SIGNATURE = re.compile(r"v1=[0-9a-f]{64}")
+_TIMESTAMP = scan_pattern(r"[0-9]{1,12}")
+_SIGNATURE = scan_pattern(r"v1=[0-9a-f]{64}")
 # Signed with when there is no secret, so a refusal costs what a check does.
 _ABSENT = secrets.token_urlsafe(32)
 

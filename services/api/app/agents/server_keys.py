@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -47,6 +46,7 @@ from app.db.models import AgentEnrollmentProfile, AgentServerKey, KeenAgent
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
 from app.security.agent_signatures import b64url, unb64url
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 
 SUITE = hpke.Suite(
@@ -73,8 +73,8 @@ ROTATE_AFTER = timedelta(days=30)
 VALID_FOR = timedelta(days=37)
 DESTROY_GRACE = timedelta(hours=1)
 
-ENCRYPTION_KEY_ID = re.compile(r"[0-9a-f]{16}")
-FINGERPRINT = re.compile(r"[A-Za-z0-9_-]{22}")
+ENCRYPTION_KEY_ID = scan_pattern(r"[0-9a-f]{16}")
+FINGERPRINT = scan_pattern(r"[A-Za-z0-9_-]{22}")
 
 
 def fingerprint(raw_public_key: bytes) -> str:

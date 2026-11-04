@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import time
 from dataclasses import dataclass
 from functools import lru_cache
 
 from app.core.config import settings
 from app.core.managed_configuration import load_documents
+from app.security.regex import scan_pattern
 
 
 @dataclass(frozen=True)
@@ -20,8 +20,8 @@ class SourceMeta:
     color: str  # normalized hex: #RRGGBB
 
 
-_HEX_RE = re.compile(r"^#?[0-9a-fA-F]{6}$")
-_HEX3_RE = re.compile(r"^#?[0-9a-fA-F]{3}$")
+_HEX_RE = scan_pattern(r"^#?[0-9a-fA-F]{6}$")
+_HEX3_RE = scan_pattern(r"^#?[0-9a-fA-F]{3}$")
 _ENV_PREFIX_NAME = "KEEN_SOURCE_NAME_"
 _ENV_PREFIX_COLOR = "KEEN_SOURCE_COLOR_"
 
@@ -81,14 +81,14 @@ def _humanize_source(source: str) -> str:
     if source in SOURCE_LABELS:
         return SOURCE_LABELS[source]
     # Keep colon semantics readable (e.g. webhook:something -> Webhook: Something)
-    parts = [p for p in re.split(r"(:)", source) if p != ""]
+    parts = [p for p in scan_pattern(r"(:)").split(source) if p != ""]
     out: list[str] = []
     for p in parts:
         if p == ":":
             out.append(":")
             continue
         # replace separators with spaces and Title Case
-        s = re.sub(r"[_-]+", " ", p).strip()
+        s = scan_pattern(r"[_-]+").sub(" ", p).strip()
         out.append(s[:1].upper() + s[1:])
     # Ensure spacing around colons is pretty
     joined = " ".join(out).replace(" : ", ": ").replace(" :", ":")
@@ -129,7 +129,7 @@ def _auto_color(source: str) -> str:
 
 def _env_key(source: str) -> str:
     # SOURCE_NAME_<KEY> where <KEY> is upper and non-alnum -> underscore.
-    return re.sub(r"[^A-Za-z0-9]", "_", source).upper()
+    return scan_pattern(r"[^A-Za-z0-9]").sub("_", source).upper()
 
 
 def _merge(

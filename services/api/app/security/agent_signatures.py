@@ -13,7 +13,6 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -21,6 +20,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from app.agents.ueu.jcs import canonical
+from app.security.regex import scan_pattern
 
 OPERATIONS = ("otlp-logs", "heartbeat", "renew")
 WINDOW_SECONDS = 300
@@ -28,18 +28,18 @@ COMPONENTS = (
     '("@method" "keen-agent-operation" "keen-encryption-key" "content-digest" '
     '"content-type")'
 )
-_INPUT = re.compile(
+_INPUT = scan_pattern(
     r'keen=\("@method" "keen-agent-operation" "keen-encryption-key" "content-digest"'
     r' "content-type"\)'
     r';created=([0-9]{1,12});keyid="([0-9a-f-]{36}:[0-9a-f]{16})"'
     r';nonce="([A-Za-z0-9_-]{22})";alg="ed25519"'
 )
-_SIGNATURE = re.compile(r"keen=:([A-Za-z0-9+/]{86}==):")
-_DIGEST = re.compile(r"sha-256=:([A-Za-z0-9+/]{43}=):")
-_ENCRYPTION_KEY = re.compile(r"[0-9a-f]{16}")
-_PUBLIC_KEY = re.compile(r"[A-Za-z0-9_-]{43}")
-_B64URL_SIGNATURE = re.compile(r"[A-Za-z0-9_-]{86}")
-KEY_ID = re.compile(r"([0-9a-f-]{36}):([0-9a-f]{16})")
+_SIGNATURE = scan_pattern(r"keen=:([A-Za-z0-9+/]{86}==):")
+_DIGEST = scan_pattern(r"sha-256=:([A-Za-z0-9+/]{43}=):")
+_ENCRYPTION_KEY = scan_pattern(r"[0-9a-f]{16}")
+_PUBLIC_KEY = scan_pattern(r"[A-Za-z0-9_-]{43}")
+_B64URL_SIGNATURE = scan_pattern(r"[A-Za-z0-9_-]{86}")
+KEY_ID = scan_pattern(r"([0-9a-f-]{36}):([0-9a-f]{16})")
 
 
 class SignatureError(ValueError):

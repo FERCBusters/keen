@@ -50,7 +50,6 @@ let meta = {
   assets: [],
   asset_categories: [],
   licenses: [],
-  aws_accounts: [],
   business_processes: [],
   controls: [],
   clauses: [],
@@ -252,7 +251,6 @@ const rows = {
   org: $('orgRows'),
   assets: $('assetsRows'),
   licenses: $('licensesRows'),
-  awsAccounts: $('awsAccountsRows'),
   access: $('accessMatrixRows'),
   effectiveness: $('effectivenessRows'),
   meetings: $('meetingsRows'),
@@ -457,8 +455,6 @@ function hideAllIsmsForms(exceptKind = '') {
   if (assetCategoryCard && exceptKind !== 'assetCategory') assetCategoryCard.style.display = 'none';
   const licenseCard = $('licenseCard');
   if (licenseCard && exceptKind !== 'license') licenseCard.style.display = 'none';
-  const awsAccountCard = $('awsAccountCard');
-  if (awsAccountCard && exceptKind !== 'awsAccount') awsAccountCard.style.display = 'none';
   const metricEntryCard = $('metricEntryFormCard');
   if (metricEntryCard && exceptKind !== 'metricEntry') metricEntryCard.style.display = 'none';
 }
@@ -512,12 +508,6 @@ function installIsmsSectionChrome() {
         addHeaderButton(header, {
           html: 'Manage licenses',
           dataset: { 'data-isms-toggle-card': 'licenseCard' },
-        });
-      }
-      if (cfg.kind === 'access') {
-        addHeaderButton(header, {
-          html: 'Manage hosting accounts',
-          dataset: { 'data-isms-toggle-card': 'awsAccountCard' },
         });
       }
     }
@@ -598,13 +588,7 @@ function toggleAuxCard(id) {
   const nextVisible = card.style.display === 'none' || card.hidden;
   if (nextVisible)
     hideAllIsmsForms(
-      id === 'assetCategoryCard'
-        ? 'assetCategory'
-        : id === 'licenseCard'
-          ? 'license'
-          : id === 'awsAccountCard'
-            ? 'awsAccount'
-            : '',
+      id === 'assetCategoryCard' ? 'assetCategory' : id === 'licenseCard' ? 'license' : '',
     );
   card.hidden = false;
   card.style.display = nextVisible ? '' : 'none';
@@ -703,50 +687,6 @@ function resetLicenseForm(item = null) {
   $('licenseDescription').value = item?.description || '';
   const button = $('saveLicense');
   if (button) button.textContent = item ? 'Save license' : 'Add license';
-}
-
-function awsAccounts() {
-  return meta.aws_accounts || [];
-}
-function awsAccountLabel(account) {
-  if (!account) return 'hosting account';
-  return `${account.name || 'hosting account'}${account.account_id ? ` (${account.account_id})` : ''}`;
-}
-function renderAwsAccountOptions(targetValues = []) {
-  const select = $('accessAwsAccounts');
-  if (!select) return;
-  select.innerHTML = optionList(awsAccounts(), { label: awsAccountLabel });
-  if (Array.isArray(targetValues) && targetValues.length) setSelectValues(select, targetValues);
-}
-function renderAwsAccounts() {
-  if (!rows.awsAccounts) return;
-  const items = awsAccounts();
-  rows.awsAccounts.innerHTML =
-    items
-      .map(
-        (a) => `<tr>
-    <td class="fw-semibold">${esc(a.name || 'hosting account')}</td>
-    <td>${esc(a.account_id || '-')}</td>
-    <td class="wrap small-muted">${esc(shorten(a.notes || '', 180) || '-')}</td>
-    <td>${Number(a.entry_count || 0)}</td>
-    <td class="text-nowrap no-print"><div class="btn-group btn-group-sm" role="group"><button class="btn btn-outline-primary" type="button" data-aws-account-edit="${esc(a.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit hosting account</span></button><button class="btn btn-outline-danger" type="button" data-aws-account-delete="${esc(a.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete hosting account</span></button></div></td>
-  </tr>`,
-      )
-      .join('') ||
-    emptyRow(
-      5,
-      'No managed hosting accounts yet. Add at least one before creating access control matrix rows.',
-    );
-}
-function resetAwsAccountForm(item = null) {
-  const form = $('awsAccountForm');
-  if (!form) return;
-  $('awsAccountId').value = item?.id || '';
-  $('awsAccountName').value = item?.name || '';
-  $('awsAccountNumber').value = item?.account_id || '';
-  $('awsAccountNotes').value = item?.notes || '';
-  const button = $('saveAwsAccount');
-  if (button) button.textContent = item ? 'Save hosting account' : 'Add hosting account';
 }
 
 function setSelectValues(select, values = []) {
@@ -963,8 +903,6 @@ function accessPayloadFromForm() {
   return {
     task_action: $('accessTaskAction').value,
     service_asset_id: $('accessService').value || null,
-    aws_account_ids: selectedValues($('accessAwsAccounts')),
-    status: $('accessStatus').value || 'Pending Approval',
     role_org_node_ids: selectedValues($('accessRole')),
     notes: $('accessNotes').value,
   };
@@ -1045,11 +983,9 @@ function populateEditForm(kind, item) {
     setSelectValues($('assetControls'), itemControls(item));
     setSelectValues($('assetClauses'), itemClauses(item));
   } else if (kind === 'access') {
-    renderAccessFormOptions(item.aws_account_ids || []);
+    renderAccessFormOptions();
     $('accessTaskAction').value = item.task_action || '';
     $('accessService').value = item.service_asset_id || item.service?.id || '';
-    setSelectValues($('accessAwsAccounts'), item.aws_account_ids || []);
-    $('accessStatus').value = item.status || 'Pending Approval';
     setSelectValues($('accessRole'), item.role_org_node_ids || []);
     $('accessNotes').value = item.notes || '';
   } else if (kind === 'effectiveness') {
@@ -1532,13 +1468,6 @@ function renderAssets() {
       .join('') || emptyRow(11, 'No assets yet.');
 }
 
-function accessStatusClass(value) {
-  const v = String(value || '').toLowerCase();
-  if (v === 'approved') return 'isms-access-cell-approved';
-  if (v === 'pending approval') return 'isms-access-cell-pending';
-  return 'isms-app-cell-empty';
-}
-
 function accessServiceLabel(item) {
   return item?.service?.asset || item?.service?.name || item?.service?.display || 'Service';
 }
@@ -1573,39 +1502,9 @@ function accessKeyLabel(item) {
     .map((role) => role?.name || '')
     .filter(Boolean)
     .join(', ');
-  const accounts = (item?.aws_accounts || [])
-    .map((acct) => awsAccountLabel(acct))
-    .filter(Boolean)
-    .join(', ');
-  return [
-    item?.task_action || 'Task/action',
-    accessServiceLabel(item),
-    item?.status || '',
-    accounts,
-    roles,
-    item?.notes || '',
-  ]
+  return [item?.task_action || 'Task/action', accessServiceLabel(item), roles, item?.notes || '']
     .filter(Boolean)
     .join(' · ');
-}
-
-function accessAccountPillsHtml(entry) {
-  const accounts = Array.isArray(entry?.aws_accounts) ? entry.aws_accounts : [];
-  if (!accounts.length) return '<span class="small-muted">-</span>';
-  const labels = accounts.map((acct) => awsAccountLabel(acct)).filter(Boolean);
-  const visible = accounts.slice(0, 2);
-  const pills = visible.map((acct) => {
-    const fullLabel = awsAccountLabel(acct);
-    const label = acct?.name || acct?.account_id || 'hosting account';
-    return `<span class="badge badge-soft user-pill isms-aws-account-pill" title="${esc(fullLabel)}">${esc(shorten(label, 18))}</span>`;
-  });
-  const remaining = accounts.length - visible.length;
-  if (remaining > 0) {
-    pills.push(
-      `<span class="badge badge-soft user-pill isms-aws-account-pill" title="${esc(labels.join('\n'))}">+${remaining}</span>`,
-    );
-  }
-  return `<span class="user-pill-list isms-aws-account-pill-list">${pills.join('')}</span>`;
 }
 
 function noteTooltipHtml(notes, label = 'Notes') {
@@ -1640,10 +1539,10 @@ function renderAccessControlMatrix() {
   const head = $('accessMatrixHead');
   setCount('accessControlCount', items.length);
   if (head) {
-    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/action</th><th class="isms-access-accounts-head">Managed hosting accounts</th><th class="text-center isms-access-status-head">Status</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name || 'Role')}">${esc(role.name || 'Role')}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
+    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/action</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name || 'Role')}">${esc(role.name || 'Role')}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
   }
   if (!items.length) {
-    rows.access.innerHTML = emptyRow(roleColumns.length + 6, 'No access control matrix rows yet.');
+    rows.access.innerHTML = emptyRow(roleColumns.length + 4, 'No access control matrix rows yet.');
     return;
   }
   const grouped = [];
@@ -1671,8 +1570,6 @@ function renderAccessControlMatrix() {
           return `<tr data-isms-row="access" data-isms-filter-text="${esc(accessKeyLabel(entry))}">
       ${serviceCell}
       <td class="wrap isms-app-key-linkage" data-sort="${esc(entry.task_action || '')}"><div class="fw-semibold"><a href="${esc(accessControlHref(entry))}">${esc(entry.task_action || 'Task/action')}</a></div></td>
-      <td class="wrap isms-access-accounts" data-sort="${esc((entry.aws_accounts || []).map((acct) => awsAccountLabel(acct)).join(', '))}">${accessAccountPillsHtml(entry)}</td>
-      <td class="isms-app-cell isms-access-status ${accessStatusClass(entry.status)} text-center" data-sort="${esc(entry.status || 'Pending Approval')}"><div class="fw-semibold">${esc(entry.status || 'Pending Approval')}</div></td>
       ${roleColumns.map((role) => accessRoleCellHtml(entry, role.id)).join('')}
       <td class="text-center small-muted isms-access-notes" data-sort="${esc(entry.notes || '')}">${noteTooltipHtml(entry.notes, 'Access row notes')}</td>
       ${actionsHtml('access', entry.id, 'isms-access-actions')}
@@ -1940,7 +1837,6 @@ function populateForms() {
     'assetFormCard',
     'assetCategoryCard',
     'licenseCard',
-    'awsAccountCard',
     'accessControlFormCard',
     'meetingFormCard',
   ]) {
@@ -2003,24 +1899,38 @@ function populateForms() {
   populateAssetCategoryControls();
 }
 
-function renderAccessFormOptions(targetAccountValues = []) {
-  const service = $('accessService');
-  if (service)
-    service.innerHTML = optionList(meta.assets || [], {
-      label: (a) => a.asset || a.name || 'Asset',
+// Services are assets, grouped by category, so cloud accounts and projects
+// appear together under Cloud services.
+function renderServiceOptions(select) {
+  const groups = new Map();
+  for (const asset of meta.assets || []) {
+    const category = asset.category_name || 'Uncategorised';
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(asset);
+  }
+  const optgroups = [...groups.keys()]
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map((category) => {
+      const group = document.createElement('optgroup');
+      group.label = category;
+      for (const asset of groups.get(category)) {
+        const option = document.createElement('option');
+        option.value = asset.id || '';
+        option.textContent = asset.asset || asset.name || 'Asset';
+        group.append(option);
+      }
+      return group;
     });
+  select.replaceChildren(...optgroups);
+}
+function renderAccessFormOptions() {
+  const service = $('accessService');
+  if (service) renderServiceOptions(service);
   const role = $('accessRole');
   if (role)
     role.innerHTML = optionList(meta.org_nodes || [], {
       label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`,
     });
-  const status = $('accessStatus');
-  if (status)
-    status.innerHTML = optionList(
-      (meta.access_statuses || ['Pending Approval', 'Approved']).map((x) => ({ id: x, name: x })),
-      { label: 'name' },
-    );
-  renderAwsAccountOptions(targetAccountValues);
 }
 
 // A refused save leaves the form as it was and says why.
@@ -2082,22 +1992,6 @@ onIsmsSubmit('licenseForm', async (ev) => {
   }
   resetLicenseForm();
   await reloadAfter(licenseId ? 'License updated' : 'License added');
-});
-
-onIsmsSubmit('awsAccountForm', async (ev) => {
-  const accountId = $('awsAccountId')?.value || '';
-  const payload = {
-    name: $('awsAccountName')?.value || '',
-    account_id: $('awsAccountNumber')?.value || null,
-    notes: $('awsAccountNotes')?.value || '',
-  };
-  if (accountId) {
-    await apiPatch(`/api/v1/isms/aws-accounts/${encodeURIComponent(accountId)}`, payload);
-  } else {
-    await apiPost('/api/v1/isms/aws-accounts', payload);
-  }
-  resetAwsAccountForm();
-  await reloadAfter(accountId ? 'hosting account updated' : 'hosting account added');
 });
 
 function selectedLinkPayload(prefix) {
@@ -2200,7 +2094,6 @@ function renderSection(section) {
     return;
   }
   if (section === 'access') {
-    renderAwsAccounts();
     renderAccessControlMatrix();
     return;
   }
@@ -2607,8 +2500,6 @@ document.addEventListener('click', async (ev) => {
   const cancelBtn = ev.target.closest?.('[data-isms-cancel-edit]');
   const licenseEditBtn = ev.target.closest?.('[data-license-edit]');
   const licenseDeleteBtn = ev.target.closest?.('[data-license-delete]');
-  const awsAccountEditBtn = ev.target.closest?.('[data-aws-account-edit]');
-  const awsAccountDeleteBtn = ev.target.closest?.('[data-aws-account-delete]');
   const removeMeetingLinkBtn = ev.target.closest?.('[data-remove-meeting-link]');
   const effectivenessRecordBtn = ev.target.closest?.('[data-effectiveness-record]');
   try {
@@ -2674,32 +2565,6 @@ document.addEventListener('click', async (ev) => {
       );
       resetLicenseForm();
       await reloadAfter('License deleted');
-      return;
-    }
-    if (awsAccountEditBtn) {
-      const id = awsAccountEditBtn.getAttribute('data-aws-account-edit');
-      const item = awsAccounts().find((a) => String(a.id) === String(id));
-      if (item) resetAwsAccountForm(item);
-      $('awsAccountName')?.focus();
-      return;
-    }
-    if (awsAccountDeleteBtn) {
-      const id = awsAccountDeleteBtn.getAttribute('data-aws-account-delete');
-      const item = awsAccounts().find((a) => String(a.id) === String(id));
-      const label = item?.name || 'this hosting account';
-      if (
-        !(await confirmAction({
-          title: `Delete ${label}`,
-          message:
-            'Delete this hosting account? It is removed from access control matrix rows, and the access it recorded is no longer listed.',
-          confirmLabel: 'Delete',
-          danger: true,
-        }))
-      )
-        return;
-      await apiDelete(`/api/v1/isms/aws-accounts/${encodeURIComponent(id)}`);
-      resetAwsAccountForm();
-      await reloadAfter('hosting account deleted');
       return;
     }
     if (editBtn) {

@@ -1,16 +1,11 @@
 // ISMS register workflows through the real page: documents with tags, folders and
-// files; organisation chart; assets with licences and hosting accounts; the access
-// control matrix; effectiveness metrics; meetings; deletion and refused saves.
+// files; organisation chart; assets with licences; the access control matrix;
+// effectiveness metrics; meetings; deletion and refused saves.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as d3 from 'd3';
 import { page, settle } from './support/page-fixture.mjs';
 
-const accounts = [
-  { id: 'aws1', name: 'Production', account_id: '111122223333', notes: 'Main', entry_count: 1 },
-  { id: 'aws2', name: 'Staging', account_id: '444455556666', entry_count: 1 },
-  { id: 'aws3', name: 'Sandbox', entry_count: 1 },
-];
 const meta = {
   framework: 'A',
   users: [
@@ -25,8 +20,15 @@ const meta = {
   document_types: ['policy', 'process'],
   effectiveness_metric_sources: [{ id: 'ci', source: 'ci', label: 'Build server' }],
   assets: [
-    { id: 'a1', asset: 'Database', name: 'Database' },
-    { id: 'a2', asset: 'Payroll', name: 'Payroll' },
+    {
+      id: 'c1',
+      asset: 'AWS account · Production',
+      name: 'AWS account · Production',
+      category_name: 'Cloud services',
+    },
+    { id: 'a1', asset: 'Database', name: 'Database', category_name: 'Data' },
+    { id: 'a2', asset: 'Payroll', name: 'Payroll', category_name: 'Data' },
+    { id: 'a3', asset: 'Kiosk', name: 'Kiosk' },
   ],
   asset_categories: [
     {
@@ -40,11 +42,9 @@ const meta = {
     { id: 'cat2', name: 'Hardware', subcategories: [{ id: 'sub3', name: 'Laptops' }] },
   ],
   licenses: [{ id: 'l1', name: 'Enterprise', description: 'Per user', asset_count: 1 }],
-  aws_accounts: accounts,
   business_processes: [],
   controls: [{ id: 'c1', ref: 'A.5.1', title: 'Policies' }],
   clauses: [{ id: 'k1', ref: '5.1', title: 'Leadership' }],
-  access_statuses: ['Pending Approval', 'Approved'],
 };
 const records = () => ({
   objectives: [
@@ -110,9 +110,6 @@ const records = () => ({
       task_action: 'Deploy',
       service_asset_id: 'a1',
       service: { id: 'a1', asset: 'Database' },
-      aws_accounts: accounts,
-      aws_account_ids: ['aws1', 'aws2', 'aws3'],
-      status: 'Approved',
       roles: [{ id: 'n1', name: 'Security team' }],
       role_org_node_ids: ['n1'],
       notes: 'Quarterly review',
@@ -501,7 +498,7 @@ test('long organisation names wrap onto two lines and end with an ellipsis', asy
   );
 });
 
-// --- Assets, licences and hosting accounts ----------------------------------------------
+// --- Assets and licences --------------------------------------------------------------
 
 test('an asset takes its category, subcategory, licence and owner', async (t) => {
   const ui = await isms(t, 'assets');
@@ -545,7 +542,7 @@ test('an asset takes its category, subcategory, licence and owner', async (t) =>
   );
 });
 
-test('categories, licences and hosting accounts are managed in their own cards', async (t) => {
+test('categories and licences are managed in their own cards', async (t) => {
   const ui = await isms(t, 'assets');
   await settle(() => ui.el('assetsRows').textContent.includes('Database'));
 
@@ -607,46 +604,37 @@ test('categories, licences and hosting accounts are managed in their own cards',
 
 // --- Access control matrix -----------------------------------------------------------
 
-test('the access matrix groups by service with role columns and account pills', async (t) => {
+test('the access matrix groups by service with role columns', async (t) => {
   const ui = await isms(t, 'access');
   await settle(() => ui.el('accessMatrixRows').textContent.includes('Deploy'));
   const head = [...ui.el('accessMatrixHead').querySelectorAll('th')].map((th) => th.textContent);
   // Organisation roles become columns; teams do not.
-  assert.deepEqual(head, [
-    'Service',
-    'Task/action',
-    'Managed hosting accounts',
-    'Status',
-    'Security team',
-    'Notes',
-    'Actions',
-  ]);
+  assert.deepEqual(head, ['Service', 'Task/action', 'Security team', 'Notes', 'Actions']);
   const row = ui.el('accessMatrixRows').querySelector('tr[data-isms-row="access"]');
-  assert.equal(
-    row.dataset.ismsFilterText,
-    'Deploy · Database · Approved · Production (111122223333), Staging (444455556666), ' +
-      'Sandbox · Security team · Quarterly review',
-  );
+  assert.equal(row.dataset.ismsFilterText, 'Deploy · Database · Security team · Quarterly review');
   assert.equal(row.querySelector('a').getAttribute('href'), '/isms-asset.html?id=a1&framework=A');
-  const pills = [...row.querySelectorAll('.isms-aws-account-pill')];
-  assert.deepEqual(
-    pills.map((p) => p.textContent),
-    ['Production', 'Staging', '+1'],
-  );
-  assert.equal(pills[2].title, 'Production (111122223333)\nStaging (444455556666)\nSandbox');
   assert.match(row.querySelector('.isms-access-role-cell').textContent, /✓/);
 
   ui.click('[data-isms-edit="access"][data-isms-id="ac1"]');
+  // Services are assets grouped by category, cloud accounts among them.
   assert.deepEqual(
-    [...ui.el('accessAwsAccounts').selectedOptions].map((o) => o.value),
-    ['aws1', 'aws2', 'aws3'],
+    [...ui.el('accessService').querySelectorAll('optgroup')].map((group) => [
+      group.label,
+      [...group.querySelectorAll('option')].map((o) => o.textContent),
+    ]),
+    [
+      ['Cloud services', ['AWS account · Production']],
+      ['Data', ['Database', 'Payroll']],
+      ['Uncategorised', ['Kiosk']],
+    ],
   );
+  assert.equal(ui.el('accessService').value, 'a1');
   assert.deepEqual(
     [...ui.el('accessRole').selectedOptions].map((o) => o.value),
     ['n1'],
   );
   ui.el('accessTaskAction').value = 'Deploy and roll back';
-  ui.select('accessAwsAccounts', 'aws1');
+  ui.el('accessService').value = 'c1';
   ui.submit('accessControlForm');
   await ui.statusIs('Access control matrix row updated');
   assert.deepEqual(ui.writes()[0], {
@@ -654,53 +642,11 @@ test('the access matrix groups by service with role columns and account pills', 
     url: '/api/v1/isms/access-control-matrix/ac1?framework=A',
     body: {
       task_action: 'Deploy and roll back',
-      service_asset_id: 'a1',
-      aws_account_ids: ['aws1'],
-      status: 'Approved',
+      service_asset_id: 'c1',
       role_org_node_ids: ['n1'],
       notes: 'Quarterly review',
     },
   });
-});
-
-test('hosting accounts are edited and removed from their card', async (t) => {
-  const ui = await isms(t, 'access');
-  await settle(() => ui.el('accessMatrixRows').textContent.includes('Deploy'));
-  ui.click('[data-isms-toggle-card="awsAccountCard"]');
-  assert.match(ui.el('awsAccountsRows').textContent, /Production\s*111122223333\s*Main\s*1/);
-  ui.click('[data-aws-account-edit="aws1"]');
-  assert.deepEqual(
-    ['awsAccountName', 'awsAccountNumber', 'awsAccountNotes'].map((id) => ui.el(id).value),
-    ['Production', '111122223333', 'Main'],
-  );
-  ui.el('awsAccountNotes').value = 'Main estate';
-  ui.submit('awsAccountForm');
-  await ui.statusIs('hosting account updated');
-  ui.click('[data-aws-account-delete="aws2"]');
-  await ui.statusIs('hosting account deleted');
-  ui.el('awsAccountName').value = 'Disaster recovery';
-  ui.submit('awsAccountForm');
-  await ui.statusIs('hosting account added');
-  assert.deepEqual(
-    ui.writes().map((w) => [w.method, w.url, w.body]),
-    [
-      [
-        'PATCH',
-        '/api/v1/isms/aws-accounts/aws1',
-        { name: 'Production', account_id: '111122223333', notes: 'Main estate' },
-      ],
-      ['DELETE', '/api/v1/isms/aws-accounts/aws2', null],
-      [
-        'POST',
-        '/api/v1/isms/aws-accounts',
-        { name: 'Disaster recovery', account_id: null, notes: '' },
-      ],
-    ],
-  );
-  assert.deepEqual(
-    ui.prompts.map((p) => p.title),
-    ['Delete Staging'],
-  );
 });
 
 // --- Effectiveness and meetings --------------------------------------------------------

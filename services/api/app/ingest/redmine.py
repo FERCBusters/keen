@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlsplit
@@ -21,6 +20,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.http import client as ingestion_client
+from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
 
@@ -40,7 +40,9 @@ def validate_config(config):
         if isinstance(value, bool) or not isinstance(value, (str, int)):
             raise RedmineError("Use a Redmine project ID, identifier or *")
         value = str(value)
-        if value != "*" and not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,99}", value):
+        if value != "*" and not scan_pattern(r"[a-z0-9][a-z0-9_-]{0,99}").fullmatch(
+            value
+        ):
             raise RedmineError("Use a Redmine project ID, identifier or *")
         if value.isdigit() and int(value) <= 0:
             raise RedmineError("Redmine project ID must be positive")
@@ -204,9 +206,9 @@ def _store(db, base, collection, project, issue, journal=None):
             if not isinstance(change, dict):
                 continue
             prop, name = str(change.get("property", "")), str(change.get("name", ""))
-            if prop in ("attr", "cf", "attachment") and re.fullmatch(
-                r"[A-Za-z0-9_]{1,80}", name
-            ):
+            if prop in ("attr", "cf", "attachment") and scan_pattern(
+                r"[A-Za-z0-9_]{1,80}"
+            ).fullmatch(name):
                 prefix = f"change.{prop}.{name}"
                 fields[prefix + ".changed"] = True
                 for part in ("old_value", "new_value"):

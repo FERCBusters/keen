@@ -12,7 +12,6 @@ from __future__ import annotations
 import csv
 import io
 import json
-import re
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote, urlsplit
@@ -42,16 +41,17 @@ from app.ingest.cloud.base import (
     text_field,
     unknown,
 )
+from app.security.regex import scan_pattern
 
-ROLE_ARN = re.compile(
-    r"arn:aws(?:-cn|-us-gov)?:iam::([0-9]{12}):role/(?:[\w+=,.@-]+/)*[\w+=,.@-]{1,64}"
+ROLE_ARN = scan_pattern(
+    r"arn:aws(?:-cn|-us-gov)?:iam::([0-9]{12}):role/(?:[\w+=,.@-]+/)*+[\w+=,.@-]{1,64}"
 )
-REGION = re.compile(r"[a-z]{2}(?:-gov)?-[a-z]+-[0-9]")
-EXTERNAL_ID = re.compile(r"[\w+=,.@:/-]{2,1224}")
-ADMIN_POLICY = re.compile(
+REGION = scan_pattern(r"[a-z]{2}(?:-gov)?-[a-z]+-[0-9]")
+EXTERNAL_ID = scan_pattern(r"[\w+=,.@:/-]{2,1224}")
+ADMIN_POLICY = scan_pattern(
     r"arn:aws(?:-cn|-us-gov)?:iam::aws:policy/AdministratorAccess"
 )
-EMAIL = re.compile(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
+EMAIL = scan_pattern(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
 DENIED = {
     "AccessDenied",
     "AccessDeniedException",
@@ -265,7 +265,9 @@ def account_session(base, role: str | None) -> Session:
         account = str(call(sts.get_caller_identity).get("Account") or "")
     finally:
         sts.close()
-    if not re.fullmatch(r"[0-9]{12}", account) or (expected and account != expected):
+    if not scan_pattern(r"[0-9]{12}").fullmatch(account) or (
+        expected and account != expected
+    ):
         # Results for one account must never come from another.
         raise Unavailable("not_configured")
     scoped.account_id = account

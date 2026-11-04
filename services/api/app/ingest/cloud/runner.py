@@ -26,6 +26,7 @@ from app.db.models import (
     CloudProvider,
     IngestionCursor,
     IsmsVendor,
+    RiskAsset,
 )
 from app.ingest.cloud import base
 from app.ingest.cloud import provider as cloud_provider
@@ -33,10 +34,17 @@ from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import Connection, connection_scope, namespace, run_lock
 from app.services.errors import DomainError
 from app.services.ingestion_pause import is_paused
+from app.services.posture_risks import category_asset
 
 log = logging.getLogger(__name__)
 
 VENDOR_NAMESPACE = uuid.UUID("8b6e1e0a-3f0e-4d5b-9b7c-1d2e3f405162")
+# Every account, subscription, project or domain a provider reports is an asset
+# in the Cloud services category, so risks, access reviews and the access
+# control matrix can name it. Its ID follows from the scope, so collection and
+# risk recording find the same asset.
+ASSET_NAMESPACE = uuid.UUID("0f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f")
+ASSET_CATEGORY = "Cloud services"
 # Results not refreshed for this long are removed with their identities.
 KEEP_DAYS = 30
 # A first activity read, or one after a long gap, looks back at most this far,
@@ -152,6 +160,47 @@ def link_vendor(db, provider, row: CloudProvider) -> uuid.UUID:
     return ident
 
 
+def scope_asset_id(provider_key: str, scope_key: str) -> uuid.UUID:
+    return uuid.uuid5(ASSET_NAMESPACE, f"{provider_key}:{scope_key}")
+
+
+def scope_asset(db, provider, scope: CloudPostureScope, vendor_id) -> RiskAsset:
+    """The scope's asset, created on first use under the provider's Vendor.
+
+    KEEN never overwrites an existing asset, so administrators can rename it or
+    move it to another category.
+    """
+    kind = scope.kind or provider.scope_noun
+    label = scope.label if scope.label != scope.scope_key else ""
+    name = f"{provider.label} {kind} · " + (
+        f"{label} ({scope.scope_key})" if label else scope.scope_key
+    )
+    return category_asset(
+        db,
+        asset_id=scope_asset_id(provider.key, scope.scope_key),
+        name=name[:256],
+        category=ASSET_CATEGORY,
+        subcategory=f"{provider.label} {kind}s",
+        description=(
+            f"{provider.label} {kind} {scope.scope_key}. KEEN created this asset "
+            "from the provider's cloud posture."
+        ),
+        vendor_id=vendor_id,
+    )
+
+
+def _add_scope_asset(db, provider, scope: CloudPostureScope, vendor_id) -> None:
+    if db.get(RiskAsset, scope_asset_id(provider.key, scope.scope_key)) is not None:
+        return
+    try:
+        with db.begin_nested():
+            scope_asset(db, provider, scope, vendor_id)
+    except IntegrityError:
+        # A risk recorded meanwhile added the asset or its category; the scope's
+        # results are stored either way.
+        log.info("Cloud scope asset for %s added elsewhere", provider.key)
+
+
 def _record_check(db, provider, scope, check: dict, now: datetime) -> str:
     payload = {
         "provider": provider.key,
@@ -196,9 +245,10 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
     """Keep each scope's latest result and record changed results as events;
     scopes the provider no longer returns are removed, and so are checks that
     found nothing to examine, such as Kubernetes checks in an account with no
-    clusters."""
+    clusters. Each scope has its asset; one that a provider stops returning
+    keeps it."""
     row = provider_row(db, provider)
-    link_vendor(db, provider, row)
+    vendor_id = link_vendor(db, provider, row)
     today = now.date().isoformat()
     seen = set()
     for scope in results[: base.MAX_SCOPES]:
@@ -243,6 +293,7 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
         current.checked_at = now
         current.checks = checks
         current.identities = identities
+        _add_scope_asset(db, provider, current, vendor_id)
     stale = db.query(CloudPostureScope).filter(
         CloudPostureScope.provider == provider.key
     )

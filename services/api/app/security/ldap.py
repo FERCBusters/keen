@@ -2,7 +2,6 @@
 
 import base64
 import hashlib
-import re
 import ssl
 import uuid
 from urllib.parse import urlsplit
@@ -18,6 +17,7 @@ from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.db.models import User, UserIdentity
 from app.security.rate_limit import fixed_window_allow
+from app.security.regex import scan_pattern
 
 
 def _entry_allowed(issuer, subject) -> bool:
@@ -69,7 +69,7 @@ def directory_identity(username, password):
             settings.ldap_email_attribute,
             settings.ldap_id_attribute,
         ]
-        if any(not re.fullmatch(r"[A-Za-z][A-Za-z0-9-]*", a) for a in attrs):
+        if any(not scan_pattern(r"[A-Za-z][A-Za-z0-9-]*").fullmatch(a) for a in attrs):
             raise ValueError("Invalid LDAP attribute")
         if bool(settings.ldap_bind_dn) != bool(settings.ldap_bind_password):
             raise ValueError("Supply both service bind DN and password")

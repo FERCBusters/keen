@@ -7,9 +7,10 @@ and expanded control vocabulary cannot fabricate a library match.
 from __future__ import annotations
 
 import math
-import re
 from collections import Counter
 from typing import Any
+
+from app.security.regex import scan_pattern
 
 _STOP = set(
     "a an and are as at be been being by can could do does for from had has have how if in into is it its may might no not of on or our should that the their them there these they this to was we were what when which who will with without would you your lack failure loss risk risks security information management process processes system systems organisation organization company business ensure use using".split()
@@ -54,7 +55,7 @@ _ALIASES = {
 
 
 def catalogue_tokens(value: Any) -> set[str]:
-    words = re.findall(r"[a-z0-9]+", str(value or "").lower())
+    words = scan_pattern(r"[a-z0-9]+").findall(str(value or "").lower())
     result = set()
     for word in words:
         if (
@@ -153,8 +154,8 @@ def rank_library(entries, *, issue: str, asset_name: str = "", rules=None, limit
                 else []
             )
         else:
-            refs = re.findall(
-                r"\b[A-Z]{2,5}-\d+\b", str(assessment.get("auditor_control_refs", ""))
+            refs = scan_pattern(r"\b[A-Z]{2,5}-\d+\b").findall(
+                str(assessment.get("auditor_control_refs", ""))
             )
         refs = sorted(set(refs))
         matches.append(

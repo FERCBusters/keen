@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from calendar import monthrange
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -14,6 +13,7 @@ from app.core.config import settings
 from app.core.datetime_utils import add_months
 from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.models import IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
+from app.security.regex import scan_pattern
 from app.services.entity_changelog import record_entity_changelog
 
 log = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ AUTO_ZERO_REFERENCE_PREFIX = "auto-zero:monthly"
 AUTO_ZERO_MAX_BACKFILL_MONTHS = 120
 ZERO_TARGET_OPERATORS = {"", "eq", "lte"}
 # "Not required", "No longer required", "Never required" and similar.
-_NEGATED_REQUIRED = re.compile(r"\b(?:not|no|never)\b.*\brequired\b")
+_NEGATED_REQUIRED = scan_pattern(r"\b(?:not|no|never)\b.*\brequired\b")
 
 
 def _today_for_effectiveness_metrics() -> date:

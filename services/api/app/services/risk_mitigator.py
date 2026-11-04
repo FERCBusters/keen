@@ -29,10 +29,11 @@ from app.db.models import (
     RiskControlLink,
     RiskLibraryEntry,
 )
+from app.security.regex import scan_pattern
 from app.services.control_refs import clause_summary, control_summary
 from app.services.mitigator_catalogue import catalogue_tokens, rank_library
 
-_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+._/-]*", re.I)
+_TOKEN_RE = scan_pattern(r"[a-z0-9][a-z0-9+._/-]*", re.I)
 _RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
 _PESTLE_TYPES = {
     "Political",
@@ -118,7 +119,7 @@ def load_rules(path: str | None = None) -> dict[str, Any]:
 
 
 def _norm_text(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+    return scan_pattern(r"\s+").sub(" ", str(value or "").strip().lower())
 
 
 def _tokens(value: Any) -> set[str]:
@@ -131,7 +132,7 @@ def _tokens(value: Any) -> set[str]:
 
 @lru_cache(maxsize=4096)
 def _word_pattern(term_norm: str) -> re.Pattern[str]:
-    return re.compile(rf"(?<![a-z0-9]){re.escape(term_norm)}(?![a-z0-9])")
+    return scan_pattern(rf"(?<![a-z0-9]){re.escape(term_norm)}(?![a-z0-9])")
 
 
 def _contains_norm(haystack_norm: str, term_norm: str) -> bool:
@@ -584,10 +585,10 @@ def _search_pestle_items(
 
 
 def _short_issue_title(issue: str, *, max_len: int = 180) -> str:
-    value = re.sub(r"\s+", " ", str(issue or "").strip())
+    value = scan_pattern(r"\s+").sub(" ", str(issue or "").strip())
     if not value:
         return "Keen Mitigator scenario"
-    first_sentence = re.split(r"(?<=[.!?])\s+", value, maxsplit=1)[0]
+    first_sentence = scan_pattern(r"(?<=[.!?])\s+").split(value, maxsplit=1)[0]
     title = first_sentence.strip(" .!?;:\n\t") or value
     if len(title) > max_len:
         title = title[: max_len - 1].rstrip() + "…"

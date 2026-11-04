@@ -22,7 +22,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -41,6 +40,7 @@ from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.security.errors import collection_error
 from app.security.provider_logging import suppress_provider_logs
+from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
 # The SDK logs response bodies on malformed 403s and URLs during retries.
@@ -77,7 +77,7 @@ def _rfc3339(dt: datetime) -> str:
 
 def _sanitize_hint(s: str) -> str:
     s = (s or "").strip().lower()
-    s = re.sub(r"[^a-z0-9._-]+", "-", s)
+    s = scan_pattern(r"[^a-z0-9._-]+").sub("-", s)
     return s.strip("-")[:40]
 
 

@@ -15,11 +15,9 @@ const meta = {
   assets: [],
   asset_categories: [],
   licenses: [],
-  aws_accounts: [],
   business_processes: [],
   controls: [{ id: 'c1', ref: 'A.5.1', title: 'Policies' }],
   clauses: [{ id: 'k1', ref: '5.1', title: 'Leadership' }],
-  access_statuses: ['Pending Approval', 'Approved'],
   effectiveness_metric_sources: [
     { id: 'ci', source: 'ci', label: 'Build server' },
     { id: 'ci', source: 'ci', label: 'Duplicate' },
@@ -351,17 +349,13 @@ const registerRows = () => ({
       id: 'ac1',
       task_action: 'Deploy',
       service: { id: 'a1', asset: 'Database' },
-      status: 'Pending Approval',
       roles: [],
-      aws_accounts: [],
     },
     {
       id: 'ac2',
       task_action: 'Restore',
       service: { id: 'a1', asset: 'Database' },
-      status: 'Revoked',
       roles: [],
-      aws_accounts: [],
       notes: '<img src=x onerror=alert(1)> review',
     },
   ],
@@ -435,9 +429,9 @@ for (const [kind, tab, rowsId, type, title, evidenceUrl] of [
   });
 }
 
-// --- Access matrix status colouring and note tooltips ---------------------------------
+// --- Access matrix note tooltips --------------------------------------------------------
 
-test('access rows colour pending approvals, leave other states plain and keep notes as text', async (t) => {
+test('access rows keep their notes as text in a tooltip', async (t) => {
   const created = [];
   const ui = await isms(t, {
     query: '&tab=access',
@@ -456,18 +450,9 @@ test('access rows colour pending approvals, leave other states plain and keep no
     },
   });
   await settle(() => ui.el('accessMatrixRows').textContent.includes('Restore'));
-  const statusCells = [...ui.el('accessMatrixRows').querySelectorAll('.isms-access-status')];
-  assert.deepEqual(
-    statusCells.map((td) => [
-      td.textContent.trim(),
-      td.classList.contains('isms-access-cell-pending'),
-      td.classList.contains('isms-app-cell-empty'),
-    ]),
-    [
-      ['Pending Approval', true, false],
-      ['Revoked', false, true],
-    ],
-  );
+  // Saving a row approves it, so rows carry no status to show.
+  assert.equal(ui.el('accessMatrixRows').querySelector('.isms-access-status'), null);
+  assert.doesNotMatch(ui.el('accessMatrixHead').textContent, /Status|hosting/i);
   // The hostile note becomes a tooltip title, never markup.
   assert.equal(ui.el('accessMatrixRows').querySelector('img'), null);
   const trigger = ui.el('accessMatrixRows').querySelector('[data-bs-toggle="tooltip"]');

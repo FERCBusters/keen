@@ -16,7 +16,6 @@ request headers cannot end the comment. The HTTP middleware lives in
 from __future__ import annotations
 
 import json
-import re
 import sys
 import uuid
 from contextvars import ContextVar, Token
@@ -24,8 +23,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import event
 
+from app.security.regex import scan_pattern
+
 _label: ContextVar[str | None] = ContextVar("keen_sql_label", default=None)
-_UNSAFE = re.compile(r"[^A-Za-z0-9/_.{}:-]")
+_UNSAFE = scan_pattern(r"[^A-Za-z0-9/_.{}:-]")
 _TRACE_LINE = "KEEN_SQL_TRACE "
 
 

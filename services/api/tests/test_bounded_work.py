@@ -22,6 +22,7 @@ import uuid
 from datetime import timedelta
 from pathlib import Path
 
+import app.worker.tasks  # noqa: F401 - registers the worker tasks
 import pytest
 from app.agents import credentials
 from app.agents.credentials import digest, locked_agent
@@ -50,7 +51,8 @@ from app.security.redaction import (
 )
 from app.services import agent_enrollment
 from app.services.errors import DomainError
-from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY, celery_app
+from app.worker import celery_app as worker
+from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY, TASK_SECONDS, celery_app
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -166,7 +168,10 @@ REVIEWED_RECURSION = {
     "mapping/rules.py:_add_label_value": "stops at MAX_DEPTH",
     "mapping/rules.py:_extract_label_values_from_obj": "stops at MAX_DEPTH",
     "security/redaction.py:walk": "stops at MAX_DEPTH",
-    "security/regex.py:check": "patterns are at most 512 characters",
+    "security/regex.py:_one_character": "patterns written in Keen's code",
+    "security/regex.py:check": (
+        "supplied patterns are at most 512 characters; code patterns are Keen's own"
+    ),
     "services/audits/scope.py:selectable_clause_descendants": "framework tree",
     "services/clauses.py:sort_children": "framework tree",
     "services/entity_changelog.py:_clean_scalar": "values Keen stored",
@@ -458,8 +463,6 @@ def _runs_per_hour(schedule):
 
 
 def test_each_source_runs_within_its_own_budget_below_its_interval():
-    from app.worker import celery_app as worker
-
     assert set(worker.SOURCE_RUN_SECONDS) == set(worker.HTTP_INGEST_SOURCES)
     beat = {
         entry["task"]: entry["schedule"]
@@ -475,9 +478,6 @@ def test_each_source_runs_within_its_own_budget_below_its_interval():
 
 
 def test_every_worker_task_ends_within_an_outer_bound():
-    import app.worker.tasks  # noqa: F401 - registers the tasks
-    from app.worker.celery_app import TASK_SECONDS
-
     for name, task in celery_app.tasks.items():
         if name.startswith("celery."):
             continue
@@ -487,14 +487,12 @@ def test_every_worker_task_ends_within_an_outer_bound():
 
 
 def test_run_budgets_follow_their_settings_under_the_general_cap(monkeypatch):
-    from app.worker.celery_app import RUN_GRACE_SECONDS, run_limits
-
     monkeypatch.setattr(settings, "collection_run_max_seconds", 3300)
-    assert run_limits(7200) == {
+    assert worker.run_limits(7200) == {
         "soft_time_limit": 3300,
-        "time_limit": 3300 + RUN_GRACE_SECONDS,
+        "time_limit": 3300 + worker.RUN_GRACE_SECONDS,
     }
-    assert run_limits(600)["soft_time_limit"] == 600
+    assert worker.run_limits(600)["soft_time_limit"] == 600
     for name in ("KEEN_RSS_RUN_SECONDS", "KEEN_LOKI_RUN_SECONDS"):
         field = name.removeprefix("KEEN_").lower()
         assert field in type(settings).model_fields, name

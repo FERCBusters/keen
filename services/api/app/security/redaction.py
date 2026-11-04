@@ -31,13 +31,14 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
+from app.security.regex import scan_pattern
 
 REDACTED = "REDACTED"
 
 MASKED_EMAIL = "[MASKED_EMAIL]"
 MASKED_IP = "[MASKED_IP]"
 
-_EMAIL_RE = re.compile(
+_EMAIL_RE = scan_pattern(
     r"(?<![A-Z0-9._%+-])"
     r"([A-Z0-9._%+-]{1,128})@([A-Z0-9.-]+\.[A-Z]{2,63})"
     # A trailing full stop ends a sentence; only ".<alnum>" continues the domain.
@@ -48,16 +49,17 @@ _EMAIL_RE = re.compile(
 # angle brackets. The name identifies the person as much as the address does,
 # so the whole mailbox is masked. A name is up to five words of letters, which
 # may carry apostrophes, dots and hyphens, or one quoted string; every
-# repetition is bounded, so malformed headers cannot stall the scan.
+# repetition is bounded or possessive, so malformed headers cannot stall the
+# scan.
 _NAME_WORD = r"[^\W\d_]{1,40}(?:['.-][^\W\d_]{1,40}){0,3}\.?"
-_MAILBOX_RE = re.compile(
+_MAILBOX_RE = scan_pattern(
     r"(?:(?<![\w\"'.-])"
-    r"(?:\"[^\"\n]{1,100}\"|" + _NAME_WORD + r"(?:[ \t]+" + _NAME_WORD + r"){0,4})"
+    r"(?:\"[^\"\n]{1,100}\"|" + _NAME_WORD + r"(?:[ \t]++" + _NAME_WORD + r"){0,4})"
     r"[ \t]*)?"
     r"<[ \t]*" + _EMAIL_RE.pattern + r"[ \t]*>",
     re.IGNORECASE,
 )
-_IPV4_RE = re.compile(
+_IPV4_RE = scan_pattern(
     r"(?<![\w.])(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
     # Reject a fifth octet or a longer token, but allow sentence punctuation.
     r"(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(?!\w|\.\d)"
@@ -66,7 +68,7 @@ _IPV4_RE = re.compile(
 # before replacement to avoid masking timestamps, ratios, or ordinary prose.
 # Bound both repetitions: overlapping colon runs must never trigger quadratic
 # backtracking on malformed evidence. Valid IPv6 addresses fit these bounds.
-_IPV6_CANDIDATE_RE = re.compile(
+_IPV6_CANDIDATE_RE = scan_pattern(
     r"(?<![\w:])(?:[0-9A-Fa-f]{0,4}:){2,8}[0-9A-Fa-f:.%]{1,64}(?![\w:])"
 )
 
@@ -94,7 +96,7 @@ DEFAULT_SENSITIVE_KEYS: set[str] = {
     "cookie",
 }
 
-_URL_RE = re.compile(r'https?://[^\s"\'<>]+', re.IGNORECASE)
+_URL_RE = scan_pattern(r'https?://[^\s"\'<>]+', re.IGNORECASE)
 
 # Measured workstation-posture facts whose names contain a sensitive-key
 # substring ("password", "signature") but which hold a boolean, a count or a
@@ -102,9 +104,9 @@ _URL_RE = re.compile(r'https?://[^\s"\'<>]+', re.IGNORECASE)
 # has exactly that shape; any other value is redacted as usual. Naming one of
 # these keys explicitly in KEEN_SENSITIVE_KEYS redacts it unconditionally.
 _MEASURED_VALUE_SHAPES = {
-    "boolean": re.compile(r"true|false"),
-    "count": re.compile(r"[0-9]{1,10}"),
-    "timestamp": re.compile(
+    "boolean": scan_pattern(r"true|false"),
+    "count": scan_pattern(r"[0-9]{1,10}"),
+    "timestamp": scan_pattern(
         r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
         r"(?:\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})?"
     ),
@@ -134,10 +136,11 @@ _embedded_json_budget: ContextVar[int] = ContextVar(
 
 # A quoted key and its scalar value in JSON-style text, including truncated
 # JSON that cannot be parsed. Keys stop at the next quote, so failed matches
-# cost no more than the distance to that quote.
-_JSON_PAIR_RE = re.compile(
+# cost no more than the distance to that quote. A quoted value's repeat is
+# possessive: it holds no state per character, whatever the value's length.
+_JSON_PAIR_RE = scan_pattern(
     r'"((?:[^"\\\r\n]|\\[^\r\n]){1,128})"(\s{0,16}:\s{0,16})'
-    r'("(?:[^"\\]|\\[\s\S])*(?:"|\\?\Z)|[^\s,:{}\[\]"]{1,1024})'
+    r'("(?:[^"\\]|\\[\s\S])*+(?:"|\\?\Z)|[^\s,:{}\[\]"]{1,1024})'
 )
 
 
@@ -187,14 +190,15 @@ def _sensitive_cfg() -> tuple[set[str], tuple[str, ...], re.Pattern, re.Pattern]
                 {_key_to_regex_fragment(k) for k in line_keys}, key=len, reverse=True
             )
         )
-        line_re = re.compile(rf"(?i)\b({alts_line})\b\s*[:=]\s*([^\r\n]+)")
+        line_re = scan_pattern(rf"(?i)\b({alts_line})\b\s*[:=]\s*([^\r\n]+)")
     else:
-        line_re = re.compile(r"(?!x)x")
+        line_re = scan_pattern(r"(?!x)x")
 
     # A partial fetch can end inside a quoted secret. Consume to end-of-input
     # when its closing quote is absent, including a final escape character.
-    kv_re = re.compile(
-        rf"""(?i)\b({alts})\b["']?\s*[:=]\s*("(?:\\[\s\S]|[^"\\])*(?:"|\\?\Z)|'(?:\\[\s\S]|[^'\\])*(?:'|\\?\Z)|[^&\s]+)"""
+    # Quoted values repeat possessively, holding no state per character.
+    kv_re = scan_pattern(
+        rf"""(?i)\b({alts})\b["']?\s*[:=]\s*("(?:\\[\s\S]|[^"\\])*+(?:"|\\?\Z)|'(?:\\[\s\S]|[^'\\])*+(?:'|\\?\Z)|[^&\s]+)"""
     )
     return keys, substring_needles, line_re, kv_re
 

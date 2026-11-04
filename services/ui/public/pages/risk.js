@@ -4,6 +4,8 @@ import {
   errorText,
   initNavbar,
   apiGet,
+  apiDelete,
+  confirmAction,
   esc,
   fmtTs,
   qs,
@@ -36,6 +38,7 @@ const risksBreadcrumb = document.getElementById('risksBreadcrumb');
 const riskVisualisation = document.getElementById('riskVisualisation');
 const sampleRiskAudit = document.getElementById('sampleRiskAudit');
 const editRisk = document.getElementById('editRisk');
+const deleteRisk = document.getElementById('deleteRisk');
 const riskTypes = document.getElementById('riskTypes');
 const riskAsset = document.getElementById('riskAsset');
 const riskCategory = document.getElementById('riskCategory');
@@ -222,6 +225,7 @@ function renderRisk(risk) {
     editRisk.href = riskWizardHref(risk?.framework || framework, { id: risk?.id || id });
     editRisk.style.display = canManageRisks ? '' : 'none';
   }
+  if (deleteRisk) deleteRisk.style.display = canManageRisks ? '' : 'none';
 
   renderTypes(risk);
   setText(riskAsset, asset);
@@ -260,6 +264,28 @@ sampleRiskAudit?.addEventListener('click', () => {
     framework: risk?.framework || framework,
     statusEl: status,
   });
+});
+
+deleteRisk?.addEventListener('click', async () => {
+  const risk = currentRisk;
+  if (!risk || !canManageRisks || deleteRisk.disabled) return;
+  if (
+    !(await confirmAction({
+      title: 'Delete risk',
+      message: `Delete “${riskDisplayTitle(risk)}”? Its links to controls, interested parties and posture checks are removed with it.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    }))
+  )
+    return;
+  deleteRisk.disabled = true;
+  try {
+    await apiDelete(`/api/v1/risks/${encodeURIComponent(risk.id || id)}`);
+    location.assign(withFramework('/risks.html', risk.framework || framework));
+  } catch (e) {
+    toast(status, `Could not delete the risk: ${errorText(e)}`, 'danger');
+    deleteRisk.disabled = false;
+  }
 });
 
 async function loadRisk() {

@@ -13,6 +13,7 @@ import yaml
 from app.core.config import settings
 from app.core.references import CONTROL_JUSTIFICATION_IDS, CONTROL_JUSTIFICATIONS
 from app.security.redaction import redact_url
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 
 # ---------------------------------------------------------------------------
@@ -214,7 +215,7 @@ def normalize_saved_search_url(url: str | None) -> str:
     if not raw:
         raise DomainError(status_code=400, detail="url is required")
 
-    if re.match(r"^(?:javascript|data):", raw, flags=re.IGNORECASE):
+    if scan_pattern(r"^(?:javascript|data):", re.IGNORECASE).match(raw):
         raise DomainError(status_code=400, detail="Invalid saved search URL")
     # Browsers read a backslash as "/" and drop tabs and newlines, so such a
     # path can resolve off-site when the navbar search jumps to it.
@@ -277,9 +278,9 @@ def _validate_event_source_url(url: str) -> Optional[str]:
         return None
 
     # Block dangerous schemes and protocol-relative URLs.
-    if re.match(r"^(?:javascript|data|vbscript):", s, flags=re.IGNORECASE):
+    if scan_pattern(r"^(?:javascript|data|vbscript):", re.IGNORECASE).match(s):
         return None
-    if re.match(r"^//", s):
+    if scan_pattern(r"^//").match(s):
         return None
 
     parts = urlsplit(s)

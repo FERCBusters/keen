@@ -4,7 +4,6 @@ import hashlib
 import json
 import logging
 import pickle
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,7 +11,7 @@ from app.core.config import settings
 from app.mapping.collector import matches_collector
 from app.mapping.fields import field_matches, validate_fields
 from app.security.json_shape import MAX_DEPTH
-from app.security.regex import MatchBudgetExceeded
+from app.security.regex import MatchBudgetExceeded, scan_pattern
 
 log = logging.getLogger(__name__)
 
@@ -199,7 +198,7 @@ _INTEGER_CONDITIONS = {
 }
 _TEXT_LIMIT = 512
 _REF_LIMIT = 64
-_FRAMEWORK = re.compile(r"[A-Za-z0-9._:-]{1,64}")
+_FRAMEWORK = scan_pattern(r"[A-Za-z0-9._:-]{1,64}")
 _WARNED: set[tuple[str, str]] = set()
 # The rules this process last read: the default framework they were read with,
 # a digest of their document, and the parsed rules. load_rules reuses them until

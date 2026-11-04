@@ -1,6 +1,6 @@
 """Validate both database and file-managed IMAP connections before network use."""
 
-import re
+from app.security.regex import scan_pattern
 
 MAX_BODY_CHARS = 65536
 DEFAULT_BODY_CHARS = 4000
@@ -22,7 +22,7 @@ def configuration(values):
     if not isinstance(host, str):
         raise ValueError("IMAP hostname must be text")
     host = host.strip()
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.:-]{0,252}", host):
+    if not scan_pattern(r"[A-Za-z0-9][A-Za-z0-9.:-]{0,252}").fullmatch(host):
         raise ValueError("Enter an IMAP hostname or IP address, without a URL")
     username = values.get("username", "")
     folder = values.get("folder") or "INBOX"
@@ -37,7 +37,10 @@ def configuration(values):
     try:
         raw_port = values.get("port") or "993"
         raw_chars = values.get("body_max_chars") or str(DEFAULT_BODY_CHARS)
-        if any(not re.fullmatch(r"[0-9]{1,5}", str(v)) for v in (raw_port, raw_chars)):
+        if any(
+            not scan_pattern(r"[0-9]{1,5}").fullmatch(str(v))
+            for v in (raw_port, raw_chars)
+        ):
             raise ValueError("Invalid integer")
         port = int(raw_port)
         chars = int(raw_chars)
@@ -50,7 +53,9 @@ def configuration(values):
             "IMAP port must be 1-65535; body character limit must be 1-65536"
         )
     interval = values.get("poll_interval_minutes", "5")
-    if not isinstance(interval, str) or not re.fullmatch(r"[0-9]{1,4}", interval):
+    if not isinstance(interval, str) or not scan_pattern(r"[0-9]{1,4}").fullmatch(
+        interval
+    ):
         raise ValueError("IMAP collection interval must be whole minutes")
     interval = int(interval)
     if not 5 <= interval <= 1440 or interval % 5:

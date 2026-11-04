@@ -280,13 +280,11 @@ test('documents with neither file nor URL hide the open action', async (t) => {
   assert.equal(none.ui.el('documentDescription').textContent, 'No description recorded.');
 });
 
-test('access control rows show their service, accounts and roles', async (t) => {
+test('access control rows show their service and roles', async (t) => {
   const row = {
     id: 'x1',
     task_action: hostile + 'Grant prod access',
-    status: 'Approved',
     service: { id: 'as1', asset: 'Prod DB' },
-    aws_accounts: [{ name: 'prod', account_id: '1234' }, {}],
     roles: [{ name: '<b>DBA</b>' }],
     notes: '',
   };
@@ -295,22 +293,20 @@ test('access control rows show their service, accounts and roles', async (t) => 
     row,
   });
   assert.equal(ui.el('accessTitle').textContent, row.task_action);
-  assert.match(ui.el('accessMeta').textContent, /^Prod DB · Approved · updated/);
+  assert.match(ui.el('accessMeta').textContent, /^Prod DB · updated/);
   assert.match(
     ui.el('accessService').querySelector('a').getAttribute('href'),
     /isms-asset\.html\?id=as1/,
   );
-  assert.deepEqual(
-    [...ui.el('accessAccounts').querySelectorAll('.badge')].map((b) => b.textContent),
-    ['prod · 1234', 'hosting account'],
-  );
+  assert.equal(ui.el('accessAccounts'), null);
+  assert.equal(ui.el('accessStatusValue'), null);
   assert.equal(ui.el('accessRoles').querySelector('b'), null);
   assert.equal(ui.el('accessNotes').textContent, 'No notes recorded.');
   const body = await sample(ui, posted, 'sampleAccessAudit');
   assert.equal(body.entity_type, 'isms_access_control_matrix');
 });
 
-test('access rows without a linked service or accounts show placeholders', async (t) => {
+test('access rows without a linked service show placeholders', async (t) => {
   const { ui } = await detail(t, 'isms-access', {
     path: '/api/v1/isms/access-control-matrix/x1',
     row: { id: 'x1', service: { name: 'Legacy <i>' } },
@@ -318,8 +314,6 @@ test('access rows without a linked service or accounts show placeholders', async
   });
   assert.equal(ui.el('accessService').textContent, 'Legacy <i>');
   assert.equal(ui.el('accessService').querySelector('a'), null);
-  assert.equal(ui.el('accessStatusValue').textContent, 'Pending Approval');
-  assert.equal(ui.el('accessAccounts').textContent, '-');
   assert.equal(ui.el('editAccessLink').style.display, 'none');
 });
 

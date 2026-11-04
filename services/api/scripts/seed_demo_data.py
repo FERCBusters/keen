@@ -63,10 +63,8 @@ from app.db.models import (  # noqa: E402
     InterestedPartyControlLink,
     InterestedPartyName,
     InterestedPartyNature,
-    IsmsAccessControlMatrixAwsAccount,
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
-    IsmsAwsAccount,
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
@@ -613,37 +611,6 @@ class DemoSeeder:
             )
         return assets
 
-    def seed_hosting_accounts(self) -> dict[str, IsmsAwsAccount]:
-        specs = {
-            "prod": (
-                "Production Hosting Account",
-                "PROD-001",
-                "Primary production workloads.",
-            ),
-            "stage": (
-                "Staging Hosting Account",
-                "STAGE-001",
-                "Pre-production validation workloads.",
-            ),
-            "backup": (
-                "Backup Hosting Account",
-                "BACKUP-001",
-                "Isolated backup and restore environment.",
-            ),
-        }
-        return {
-            key: self.upsert(
-                IsmsAwsAccount,
-                {"account_id": self.account_code(code)},
-                {
-                    "name": self.label(name),
-                    "notes": notes,
-                    "created_by_user_id": self.user.id,
-                },
-            )
-            for key, (name, code, notes) in specs.items()
-        }
-
     def seed_business_processes(self) -> dict[str, PestleBusinessProcess]:
         specs = {
             "onboarding": ("Customer onboarding", "New customer setup and assurance."),
@@ -772,15 +739,12 @@ class DemoSeeder:
     def seed_access_matrix(
         self,
         assets: dict[str, RiskAsset],
-        accounts: dict[str, IsmsAwsAccount],
         org_nodes: dict[str, IsmsOrgNode],
     ) -> None:
         specs = [
             {
                 "task": "Approve production administrator access",
                 "asset": "platform",
-                "status": "Approved",
-                "accounts": ["prod"],
                 "roles": ["security_lead", "platform_engineer"],
                 "notes": "Production admin access requires ticket approval and quarterly review.",
                 "controls": ["A.5.15", "A.5.16", "A.8.2"],
@@ -788,8 +752,6 @@ class DemoSeeder:
             {
                 "task": "Rotate backup restore credentials",
                 "asset": "data_store",
-                "status": "Pending Approval",
-                "accounts": ["backup"],
                 "roles": ["platform_engineer"],
                 "notes": "Credential rotation is pending the next restore validation window.",
                 "controls": ["A.5.17", "A.8.13", "A.8.24"],
@@ -797,8 +759,6 @@ class DemoSeeder:
             {
                 "task": "Deploy application release to staging",
                 "asset": "web_app",
-                "status": "Approved",
-                "accounts": ["stage"],
                 "roles": ["security_lead", "platform_engineer"],
                 "notes": "Staging deployment is allowed after code review and CI checks pass.",
                 "controls": ["A.8.8", "A.8.25", "A.8.28"],
@@ -806,8 +766,6 @@ class DemoSeeder:
             {
                 "task": "Triage customer security request",
                 "asset": "service_desk",
-                "status": "Approved",
-                "accounts": ["prod", "stage"],
                 "roles": ["service_desk", "dpo"],
                 "notes": "Support staff can inspect metadata but not export evidence without approval.",
                 "controls": ["A.5.4", "A.5.24", "A.6.3"],
@@ -818,8 +776,6 @@ class DemoSeeder:
                 dict(
                     task="Revoke a departing contractor's access",
                     asset="platform",
-                    status="Pending Approval",
-                    accounts=["prod", "stage"],
                     roles=["security_lead", "service_desk"],
                     notes="Fictional leaver checklist: disable identity, revoke tokens, confirm removal and retain reviewer evidence. No real account is changed.",
                     controls=["A.5.18", "A.6.5"],
@@ -827,8 +783,6 @@ class DemoSeeder:
                 dict(
                     task="Review temporary supplier support access",
                     asset="web_app",
-                    status="Pending Approval",
-                    accounts=["prod"],
                     roles=["security_lead", "platform_engineer"],
                     notes="Fictional time-limited support request. Require sponsor approval, MFA, an expiry and post-session review before enabling access.",
                     controls=["A.5.19", "A.5.22", "A.8.2"],
@@ -836,8 +790,6 @@ class DemoSeeder:
                 dict(
                     task="Exercise emergency recovery access",
                     asset="data_store",
-                    status="Approved",
-                    accounts=["backup"],
                     roles=["security_lead", "platform_engineer"],
                     notes="Fictional break-glass exercise with dual approval and subsequent credential rotation. This matrix is documentation only; it grants no Keen permissions.",
                     controls=["A.5.30", "A.8.13"],
@@ -845,8 +797,6 @@ class DemoSeeder:
                 dict(
                     task="Export a synthetic audit evidence package",
                     asset="service_desk",
-                    status="Pending Approval",
-                    accounts=["stage"],
                     roles=["isms_owner", "dpo"],
                     notes="Review recipient, scope and redaction before exporting fictional evidence; record retention and approval decisions.",
                     controls=["A.5.12", "A.5.14"],
@@ -859,16 +809,10 @@ class DemoSeeder:
                 {"task_action": self.label(spec["task"])},
                 {
                     "service_asset_id": assets[spec["asset"]].id,
-                    "status": spec["status"],
                     "notes": spec["notes"],
                     "created_by_user_id": self.user.id,
                 },
             )
-            for account_key in spec["accounts"]:
-                self.ensure_link(
-                    IsmsAccessControlMatrixAwsAccount,
-                    {"entry_id": entry.id, "aws_account_id": accounts[account_key].id},
-                )
             for role_key in spec["roles"]:
                 self.ensure_link(
                     IsmsAccessControlMatrixRole,
@@ -2062,12 +2006,11 @@ class DemoSeeder:
         org_nodes = self.seed_org_nodes()
         licenses = self.seed_licenses()
         assets = self.seed_assets(licenses, org_nodes)
-        accounts = self.seed_hosting_accounts()
         processes = self.seed_business_processes()
         self.seed_interested_parties()
         risks = seed_risks(self, assets, org_nodes)
         seed_pestle(self, processes)
-        self.seed_access_matrix(assets, accounts, org_nodes)
+        self.seed_access_matrix(assets, org_nodes)
         docs = seed_documents(self)
         diary_events = self.seed_diary_events()
         events = {**diary_events, **self.seed_source_events(), **seed_evidence(self)}

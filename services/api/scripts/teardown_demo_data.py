@@ -58,10 +58,8 @@ from app.db.models import (  # noqa: E402
     InterestedPartyControlLink,
     InterestedPartyName,
     InterestedPartyNature,
-    IsmsAccessControlMatrixAwsAccount,
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
-    IsmsAwsAccount,
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsDocumentFolder,
@@ -256,18 +254,6 @@ class DemoTeardown:
                 )
             )
         )
-        found["accounts"] = self.ids(
-            db.query(IsmsAwsAccount.id).filter(
-                or_(
-                    self.labelled(IsmsAwsAccount.name),
-                    self.starts_with(
-                        IsmsAwsAccount.account_id,
-                        (re.sub(r"[^A-Z0-9]", "", self.prefix.upper()) or "DEMO")[:12]
-                        + "-",
-                    ),
-                )
-            )
-        )
         found["parties"] = (
             self.ids(
                 db.query(InterestedParty.id).filter(
@@ -285,10 +271,24 @@ class DemoTeardown:
                 )
             )
         )
+        cloud_assets = []
+        if settings.demo_mode:
+            # Demo cloud posture is the seed's fictional data, and so are the
+            # assets KEEN added for its scopes.
+            from app.db.models import CloudPostureScope
+            from app.ingest.cloud.runner import scope_asset_id
+
+            cloud_assets = [
+                scope_asset_id(provider, key)
+                for provider, key in db.query(
+                    CloudPostureScope.provider, CloudPostureScope.scope_key
+                )
+            ]
         found["assets"] = self.ids(
             db.query(RiskAsset.id).filter(
                 or_(
                     self.labelled(RiskAsset.name),
+                    RiskAsset.id.in_(cloud_assets or [None]),
                     RiskAsset.category_id.in_(found["categories"] or [None]),
                     RiskAsset.subcategory_id.in_(found["subcategories"] or [None]),
                     RiskAsset.license_id.in_(found["licences"] or [None]),
@@ -445,16 +445,6 @@ class DemoTeardown:
             IsmsMeetingAttendee, IsmsMeetingAttendee.meeting_id, found["meetings"]
         )
         self.delete_ids(
-            IsmsAccessControlMatrixAwsAccount,
-            IsmsAccessControlMatrixAwsAccount.entry_id,
-            found["access"],
-        )
-        self.delete_ids(
-            IsmsAccessControlMatrixAwsAccount,
-            IsmsAccessControlMatrixAwsAccount.aws_account_id,
-            found["accounts"],
-        )
-        self.delete_ids(
             IsmsAccessControlMatrixRole,
             IsmsAccessControlMatrixRole.entry_id,
             found["access"],
@@ -522,7 +512,6 @@ class DemoTeardown:
             IsmsAccessControlMatrixEntry.id,
             found["access"],
         )
-        self.delete_ids(IsmsAwsAccount, IsmsAwsAccount.id, found["accounts"])
         self.delete_ids(IsmsDocument, IsmsDocument.id, found["documents"])
         self.delete_ids(IsmsDocumentFolder, IsmsDocumentFolder.id, found["folders"])
         self.delete_ids(Risk, Risk.id, found["risks"])

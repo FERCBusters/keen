@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import time
 from contextlib import asynccontextmanager
 
@@ -45,6 +44,7 @@ from app.security.permissions import (
 )
 from app.security.rate_limit import address_window_allow
 from app.security.redaction import redact_query_string, redact_str
+from app.security.regex import scan_pattern
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.security.roles import attach_effective_role, lock_admin_changes
 from app.security.route_policy import (
@@ -343,7 +343,7 @@ def _authenticate(request: Request) -> JSONResponse | None:
 
 # Authorisation codes and state are single-use, but are still credentials
 # while a sign-in is in progress; keep them out of the audit trail.
-_OAUTH_CALLBACK_PATH = re.compile(r"/v1/auth/(?:oidc|sso/[^/]+)/callback")
+_OAUTH_CALLBACK_PATH = scan_pattern(r"/v1/auth/(?:oidc|sso/[^/]+)/callback")
 _OAUTH_CALLBACK_QUERY_KEYS = frozenset({"code", "state"})
 # Public read-only documents that anyone may fetch at any rate.
 _UNAUDITED_PUBLIC_READS = frozenset(

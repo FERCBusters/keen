@@ -22,6 +22,7 @@ from app.core.cache import cached_json, user_cache_scope
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event, Mapping
 from app.security.diary_visibility import diary_filter_condition
+from app.security.regex import scan_pattern
 from app.services.control_inheritance import effective_framework_ids
 from app.services.errors import DomainError
 
@@ -41,12 +42,12 @@ REPEAT_MIN_COUNT = 3
 REPEAT_LIMIT = 8
 PERIOD_LIMIT = 5
 
-_UUID = re.compile(
+_UUID = scan_pattern(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
 )
-_HEX = re.compile(r"\b[0-9a-f]{7,}\b", re.I)
-_NUMBER = re.compile(r"\d+([.,:]\d+)*")
-_SPACE = re.compile(r"\s+")
+_HEX = scan_pattern(r"\b[0-9a-f]{7,}\b", re.I)
+_NUMBER = scan_pattern(r"\d+(?:[.,:]\d+)*+")
+_SPACE = scan_pattern(r"\s+")
 
 
 def summary_pattern(summary: str) -> str:

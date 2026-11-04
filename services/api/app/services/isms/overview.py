@@ -12,7 +12,6 @@ from app.db.models import (
     ControlItem,
     FrameworkClause,
     IsmsAccessControlMatrixEntry,
-    IsmsAwsAccount,
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
@@ -35,7 +34,6 @@ from .serializers import (
     _access_control_matrix_out,
     _asset_categories_out,
     _asset_out,
-    _aws_account_out,
     _clause_out,
     _document_out,
     _effectiveness_measure_out,
@@ -75,7 +73,6 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
         "objective_statuses": sorted(OBJECTIVE_STATUSES),
         "application_values": ["Low", "Medium", "High"],
         "application_source_types": sorted(APP_SOURCE_TYPES),
-        "access_statuses": ["Pending Approval", "Approved"],
         "effectiveness_threshold_operators": ["", "lt", "lte", "eq", "gte", "gt"],
     }
 
@@ -119,16 +116,6 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
             _license_out(row, include_asset_count=True) for row in licenses
         ]
 
-    if wants("access"):
-        aws_accounts = (
-            db.query(IsmsAwsAccount)
-            .order_by(func.lower(IsmsAwsAccount.name).asc())
-            .all()
-        )
-        payload["aws_accounts"] = [
-            _aws_account_out(row, include_entry_count=True) for row in aws_accounts
-        ]
-
     if wants("objectives", "documents", "org", "assets", "effectiveness", "meetings"):
         controls = (
             db.query(ControlItem)
@@ -164,7 +151,6 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
         "assets": "assets",
         "asset_categories": "assets",
         "licenses": "assets",
-        "aws_accounts": "access_control",
         "access_control_matrix": "access_control",
         "effectiveness_measures": "effectiveness",
         "effectiveness_metric_entries": "effectiveness",
@@ -202,7 +188,6 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
         "org_nodes": int(db.query(IsmsOrgNode.id).count() or 0),
         "assets": int(db.query(RiskAsset.id).count() or 0),
         "licenses": int(db.query(IsmsLicense.id).count() or 0),
-        "aws_accounts": int(db.query(IsmsAwsAccount.id).count() or 0),
         "access_control_matrix": int(
             db.query(IsmsAccessControlMatrixEntry.id).count() or 0
         ),
@@ -310,7 +295,6 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
         "assets": "assets",
         "asset_categories": "assets",
         "licenses": "assets",
-        "aws_accounts": "access_control",
         "access_control_matrix": "access_control",
         "effectiveness_measures": "effectiveness",
         "effectiveness_metric_entries": "effectiveness",

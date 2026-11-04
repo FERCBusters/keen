@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import uuid
 
 import httpx
@@ -23,6 +22,7 @@ from app.db.session import track_unpublished_object
 from app.ingest.bookstack import _client
 from app.security.permissions import has_permission
 from app.security.redaction import prepare_event_fields
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 from app.storage.s3 import put_bytes
 
@@ -113,7 +113,7 @@ def capture_section(*, payload: SectionInput, user, db: Session):
     ):
         raise DomainError(400, "Unknown framework target")
     anchor = payload.anchor.strip().removeprefix("#")
-    if anchor and not re.fullmatch(r"[A-Za-z0-9_:-]{1,256}", anchor):
+    if anchor and not scan_pattern(r"[A-Za-z0-9_:-]{1,256}").fullmatch(anchor):
         raise DomainError(
             400, "Use a BookStack section anchor such as bkmrk-access-review"
         )

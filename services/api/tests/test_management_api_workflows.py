@@ -87,12 +87,6 @@ ENTITIES = [
     ("isms/org-nodes", {"name": "Security team"}, "name", "Security role"),
     ("isms/licenses", {"name": "License A"}, "name", "License B"),
     (
-        "isms/aws-accounts",
-        {"name": "Production", "account_id": "123456789012"},
-        "name",
-        "Staging",
-    ),
-    (
         "isms/meetings",
         {"title": "Review", "date": "2026-01-01"},
         "title",
@@ -358,9 +352,6 @@ def test_asset_license_and_access_matrix_relationship_lifecycle(api):
             "owner_org_node_id": role["id"],
         },
     )
-    account = request(
-        api, "POST", "isms/aws-accounts", {"name": "Hosting", "account_id": "account-1"}
-    )
     entry = request(
         api,
         "POST",
@@ -368,7 +359,6 @@ def test_asset_license_and_access_matrix_relationship_lifecycle(api):
         {
             "task_action": "Deploy",
             "service_asset_id": asset["id"],
-            "aws_account_ids": [account["id"]],
             "role_org_node_ids": [role["id"]],
         },
     )
@@ -376,7 +366,6 @@ def test_asset_license_and_access_matrix_relationship_lifecycle(api):
     assert request(api, "GET", path)["task_action"] == "Deploy"
     assert request(api, "PATCH", path, {"notes": "Reviewed"})["notes"] == "Reviewed"
     request(api, "DELETE", path)
-    request(api, "DELETE", "isms/aws-accounts/" + account["id"])
     request(
         api,
         "PATCH",
@@ -826,14 +815,6 @@ def test_control_relationship_view_skips_orphaned_and_unlisted_links(api):
                 "isms/assets",
                 {"asset": "S", "category_name": "C", "subcategory_name": "D"},
             )["id"],
-            "aws_account_ids": [
-                request(
-                    api,
-                    "POST",
-                    "isms/aws-accounts",
-                    {"name": "H", "account_id": "1"},
-                )["id"]
-            ],
         },
     )
     api.db.add(
@@ -863,7 +844,6 @@ def test_serializers_tolerate_missing_rows_and_refuse_unknown_entity_types():
     assert serializers._business_process_out(None) is None
     assert serializers._asset_category_out(None) is None
     assert serializers._asset_subcategory_out(None) is None
-    assert serializers._aws_account_out(None) is None
     assert serializers._metric_entry_value_display(None) == ""
     assert serializers._metric_entry_out(None) is None
     with pytest.raises(DomainError) as refused:

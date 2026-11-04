@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from typing import Any
 
 from app.security.json_shape import json_depth
+from app.security.regex import scan_pattern
 
 
 def ensure_utc(dt: datetime | None) -> datetime | None:
@@ -65,7 +65,9 @@ def brief_http_request(log_line: str) -> str:
       "... \"GET /path?query=... HTTP/1.1\" ..." -> "GET /path"
     """
     s = str(log_line or "")
-    m = re.search(r'"(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+([^\s\"]+)', s)
+    m = scan_pattern(r'"(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+([^\s\"]+)').search(
+        s
+    )
     if not m:
         return ""
     return f"{m.group(1)} {truncate(m.group(2).split('?', 1)[0], 120)}"

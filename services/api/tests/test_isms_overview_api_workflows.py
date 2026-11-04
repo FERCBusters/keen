@@ -123,18 +123,12 @@ def isms(keen):  # noqa: F811 - fixture imported above
         "/v1/isms/assets",
         {"asset": "Kiosk", "category_name": "Hardware", "subcategory_name": "Devices"},
     )
-    account = manage(
-        "POST",
-        "/v1/isms/aws-accounts",
-        {"name": "Production", "account_id": "123456789012"},
-    )
     entry = manage(
         "POST",
         "/v1/isms/access-control-matrix",
         {
             "task_action": "Deploy",
             "service_asset_id": asset["id"],
-            "aws_account_ids": [account["id"]],
             "role_org_node_ids": [role["id"]],
         },
     )
@@ -224,7 +218,7 @@ def test_meta_lists_the_choices_for_each_section(isms):
     assert [doc["title"] for doc in meta["documents"]] == ["Security policy"]
     assert {a["name"] for a in meta["assets"]} == {"Payroll database", "Kiosk"}
     assert [lic["name"] for lic in meta["licenses"]] == ["Enterprise seat"]
-    assert [acc["name"] for acc in meta["aws_accounts"]] == ["Production"]
+    assert "aws_accounts" not in meta
     assert {c["name"] for c in meta["asset_categories"]} >= {"Data", "Hardware"}
     assert isinstance(meta["effectiveness_metric_sources"], list)
     assert meta["effectiveness_metric_source_types"] == [
@@ -235,12 +229,10 @@ def test_meta_lists_the_choices_for_each_section(isms):
     documents = _send(reader, "GET", "/v1/isms/meta", section="Policies")
     assert documents["section"] == "documents"
     assert {"controls", "clauses"} <= set(documents)
-    assert not {"users", "org_nodes", "assets", "licenses", "aws_accounts"} & set(
-        documents
-    )
+    assert not {"users", "org_nodes", "assets", "licenses"} & set(documents)
     access = _send(reader, "GET", "/v1/isms/meta", section="access-control")
     assert access["section"] == "access"
-    assert {"users", "org_nodes", "assets", "aws_accounts"} <= set(access)
+    assert {"users", "org_nodes", "assets"} <= set(access)
     assert "controls" not in access
     overview = _send(reader, "GET", "/v1/isms/meta", section="summary")
     assert overview["section"] == "overview" and "users" not in overview
@@ -258,7 +250,6 @@ def test_summary_counts_and_lists_each_register(isms):
         "org_nodes": 2,
         "assets": 2,
         "licenses": 1,
-        "aws_accounts": 1,
         "access_control_matrix": 1,
         "effectiveness_measures": 1,  # framework A only
         "effectiveness_metric_entries": 1,

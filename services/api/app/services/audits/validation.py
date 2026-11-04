@@ -9,6 +9,7 @@ from sqlalchemy import func
 
 from app.core.config import settings
 from app.db.models import Audit
+from app.security.regex import scan_pattern
 from app.security.rich_text import sanitize_rich_text_html
 from app.services.errors import DomainError
 from app.services.text import clean_text
@@ -32,7 +33,7 @@ AUDIT_SAMPLE_ENTITY_LABELS = {
 }
 
 
-ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ISO_DATE = scan_pattern(r"^\d{4}-\d{2}-\d{2}$")
 
 
 FINDING_STATUSES = {"open", "closed", "accepted"}
@@ -72,7 +73,7 @@ def clean_framework(raw: str | None) -> str:
     v = (raw or settings.default_framework_slug or "").strip()
     if not v:
         raise DomainError(status_code=400, detail="framework_slug is required")
-    if len(v) > 64 or not re.match(r"^[A-Za-z0-9._:-]+$", v):
+    if len(v) > 64 or not scan_pattern(r"^[A-Za-z0-9._:-]+$").match(v):
         raise DomainError(status_code=400, detail="Invalid framework_slug")
     return v
 
@@ -142,7 +143,7 @@ def clean_url(raw: str | None) -> str | None:
             status_code=400,
             detail="evidence_url must not contain backslashes or control characters",
         )
-    if re.match(r"^(?:javascript|data|vbscript):", v, flags=re.I):
+    if scan_pattern(r"^(?:javascript|data|vbscript):", re.I).match(v):
         raise DomainError(status_code=400, detail="Unsupported evidence_url scheme")
     if v.startswith("//"):
         raise DomainError(

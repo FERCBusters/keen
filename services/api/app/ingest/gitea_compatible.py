@@ -15,7 +15,6 @@ avoids that and is typically the most reliable for private repos.
 from __future__ import annotations
 
 import json
-import re
 from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
@@ -39,8 +38,9 @@ from app.ingest.http import ListingTooLarge, require_origin, retained_listing
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
+from app.security.regex import scan_pattern
 
-_ACCOUNT_NAME = re.compile(r"[A-Za-z0-9_.-]{1,100}")
+_ACCOUNT_NAME = scan_pattern(r"[A-Za-z0-9_.-]{1,100}")
 
 
 class ActivityListingIncomplete(ValueError):

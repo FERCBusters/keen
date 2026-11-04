@@ -22,6 +22,7 @@ from app.integrations.runtime import dispatch, fail, queue_run
 from app.integrations.schema import Definition, Strict, has_dot_segment
 from app.integrations.templates import templates
 from app.integrations.transport import encrypt
+from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 
 
@@ -127,11 +128,10 @@ def validate_definition(db, d):
     def walk(v):
         if isinstance(v, dict):
             for k, x in v.items():
-                if re.search(
+                if scan_pattern(
                     r"(^|[_-])(password|secret|token|api[_-]?key|authorization|cookie)($|[_-])",
-                    k,
                     re.I,
-                ):
+                ).search(k):
                     raise DomainError(
                         422, "Move credentials from the definition to a Connection"
                     )
@@ -209,7 +209,7 @@ def _save_connection(key, body, db, new=False):
     ):
         raise DomainError(422, "Unsupported authentication type")
     if body.auth_kind in ("header", "query") and (
-        not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,127}", body.auth_name)
+        not scan_pattern(r"[A-Za-z][A-Za-z0-9_-]{0,127}").fullmatch(body.auth_name)
         or body.auth_name.lower()
         in (
             "host",

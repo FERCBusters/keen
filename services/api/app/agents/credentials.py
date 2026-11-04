@@ -8,7 +8,6 @@ an administrator registers the identity and never changes.
 
 import hashlib
 import hmac
-import re
 from contextlib import contextmanager
 from datetime import timedelta
 
@@ -27,6 +26,7 @@ from app.security.agent_signatures import (
     verify_request,
 )
 from app.security.rate_limit import fixed_window_allow
+from app.security.regex import scan_pattern
 
 NONCE_SECONDS = 600
 RENEWAL_GRACE = timedelta(hours=24)
@@ -37,9 +37,8 @@ def digest(value):
 
 
 def parse_agent_credential(authorization):
-    match = re.fullmatch(
-        r"Bearer (ka_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43})",
-        authorization,
+    match = scan_pattern(r"Bearer (ka_([0-9a-f-]{36})\.[A-Za-z0-9_-]{43})").fullmatch(
+        authorization
     )
     if not match:
         raise HTTPException(401, "Invalid agent credential")

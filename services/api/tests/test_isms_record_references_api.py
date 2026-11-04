@@ -1,7 +1,7 @@
 """People, accounts, roles and documents that ISMS records refer to.
 
 Meetings, organisation roles, objectives and access-matrix entries name users,
-people, hosting accounts, roles and documents by ID. The API accepts only
+people, roles and documents by ID. The API accepts only
 records that exist (and users who are active), lists each one once, and
 replaces a list only when an edit sends it.
 """
@@ -163,30 +163,16 @@ def test_role_members_and_objective_resources_must_be_active_users(isms):  # noq
     assert objective["resource_user_ids"] == [member]
 
 
-def test_access_entries_name_existing_accounts_and_roles(isms):  # noqa: F811
+def test_access_entries_name_existing_roles(isms):  # noqa: F811
     path = f"/v1/isms/access-control-matrix/{isms.entry['id']}"
-    account = isms.entry["aws_account_ids"][0]
     role = isms.role["id"]
 
-    kept = isms.manage(
-        "PATCH",
-        path,
-        {"aws_account_ids": [account, account], "role_org_node_ids": [role, role]},
-    )
+    kept = isms.manage("PATCH", path, {"role_org_node_ids": [role, role]})
 
-    assert (kept["aws_account_ids"], kept["role_org_node_ids"]) == ([account], [role])
-    missing_account = str(uuid.UUID(int=11))
+    assert kept["role_org_node_ids"] == [role]
     missing_role = str(uuid.UUID(int=12))
-    refused = isms.manage(
-        "PATCH", path, {"aws_account_ids": [missing_account]}, status=400
-    )
-    assert refused["detail"] == f"Unknown hosting account: {missing_account}"
     refused = isms.manage(
         "PATCH", path, {"role_org_node_ids": [missing_role]}, status=400
     )
     assert refused["detail"] == "Unknown organisation chart role"
-    unchanged = isms.manage("GET", path)
-    assert (unchanged["aws_account_ids"], unchanged["role_org_node_ids"]) == (
-        [account],
-        [role],
-    )
+    assert isms.manage("GET", path)["role_org_node_ids"] == [role]
