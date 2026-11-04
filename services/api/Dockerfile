@@ -1,5 +1,5 @@
 # Pinned by digest; tools/docker_image_pins.py keeps the digest current.
-FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159
+FROM python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
 
 WORKDIR /app
 
