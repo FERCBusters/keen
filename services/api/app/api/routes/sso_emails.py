@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.api.context import change_context
 from app.api.routing import Router
-from app.core.config import settings
 from app.db.session import get_db
+from app.security.auth import cookie_name as session_cookie_name
 from app.security.auth import require_authenticated
 from app.services import sso_emails as service
 from app.services.sso_emails import Address, Proof
@@ -33,7 +33,7 @@ def request_address(
         context=change_context(request),
         user=user,
         db=db,
-        session_id=request.cookies.get(settings.session_cookie_name, ""),
+        session_id=request.cookies.get(session_cookie_name(), ""),
     )
 
 
@@ -61,5 +61,5 @@ def remove_address(
         context=change_context(request),
         user=user,
         db=db,
-        session_id=request.cookies.get(settings.session_cookie_name, ""),
+        session_id=request.cookies.get(session_cookie_name(), ""),
     )

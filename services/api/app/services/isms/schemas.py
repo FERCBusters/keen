@@ -100,7 +100,6 @@ class AccessControlMatrixPayload(BaseModel):
     service_asset_id: uuid.UUID | None = None
     aws_account_ids: list[uuid.UUID] | None = None
     status: str | None = Field(default=None, max_length=32)
-    approved_by_user_id: uuid.UUID | None = None
     # One access row can apply to several organisation-chart roles.
     role_org_node_ids: list[uuid.UUID] | None = None
     notes: str | None = Field(default=None, max_length=12000)

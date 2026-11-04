@@ -7,7 +7,6 @@ import {
   getCurrentFramework,
   toast,
   withFramework,
-  userPillHtml,
   canSampleIntoAudit,
   openAuditSampleModal,
   loadEntityChangelog,
@@ -71,7 +70,6 @@ function renderAccess(row) {
   $('accessService').innerHTML = serviceHtml(access);
   $('accessAccounts').innerHTML = accountBadges(access.aws_accounts);
   $('accessStatusValue').textContent = access.status || 'Pending Approval';
-  $('accessApprovedBy').innerHTML = userPillHtml(access.approved_by);
   $('accessRoles').innerHTML = badgeList(access.roles, 'name');
   $('accessUpdated').textContent = fmtTs(access.updated_at) || '-';
 

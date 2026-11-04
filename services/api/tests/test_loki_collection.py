@@ -616,6 +616,36 @@ def test_long_labels_are_bounded_to_the_event_columns(lk):
         assert len(value) == getattr(Event.__table__.c, column).type.length, column
 
 
+def test_a_line_nested_too_deeply_is_stored_as_text_and_the_run_continues(lk):
+    # One log line nested more deeply than collected structures are walked
+    # must not fail the run and hold the cursor back for every later line.
+    deep = "[" * 3000 + "]" * 3000
+    within = json.dumps({"level": [[["ok"]]]})
+    lk.upstream.replies.append(
+        [
+            {
+                "stream": {"app": "api"},
+                "values": [
+                    _line(NOW - timedelta(minutes=6), deep),
+                    _line(NOW - timedelta(minutes=5), within),
+                    _line(NOW - timedelta(minutes=4), "plain after"),
+                ],
+            }
+        ]
+    )
+
+    (result,) = lk.run()
+
+    assert result["created_events"] == 3, result
+    by_line = {event.normalized_payload["line"]: event for event in lk.events()}
+    # The deep line is kept as text; a shallow document is still structured.
+    assert "json" not in by_line[deep].normalized_payload
+    assert by_line[within].normalized_payload["json"] == {"level": [[["ok"]]]}
+    assert "json" not in by_line["plain after"].normalized_payload
+    # The cursor moves past the window, so later runs continue after it.
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW
+
+
 def _failed_login(user):
     # An OSSEC-style line; `srcuser` is whatever a client typed as its username.
     return json.dumps(

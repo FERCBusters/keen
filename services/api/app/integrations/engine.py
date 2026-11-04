@@ -208,9 +208,7 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
         else:
             nxt = pointer(payload, p.next_path)
             if p.mode == "link":
-                link = next((v for k, v in headers.items() if k.lower() == "link"), "")
-                match = re.search(r'<([^>]+)>\s*;\s*rel="?next"?', link)
-                nxt = match.group(1) if match else None
+                nxt = next_link(headers)
             if nxt is None or nxt == "":
                 complete = True
                 break
@@ -233,6 +231,17 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
             "Page limit reached; cursor was not advanced. Narrow the query or raise the bounded limit"
         )
     return records, watermark.isoformat(), pages
+
+
+def next_link(headers) -> str | None:
+    """The target of a Link header's rel="next" entry, if there is one.
+
+    A target holds no "<", so each "<" starts at most one attempt and the
+    search takes time linear in the header's length.
+    """
+    link = next((v for k, v in headers.items() if k.lower() == "link"), "")
+    match = re.search(r'<([^<>]+)>\s*;\s*rel="?next"?', link)
+    return match.group(1) if match else None
 
 
 def external_id(collector_id, record_id):

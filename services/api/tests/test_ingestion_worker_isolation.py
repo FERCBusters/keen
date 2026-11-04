@@ -72,13 +72,17 @@ def test_every_ingest_http_task_ends_after_its_collection_budgets():
     validate_config({"max_run_seconds": 1800})
     with pytest.raises(RiskLedgerError):
         validate_config({"max_run_seconds": 1801})
-    for source in HTTP_INGEST_SOURCES:
-        task = getattr(tasks, f"ingest_{source}_all_task")
-        assert task.soft_time_limit > 1800 + http.MAX_RESPONSE_SECONDS
+    assert tasks.ingest_riskledger_all_task.soft_time_limit > (
+        1800 + http.MAX_RESPONSE_SECONDS
+    )
     assert (
         tasks.ingest_source_connection_task.soft_time_limit
         > 1800 + http.MAX_RESPONSE_SECONDS
     )
+    # Every other source's run has room for several requests.
+    for source in HTTP_INGEST_SOURCES:
+        task = getattr(tasks, f"ingest_{source}_all_task")
+        assert task.soft_time_limit > 2 * http.MAX_RESPONSE_SECONDS, source
 
 
 @pytest.mark.parametrize("source", sorted(set(HTTP_INGEST_SOURCES) - {"elasticsearch"}))

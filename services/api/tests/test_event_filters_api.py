@@ -639,7 +639,8 @@ def test_exports_apply_list_filters_and_name_them(events):
         "Nightly backup & restore"
     ]
     assert response.headers["content-disposition"] == (
-        'attachment; filename="events_source-ci-jenkins_rule-backup-runs.json"'
+        'attachment; filename="events_source-ci-jenkins_rule-backup-runs.json"; '
+        "filename*=UTF-8''events_source-ci-jenkins_rule-backup-runs.json"
     )
 
 

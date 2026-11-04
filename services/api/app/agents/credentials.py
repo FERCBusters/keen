@@ -9,9 +9,12 @@ an administrator registers the identity and never changes.
 import hashlib
 import hmac
 import re
+from contextlib import contextmanager
 from datetime import timedelta
 
 from fastapi import HTTPException
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
@@ -43,22 +46,57 @@ def parse_agent_credential(authorization):
     return match[1], match[2]
 
 
+# PostgreSQL's lock_not_available, raised by NOWAIT and by lock_timeout.
+LOCK_NOT_AVAILABLE = "55P03"
+# How long a request waits for its profile's row, which only administrative
+# changes and enrolments hold exclusively. Another request of the same agent is
+# never waited for: while one holds the agent's row, the next is refused at
+# once and retried by the agent, so one identity cannot hold database
+# connections waiting behind its own requests.
+LOCK_WAIT_SECONDS = 5
+
+
+@contextmanager
+def bounded_lock_wait(db, *, locking=True):
+    """Answer 429 once a row lock held elsewhere has been waited for briefly."""
+    postgres = locking and db.get_bind().dialect.name == "postgresql"
+    if postgres:
+        db.execute(text(f"SET LOCAL lock_timeout = '{LOCK_WAIT_SECONDS}s'"))
+    try:
+        yield
+    except OperationalError as error:
+        if getattr(error.orig, "pgcode", None) == LOCK_NOT_AVAILABLE:
+            raise HTTPException(
+                429,
+                "The agent's identity is busy; retry shortly",
+                headers={"Retry-After": "5"},
+            ) from None
+        raise
+    if postgres:
+        db.execute(text("SET LOCAL lock_timeout TO DEFAULT"))
+
+
 def locked_agent(db, ident, *, lock=True):
     agent = db.query(KeenAgent).filter_by(id=ident).one_or_none()
     if not agent:
         raise HTTPException(401, "Invalid agent credential")
     profile = None
-    if agent.enrollment_profile_id:
-        query = (
-            db.query(AgentEnrollmentProfile)
-            .filter_by(id=agent.enrollment_profile_id)
-            .populate_existing()
-        )
-        profile = (query.with_for_update() if lock else query).one_or_none()
-        if not profile or profile.state == "revoked":
-            raise HTTPException(401, "Invalid agent credential")
-    query = db.query(KeenAgent).filter_by(id=ident).populate_existing()
-    agent = (query.with_for_update() if lock else query).one()
+    with bounded_lock_wait(db, locking=lock):
+        if agent.enrollment_profile_id:
+            query = (
+                db.query(AgentEnrollmentProfile)
+                .filter_by(id=agent.enrollment_profile_id)
+                .populate_existing()
+            )
+            # A shared lock: the profile's agents proceed together, and its
+            # revocation waits for their requests to finish.
+            profile = (
+                query.with_for_update(read=True) if lock else query
+            ).one_or_none()
+            if not profile or profile.state == "revoked":
+                raise HTTPException(401, "Invalid agent credential")
+        query = db.query(KeenAgent).filter_by(id=ident).populate_existing()
+        agent = (query.with_for_update(nowait=True) if lock else query).one()
     if not agent.enabled or agent.expires_at <= utc_now_naive():
         raise HTTPException(401, "Invalid agent credential")
     return agent, profile

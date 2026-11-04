@@ -14,6 +14,7 @@ from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.ingest.http import retained_listing
+from app.integrations.schema import has_dot_segment
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
 from app.security.xml import parse_untrusted_xml
@@ -89,18 +90,21 @@ def _within_api(url: str) -> bool:
     """Return whether a URL GitHub returned lies within the configured API.
 
     Pagination links are followed with Keen's token, so they must stay on the
-    API origin and under its base path.
+    API origin and under its base path. The link is requested as written, and a
+    server resolves dot segments after decoding, so an encoded ``..`` counts.
     """
     try:
         base = httpx.URL(settings.github_base_url.rstrip("/"))
         target = httpx.URL(url)
     except (httpx.InvalidURL, TypeError):
         return False
+    raw_path = target.raw_path.split(b"?", 1)[0].decode("ascii", "replace")
     return (
         target.scheme == base.scheme
         and target.host == base.host
         and target.port == base.port
         and not target.userinfo
+        and not has_dot_segment(raw_path)
         and (target.path.rstrip("/") + "/").startswith(base.path.rstrip("/") + "/")
     )
 

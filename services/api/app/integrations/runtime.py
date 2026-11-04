@@ -19,6 +19,7 @@ from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import Connection as SourceOrigin
 from app.ingest.connections import connection_scope
 from app.mapping.rules import evaluate_by_framework, load_rules
+from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
 from app.security.redaction import redact_obj, redact_url
 from app.services.ingestion_pause import is_paused
 from cryptography.fernet import InvalidToken
@@ -31,15 +32,26 @@ from .transport import connection_auth
 
 
 def scrub(value, secrets):
-    if isinstance(value, dict):
-        return {scrub(k, secrets): scrub(v, secrets) for k, v in value.items()}
-    if isinstance(value, list):
-        return [scrub(v, secrets) for v in value]
-    if isinstance(value, str):
-        for secret in secrets:
-            if secret:
-                value = value.replace(secret, "[REDACTED]")
-    return value
+    """Remove the connection's secrets from a record, wherever they appear.
+
+    Containers nested more than MAX_DEPTH deep become NESTED_TOO_DEEPLY, as in
+    the shared redaction, so one record cannot exhaust the recursion limit.
+    """
+
+    def walk(item, depth):
+        if isinstance(item, (dict, list)) and depth > MAX_DEPTH:
+            return NESTED_TOO_DEEPLY
+        if isinstance(item, dict):
+            return {walk(k, depth + 1): walk(v, depth + 1) for k, v in item.items()}
+        if isinstance(item, list):
+            return [walk(v, depth + 1) for v in item]
+        if isinstance(item, str):
+            for secret in secrets:
+                if secret:
+                    item = item.replace(secret, "[REDACTED]")
+        return item
+
+    return walk(value, 1)
 
 
 def queue_run(db, collector, preview=False):

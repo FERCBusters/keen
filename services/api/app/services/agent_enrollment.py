@@ -14,7 +14,13 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.agents import server_keys
-from app.agents.credentials import digest, live_only, reauthenticate, revoke_keys
+from app.agents.credentials import (
+    bounded_lock_wait,
+    digest,
+    live_only,
+    reauthenticate,
+    revoke_keys,
+)
 from app.agents.schema import Strict
 from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
@@ -440,16 +446,43 @@ def enroll(*, body: Enrollment, context: ChangeContext, db: Session):
     return result
 
 
+def _holds_credential(db, model, ident, credential_hash, *, stored):
+    """Whether a credential could be the record's own, judged without a lock.
+
+    Only then does enrolment take the record's row lock and check again, so a
+    request without the credential never waits for, or holds, that lock.
+    """
+    record = db.query(model).filter_by(id=ident).one_or_none()
+    if record is None:
+        return False
+    own = getattr(record, stored)
+    if own and hmac.compare_digest(own, credential_hash):
+        return True
+    # A retry of a completed enrolment carries a code that is spent.
+    return (
+        model is KeenAgent
+        and db.query(AgentKey.key_id)
+        .filter_by(agent_id=ident, credential_hash=credential_hash)
+        .first()
+        is not None
+    )
+
+
 def enroll_with_code(db, context, code, ident, body):
     if body.name is not None or body.nonce is not None:
         raise DomainError(400, "Enrolment codes take only a key and its proof")
-    agent = (
-        db.query(KeenAgent)
-        .filter_by(id=ident)
-        .populate_existing()
-        .with_for_update()
-        .one_or_none()
-    )
+    if not _holds_credential(
+        db, KeenAgent, ident, digest(code), stored="enrollment_code_hash"
+    ):
+        raise DomainError(401, "Invalid enrollment credential")
+    with bounded_lock_wait(db):
+        agent = (
+            db.query(KeenAgent)
+            .filter_by(id=ident)
+            .populate_existing()
+            .with_for_update()
+            .one_or_none()
+        )
     if agent is None or not agent.enabled or agent.credential_type != "key":
         raise DomainError(401, "Invalid enrollment credential")
     code_hash = digest(code)
@@ -482,13 +515,19 @@ def enroll_with_code(db, context, code, ident, body):
 def enroll_with_profile(db, context, bootstrap, ident, body):
     if body.name is None or body.nonce is None:
         raise DomainError(400, "Profile enrolment needs a name and a nonce")
-    profile = (
-        db.query(AgentEnrollmentProfile)
-        .filter_by(id=ident)
-        .populate_existing()
-        .with_for_update()
-        .one_or_none()
-    )
+    if not _holds_credential(
+        db, AgentEnrollmentProfile, ident, digest(bootstrap), stored="key_hash"
+    ):
+        raise DomainError(401, "Invalid enrollment credential")
+    # The profile's agents hold its row shared while their requests run.
+    with bounded_lock_wait(db):
+        profile = (
+            db.query(AgentEnrollmentProfile)
+            .filter_by(id=ident)
+            .populate_existing()
+            .with_for_update()
+            .one_or_none()
+        )
     if (
         not profile
         or profile.state == "revoked"

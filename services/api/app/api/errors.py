@@ -12,12 +12,12 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from sqlalchemy.exc import DataError
 
+from app.security.json_shape import MAX_DEPTH, json_depth
 from app.security.redaction import storable
-from app.security.request_limits import json_body_limit
+from app.security.request_limits import json_body_limit, json_value_limit
 from app.security.route_policy import policy_path
 from app.services.errors import DomainError
 
-MAX_JSON_DEPTH = 64
 logger = logging.getLogger(__name__)
 
 
@@ -62,30 +62,25 @@ def _finite_float(text):
     return value
 
 
-def _within_depth(value) -> bool:
-    pending = [(value, 1)]
-    while pending:
-        current, depth = pending.pop()
-        if depth > MAX_JSON_DEPTH:
-            return False
-        if isinstance(current, dict):
-            pending.extend((item, depth + 1) for item in current.values())
-        elif isinstance(current, list):
-            pending.extend((item, depth + 1) for item in current)
-    return True
-
-
-def decode_json_body(body: bytes):
+def decode_json_body(body: bytes, max_values: int | None = None):
     """Decode a request body as standard JSON that the application can store.
 
-    Non-finite numbers and excessive nesting are rejected. NUL characters, which
-    PostgreSQL text and JSON values cannot hold, become replacement characters.
+    Non-finite numbers and excessive nesting are rejected, as is a document
+    holding more than ``max_values`` values: the route's model is checked on
+    the event loop, at a cost for each value. NUL characters, which PostgreSQL
+    text and JSON values cannot hold, become replacement characters.
     """
     try:
         value = json.loads(body, parse_constant=_non_finite, parse_float=_finite_float)
     except (ValueError, RecursionError):
         raise HTTPException(400, "Request body must be valid JSON") from None
-    if not _within_depth(value):
+    # The value count is measured first, so it also bounds the depth walk.
+    if (
+        max_values is not None
+        and json_depth(value, max_values, max_values=max_values) is None
+    ):
+        raise HTTPException(413, "Request body holds too many values")
+    if json_depth(value, MAX_DEPTH) is None:
         raise HTTPException(400, "Request body is nested too deeply")
     return storable(value) if b"\\u0000" in body else value
 
@@ -103,10 +98,13 @@ async def _strict_json(request: Request):
         body = await request.body()
         if len(body) > json_body_limit(policy_path(request)):
             raise HTTPException(413, "Request body too large")
-        # Decoding runs in a worker thread, where the depth walk and NUL
+        # Decoding runs in a worker thread, where the shape checks and NUL
         # replacement share the interpreter with the event loop. The size
-        # limit bounds the C decoder, which holds the interpreter lock.
-        request._json = await anyio.to_thread.run_sync(decode_json_body, body)
+        # limit bounds the C decoder, which holds the interpreter lock; the
+        # value limit bounds the model check that follows on the event loop.
+        request._json = await anyio.to_thread.run_sync(
+            decode_json_body, body, json_value_limit(policy_path(request))
+        )
     return request._json
 
 

@@ -15,6 +15,7 @@ import regex as regex_engine
 from app.core.config import settings
 from app.ingest import bookstack
 from app.security import csrf, oidc, regex, sessions
+from app.security.auth import cookie_name as session_cookie_name
 from app.security.route_policy import PUBLIC_HTTP_ROUTES, is_public_request
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
@@ -348,7 +349,7 @@ def test_public_policy_matches_real_routes():
 def test_production_csrf_and_admin_gates(production_client):
     client, redis, admin, reader = production_client
     sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     response = client.patch("/v1/me/preferences", json={})
     assert response.status_code == 403 and "CSRF" in response.text
     client.cookies.set(csrf.csrf_cookie_name(), "known-token")
@@ -362,7 +363,7 @@ def test_production_csrf_and_admin_gates(production_client):
     )
     assert response.status_code == 403
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     assert client.get("/v1/admin/source-connections").status_code == 403
 
 
@@ -396,12 +397,10 @@ def test_websocket_snapshot_releases_database(production_client, monkeypatch):
 
     monkeypatch.setattr(database, "SessionLocal", factory)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
-    result = _notification_snapshot(
-        {}, {settings.session_cookie_name: sid}, counts=True
-    )
+    result = _notification_snapshot({}, {session_cookie_name(): sid}, counts=True)
     assert result[0][0] == str(reader.id) and closed == [True]
     sessions.delete_session(redis, sid)
-    assert _notification_snapshot({}, {settings.session_cookie_name: sid}) is None
+    assert _notification_snapshot({}, {session_cookie_name(): sid}) is None
     assert len(closed) == 2
 
 
@@ -650,7 +649,7 @@ def test_live_websocket_closes_after_logout(production_client, monkeypatch):
     monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
     monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", 0.01)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     with client.websocket_connect(
         "/ws/notifications", headers={"Origin": "https://keen.example"}
     ) as socket:
@@ -681,7 +680,7 @@ def test_production_mfa_requires_verified_current_security_version(
             mfa_verified=verified,
             mfa_version=version,
         )
-        client.cookies.set(settings.session_cookie_name, sid)
+        client.cookies.set(session_cookie_name(), sid)
         assert client.get("/v1/auth/check").status_code == expected
 
 
@@ -732,23 +731,25 @@ def test_disabled_webhooks_reject_before_credentials(
     verify.assert_not_called()
 
 
-def test_metric_webhook_rate_limit_precedes_credentials(production_client, monkeypatch):
+def test_metric_webhook_refusals_spend_their_own_allowance(
+    production_client, monkeypatch
+):
     from app.api.routes import webhooks
     from app.ingest.connections import deployment_settings
 
     monkeypatch.setattr(deployment_settings, "webhooks_enabled", True)
     monkeypatch.setattr(webhooks, "get_valkey", lambda: production_client[1])
     limiter = Mock(return_value=(False, 60))
-    monkeypatch.setattr(webhooks, "address_window_allow", limiter)
-    verify = Mock(side_effect=AssertionError("Must reject before credential check"))
-    monkeypatch.setattr(webhooks.service, "submit_signed_metric", verify)
+    monkeypatch.setattr(webhooks.service, "address_window_allow", limiter)
     response = production_client[0].post(
         "/v1/webhooks/isms/effectiveness-metrics/test", json={"value": 1}
     )
+    # An unsigned submission is refused, and counted only as a refusal, so a
+    # sender without a secret cannot spend a shared address's metric allowance.
     assert response.status_code == 429
     assert response.headers["retry-after"] == "60"
+    assert limiter.call_args.args[1] == webhooks.service.REFUSED_ALLOWANCE
     assert limiter.call_args.kwargs["fail_closed"] is True
-    verify.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -770,7 +771,9 @@ def test_enabled_metric_webhook_requires_a_signature(production_client, monkeypa
 
     monkeypatch.setattr(deployment_settings, "webhooks_enabled", True)
     monkeypatch.setattr(webhooks, "get_valkey", lambda: production_client[1])
-    monkeypatch.setattr(webhooks, "address_window_allow", Mock(return_value=(True, 0)))
+    monkeypatch.setattr(
+        webhooks.service, "address_window_allow", Mock(return_value=(True, 0))
+    )
     # The shared provider secret no longer authenticates measurements.
     monkeypatch.setattr(webhooks, "verify_secret", Mock(return_value=True))
     response = production_client[0].post(
@@ -797,12 +800,12 @@ def test_deactivation_permanently_revokes_all_session_methods(
     )
     main.app.dependency_overrides[get_db] = lambda: contract_db
     try:
-        client.cookies.set(settings.session_cookie_name, old_sid)
+        client.cookies.set(session_cookie_name(), old_sid)
         assert client.get("/v1/me").status_code == 200
 
         def change(active):
             client.cookies.clear()
-            client.cookies.set(settings.session_cookie_name, admin_sid)
+            client.cookies.set(session_cookie_name(), admin_sid)
             client.cookies.set(csrf.csrf_cookie_name(), "test-token")
             response = client.patch(
                 f"/v1/users/{reader.id}",
@@ -815,11 +818,11 @@ def test_deactivation_permanently_revokes_all_session_methods(
             assert response.status_code == 200, response.text
 
         change(False)
-        client.cookies.set(settings.session_cookie_name, old_sid)
+        client.cookies.set(session_cookie_name(), old_sid)
         assert client.get("/v1/me").status_code == 401
         assert sessions.get_session(redis, old_sid) is None
         change(True)
-        client.cookies.set(settings.session_cookie_name, untouched_sid)
+        client.cookies.set(session_cookie_name(), untouched_sid)
         assert client.get("/v1/me").status_code == 401
         assert sessions.get_session(redis, untouched_sid) is None
         contract_db.refresh(reader)
@@ -831,7 +834,7 @@ def test_deactivation_permanently_revokes_all_session_methods(
             session_version=reader.session_version,
             mfa_version=reader.mfa_version,
         )
-        client.cookies.set(settings.session_cookie_name, fresh)
+        client.cookies.set(session_cookie_name(), fresh)
         assert client.get("/v1/me").status_code == 200
     finally:
         main.app.dependency_overrides.pop(get_db, None)
@@ -868,7 +871,7 @@ def test_login_issuers_capture_account_session_version(
     cookies = SimpleCookie()
     for header in response.headers.getlist("set-cookie"):
         cookies.load(header)
-    sid = cookies[settings.session_cookie_name].value
+    sid = cookies[session_cookie_name()].value
     assert sessions.get_session(redis, sid)["session_version"] == 7
 
 
@@ -938,7 +941,7 @@ def test_admin_source_types_expose_display_labels(
     main.app.dependency_overrides[get_db] = lambda: contract_db
     try:
         sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
-        client.cookies.set(settings.session_cookie_name, sid)
+        client.cookies.set(session_cookie_name(), sid)
         response = client.get("/v1/admin/source-connections")
         assert response.status_code == 200, response.text
         types = {item["source"]: item for item in response.json()["types"]}
@@ -965,7 +968,7 @@ def test_audit_domain_adapter_preserves_access_and_csrf(production_client, contr
 
         def sign_in(user):
             sid = sessions.create_session(redis, user_id=str(user.id), ttl_seconds=300)
-            client.cookies.set(settings.session_cookie_name, sid)
+            client.cookies.set(session_cookie_name(), sid)
 
         sign_in(admin)
         assert client.post("/v1/audits", json={"title": "Review"}).status_code == 403
@@ -1013,7 +1016,7 @@ def test_logout_requires_intent_and_get_never_revokes(
     monkeypatch.setattr(routes, "get_valkey", lambda: redis)
     main.app.dependency_overrides[get_db] = lambda: contract_db
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     client.cookies.set(csrf.csrf_cookie_name(), "synthetic-token")
     try:
         response = client.get(
@@ -1062,7 +1065,7 @@ def test_permission_owned_mutations_keep_csrf_and_route_permissions(
     client, redis, _, reader = production_client
     main.app.dependency_overrides[get_db] = lambda: contract_db
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     client.cookies.set(csrf.csrf_cookie_name(), "synthetic-token")
     headers = {"Origin": "https://keen.example", "X-CSRF-Token": "synthetic-token"}
     try:
@@ -1181,7 +1184,7 @@ def test_question_attachment_rejection_rolls_back_http_operation(
     monkeypatch.setattr(questions_operations._Notices, "publish", AsyncMock())
     monkeypatch.setattr(tasks.send_question_webhooks_task, "delay", Mock())
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     client.cookies.set(csrf.csrf_cookie_name(), "synthetic-token")
     headers = {"Origin": "https://keen.example", "X-CSRF-Token": "synthetic-token"}
     path = f"/v1/questions/entities/event/{event.id}"
@@ -1271,7 +1274,7 @@ def test_a_signed_in_browser_without_a_csrf_token_receives_one_for_its_writes(
             sid = sessions.create_session(
                 redis, user_id=str(reader.id), ttl_seconds=300
             )
-            client.cookies.set(settings.session_cookie_name, sid)
+            client.cookies.set(session_cookie_name(), sid)
         return client
 
     def minted(response):
@@ -1354,7 +1357,7 @@ def test_retention_overrides_keep_admin_and_csrf_boundary(
         }
         for user in (reader, admin):
             sid = sessions.create_session(redis, user_id=str(user.id), ttl_seconds=300)
-            client.cookies.set(settings.session_cookie_name, sid)
+            client.cookies.set(session_cookie_name(), sid)
             assert client.put(path, json=payload).status_code == 403
             assert not writes
             response = client.put(path, json=payload, headers=headers)
@@ -1379,7 +1382,7 @@ def _notification_client(production_client, monkeypatch, *, recheck=0.01):
     monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
     monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", recheck)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     return client, reader
 
 

@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AuditLog, OidcLoginState, User, UserIdentity, UserSsoEmail
 from app.security import oidc
+from app.security.auth import cookie_name as session_cookie_name
 from joserfc import jwt
 from joserfc.jwk import RSAKey
 
@@ -207,7 +208,7 @@ def _signed_in_as(browser):
 
 def _sets_session(response):
     cookies = response.headers.get_list("set-cookie")
-    return any(c.startswith(settings.session_cookie_name + "=") for c in cookies)
+    return any(c.startswith(session_cookie_name() + "=") for c in cookies)
 
 
 # --- The authorization request -------------------------------------------------

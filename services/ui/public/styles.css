@@ -1333,13 +1333,6 @@ a.schedule-calendar-event {
   padding: 0.1rem 0.25rem;
 }
 
-.isms-app-matrix-table .isms-access-approver-head,
-.isms-app-matrix-table .isms-access-approver {
-  width: 8.5rem;
-  min-width: 8.5rem;
-  max-width: 8.5rem;
-}
-
 .isms-app-matrix-table .isms-access-accounts-head,
 .isms-app-matrix-table .isms-access-accounts {
   width: 13rem;
@@ -1478,22 +1471,6 @@ a.eff-metric-value:focus {
   width: 4rem;
   min-width: 4rem;
   max-width: 4rem;
-}
-
-.isms-app-matrix-table.isms-access-matrix-table .isms-access-approver-head,
-.isms-app-matrix-table.isms-access-matrix-table .isms-access-approver {
-  width: 6rem;
-  min-width: 6rem;
-  max-width: 6rem;
-}
-
-.isms-access-approver-pill {
-  display: inline-block;
-  max-width: 5.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
 }
 
 .isms-app-matrix-table.isms-access-matrix-table .isms-access-accounts-head,

@@ -18,6 +18,7 @@ from app.db.models import (
     IsmsEffectivenessMetricEntry,
     User,
 )
+from app.security.permissions import can_read_events
 from app.services.errors import DomainError
 from app.services.text import clean_text
 
@@ -142,8 +143,23 @@ def _effectiveness_metric_sources_out(
     overrides = (
         getattr(user, "pref_source_colors", None) if isinstance(user, User) else None
     )
+    # Collected source names derive from events, so only event readers see
+    # them all; other ISMS readers see the sources measures already name.
+    if can_read_events(db, user):
+        names = _actual_effectiveness_metric_source_names(db)
+    else:
+        names = sorted(
+            {
+                source
+                for (source,) in db.query(IsmsEffectivenessMeasure.source_type)
+                .distinct()
+                .all()
+                if source and source != EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
+            },
+            key=str.lower,
+        )
     items: list[dict[str, str]] = []
-    for source in _actual_effectiveness_metric_source_names(db):
+    for source in names:
         meta = apply_user_source_overrides(get_source_meta(source), overrides)
         items.append(
             {

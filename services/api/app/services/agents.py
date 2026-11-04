@@ -243,8 +243,9 @@ def stored_record(event) -> dict:
 
 def persist_batch(*, db, auth, authorization, batch):
     # The per-agent row lock serialises ingestion, chain updates and credential
-    # revocation. One transaction persists the whole request; a lost
-    # acknowledgement is safely retried.
+    # revocation; a request arriving while another of the agent's requests
+    # holds it is refused for the agent to retry. One transaction persists the
+    # whole request; a lost acknowledgement is safely retried.
     a, _ = reauthenticate(db, auth, authorization)
     if a.credential_type == "key" and batch.events:
         raise DomainError(

@@ -30,6 +30,8 @@ from functools import lru_cache
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
+
 REDACTED = "REDACTED"
 
 MASKED_EMAIL = "[MASKED_EMAIL]"
@@ -223,21 +225,6 @@ def should_redact_value(k: str, value: Any) -> bool:
     return not _is_measured_value(_normalize_key(k), value)
 
 
-def _json_depth(obj: Any, limit: int) -> int | None:
-    """Return the container depth of obj, or None when it exceeds limit."""
-    deepest = 0
-    stack = [(obj, 1)]
-    while stack:
-        item, depth = stack.pop()
-        if isinstance(item, (dict, list)):
-            if depth > limit:
-                return None
-            deepest = max(deepest, depth)
-            children = item.values() if isinstance(item, dict) else item
-            stack.extend((child, depth + 1) for child in children)
-    return deepest
-
-
 def _unique_object(pairs):
     names = [name for name, _ in pairs]
     if len(set(names)) != len(names):
@@ -262,7 +249,12 @@ def _redact_embedded_json(s: str) -> str | None:
         parsed = json.loads(s, object_pairs_hook=_unique_object)
     except (ValueError, RecursionError):
         return None
-    depth = _json_depth(parsed, budget) if isinstance(parsed, (dict, list)) else None
+    # A document deeper than the walkers go keeps its content as redacted text.
+    depth = (
+        json_depth(parsed, min(budget, MAX_DEPTH))
+        if isinstance(parsed, (dict, list))
+        else None
+    )
     if depth is None:
         return None
     token = _embedded_json_budget.set(budget - depth)
@@ -348,24 +340,35 @@ def redact_str(s: str | None) -> str | None:
 
 
 def redact_obj(obj: Any) -> Any:
-    """Recursively redact secrets in dict/list/string objects."""
-    if obj is None:
-        return None
-    if isinstance(obj, str):
-        return redact_str(obj)
-    if isinstance(obj, list):
-        return [redact_obj(x) for x in obj]
-    if isinstance(obj, tuple):
-        return tuple(redact_obj(x) for x in obj)
-    if isinstance(obj, dict):
-        out = {}
-        for k, v in obj.items():
-            if isinstance(k, str) and should_redact_value(k, v):
-                out[k] = REDACTED
-            else:
-                out[k] = redact_obj(v)
-        return out
-    return obj
+    """Recursively redact secrets in dict/list/string objects.
+
+    Containers nested more than MAX_DEPTH deep are replaced by
+    NESTED_TOO_DEEPLY, so a collected record cannot exhaust the interpreter's
+    recursion limit, and nothing below that depth is kept unredacted.
+    """
+
+    def walk(value: Any, depth: int) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return redact_str(value)
+        if isinstance(value, (list, tuple, dict)) and depth > MAX_DEPTH:
+            return NESTED_TOO_DEEPLY
+        if isinstance(value, list):
+            return [walk(x, depth + 1) for x in value]
+        if isinstance(value, tuple):
+            return tuple(walk(x, depth + 1) for x in value)
+        if isinstance(value, dict):
+            out = {}
+            for k, v in value.items():
+                if isinstance(k, str) and should_redact_value(k, v):
+                    out[k] = REDACTED
+                else:
+                    out[k] = walk(v, depth + 1)
+            return out
+        return value
+
+    return walk(obj, 1)
 
 
 def mask_event_data_str(s: str | None) -> str | None:
@@ -404,18 +407,27 @@ def mask_event_data_str(s: str | None) -> str | None:
 
 
 def mask_event_data_obj(obj: Any) -> Any:
-    """Recursively mask IP/email substrings in strings contained in an object."""
-    if obj is None:
-        return None
-    if isinstance(obj, str):
-        return mask_event_data_str(obj)
-    if isinstance(obj, list):
-        return [mask_event_data_obj(x) for x in obj]
-    if isinstance(obj, tuple):
-        return tuple(mask_event_data_obj(x) for x in obj)
-    if isinstance(obj, dict):
-        return {k: mask_event_data_obj(v) for k, v in obj.items()}
-    return obj
+    """Recursively mask IP/email substrings in strings contained in an object.
+
+    Containers nested more than MAX_DEPTH deep become NESTED_TOO_DEEPLY.
+    """
+
+    def walk(value: Any, depth: int) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return mask_event_data_str(value)
+        if isinstance(value, (list, tuple, dict)) and depth > MAX_DEPTH:
+            return NESTED_TOO_DEEPLY
+        if isinstance(value, list):
+            return [walk(x, depth + 1) for x in value]
+        if isinstance(value, tuple):
+            return tuple(walk(x, depth + 1) for x in value)
+        if isinstance(value, dict):
+            return {k: walk(v, depth + 1) for k, v in value.items()}
+        return value
+
+    return walk(obj, 1)
 
 
 def is_textual_content_type(content_type: str | None) -> bool:
@@ -443,6 +455,8 @@ def mask_event_data_bytes(data: bytes, content_type: str | None) -> tuple[bytes,
     if ct == "application/json" or ct.endswith("+json"):
         try:
             obj = json.loads(txt)
+            if json_depth(obj) is None:
+                raise ValueError("nested too deeply")
             obj2 = mask_event_data_obj(obj)
             if obj2 == obj:
                 return data, "clean"
@@ -511,6 +525,8 @@ def redact_bytes(data: bytes, content_type: str | None) -> tuple[bytes, str]:
     if ct == "application/json" or ct.endswith("+json"):
         try:
             obj = json.loads(txt)
+            if json_depth(obj) is None:
+                raise ValueError("nested too deeply")
             obj2 = redact_obj(obj)
             new_txt = json.dumps(obj2, ensure_ascii=False, sort_keys=True)
         except Exception:
@@ -529,17 +545,24 @@ def storable(value: Any) -> Any:
 
     Collected evidence can contain NUL characters from upstream systems. The
     replacement character keeps the position visible, and the record is stored
-    instead of failing the whole collection batch.
+    instead of failing the whole collection batch. Containers nested more than
+    MAX_DEPTH deep become NESTED_TOO_DEEPLY.
     """
-    if isinstance(value, str):
-        return value.replace("\x00", "\ufffd") if "\x00" in value else value
-    if isinstance(value, list):
-        return [storable(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(storable(item) for item in value)
-    if isinstance(value, dict):
-        return {storable(key): storable(item) for key, item in value.items()}
-    return value
+
+    def walk(item: Any, depth: int) -> Any:
+        if isinstance(item, str):
+            return item.replace("\x00", "\ufffd") if "\x00" in item else item
+        if isinstance(item, (list, tuple, dict)) and depth > MAX_DEPTH:
+            return NESTED_TOO_DEEPLY
+        if isinstance(item, list):
+            return [walk(x, depth + 1) for x in item]
+        if isinstance(item, tuple):
+            return tuple(walk(x, depth + 1) for x in item)
+        if isinstance(item, dict):
+            return {walk(k, depth + 1): walk(v, depth + 1) for k, v in item.items()}
+        return item
+
+    return walk(value, 1)
 
 
 def prepare_event_fields(fields: dict, *, mask: bool = False) -> dict:

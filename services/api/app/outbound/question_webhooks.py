@@ -179,8 +179,29 @@ def build_generic_payload(
     return payload
 
 
-def _compact_text(payload: dict[str, Any]) -> str:
-    """Build a friendly plain-text summary used for Slack/Teams/Chat."""
+# Question text, usernames and event summaries (which come from evidence
+# sources) are untrusted. Each chat service reads its own syntax in message text:
+# <url|label> links and <!channel> or <users/all> mentions in Slack and Google
+# Chat, [label](url) links in Teams. Slack documents entity escapes for its
+# syntax; Google Chat documents none, so its brackets become lookalikes, as do
+# Teams' link brackets. Only Keen's own link is then a link.
+_SLACK_TEXT = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;"})
+_CHAT_TEXT = str.maketrans({"<": "\u2039", ">": "\u203a"})
+_TEAMS_TEXT = str.maketrans(
+    {"<": "\u2039", ">": "\u203a", "[": "\uff3b", "]": "\uff3d"}
+)
+
+
+def _plain(value: Any, table: dict[int, str] | None) -> str:
+    text = str(value)
+    return text.translate(table) if table else text
+
+
+def _compact_text(payload: dict[str, Any], table: dict[int, str] | None = None) -> str:
+    """Build a friendly plain-text summary used for Slack/Teams/Chat.
+
+    ``table`` neutralises the chat service's markup in untrusted values.
+    """
 
     ev = payload.get("event") or {}
     post = payload.get("post") or {}
@@ -188,19 +209,26 @@ def _compact_text(payload: dict[str, Any]) -> str:
     links = payload.get("links") or {}
     event_type = str(payload.get("type") or "").strip()
 
-    ev_sum = str(ev.get("summary") or "(no summary)")
-    ev_source = str(ev.get("source") or "")
-    ev_ts = str(ev.get("timestamp") or "")
+    ev_sum = _plain(ev.get("summary") or "(no summary)", table)
+    ev_source = _plain(ev.get("source") or "", table)
+    ev_ts = _plain(ev.get("timestamp") or "", table)
 
-    thread_author = str(
-        thread.get("created_by_username") or thread.get("created_by_user_id") or ""
+    thread_author = _plain(
+        thread.get("created_by_username") or thread.get("created_by_user_id") or "",
+        table,
     )
-    post_author = str(post.get("author_username") or post.get("author_user_id") or "")
+    post_author = _plain(
+        post.get("author_username") or post.get("author_user_id") or "", table
+    )
 
-    body = str(post.get("body") or "")
+    body = _plain(post.get("body") or "", table)
 
     ctrls = payload.get("controls") or []
-    ctrl_refs = [ref for c in ctrls if (ref := str((c or {}).get("ref") or "").strip())]
+    ctrl_refs = [
+        _plain(ref, table)
+        for c in ctrls
+        if (ref := str((c or {}).get("ref") or "").strip())
+    ]
 
     ctrl_part = f"\nControls: {', '.join(ctrl_refs[:12])}" if ctrl_refs else ""
     if len(ctrl_refs) > 12:
@@ -213,7 +241,7 @@ def _compact_text(payload: dict[str, Any]) -> str:
 
     if event_type == "keen.question.replied":
         reply = payload.get("reply") or {}
-        as_role = str(reply.get("as") or "").strip()
+        as_role = _plain(reply.get("as") or "", table).strip()
         header = "New reply on question"
         if as_role:
             header = f"New {as_role} reply on question"
@@ -228,7 +256,7 @@ def _compact_text(payload: dict[str, Any]) -> str:
                 lines.append(f"Replied by: {post_author} ({as_role})")
             else:
                 lines.append(f"Replied by: {post_author}")
-        st = str(thread.get("status") or "").strip()
+        st = _plain(thread.get("status") or "", table).strip()
         if st:
             lines.append(f"Thread status: {st}")
     else:
@@ -246,7 +274,7 @@ def _compact_text(payload: dict[str, Any]) -> str:
 def slack_payload(payload: dict[str, Any]) -> dict[str, Any]:
     links = payload.get("links") or {}
     ev_link = str(links.get("event") or "")
-    text = _compact_text(payload)
+    text = _compact_text(payload, _SLACK_TEXT)
 
     # Slack supports mrkdwn and <url|label>.
     if ev_link:
@@ -260,7 +288,7 @@ def slack_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def google_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    return {"text": _compact_text(payload)}
+    return {"text": _compact_text(payload, _CHAT_TEXT)}
 
 
 def teams_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -271,8 +299,11 @@ def teams_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     # Microsoft Teams Incoming Webhook (MessageCard)
     ev = payload.get("event") or {}
-    title = str(ev.get("summary") or ("New reply" if is_reply else "New question"))
-    txt = _compact_text(payload)
+    title = _plain(
+        ev.get("summary") or ("New reply" if is_reply else "New question"),
+        _TEAMS_TEXT,
+    )
+    txt = _compact_text(payload, _TEAMS_TEXT)
     if ev_link:
         # MessageCard supports basic markdown links.
         txt += f"\n\n[View in Keen]({ev_link})"

@@ -38,8 +38,13 @@ def load_rss_config(path: str) -> dict[str, Any]:
     return load_document("rss", path)
 
 
+# RFC 822 and ISO 8601 dates fit easily. dateutil's parsing time grows with
+# the square of its input, so a feed's longer date text is not a date.
+MAX_DATE_CHARS = 64
+
+
 def _parse_dt(value: str | None) -> datetime | None:
-    if not value:
+    if not value or len(value) > MAX_DATE_CHARS:
         return None
     try:
         dt = dtparser.parse(value)

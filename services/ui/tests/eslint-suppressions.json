@@ -162,7 +162,7 @@
   },
   "services/ui/public/pages/isms-access.js": {
     "no-unsanitized/property": {
-      "count": 4
+      "count": 3
     }
   },
   "services/ui/public/pages/isms-asset.js": {
@@ -200,7 +200,7 @@
       "count": 1
     },
     "no-unsanitized/property": {
-      "count": 47
+      "count": 46
     }
   },
   "services/ui/public/pages/mitigator.js": {

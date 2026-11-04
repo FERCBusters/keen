@@ -30,8 +30,9 @@ from app.db.models import (
     Permission,
     User,
 )
+from app.security.auth import cookie_name as session_cookie_name
 from app.security.passwords import hash_password
-from app.security.request_limits import MAX_JSON_BODY
+from app.security.request_limits import MAX_JSON_BODY, MAX_JSON_VALUES
 from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
@@ -311,20 +312,20 @@ def test_isms_manager_can_manage_members_of_roles_without_risks(keen):
 @pytest.mark.parametrize("path", ["/v1/auth/logout", "/v1/auth/oidc/logout"])
 def test_sign_out_fails_closed_when_revocation_fails(keen, monkeypatch, path):
     client = keen.client(keen.user())
-    sid = client.cookies.get(settings.session_cookie_name)
+    sid = client.cookies.get(session_cookie_name())
     with monkeypatch.context() as patch:
         patch.setattr(
             type(keen.store), "delete", Mock(side_effect=ConnectionError("store down"))
         )
         failed = client.post(path, headers=unsafe(client))
     assert failed.status_code == 503, failed.text
-    assert settings.session_cookie_name not in failed.headers.get("set-cookie", "")
+    assert session_cookie_name() not in failed.headers.get("set-cookie", "")
     assert client.get("/v1/me").status_code == 200
 
     done = client.post(path, headers=unsafe(client))
     assert done.status_code in (200, 204), done.text
     replay = keen.client()
-    replay.cookies.set(settings.session_cookie_name, sid)
+    replay.cookies.set(session_cookie_name(), sid)
     assert replay.get("/v1/me").status_code == 401
 
 
@@ -360,7 +361,7 @@ def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
         session_version=user.session_version,
     )
     client = keen.client()
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
 
     # Near the end of its lifetime, use refreshes it only up to that end, and
     # a permission refresh never extends it either.
@@ -381,7 +382,7 @@ def test_a_session_without_a_readable_start_is_refused(keen):
     from app.security.sessions import session_key
 
     client = keen.client(keen.user())
-    sid = client.cookies.get(settings.session_cookie_name)
+    sid = client.cookies.get(session_cookie_name())
     payload = json.loads(keen.store.get(session_key(sid)))
     payload["created_at"] = "not-a-time"
     keen.store.set(session_key(sid), json.dumps(payload), keepttl=True)
@@ -434,7 +435,7 @@ def test_failed_webhook_persistence_releases_replay_claim(keen, monkeypatch):
 
 
 def test_webhook_allowances_are_per_built_in_provider_and_address(keen, monkeypatch):
-    from app.ingest import connections, webhooks
+    from app.ingest import webhooks
 
     monkeypatch.setenv("SYNTHETIC_WEBHOOK_SECRET", "synthetic-webhook-secret")
     monkeypatch.setattr(
@@ -445,47 +446,65 @@ def test_webhook_allowances_are_per_built_in_provider_and_address(keen, monkeypa
                 "monitor": {
                     "secret_header": "X-Monitor-Secret",
                     "secret_env": "SYNTHETIC_WEBHOOK_SECRET",
-                }
+                },
+                "cloudtrail_source_ip": {
+                    "secret_header": "X-Monitor-Secret",
+                    "secret_env": "SYNTHETIC_WEBHOOK_SECRET",
+                },
             }
         },
     )
-    lookups = []
-    listed = connections.connections
+    stored = []
     monkeypatch.setattr(
-        connections,
-        "connections",
-        lambda *a, **kw: lookups.append(a) or listed(*a, **kw),
+        webhooks,
+        "store_event_with_artifact",
+        lambda db, **kw: stored.append(kw) or {"ok": True, "event_id": "e"},
     )
-    client = client_from("198.51.100.4")
-    # A made-up provider per request draws on one shared allowance.
+    good = {"X-Monitor-Secret": "synthetic-webhook-secret"}
+    # Senders deliver for many customers from shared addresses. Requests
+    # without the secret, to any provider name, spend one refusals' allowance.
+    shared = client_from("198.51.100.4")
     for index in range(100):
-        assert client.post(f"/v1/webhooks/made-up-{index}/alert").status_code == 403
-    assert len(lookups) == 100
+        assert shared.post(f"/v1/webhooks/made-up-{index}/alert").status_code == 403
     for path in ("/v1/webhooks/made-up-new/alert", "/v1/webhooks/monitor/alert"):
-        refused = client.post(path, headers={"X-Monitor-Secret": "wrong"})
+        refused = shared.post(path, headers={"X-Monitor-Secret": "wrong"})
         assert refused.status_code == 429 and refused.headers["Retry-After"]
-    # Throttled requests stop before any connection lookup.
-    assert len(lookups) == 100
-    # Each built-in provider keeps its own allowance from that address.
-    for _ in range(100):
-        assert client.post("/v1/webhooks/cloudtrail_source_ip/a").status_code == 403
-    assert client.post("/v1/webhooks/cloudtrail_source_ip/a").status_code == 429
-    assert client.post("/v1/webhooks/enroll/diff").status_code == 403
-    assert client.post("/v1/webhooks/made-up-later/alert").status_code == 429
-    assert len(lookups) == 201
-    # The store holds one counter for the other names and one per built-in.
-    assert sorted(keen.store.keys("keen:rl:webhook:*")) == [
+    # A delivery whose secret verifies, from the same address, still lands.
+    delivered = shared.post("/v1/webhooks/monitor/alert", content=b"{}", headers=good)
+    assert delivered.status_code == 200, delivered.text
+    assert len(stored) == 1
+    # Verified deliveries have an allowance for each built-in provider.
+    for index in range(100):
+        response = shared.post(
+            "/v1/webhooks/cloudtrail_source_ip/a",
+            content=b'{"n": %d}' % index,
+            headers=good,
+        )
+        assert response.status_code == 200, response.text
+    over = shared.post(
+        "/v1/webhooks/cloudtrail_source_ip/a", content=b"{}", headers=good
+    )
+    assert over.status_code == 429
+    assert (
+        shared.post(
+            "/v1/webhooks/monitor/alert", content=b'{"n": 1}', headers=good
+        ).status_code
+        == 200
+    )
+    # The store holds the refusals' counter and one per provider used.
+    assert sorted(keen.store.keys("keen:rl:webhook:*:ip:*")) == [
         "keen:rl:webhook:other:ip:198.51.100.4",
         "keen:rl:webhook:provider:cloudtrail_source_ip:ip:198.51.100.4",
-        "keen:rl:webhook:provider:enroll:ip:198.51.100.4",
+        "keen:rl:webhook:refused:ip:198.51.100.4",
     ]
-    # Another address, and metric submissions, have their own allowances.
+    # Another address has its own allowances, and metric submissions without
+    # a valid signature spend the refusals' allowance of their address.
     assert (
         client_from("198.51.100.5").post("/v1/webhooks/monitor/alert").status_code
         == 403
     )
-    metric = client.post("/v1/webhooks/isms/effectiveness-metrics/m-1", content=b"{}")
-    assert metric.status_code == 403
+    metric = shared.post("/v1/webhooks/isms/effectiveness-metrics/m-1", content=b"{}")
+    assert metric.status_code == 429
 
 
 # --- Metric webhook redaction ---------------------------------------------------
@@ -1058,13 +1077,13 @@ def test_nul_characters_in_requests_are_refused_or_stored_safely(keen):
 def test_json_bodies_are_bounded_and_decoded_off_the_event_loop(keen, monkeypatch):
     decode, decoded = errors.decode_json_body, []
 
-    def recorded(body):
+    def recorded(body, max_values=None):
         try:
             asyncio.get_running_loop()
             decoded.append("event loop")
         except RuntimeError:
             decoded.append("worker thread")
-        return decode(body)
+        return decode(body, max_values)
 
     monkeypatch.setattr(errors, "decode_json_body", recorded)
     nobody = keen.client(keen.user())  # signed in, with no permissions
@@ -1093,6 +1112,23 @@ def test_json_bodies_are_bounded_and_decoded_off_the_event_loop(keen, monkeypatc
     accepted = send(nobody, padded, "application/json")
     assert accepted.status_code == 200, accepted.text
     assert decoded == ["worker thread"]
+
+    # A route's model is checked on the event loop at a cost for each value,
+    # so a document holding more values than any form sends is refused while
+    # it is decoded, before that check. The costliest accepted document, every
+    # value invalid, stays well within a second of the process's time.
+    def colours(count):
+        return json.dumps({"source_colors": {format(i, "x"): 0 for i in range(count)}})
+
+    crowded = send(nobody, colours(MAX_JSON_VALUES - 1), "application/json")
+    assert (crowded.status_code, crowded.json()["detail"]) == (
+        413,
+        "Request body holds too many values",
+    )
+    started = time.process_time()
+    costliest = send(nobody, colours(MAX_JSON_VALUES - 2), "application/json")
+    assert costliest.status_code == 422, costliest.status_code
+    assert time.process_time() - started < 1.0
 
     # Administration requests, such as configuration imports, may send more.
     admin = keen.client(keen.user(role="admin"))

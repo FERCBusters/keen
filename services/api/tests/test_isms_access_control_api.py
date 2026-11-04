@@ -10,7 +10,7 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from app.db.models import IsmsOrgNode, User
+from app.db.models import IsmsOrgNode
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -53,7 +53,6 @@ def acm(keen):  # noqa: F811 - fixture imported above
     )
     production = account("Production", "111111111111")
     staging = account("Staging", "222222222222")
-    approver = keen.user("isms.read")
 
     def entry(**body):
         return manage(
@@ -78,7 +77,6 @@ def acm(keen):  # noqa: F811 - fixture imported above
         service=service,
         production=production,
         staging=staging,
-        approver=approver,
         entry=entry,
     )
 
@@ -160,11 +158,13 @@ def test_deleting_a_hosting_account_removes_it_from_matrix_rows(acm):
 def test_a_matrix_row_records_its_service_accounts_roles_and_approval(acm):
     operator, auditor = acm.role("Operator"), acm.role("Auditor")
 
+    # Whoever saves a row stands behind its state; no approver is recorded,
+    # and a client that still sends one changes nothing.
     row = acm.entry(
         task_action="  Deploy releases  ",
         aws_account_ids=[acm.staging["id"], acm.production["id"], acm.staging["id"]],
         role_org_node_ids=[operator, auditor, operator],
-        approved_by_user_id=str(acm.approver.id),
+        approved_by_user_id=str(uuid.uuid4()),
         status="Approved",
         notes="  Reviewed quarterly  ",
     )
@@ -177,11 +177,8 @@ def test_a_matrix_row_records_its_service_accounts_roles_and_approval(acm):
     # Accounts and roles are listed once each, by name.
     assert row["aws_account_ids"] == [acm.production["id"], acm.staging["id"]]
     assert [r["name"] for r in row["roles"]] == ["Auditor", "Operator"]
-    assert (row["status"], row["approved_by"]["id"], row["notes"]) == (
-        "Approved",
-        str(acm.approver.id),
-        "Reviewed quarterly",
-    )
+    assert (row["status"], row["notes"]) == ("Approved", "Reviewed quarterly")
+    assert "approved_by" not in row and "approved_by_user_id" not in row
     assert row["display"] == "Deploy releases × Payroll"
     assert acm.call(acm.reader, "GET", f"access-control-matrix/{row['id']}") == row
 
@@ -216,11 +213,6 @@ INVALID = [
         "unknown-service",
         {"service_asset_id": str(uuid.uuid4())},
         "Unknown service asset",
-    ),
-    (
-        "unknown-approver",
-        {"approved_by_user_id": str(uuid.uuid4())},
-        "Unknown approved-by user",
     ),
     (
         "unknown-role",
@@ -258,12 +250,9 @@ def test_invalid_rows_are_refused_on_create_and_update(acm, change, detail):
     assert acm.call(acm.reader, "GET", "access-control-matrix")["items"] == [original]
 
 
-def test_an_unknown_or_inactive_account_holder_is_refused(acm):
+def test_an_unknown_hosting_account_is_refused(acm):
     original = acm.entry()
     unknown = str(uuid.uuid4())
-    inactive = User(username="departed", password_hash="unused", is_active=False)
-    acm.keen.db.add(inactive)
-    acm.keen.db.commit()
 
     account = acm.manage(
         "PATCH",
@@ -271,15 +260,8 @@ def test_an_unknown_or_inactive_account_holder_is_refused(acm):
         {"aws_account_ids": [unknown]},
         400,
     )
-    approver = acm.manage(
-        "PATCH",
-        f"access-control-matrix/{original['id']}",
-        {"approved_by_user_id": str(inactive.id)},
-        400,
-    )
 
     assert account["detail"] == f"Unknown hosting account: {unknown}"
-    assert approver["detail"] == "Unknown approved-by user"
     assert acm.call(acm.reader, "GET", f"access-control-matrix/{original['id']}") == (
         original
     )
@@ -290,21 +272,14 @@ def test_an_update_changes_only_the_fields_it_names(acm):
     original = acm.entry(role_org_node_ids=[operator], notes="Reviewed")
     path = f"access-control-matrix/{original['id']}"
 
-    approved = acm.manage(
-        "PATCH",
-        path,
-        {"status": "Approved", "approved_by_user_id": str(acm.approver.id)},
-    )
+    approved = acm.manage("PATCH", path, {"status": "Approved"})
     moved = acm.manage(
         "PATCH",
         path,
         {"aws_account_ids": [acm.staging["id"]], "role_org_node_ids": []},
     )
 
-    assert (approved["status"], approved["approved_by_user_id"]) == (
-        "Approved",
-        str(acm.approver.id),
-    )
+    assert approved["status"] == "Approved"
     assert (approved["notes"], approved["aws_account_ids"]) == (
         "Reviewed",
         [acm.production["id"]],

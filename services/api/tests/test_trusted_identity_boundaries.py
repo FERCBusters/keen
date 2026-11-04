@@ -11,6 +11,7 @@ import pytest
 from app.core.config import settings
 from app.db.models import UserIdentity
 from app.security import auth, sessions
+from app.security.auth import cookie_name as session_cookie_name
 from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
@@ -84,7 +85,7 @@ def test_the_proxy_names_only_active_accounts(production_client, proxy, contract
         # A proxy identity Keen cannot use is not replaced by a session cookie.
         _, redis, admin, _ = production_client
         sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
-        client.cookies.set(settings.session_cookie_name, sid)
+        client.cookies.set(session_cookie_name(), sid)
         assert client.get("/v1/auth/check").status_code == 204
         assert (
             client.get("/v1/auth/check", headers={"REMOTE_USER": "nobody"}).status_code
@@ -105,7 +106,7 @@ def test_the_proxy_names_only_active_accounts(production_client, proxy, contract
 def test_a_session_naming_no_valid_user_id_is_refused(production_client):  # noqa: F811 - fixture imported above
     client, redis, *_ = production_client
     sid = sessions.create_session(redis, user_id="not-a-uuid", ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
 
     assert client.get("/v1/auth/check").status_code == 401
 
@@ -129,7 +130,7 @@ def test_a_hosted_workspace_admits_only_its_owners_sign_in(
         sid = sessions.create_session(
             redis, user_id=str(user.id), ttl_seconds=300, auth_method=auth_method
         )
-        client.cookies.set(settings.session_cookie_name, sid)
+        client.cookies.set(session_cookie_name(), sid)
         return client.get("/v1/auth/check").status_code, sid
 
     status, _ = check(admin, "oidc")

@@ -8,6 +8,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from app.security.json_shape import json_depth
+
 
 def ensure_utc(dt: datetime | None) -> datetime | None:
     """Return a timezone-aware UTC datetime.
@@ -32,15 +34,21 @@ def make_fingerprint(*parts: str) -> str:
 
 
 def try_parse_json_line(line: str) -> Any | None:
+    """The line's JSON document, or None to keep the line as text.
+
+    A document nested more deeply than collected structures are walked stays
+    text, so one such line is stored and redacted like any other.
+    """
     s = (line or "").strip()
     if not s:
         return None
     if s[0] not in "{[":
         return None
     try:
-        return json.loads(s)
+        parsed = json.loads(s)
     except Exception:
         return None
+    return parsed if json_depth(parsed) is not None else None
 
 
 def truncate(s: str, limit: int = 220) -> str:

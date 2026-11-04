@@ -11,6 +11,7 @@ from typing import Any
 from app.core.config import settings
 from app.mapping.collector import matches_collector
 from app.mapping.fields import field_matches, validate_fields
+from app.security.json_shape import MAX_DEPTH
 from app.security.regex import MatchBudgetExceeded
 
 log = logging.getLogger(__name__)
@@ -94,8 +95,8 @@ def _match_any_exact(expected: str | None, values: list[str]) -> bool:
     return any(str(v) == expected for v in values)
 
 
-def _add_label_value(out: list[str], value: Any) -> None:
-    if value is None:
+def _add_label_value(out: list[str], value: Any, depth: int = 1) -> None:
+    if value is None or depth > MAX_DEPTH:
         return
     if isinstance(value, (str, int, float, bool)):
         txt = str(value).strip()
@@ -104,29 +105,33 @@ def _add_label_value(out: list[str], value: Any) -> None:
         return
     if isinstance(value, (list, tuple, set)):
         for item in value:
-            _add_label_value(out, item)
+            _add_label_value(out, item, depth + 1)
         return
     if isinstance(value, dict):
         for k, v in value.items():
             # Loki-style labels are stored as a dict. Keep both the value and
             # a key=value representation so rules can target either form.
-            _add_label_value(out, v)
+            _add_label_value(out, v, depth + 1)
             if isinstance(v, (str, int, float, bool)):
                 txt = f"{k}={v}".strip()
                 if txt:
                     out.append(txt)
 
 
-def _extract_label_values_from_obj(obj: Any, out: list[str]) -> None:
+def _extract_label_values_from_obj(obj: Any, out: list[str], depth: int = 1) -> None:
+    # Stored payloads are no deeper than MAX_DEPTH; the bound keeps any other
+    # caller's structure from exhausting the recursion limit.
+    if depth > MAX_DEPTH:
+        return
     if isinstance(obj, dict):
         for k, v in obj.items():
             if str(k) in {"label", "labels"}:
                 _add_label_value(out, v)
             if isinstance(v, (dict, list, tuple, set)):
-                _extract_label_values_from_obj(v, out)
+                _extract_label_values_from_obj(v, out, depth + 1)
     elif isinstance(obj, (list, tuple, set)):
         for item in obj:
-            _extract_label_values_from_obj(item, out)
+            _extract_label_values_from_obj(item, out, depth + 1)
 
 
 def _event_label_values(event: dict[str, Any]) -> list[str]:

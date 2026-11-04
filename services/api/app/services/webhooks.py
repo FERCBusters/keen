@@ -4,7 +4,7 @@ import json
 import math
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, NoReturn
 
 from cryptography.fernet import InvalidToken
 from sqlalchemy import func
@@ -21,6 +21,7 @@ from app.db.models import (
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt
 from app.security import signed_webhooks
+from app.security.rate_limit import address_window_allow
 from app.security.redaction import (
     mask_event_data_obj,
     mask_event_data_str,
@@ -28,6 +29,7 @@ from app.security.redaction import (
     redact_str,
     redact_url,
 )
+from app.security.request_limits import MAX_METRIC_SUBMISSION
 from app.services import inbox
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
@@ -38,8 +40,32 @@ from app.services.isms.metric_values import (
     resolve_metric_source_type,
 )
 
-# Submissions are small JSON documents; the bound applies before verification.
-MAX_SUBMISSION_BYTES = 256 * 1024
+# Each client address may make this many requests a minute against each of the
+# webhook allowances: verified deliveries per provider (see the webhook routes),
+# verified metric submissions, and refused deliveries of every kind.
+ADDRESS_ALLOWANCE = 100
+METRIC_ALLOWANCE = "webhook:isms_metrics"
+REFUSED_ALLOWANCE = "webhook:refused"
+
+
+def spend_address_allowance(redis, scope: str, client_ip: str | None) -> None:
+    ok, retry = address_window_allow(
+        redis, scope, client_ip, ADDRESS_ALLOWANCE, 60, fail_closed=True
+    )
+    if not ok:
+        raise DomainError(
+            429, "Webhook rate limit exceeded", headers={"Retry-After": str(retry)}
+        )
+
+
+def refuse(redis, client_ip: str | None, detail: str) -> NoReturn:
+    """Refuse an unverified request, counting it against its address.
+
+    Refusals have their own allowance, so a sender without the secret cannot
+    spend the allowance that verified deliveries from a shared address use.
+    """
+    spend_address_allowance(redis, REFUSED_ALLOWANCE, client_ip)
+    raise DomainError(status_code=403, detail=detail)
 
 
 def _webhook_parse_date(value: Any) -> date | None:
@@ -161,14 +187,15 @@ def submit_signed_metric(
     try:
         timestamp, signature = signed_webhooks.presented(timestamps, signatures, now)
     except signed_webhooks.SignatureRefused as refused:
-        raise DomainError(status_code=403, detail=str(refused)) from None
-    if len(body) > MAX_SUBMISSION_BYTES:
+        refuse(redis, context.client_ip, str(refused))
+    if len(body) > MAX_METRIC_SUBMISSION:
         raise DomainError(status_code=413, detail="Submissions are limited to 256 KiB")
     measure, secret = _submission_target(db, metric_key)
     # The comparison runs even without a secret, so refusals take as long.
     signed = signed_webhooks.matches(secret, timestamp, body, signature)
     if measure is None or not signed:
-        raise DomainError(status_code=403, detail="Invalid webhook signature")
+        refuse(redis, context.client_ip, "Invalid webhook signature")
+    spend_address_allowance(redis, METRIC_ALLOWANCE, context.client_ip)
     require_receiving(db, "webhooks")
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}

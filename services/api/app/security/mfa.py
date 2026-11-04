@@ -24,6 +24,27 @@ from app.security.rate_limit import (
 from app.security.roles import attach_effective_role
 
 COOKIE = "keen_mfa_pending"
+
+
+def cookie_name() -> str:
+    """The pending ceremony's cookie: Secure and host-only over HTTPS, so it
+    takes the ``__Host-`` prefix there, as the session cookie does."""
+    if settings.public_base_url.startswith("https://"):
+        return "__Host-" + COOKIE
+    return COOKIE
+
+
+def clear_cookie(response) -> None:
+    # Browsers refuse a __Host- cookie, even an expiring one, without Secure.
+    response.delete_cookie(
+        cookie_name(),
+        path="/",
+        secure=settings.public_base_url.startswith("https://"),
+        httponly=True,
+        samesite="strict",
+    )
+
+
 TTL = 300
 # Wrong TOTP or recovery codes an account may receive, counted across sign-ins
 # from the first of them; the one that reaches the limit ends the ceremony, and
@@ -207,7 +228,7 @@ def start(db, user, request, purpose="login"):
 
     response = JSONResponse({"mfa_required": True, "next": "/mfa.html"})
     response.set_cookie(
-        COOKIE,
+        cookie_name(),
         token,
         max_age=TTL,
         httponly=True,
@@ -221,7 +242,7 @@ def start(db, user, request, purpose="login"):
 
 def pending(db, request):
     check_origin(request)
-    token = request.cookies.get(COOKIE, "")
+    token = request.cookies.get(cookie_name(), "")
     if not token or len(token) > 128:
         raise HTTPException(401, "Verification expired; start again")
     # Consistent lock order: user first, then challenge; serializes codes/changes.
@@ -357,11 +378,11 @@ def check_client_data(credential, user=None):
 
 
 def cancel(db, request, response):
-    token = request.cookies.get(COOKIE, "")
+    token = request.cookies.get(cookie_name(), "")
     if token and len(token) <= 128:
         db.query(MfaChallenge).filter(MfaChallenge.token_hash == digest(token)).delete(
             synchronize_session=False
         )
         db.commit()
-    response.delete_cookie(COOKIE, path="/")
+    clear_cookie(response)
     return response

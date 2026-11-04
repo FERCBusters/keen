@@ -49,23 +49,59 @@ celery_app.conf.task_routes = {
     "app.worker.tasks.integration_run_task": {"queue": "ingest-http"},
     "keen.ingest_imap_connection": {"queue": "imap"},
 }
-# The ingest-http worker runs one task at a time, so a collection that never
-# ends would hold back every other collector and custom API run. Each request
-# already ends within its transport budget (two minutes for built-in
-# collectors), and the longest per-connection run budget, Risk Ledger's
-# max_run_seconds, is at most 30 minutes; these limits stop a run that still
-# continues an hour later. The soft limit ends the whole run of a source's
-# connections, and its next run starts one connection further along, so the
-# connections a stopped run missed are not always last. Cloud posture tasks
-# and custom API runs keep their own, shorter limits.
-HTTP_COLLECTION_LIMITS = {"soft_time_limit": 3300, "time_limit": 3600}
+# The ingest-http worker runs one task at a time, so a collection that runs on
+# would hold back every other collector and custom API run, and a hostile or
+# failing source would hold them back for as long as its runs last. Each
+# request already ends within its transport budget (two minutes for built-in
+# collectors). Each source type's scheduled run also ends within its own
+# budget, KEEN_<SOURCE>_RUN_SECONDS, set below the interval between its runs,
+# and KEEN_COLLECTION_RUN_MAX_SECONDS caps every budget. Collectors store and
+# commit each input, page, chunk or day as they go, so a run stopped at its
+# budget keeps what it collected and the next run continues from its cursor.
+# The soft limit ends the whole run of a source's connections, and its next run
+# starts one connection further along, so the connections a stopped run missed
+# are not always last; the hard limit follows after a short grace. A manual run
+# of one connection has the general cap. Cloud posture tasks and custom API
+# runs keep their own, shorter limits.
+RUN_GRACE_SECONDS = 120
+SOURCE_RUN_SECONDS = {
+    "elasticsearch": settings.elasticsearch_run_seconds,
+    "loki": settings.loki_run_seconds,
+    "cloudwatch_logs": settings.cloudwatch_logs_run_seconds,
+    "github": settings.github_run_seconds,
+    "forgejo": settings.forgejo_run_seconds,
+    "gitea": settings.gitea_run_seconds,
+    "gitlab": settings.gitlab_run_seconds,
+    "redmine": settings.redmine_run_seconds,
+    "riskledger": settings.riskledger_run_seconds,
+    "jenkins": settings.jenkins_run_seconds,
+    "taiga": settings.taiga_run_seconds,
+    "bookstack": settings.bookstack_run_seconds,
+    "rss": settings.rss_run_seconds,
+    "google_workspace": settings.google_workspace_run_seconds,
+}
+
+
+def run_limits(budget: int) -> dict[str, int]:
+    soft = min(budget, settings.collection_run_max_seconds)
+    return {"soft_time_limit": soft, "time_limit": soft + RUN_GRACE_SECONDS}
+
+
 celery_app.conf.task_annotations = {
     **{
-        f"app.worker.tasks.ingest_{source}_all_task": HTTP_COLLECTION_LIMITS
-        for source in HTTP_INGEST_SOURCES
+        f"app.worker.tasks.ingest_{source}_all_task": run_limits(budget)
+        for source, budget in SOURCE_RUN_SECONDS.items()
     },
-    "keen.ingest_source_connection": HTTP_COLLECTION_LIMITS,
+    "keen.ingest_source_connection": run_limits(settings.collection_run_max_seconds),
 }
+# Every other task ends within an outer bound too. Socket timeouts restart with
+# each byte, so a server that answers a byte at a time (an operator's mail or
+# directory server, a cloud SDK endpoint) could otherwise hold a worker for as
+# long as it keeps answering. Long internal work, such as a rule backfill, runs
+# as a series of short tasks.
+TASK_SECONDS = 3300
+celery_app.conf.task_soft_time_limit = TASK_SECONDS
+celery_app.conf.task_time_limit = TASK_SECONDS + RUN_GRACE_SECONDS
 
 # Beat schedules
 celery_app.conf.beat_schedule = {
@@ -197,3 +233,15 @@ celery_app.conf.beat_schedule["security-notifications"] = {
     "task": "app.worker.tasks.security_notifications_task",
     "schedule": 60.0,
 }
+
+# A scheduled collection waits at most this long for the ingest-http worker.
+# While one long collection holds the worker, the runs scheduled behind it
+# expire, and each source's next scheduled run collects from its cursor, so no
+# backlog builds up behind a slow or hostile source.
+SCHEDULED_COLLECTION_EXPIRY = 600
+for _entry in celery_app.conf.beat_schedule.values():
+    if (
+        celery_app.conf.task_routes.get(_entry["task"], {}).get("queue")
+        == "ingest-http"
+    ):
+        _entry.setdefault("options", {})["expires"] = SCHEDULED_COLLECTION_EXPIRY

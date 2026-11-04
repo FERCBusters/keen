@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import NoReturn
+
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -9,7 +11,8 @@ from app.api.routing import Router
 from app.core.valkey import get_valkey
 from app.db.session import get_db
 from app.ingest.webhooks import BUILT_IN_PROVIDERS, ingest_webhook, verify_secret
-from app.security.rate_limit import address_window_allow, fixed_window_spend
+from app.security.client_ip import request_ip
+from app.security.rate_limit import fixed_window_spend
 from app.security.signed_webhooks import SIGNATURE_HEADER, TIMESTAMP_HEADER
 from app.services import webhooks as service
 
@@ -29,29 +32,23 @@ def _require_webhook_enabled():
         raise HTTPException(503, "Webhook ingestion is disabled")
 
 
-# Each built-in provider has its own allowance per client address, so one
-# busy sender leaves the others theirs. Every other provider name shares one
-# "other" allowance per address, so a made-up provider never opens a fresh
-# allowance or adds a counter. Metric submissions have their own.
-METRIC_LIMIT = "webhook:isms_metrics"
-
-
+# Deliveries whose secret verifies draw on an allowance for their provider and
+# client address: each built-in provider has its own, so one busy sender leaves
+# the others theirs, and every other provider name shares one "other"
+# allowance, so a made-up provider never opens a fresh allowance or adds a
+# counter. Refused deliveries draw on a separate allowance for their address.
+# Senders such as Git hosting services deliver for many customers from shared
+# addresses, so a sender without the secret can spend only the refusals'
+# allowance, never the one its neighbours' verified deliveries use.
 def _generic_limit(provider: str) -> str:
     if provider in BUILT_IN_PROVIDERS:
         return f"webhook:provider:{provider}"
     return "webhook:other"
 
 
-def _limit_webhook(request: Request, scope: str):
-    from app.security.client_ip import request_ip
-
-    ok, retry = address_window_allow(
-        get_valkey(), scope, request_ip(request), 100, 60, fail_closed=True
-    )
-    if not ok:
-        raise HTTPException(
-            429, "Webhook rate limit exceeded", headers={"Retry-After": str(retry)}
-        )
+def _refuse_webhook(request: Request) -> NoReturn:
+    """Refuse a delivery whose secret did not verify, counting it."""
+    service.refuse(get_valkey(), request_ip(request), "Invalid webhook secret")
 
 
 @router.post("/v1/webhooks/isms/effectiveness-metrics/{metric_key}")
@@ -74,17 +71,11 @@ async def isms_effectiveness_metric_webhook(
       "source_url": "https://grafana.example/..."
     }
     """
-    # The checks that need no body run first, so the body of a request that
-    # is disabled or over its allowance is never read into memory; all of the
-    # work runs in the thread pool, off the event loop.
-    await run_in_threadpool(_admit_metric, request)
+    # The signature covers the body, so the body (at most 256 KiB) is read
+    # first; all of the work runs in the thread pool, off the event loop.
+    await run_in_threadpool(_require_webhook_enabled)
     body = await request.body()
     return await run_in_threadpool(_submit_metric, metric_key, request, db, body)
-
-
-def _admit_metric(request: Request):
-    _require_webhook_enabled()
-    _limit_webhook(request, METRIC_LIMIT)
 
 
 def _submit_metric(metric_key: str, request: Request, db: Session, body: bytes):
@@ -108,9 +99,8 @@ async def webhook_ingest(
     db: Session = Depends(get_db),
     connection_id: str | None = None,
 ):
-    # The secret is checked before the body is read, so an unauthenticated
-    # request's body never reaches memory; all of the work runs in the thread
-    # pool, off the event loop.
+    # The secret is checked before the handler reads the body; all of the
+    # work runs in the thread pool, off the event loop.
     connection = await run_in_threadpool(_admit, provider, request, db, connection_id)
     body = await request.body()
     return await run_in_threadpool(
@@ -123,18 +113,21 @@ def _admit(provider: str, request: Request, db: Session, connection_id: str | No
     from app.ingest.connections import connection_scope, connections, resolve
 
     _require_webhook_enabled()
-    # Throttle before any database work; an unauthenticated caller learns
-    # nothing about connections or ingestion state before its secret is verified.
-    _limit_webhook(request, _generic_limit(provider))
+    # An unauthenticated caller learns nothing about connections or ingestion
+    # state before its secret is verified, and spends only the refusals'
+    # allowance for its address.
     key = connection_id or "env:webhooks"
     connection = next(
         (c for c in connections(db, "webhooks") if c.id == key and c.enabled), None
     )
     if connection is None:
-        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+        _refuse_webhook(request)
     with connection_scope(resolve(connection)):
         if not verify_secret(provider, dict(request.headers.items())):
-            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+            _refuse_webhook(request)
+        service.spend_address_allowance(
+            get_valkey(), _generic_limit(provider), request_ip(request)
+        )
         from app.services.ingestion_pause import require_receiving
 
         require_receiving(db, "webhooks")

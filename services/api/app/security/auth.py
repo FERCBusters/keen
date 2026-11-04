@@ -76,7 +76,20 @@ def _remote_user_from_headers(headers: Mapping[str, str], *, peer=None) -> str |
 
 
 def cookie_name() -> str:
-    return settings.session_cookie_name
+    """The session cookie's name.
+
+    A Secure cookie without a Domain attribute takes the ``__Host-`` prefix,
+    which a browser accepts only from this host over HTTPS, so another site
+    under the same parent domain can neither set nor shadow the session.
+    """
+    name = settings.session_cookie_name
+    if (
+        settings.cookie_secure
+        and not settings.cookie_domain.strip()
+        and not name.startswith(("__Host-", "__Secure-"))
+    ):
+        return "__Host-" + name
+    return name
 
 
 def get_current_user_from_headers_cookies(
@@ -195,7 +208,10 @@ def set_session_cookie(response: Response, session_id: str) -> None:
 
 def clear_session_cookie(response: Response) -> None:
     domain = settings.cookie_domain.strip() or None
-    response.delete_cookie(key=cookie_name(), domain=domain, path="/")
+    # Browsers refuse a __Host- cookie, even an expiring one, without Secure.
+    response.delete_cookie(
+        key=cookie_name(), domain=domain, path="/", secure=settings.cookie_secure
+    )
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User | None:

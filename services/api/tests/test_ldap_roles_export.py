@@ -25,6 +25,7 @@ from app.db.models import (
 from app.mapping.rules import parse_rules
 from app.security import ldap, mfa
 from app.security.auth import authenticate_user
+from app.security.auth import cookie_name as session_cookie_name
 from app.services.errors import DomainError
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -492,7 +493,7 @@ def test_ldap_login_route_and_mfa_with_local_disabled(db, directory, monkeypatch
     cookie = SimpleCookie()
     for header in response.headers.getlist("set-cookie"):
         cookie.load(header)
-    session = get_session(redis, cookie[settings.session_cookie_name].value)
+    session = get_session(redis, cookie[session_cookie_name()].value)
     assert session["auth_method"] == "ldap"
     user = db.query(User).filter_by(auth_backend="ldap").one()
     user.mfa_enabled = True

@@ -113,8 +113,6 @@ const records = () => ({
       aws_accounts: accounts,
       aws_account_ids: ['aws1', 'aws2', 'aws3'],
       status: 'Approved',
-      approved_by: { username: 'alice' },
-      approved_by_user_id: 'u1',
       roles: [{ id: 'n1', name: 'Security team' }],
       role_org_node_ids: ['n1'],
       notes: 'Quarterly review',
@@ -619,7 +617,6 @@ test('the access matrix groups by service with role columns and account pills', 
     'Task/action',
     'Managed hosting accounts',
     'Status',
-    'Approved by',
     'Security team',
     'Notes',
     'Actions',
@@ -628,7 +625,7 @@ test('the access matrix groups by service with role columns and account pills', 
   assert.equal(
     row.dataset.ismsFilterText,
     'Deploy · Database · Approved · Production (111122223333), Staging (444455556666), ' +
-      'Sandbox · Security team · alice · Quarterly review',
+      'Sandbox · Security team · Quarterly review',
   );
   assert.equal(row.querySelector('a').getAttribute('href'), '/isms-asset.html?id=a1&framework=A');
   const pills = [...row.querySelectorAll('.isms-aws-account-pill')];
@@ -660,7 +657,6 @@ test('the access matrix groups by service with role columns and account pills', 
       service_asset_id: 'a1',
       aws_account_ids: ['aws1'],
       status: 'Approved',
-      approved_by_user_id: 'u1',
       role_org_node_ids: ['n1'],
       notes: 'Quarterly review',
     },

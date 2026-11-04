@@ -155,13 +155,6 @@ def _validate_access_control_payload(
             .first()
         ):
             raise DomainError(status_code=400, detail="Unknown service asset")
-    if (not fields or "approved_by_user_id" in fields) and payload.approved_by_user_id:
-        if (
-            not db.query(User.id)
-            .filter(User.id == payload.approved_by_user_id, User.is_active.is_(True))
-            .first()
-        ):
-            raise DomainError(status_code=400, detail="Unknown approved-by user")
     role_ids: list[uuid.UUID] = []
     if not fields or "role_org_node_ids" in fields:
         role_ids.extend(payload.role_org_node_ids or [])
@@ -197,7 +190,6 @@ def create_access_control_matrix_entry(
         ),
         service_asset_id=payload.service_asset_id,
         status=status,
-        approved_by_user_id=payload.approved_by_user_id,
         notes=clean_text(payload.notes, max_len=12000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
@@ -266,8 +258,6 @@ def update_access_control_matrix_entry(
         row.service_asset_id = payload.service_asset_id
     if "status" in fields:
         row.status = (payload.status or "Pending Approval").strip()
-    if "approved_by_user_id" in fields:
-        row.approved_by_user_id = payload.approved_by_user_id
     if "role_org_node_ids" in fields:
         _replace_access_control_roles(db, row, payload.role_org_node_ids or [])
     if "notes" in fields:

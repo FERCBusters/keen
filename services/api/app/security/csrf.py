@@ -67,7 +67,9 @@ def set_csrf_cookie(response: Response, token: str) -> None:
 
 def clear_csrf_cookie(response: Response) -> None:
     domain = settings.cookie_domain.strip() or None
-    response.delete_cookie(key=csrf_cookie_name(), domain=domain, path="/")
+    response.delete_cookie(
+        key=csrf_cookie_name(), domain=domain, path="/", secure=settings.cookie_secure
+    )
 
 
 def request_origin_allowed(request, *, require_origin=False) -> bool:

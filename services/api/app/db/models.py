@@ -2337,12 +2337,6 @@ class IsmsAccessControlMatrixEntry(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="Pending Approval", index=True
     )
-    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -2355,7 +2349,6 @@ class IsmsAccessControlMatrixEntry(Base):
     )
 
     service_asset = relationship("RiskAsset", foreign_keys=[service_asset_id])
-    approved_by = relationship("User", foreign_keys=[approved_by_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     role_links = relationship(
         "IsmsAccessControlMatrixRole",

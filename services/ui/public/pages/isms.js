@@ -407,7 +407,7 @@ const ismsTableSections = [
     countId: 'accessControlCount',
     formCardId: 'accessControlFormCard',
     title: 'Access control matrix filters',
-    placeholder: 'Filter access rows by task/action, service, account, role, approver or status',
+    placeholder: 'Filter access rows by task/action, service, account, role or status',
     addLabel: 'Add new access row',
   },
   {
@@ -965,7 +965,6 @@ function accessPayloadFromForm() {
     service_asset_id: $('accessService').value || null,
     aws_account_ids: selectedValues($('accessAwsAccounts')),
     status: $('accessStatus').value || 'Pending Approval',
-    approved_by_user_id: $('accessApprovedBy').value || null,
     role_org_node_ids: selectedValues($('accessRole')),
     notes: $('accessNotes').value,
   };
@@ -1051,7 +1050,6 @@ function populateEditForm(kind, item) {
     $('accessService').value = item.service_asset_id || item.service?.id || '';
     setSelectValues($('accessAwsAccounts'), item.aws_account_ids || []);
     $('accessStatus').value = item.status || 'Pending Approval';
-    $('accessApprovedBy').value = item.approved_by_user_id || '';
     setSelectValues($('accessRole'), item.role_org_node_ids || []);
     $('accessNotes').value = item.notes || '';
   } else if (kind === 'effectiveness') {
@@ -1579,14 +1577,12 @@ function accessKeyLabel(item) {
     .map((acct) => awsAccountLabel(acct))
     .filter(Boolean)
     .join(', ');
-  const approver = item?.approved_by?.username || '';
   return [
     item?.task_action || 'Task/action',
     accessServiceLabel(item),
     item?.status || '',
     accounts,
     roles,
-    approver,
     item?.notes || '',
   ]
     .filter(Boolean)
@@ -1644,10 +1640,10 @@ function renderAccessControlMatrix() {
   const head = $('accessMatrixHead');
   setCount('accessControlCount', items.length);
   if (head) {
-    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/action</th><th class="isms-access-accounts-head">Managed hosting accounts</th><th class="text-center isms-access-status-head">Status</th><th class="text-center isms-access-approver-head">Approved by</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name || 'Role')}">${esc(role.name || 'Role')}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
+    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/action</th><th class="isms-access-accounts-head">Managed hosting accounts</th><th class="text-center isms-access-status-head">Status</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name || 'Role')}">${esc(role.name || 'Role')}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
   }
   if (!items.length) {
-    rows.access.innerHTML = emptyRow(roleColumns.length + 7, 'No access control matrix rows yet.');
+    rows.access.innerHTML = emptyRow(roleColumns.length + 6, 'No access control matrix rows yet.');
     return;
   }
   const grouped = [];
@@ -1672,13 +1668,11 @@ function renderAccessControlMatrix() {
             idx === 0
               ? `<td class="isms-app-group" rowspan="${group.rows.length}" data-sort="${esc(group.name)}"><span>${serviceHref ? `<a class="link-light" href="${esc(serviceHref)}">${esc(group.name)}</a>` : esc(group.name)}</span></td>`
               : '';
-          const approverText = entry.approved_by?.username || '';
           return `<tr data-isms-row="access" data-isms-filter-text="${esc(accessKeyLabel(entry))}">
       ${serviceCell}
       <td class="wrap isms-app-key-linkage" data-sort="${esc(entry.task_action || '')}"><div class="fw-semibold"><a href="${esc(accessControlHref(entry))}">${esc(entry.task_action || 'Task/action')}</a></div></td>
       <td class="wrap isms-access-accounts" data-sort="${esc((entry.aws_accounts || []).map((acct) => awsAccountLabel(acct)).join(', '))}">${accessAccountPillsHtml(entry)}</td>
       <td class="isms-app-cell isms-access-status ${accessStatusClass(entry.status)} text-center" data-sort="${esc(entry.status || 'Pending Approval')}"><div class="fw-semibold">${esc(entry.status || 'Pending Approval')}</div></td>
-      <td class="wrap isms-access-approver" data-sort="${esc(approverText)}">${entry.approved_by ? userPillHtml(entry.approved_by, { className: 'isms-access-approver-pill' }) : '<span class="small-muted">-</span>'}</td>
       ${roleColumns.map((role) => accessRoleCellHtml(entry, role.id)).join('')}
       <td class="text-center small-muted isms-access-notes" data-sort="${esc(entry.notes || '')}">${noteTooltipHtml(entry.notes, 'Access row notes')}</td>
       ${actionsHtml('access', entry.id, 'isms-access-actions')}
@@ -2015,9 +2009,6 @@ function renderAccessFormOptions(targetAccountValues = []) {
     service.innerHTML = optionList(meta.assets || [], {
       label: (a) => a.asset || a.name || 'Asset',
     });
-  const approver = $('accessApprovedBy');
-  if (approver)
-    approver.innerHTML = optionList(meta.users || [], { label: 'username', includeBlank: true });
   const role = $('accessRole');
   if (role)
     role.innerHTML = optionList(meta.org_nodes || [], {

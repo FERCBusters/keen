@@ -415,6 +415,28 @@ class Settings(BaseSettings):
     cloudwatch_logs_region: str = Field(default="")
     cloudwatch_logs_config_path: str = Field(default="/app/config/cloudwatch_logs.yml")
 
+    # --- Collection run time
+    # Each source type's scheduled run ends within its own budget, set below the
+    # interval between its runs; a source whose legitimate runs take longer,
+    # such as Loki during a large log spike, can be given more. Every budget is
+    # capped by collection_run_max_seconds. A Risk Ledger run needs its
+    # longest per-connection max_run_seconds (30 minutes) and one request more.
+    collection_run_max_seconds: int = Field(default=3300, ge=300, le=86400)
+    elasticsearch_run_seconds: int = Field(default=1500, ge=300, le=86400)
+    loki_run_seconds: int = Field(default=1500, ge=300, le=86400)
+    cloudwatch_logs_run_seconds: int = Field(default=1500, ge=300, le=86400)
+    google_workspace_run_seconds: int = Field(default=1500, ge=300, le=86400)
+    github_run_seconds: int = Field(default=1200, ge=300, le=86400)
+    forgejo_run_seconds: int = Field(default=1200, ge=300, le=86400)
+    gitea_run_seconds: int = Field(default=1200, ge=300, le=86400)
+    gitlab_run_seconds: int = Field(default=1200, ge=300, le=86400)
+    jenkins_run_seconds: int = Field(default=1200, ge=300, le=86400)
+    taiga_run_seconds: int = Field(default=900, ge=300, le=86400)
+    bookstack_run_seconds: int = Field(default=1800, ge=300, le=86400)
+    redmine_run_seconds: int = Field(default=480, ge=300, le=86400)
+    riskledger_run_seconds: int = Field(default=2100, ge=1980, le=86400)
+    rss_run_seconds: int = Field(default=600, ge=300, le=86400)
+
     # --- Cloud vendor posture, shown on each cloud Vendor's page
     # Every enabled provider's settings checks run on one schedule and its
     # activity reads on another.

@@ -362,10 +362,12 @@ def test_submissions_wait_when_replays_cannot_be_checked(metrics, monkeypatch):
 def test_oversized_submissions_are_refused_before_verification(metrics):
     body = json.dumps({"value": 1, "notes": "x" * (256 * 1024)}).encode()
 
+    # The body limit applies as the request arrives, so an unsigned sender
+    # never has more than a submission's worth of body read for it.
     refused = metrics.post(content=body)
 
     assert refused.status_code == 413
-    assert refused.json()["detail"] == "Submissions are limited to 256 KiB"
+    assert refused.json()["detail"] == "Request body too large"
     assert metrics.entries() == []
 
 

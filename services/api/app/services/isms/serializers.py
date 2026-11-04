@@ -379,10 +379,6 @@ def _access_control_matrix_out(
         "aws_accounts": accounts,
         "aws_account_ids": [acct["id"] for acct in accounts if acct],
         "status": row.status,
-        "approved_by": _user_summary(row.approved_by),
-        "approved_by_user_id": (
-            str(row.approved_by_user_id) if row.approved_by_user_id else None
-        ),
         "roles": roles,
         "role_org_node_ids": [role["id"] for role in roles if role],
         "notes": row.notes or "",

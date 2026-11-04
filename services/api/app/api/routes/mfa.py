@@ -145,7 +145,7 @@ def finish(request: Request, db: Session = Depends(get_db)):
     response = complete_local_login(
         db, user, request, mfa_verified=enabled, verified_version=verified_version
     )
-    response.delete_cookie(mfa.COOKIE, path="/")
+    mfa.clear_cookie(response)
     return no_cache(response)
 
 

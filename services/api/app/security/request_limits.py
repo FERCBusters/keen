@@ -12,9 +12,15 @@ MAX_BODY = 40 * 1024 * 1024
 # Administration routes, which hold configuration and control imports, may
 # send a whole request body of JSON.
 MAX_JSON_BODY = 2 * 1024 * 1024
+# Checking a document against a route's model also costs time for each value,
+# and that check runs on the event loop. Outside administration, no form sends
+# more than a few thousand values, so a request holds at most this many.
+MAX_JSON_VALUES = 20_000
 # ISMS document files and audit final reports accept a single file up to this
 # size; their operations check the file itself against the same figure.
 MAX_FILE_UPLOAD = 100 * 1024 * 1024
+# A signed effectiveness-metric submission.
+MAX_METRIC_SUBMISSION = 256 * 1024
 # Room for the multipart boundary and part headers around that one file.
 _MULTIPART_ROOM = 64 * 1024
 _SEALED_OVERHEAD = 1120 + 32 + 16
@@ -32,6 +38,10 @@ def body_limit(path):
         return 256 * 1024
     if path == "/v1/otlp/logs":
         return 1024 * 1024 + _SEALED_OVERHEAD
+    # Signed metric submissions are small; the body is read before its signature
+    # can be checked, so an unsigned sender holds no more than this in memory.
+    if path.startswith("/v1/webhooks/isms/effectiveness-metrics/"):
+        return MAX_METRIC_SUBMISSION
     if path.startswith("/v1/webhooks/"):
         return 10 * 1024 * 1024
     if _FILE_UPLOADS.fullmatch(path):
@@ -48,6 +58,13 @@ def json_body_limit(path):
     if path.startswith("/v1/admin/"):
         return MAX_BODY
     return MAX_JSON_BODY
+
+
+def json_value_limit(path):
+    """The most values a parsed JSON request to this path may hold, if bounded."""
+    if path.startswith("/v1/admin/"):
+        return None
+    return MAX_JSON_VALUES
 
 
 def target_has_nul(scope) -> bool:

@@ -280,14 +280,13 @@ test('documents with neither file nor URL hide the open action', async (t) => {
   assert.equal(none.ui.el('documentDescription').textContent, 'No description recorded.');
 });
 
-test('access control rows show their service, accounts, approver and roles', async (t) => {
+test('access control rows show their service, accounts and roles', async (t) => {
   const row = {
     id: 'x1',
     task_action: hostile + 'Grant prod access',
     status: 'Approved',
     service: { id: 'as1', asset: 'Prod DB' },
     aws_accounts: [{ name: 'prod', account_id: '1234' }, {}],
-    approved_by: 'dana',
     roles: [{ name: '<b>DBA</b>' }],
     notes: '',
   };

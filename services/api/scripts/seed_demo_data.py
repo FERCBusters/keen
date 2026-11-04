@@ -860,9 +860,6 @@ class DemoSeeder:
                 {
                     "service_asset_id": assets[spec["asset"]].id,
                     "status": spec["status"],
-                    "approved_by_user_id": (
-                        self.user.id if spec["status"] == "Approved" else None
-                    ),
                     "notes": spec["notes"],
                     "created_by_user_id": self.user.id,
                 },

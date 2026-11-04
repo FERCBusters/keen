@@ -13,6 +13,7 @@ from app.api.routes import auth as auth_routes
 from app.core.config import settings
 from app.db.models import AuditLog
 from app.security import auth
+from app.security.auth import cookie_name as session_cookie_name
 from app.security.rate_limit import login_limit_key, login_name
 
 # Imported fixtures: the assembled application with an in-memory session store,
@@ -52,7 +53,7 @@ def signin(keen, monkeypatch):  # noqa: F811 - fixture imported above
 
     def session_set(response):
         cookies = response.headers.get_list("set-cookie")
-        return any(c.startswith(settings.session_cookie_name + "=") for c in cookies)
+        return any(c.startswith(session_cookie_name() + "=") for c in cookies)
 
     keen.verified = verified
     keen.attempt = attempt
@@ -152,18 +153,18 @@ def test_signing_in_replaces_a_session_planted_in_the_browser(signin):
     # Session fixation: an attacker plants their own session ID in the
     # victim's browser before the victim signs in.
     attacker = signin.client(signin.user())
-    planted = attacker.cookies.get(settings.session_cookie_name)
+    planted = attacker.cookies.get(session_cookie_name())
     victim = signin.user()
     browser = signin.client()
 
     response = browser.post(
         "/v1/auth/login",
         json={"username": victim.username, "password": PASSWORD},
-        headers={"Origin": BASE, "Cookie": f"{settings.session_cookie_name}={planted}"},
+        headers={"Origin": BASE, "Cookie": f"{session_cookie_name()}={planted}"},
     )
 
     assert response.status_code == 200, response.text
-    issued = response.cookies.get(settings.session_cookie_name)
+    issued = response.cookies.get(session_cookie_name())
     assert issued and issued != planted
     assert browser.get("/v1/auth/check").headers["x-keen-user"] == victim.username
     # The planted session is revoked rather than upgraded.

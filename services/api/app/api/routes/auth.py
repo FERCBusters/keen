@@ -21,6 +21,7 @@ from app.security.auth import (
     require_authenticated,
     set_session_cookie,
 )
+from app.security.auth import cookie_name as session_cookie_name
 from app.security.csrf import (
     clear_csrf_cookie,
     csrf_valid,
@@ -164,7 +165,7 @@ def complete_local_login(
     sid, result = login_service.complete_local_login(
         db,
         user,
-        existing_sid=request.cookies.get(settings.session_cookie_name),
+        existing_sid=request.cookies.get(session_cookie_name()),
         context=change_context(request),
         mfa_verified=mfa_verified,
         verified_version=verified_version,
@@ -222,7 +223,7 @@ async def _complete_sso_callback(
                 user,
                 provider=provider,
                 id_token=id_token,
-                existing_sid=request.cookies.get(settings.session_cookie_name),
+                existing_sid=request.cookies.get(session_cookie_name()),
                 context=context,
             )
         )
@@ -258,7 +259,7 @@ async def _complete_sso_callback(
 
 
 def _require_logout_intent(request):
-    if request.cookies.get(settings.session_cookie_name):
+    if request.cookies.get(session_cookie_name()):
         allowed = csrf_valid(request)
     else:
         # Pending MFA has a separate credential and may not have a CSRF cookie.
@@ -288,7 +289,7 @@ def _revoke_or_fail(sid: str) -> None:
 @router.post("/v1/auth/logout")
 def logout(request: Request, db: Session = Depends(get_db)) -> Response:
     _require_logout_intent(request)
-    sid = (request.cookies.get(settings.session_cookie_name) or "").strip()
+    sid = (request.cookies.get(session_cookie_name()) or "").strip()
     _revoke_or_fail(sid)
     resp = Response(status_code=204)
     from app.security import mfa
@@ -301,7 +302,7 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
 
 def _browser_logout_response(request: Request, db: Session) -> Response:
     _require_logout_intent(request)
-    sid = (request.cookies.get(settings.session_cookie_name) or "").strip()
+    sid = (request.cookies.get(session_cookie_name()) or "").strip()
     try:
         session_row = get_session(get_valkey(), sid) if sid else None
     except Exception:

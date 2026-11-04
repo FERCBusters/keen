@@ -69,6 +69,7 @@ from app.services.mapping_provenance import rule_id_of
 from app.services.presentation import event_identifier as _event_identifier
 from app.services.presentation import extract_source_url as _extract_source_url
 from app.services.ueu_evidence import display_payload, evidence_record
+from app.storage.filenames import content_disposition_attachment
 
 INCIDENT_CREATE_PERMISSION = "incident.create"
 INCIDENT_DELETE_PERMISSION = "incident.delete"
@@ -803,7 +804,7 @@ def export_events(
     filename = "_".join(name_parts) + (".ndjson" if fmt == "ndjson" else f".{fmt}")
 
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": content_disposition_attachment(filename),
         "X-Keen-Export-Total": str(total),
         "X-Keen-Export-Returned": str(returned),
         "X-Keen-Export-Truncated": "1" if returned < total else "0",

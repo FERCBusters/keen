@@ -139,7 +139,10 @@ class Session:
                 continue
             for name, morsel in cookie.items():
                 lowered = raw.lower()
-                if name == "keen_mfa_pending" or "max-age=0" in lowered:
+                if (
+                    name in ("keen_mfa_pending", "__Host-keen_mfa_pending")
+                    or "max-age=0" in lowered
+                ):
                     continue
                 if morsel["httponly"] or "httponly" in lowered:
                     self.session_cookie = name

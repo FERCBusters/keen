@@ -43,6 +43,7 @@ from app.db.models import (
 from app.db.session import Base, get_db
 from app.security import auth as identity
 from app.security import mfa
+from app.security.auth import cookie_name as session_cookie_name
 from app.security.passwords import hash_password
 from app.security.sessions import create_session
 from cryptography.fernet import Fernet
@@ -223,7 +224,10 @@ class LocalMfaTests(unittest.TestCase):
             cookie = SimpleCookie()
             cookie.load(response.headers["set-cookie"])
             self.client.cookies.set(
-                mfa.COOKIE, cookie[mfa.COOKIE].value, domain="keen.example", path="/"
+                mfa.cookie_name(),
+                cookie[mfa.cookie_name()].value,
+                domain="keen.example",
+                path="/",
             )
 
     def enrol(self):
@@ -366,7 +370,7 @@ class LocalMfaTests(unittest.TestCase):
             auth_method="local",
             mfa_version=0,
         )
-        self.client.cookies.set(settings.session_cookie_name, sid)
+        self.client.cookies.set(session_cookie_name(), sid)
         self.assertTrue(self.client.get("/protected").json()["authenticated"])
         self.enrol()
         self.assertFalse(self.client.get("/protected").json()["authenticated"])
@@ -468,14 +472,18 @@ class LocalMfaTests(unittest.TestCase):
 
     def test_cancel_and_logout_invalidate_pending_challenge(self):
         self.start()
-        token = self.client.cookies.get(mfa.COOKIE)
+        token = self.client.cookies.get(mfa.cookie_name())
         self.assertEqual(self.post("cancel").status_code, 200)
-        self.client.cookies.set(mfa.COOKIE, token, domain="keen.example", path="/")
+        self.client.cookies.set(
+            mfa.cookie_name(), token, domain="keen.example", path="/"
+        )
         self.assertEqual(self.post("state").status_code, 401)
         self.start()
-        token = self.client.cookies.get(mfa.COOKIE)
+        token = self.client.cookies.get(mfa.cookie_name())
         self.assertEqual(self.client.post("/v1/auth/logout").status_code, 204)
-        self.client.cookies.set(mfa.COOKIE, token, domain="keen.example", path="/")
+        self.client.cookies.set(
+            mfa.cookie_name(), token, domain="keen.example", path="/"
+        )
         self.assertEqual(self.post("state").status_code, 401)
 
     def test_full_application_middleware_boundary(self):

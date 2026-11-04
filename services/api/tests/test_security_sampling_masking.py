@@ -31,6 +31,7 @@ from app.db.models import (
     user_permissions,
 )
 from app.security import auth, csrf, permissions, sessions
+from app.security.auth import cookie_name as session_cookie_name
 from app.services import bookstack_sections
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -120,7 +121,7 @@ def sampling_client(contract_db, monkeypatch, tmp_path):
     )
     client = TestClient(main.app, base_url="https://keen.example")
     sid = sessions.create_session(redis, user_id=str(ids.user), ttl_seconds=300)
-    client.cookies.set(settings.session_cookie_name, sid)
+    client.cookies.set(session_cookie_name(), sid)
     client.cookies.set(csrf.csrf_cookie_name(), "synthetic-csrf")
     client.headers.update(
         {"Origin": "https://keen.example", csrf.csrf_header_name(): "synthetic-csrf"}
