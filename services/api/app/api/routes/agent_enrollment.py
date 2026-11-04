@@ -111,7 +111,7 @@ async def renew(request: Request, db: Session = Depends(get_db)):
             authenticate_agent,
             request,
             db,
-            "keen:agent:renew:auth-failure:ip:",
+            "agent:renew:auth-failure",
             operation="renew",
             allow_retired=True,
         )

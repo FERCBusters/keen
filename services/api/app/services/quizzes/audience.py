@@ -241,6 +241,11 @@ def _sits(person: IsmsPerson) -> bool:
     return person.user is not None and bool(person.user.is_active)
 
 
+def _account(person: IsmsPerson) -> str:
+    """The account that sits quizzes as this person, shown to those assigning."""
+    return person.user.username if _sits(person) and person.user else ""
+
+
 def audience_out(db: Session, quiz: Quiz) -> dict[str, Any]:
     entries = list(quiz.audience)
     node_ids = [entry.org_node_id for entry in entries if entry.org_node_id]
@@ -261,6 +266,7 @@ def audience_out(db: Session, quiz: Quiz) -> dict[str, Any]:
                 "name": person.name,
                 "email": person.email or "",
                 "can_sit": _sits(person),
+                "username": _account(person),
             }
             for person in people
         ],
@@ -301,6 +307,7 @@ def assignees(*, db: Session, user: User) -> dict[str, Any]:
                 "position": person.position or "",
                 "role": person.org_node.name if person.org_node else "",
                 "can_sit": _sits(person),
+                "username": _account(person),
             }
             for person in people
         ],

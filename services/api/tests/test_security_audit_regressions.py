@@ -1,6 +1,5 @@
 """Reproductions for the October security audit, using synthetic credentials."""
 
-import asyncio
 import io
 import socket
 import ssl
@@ -9,7 +8,7 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 from app.core.config import settings
@@ -181,7 +180,7 @@ def test_attachment_failures_propagate_without_logging_untrusted_names(
     upload = SimpleNamespace(
         filename="attack\nforged-log.pdf",
         content_type="application/pdf",
-        read=AsyncMock(return_value=b"%PDF-1.7\nfixture"),
+        read=Mock(return_value=b"%PDF-1.7\nfixture"),
     )
     if failure == "magic":
         upload.read.return_value = b"not a PDF"
@@ -190,15 +189,13 @@ def test_attachment_failures_propagate_without_logging_untrusted_names(
     store = Mock(side_effect=OSError("storage failed"))
     monkeypatch.setattr(questions, "put_bytes", store)
     with pytest.raises(DomainError if failure == "magic" else OSError):
-        asyncio.run(
-            questions._store_attachments(
-                Mock(),
-                event_id=uuid.uuid4(),
-                thread_id=uuid.uuid4(),
-                post_id=uuid.uuid4(),
-                files=[upload],
-                captured_by="fixture",
-            )
+        questions._store_attachments(
+            Mock(),
+            event_id=uuid.uuid4(),
+            thread_id=uuid.uuid4(),
+            post_id=uuid.uuid4(),
+            files=[upload],
+            captured_by="fixture",
         )
     assert "forged-log" not in caplog.text
     if failure != "storage":
@@ -417,23 +414,21 @@ def test_later_invalid_attachment_prevents_all_storage_writes(monkeypatch):
         SimpleNamespace(
             filename="good.pdf",
             content_type="application/pdf",
-            read=AsyncMock(return_value=b"%PDF-1.7\nfixture"),
+            read=Mock(return_value=b"%PDF-1.7\nfixture"),
         ),
         SimpleNamespace(
             filename="bad.pdf",
             content_type="application/pdf",
-            read=AsyncMock(return_value=b"not a PDF"),
+            read=Mock(return_value=b"not a PDF"),
         ),
     ]
     with pytest.raises(DomainError):
-        asyncio.run(
-            questions._store_attachments(
-                Mock(),
-                event_id=uuid.uuid4(),
-                thread_id=uuid.uuid4(),
-                post_id=uuid.uuid4(),
-                files=files,
-                captured_by="fixture",
-            )
+        questions._store_attachments(
+            Mock(),
+            event_id=uuid.uuid4(),
+            thread_id=uuid.uuid4(),
+            post_id=uuid.uuid4(),
+            files=files,
+            captured_by="fixture",
         )
     store.assert_not_called()

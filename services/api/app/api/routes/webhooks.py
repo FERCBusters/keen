@@ -2,17 +2,24 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.context import change_context
 from app.api.routing import Router
 from app.core.valkey import get_valkey
 from app.db.session import get_db
 from app.ingest.webhooks import BUILT_IN_PROVIDERS, ingest_webhook, verify_secret
-from app.security.rate_limit import address_window_allow
+from app.security.rate_limit import address_window_allow, fixed_window_spend
 from app.security.signed_webhooks import SIGNATURE_HEADER, TIMESTAMP_HEADER
 from app.services import webhooks as service
 
 router = Router()
+
+# Each provider on a connection may deliver this many bytes a minute, from any
+# number of addresses. Storing a delivery (parsing, redaction, masking, rule
+# matching) costs processor time in proportion to its size, so a holder of one
+# provider's secret on a connection can spend only this much of it.
+CONNECTION_BYTES_PER_MINUTE = 32 * 1024 * 1024
 
 
 def _require_webhook_enabled():
@@ -67,9 +74,20 @@ async def isms_effectiveness_metric_webhook(
       "source_url": "https://grafana.example/..."
     }
     """
+    # The checks that need no body run first, so the body of a request that
+    # is disabled or over its allowance is never read into memory; all of the
+    # work runs in the thread pool, off the event loop.
+    await run_in_threadpool(_admit_metric, request)
+    body = await request.body()
+    return await run_in_threadpool(_submit_metric, metric_key, request, db, body)
+
+
+def _admit_metric(request: Request):
     _require_webhook_enabled()
     _limit_webhook(request, METRIC_LIMIT)
-    body = await request.body()
+
+
+def _submit_metric(metric_key: str, request: Request, db: Session, body: bytes):
     return service.submit_signed_metric(
         db=db,
         redis=get_valkey(),
@@ -90,6 +108,18 @@ async def webhook_ingest(
     db: Session = Depends(get_db),
     connection_id: str | None = None,
 ):
+    # The secret is checked before the body is read, so an unauthenticated
+    # request's body never reaches memory; all of the work runs in the thread
+    # pool, off the event loop.
+    connection = await run_in_threadpool(_admit, provider, request, db, connection_id)
+    body = await request.body()
+    return await run_in_threadpool(
+        _ingest, provider, event_type, request, db, connection, body
+    )
+
+
+def _admit(provider: str, request: Request, db: Session, connection_id: str | None):
+    """The enabled connection whose secret this request carries, or a refusal."""
     from app.ingest.connections import connection_scope, connections, resolve
 
     _require_webhook_enabled()
@@ -103,13 +133,42 @@ async def webhook_ingest(
     if connection is None:
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
     with connection_scope(resolve(connection)):
-        headers = {k: v for k, v in request.headers.items()}
-        if not verify_secret(provider, headers):
+        if not verify_secret(provider, dict(request.headers.items())):
             raise HTTPException(status_code=403, detail="Invalid webhook secret")
         from app.services.ingestion_pause import require_receiving
 
         require_receiving(db, "webhooks")
-        body = await request.body()
+    return connection
+
+
+def _ingest(
+    provider: str,
+    event_type: str,
+    request: Request,
+    db: Session,
+    connection,
+    body: bytes,
+):
+    from app.ingest.connections import connection_scope, resolve
+
+    with connection_scope(resolve(connection)):
+        # Each provider's secret on a connection spends its own allowance, so
+        # the holder of one provider's secret cannot hold up another's.
+        ok, retry = fixed_window_spend(
+            get_valkey(),
+            f"keen:rl:webhook:bytes:{connection.id}:{provider}",
+            len(body),
+            CONNECTION_BYTES_PER_MINUTE,
+            60,
+            fail_closed=True,
+        )
+        if not ok:
+            raise HTTPException(
+                429,
+                "Webhook volume limit exceeded for this provider and connection",
+                headers={"Retry-After": str(retry)},
+            )
+        headers = {k: v for k, v in request.headers.items()}
         try:
             return ingest_webhook(
                 db, provider=provider, event_type=event_type, body=body, headers=headers

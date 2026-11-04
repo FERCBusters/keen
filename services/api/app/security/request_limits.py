@@ -56,6 +56,31 @@ def target_has_nul(scope) -> bool:
     return "\x00" in scope.get("path", "") or b"%00" in query or b"\x00" in query
 
 
+# The routes whose last parameter may itself contain "/" (a ``:path``
+# parameter), and so may arrive with an encoded slash. Every such route is
+# listed here; tests/test_request_targets.py fails when another appears.
+ENCODED_SLASH_ROUTES = re.compile(r"/v1/admin/frameworks/[^/]+/nodes/[^/]+/.+")
+_ENCODED_SEPARATOR = re.compile(rb"%(?:2f|5c)", re.IGNORECASE)
+
+
+def target_traverses(scope) -> bool:
+    """Whether a request target could name another route than it appears to.
+
+    A path parameter that carries an encoded "/" or "../" decodes into extra
+    segments. Browser pages build API paths from record identifiers and query
+    values, so such a target would let a crafted link send the page's own
+    authenticated request to a different route. No API path has a "." or ".."
+    segment, and only routes with a ``:path`` parameter take an encoded slash.
+    """
+    path = scope.get("path", "")
+    if any(segment in {".", ".."} for segment in path.split("/")):
+        return True
+    raw = scope.get("raw_path") or path.encode()
+    return bool(_ENCODED_SEPARATOR.search(raw)) and not ENCODED_SLASH_ROUTES.fullmatch(
+        path
+    )
+
+
 class RequestBodyLimitMiddleware:
     def __init__(self, app):
         self.app = app
@@ -72,7 +97,7 @@ class RequestBodyLimitMiddleware:
                 headers={"Cache-Control": "no-store"},
             )(scope, receive, send)
 
-        if target_has_nul(scope):
+        if target_has_nul(scope) or target_traverses(scope):
             return await reject(400, "Invalid request target")
 
         for key, value in scope.get("headers", []):

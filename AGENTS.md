@@ -28,6 +28,10 @@
 - Keep scripts in external files and event handlers in JavaScript listeners. Preserve the supplied CSP; do not restore inline scripts, `eval`, `new Function`, or unsafe script policy exceptions to fix a UI regression.
 - Serve uploaded active content as attachments. Keep local storage paths within their configured root and preserve download filename/header sanitization. Native preview processing needs resource limits and maintained dependencies.
 - Fail closed on authentication or authorization uncertainty. Keep errors useful without disclosing credentials, private keys or upstream response bodies.
+- When a change grants access through a relationship (an attendee list, a role's members, the account linked to a People record), review who can change that relationship and require the granted authority to change it. Authority that follows a People record's account is listed in `services.people.LINK_AUTHORITIES`; `tests/test_people_link_authority.py` fails when an access rule reads that link without an entry.
+- Coroutines await only asynchronous calls. Hand database, Valkey, storage and broker work, and long Python work on a request body, to `run_in_threadpool` or `anyio.to_thread.run_sync`. `tests/test_event_loop_blocking.py` checks every `async def`, middleware included, for calls on a database session, the calls in its `BLOCKING_CALLS` and helpers in the same module that make them; add a blocking helper from another module to that list.
+- A collector that keeps a listing's pages until it has them all reads them inside `app.ingest.http.retained_listing`, or reduces each page to the fields it needs before the next; `tests/test_retained_listings.py` finds every page-keeping loop.
+- API paths built from identifiers reach only the route they name: the UI's API helpers in `app.js` refuse `.` and `..` segments, which the browser would resolve before sending, the supplied proxy forwards the target as sent, and the API refuses dot segments and encoded slashes outside `:path` parameters (`ENCODED_SLASH_ROUTES` in `security/request_limits.py`).
 
 ## Validation
 

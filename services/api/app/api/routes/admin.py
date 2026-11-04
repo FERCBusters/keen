@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 from typing import Any
 
 from fastapi import Depends, Path, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.context import change_context
 from app.api.errors import json_object
@@ -426,16 +428,20 @@ async def admin_diary(
 
         uploads = list(form.getlist("attachments"))
 
-    return await service.admin_diary(
-        db=db,
-        author=author,
-        summary=summary,
-        details_obj=details_obj,
-        links=links,
-        controls=controls,
-        framework=framework,
-        ts=ts,
-        uploads=upload_inputs(uploads),
+    # Storing the entry and its attachments runs in the thread pool.
+    return await run_in_threadpool(
+        partial(
+            service.admin_diary,
+            db=db,
+            author=author,
+            summary=summary,
+            details_obj=details_obj,
+            links=links,
+            controls=controls,
+            framework=framework,
+            ts=ts,
+            uploads=upload_inputs(uploads),
+        )
     )
 
 
@@ -448,8 +454,15 @@ async def admin_update_diary(
 ):
     'Edit an existing diary entry (admin-only).\n\n    Supports JSON PATCH-like semantics (only fields present are updated).\n\n    Payload supports:\n      - summary: str\n      - details: str | dict\n      - links: list[{url,text}] | JSON string\n      - timestamp: ISO8601 string\n      - controls: list[str] | comma-separated string\n\n    Note: This endpoint is intentionally restricted to events where source=="diary".\n'
     body = await json_object(request)
-    return service.admin_update_diary(
-        event_id=event_id, context=change_context(request), user=user, db=db, body=body
+    return await run_in_threadpool(
+        partial(
+            service.admin_update_diary,
+            event_id=event_id,
+            context=change_context(request),
+            user=user,
+            db=db,
+            body=body,
+        )
     )
 
 

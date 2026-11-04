@@ -1178,7 +1178,7 @@ def test_question_attachment_rejection_rolls_back_http_operation(
     main.app.dependency_overrides[get_db] = db_session
     monkeypatch.setattr(settings, "artifact_storage_backend", "local")
     monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path))
-    monkeypatch.setattr(questions_operations, "_broadcast_open_count", AsyncMock())
+    monkeypatch.setattr(questions_operations._Notices, "publish", AsyncMock())
     monkeypatch.setattr(tasks.send_question_webhooks_task, "delay", Mock())
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(settings.session_cookie_name, sid)

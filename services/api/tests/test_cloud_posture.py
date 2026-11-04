@@ -420,7 +420,8 @@ def test_admin_runners_queue_a_provider_before_any_vendor_shows_it(
         response = admin.post(
             f"/v1/admin/ingest/cloud/{bad}/run", headers=unsafe(admin)
         )
-        assert response.status_code in (404, 422), (bad, response.status_code)
+        # An encoded slash is refused as a request target before routing.
+        assert response.status_code in (400, 404, 422), (bad, response.status_code)
     monkeypatch.setattr(settings, "linode_enabled", False)
     response = admin.post("/v1/admin/ingest/cloud/linode/run", headers=unsafe(admin))
     assert response.status_code == 409

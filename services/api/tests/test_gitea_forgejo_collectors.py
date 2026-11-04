@@ -898,3 +898,119 @@ def test_rss_fallback_counts_only_new_rows_and_keeps_the_newest_time(collector):
         result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
     assert result["created_events"] == 1
     assert result["cursor_last_ts"] == "2026-10-09T06:00:00"
+
+
+def _refusal(incomplete):
+    from app.ingest.http import ListingTooLarge
+
+    if incomplete == "too_large":
+        return ListingTooLarge("listing too large")
+    return gc.ActivityListingIncomplete("page limit")
+
+
+def _activity(n, when):
+    return {"id": n, "op_type": "commit_repo", "created": when.isoformat() + "Z"}
+
+
+@pytest.mark.parametrize("incomplete", ["too_large", "page_limit"])
+def test_a_backlog_larger_than_one_listing_is_collected_a_day_at_a_time(
+    collector, incomplete
+):
+    # RSS lists only the newest items, and would move the cursor past the
+    # rest; the API is read again one day at a time, oldest first.
+    db = MagicMock()
+    cursor = gc.IngestionCursor(name="c", last_ts=datetime(2026, 10, 7, 12), meta={})
+    db.query.return_value.filter.return_value.one_or_none.return_value = cursor
+    days = {
+        "2026-10-07": [
+            _activity(2, datetime(2026, 10, 7, 13)),
+            _activity(1, datetime(2026, 10, 7, 9)),
+        ],
+        "2026-10-08": [
+            _activity(4, datetime(2026, 10, 8, 18)),
+            _activity(3, datetime(2026, 10, 8, 1)),
+        ],
+        "2026-10-10": [_activity(5, datetime(2026, 10, 10, 8))],
+    }
+    listed = []
+    committed = []
+
+    def fetch(*, day=None, **kwargs):
+        if day is None:
+            raise _refusal(incomplete)
+        listed.append(day.isoformat())
+        return days.get(day.isoformat(), [])
+
+    db.commit.side_effect = lambda: committed.append(cursor.last_ts)
+    with (
+        configured(collector),
+        patch.object(collector, "_fetch_api_activities", side_effect=fetch),
+        patch.object(collector, "_fetch_rss") as rss,
+        patch.object(
+            gc, "store_event_with_artifact", return_value={"deduped": False}
+        ) as store,
+    ):
+        result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
+    rss.assert_not_called()
+    # From the day before the cursor to the day after today, in order.
+    assert listed == [f"2026-10-{d:02d}" for d in range(6, 12)]
+    stored = [c.kwargs["timestamp"] for c in store.call_args_list]
+    assert stored == [
+        datetime(2026, 10, 7, 13),
+        datetime(2026, 10, 8, 1),
+        datetime(2026, 10, 8, 18),
+        datetime(2026, 10, 10, 8),
+    ]
+    # Each day commits the cursor before the next is read.
+    assert datetime(2026, 10, 7, 13) in committed
+    assert datetime(2026, 10, 8, 18) in committed
+    assert result["mode"] == "api"
+    assert result["created_events"] == 4
+    assert result["cursor_last_ts"] == "2026-10-10T08:00:00"
+
+
+@pytest.mark.parametrize("incomplete", ["too_large", "page_limit"])
+def test_a_day_larger_than_one_listing_keeps_the_days_before_it(collector, incomplete):
+    db = MagicMock()
+    cursor = gc.IngestionCursor(name="c", last_ts=datetime(2026, 10, 7, 12), meta={})
+    db.query.return_value.filter.return_value.one_or_none.return_value = cursor
+
+    def fetch(*, day=None, **kwargs):
+        if day is None or day.isoformat() == "2026-10-09":
+            raise _refusal(incomplete)
+        if day.isoformat() == "2026-10-08":
+            return [_activity(3, datetime(2026, 10, 8, 1))]
+        return []
+
+    with (
+        configured(collector),
+        patch.object(collector, "_fetch_api_activities", side_effect=fetch),
+        patch.object(collector, "_fetch_rss") as rss,
+        patch.object(gc, "store_event_with_artifact", return_value={"deduped": False}),
+    ):
+        result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
+    rss.assert_not_called()
+    assert result["mode"] == "failed"
+    assert result["created_events"] == 1
+    assert result["cursor_last_ts"] == "2026-10-08T01:00:00"
+    assert result["error"] == (
+        f"{collector.label} activity on 2026-10-09 is larger than one collection "
+        "reads; activity before that day is collected and the cursor resumes from there"
+    )
+
+
+def test_a_days_activity_is_listed_with_the_feeds_date_parameter(collector):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=[{"id": 1}])
+
+    with configured(collector), serving(collector, handler):
+        collector._fetch_api_activities(
+            base_url="https://host.example",
+            owner="team",
+            repo="repo",
+            day=datetime(2026, 10, 8).date(),
+        )
+    assert requests[0].url.params["date"] == "2026-10-08"

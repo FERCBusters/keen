@@ -1523,7 +1523,7 @@ def _diary_placeholder(db: Session, framework: str, ref: str) -> ControlItem:
     return item
 
 
-async def admin_diary(
+def admin_diary(
     *, db, author, summary, details_obj, links, controls, framework, ts, uploads
 ):
     if not summary:
@@ -1585,7 +1585,7 @@ async def admin_diary(
         number = len(held)
         for up in uploads[:10]:
             try:
-                data = await up.read()
+                data = up.read()
             except Exception:
                 continue
             if not data:

@@ -89,7 +89,7 @@ function quizView(overrides = {}) {
     ],
     audience: {
       people: [
-        { id: 'p1', name: 'Ada', email: 'ada@example.test', can_sit: true },
+        { id: 'p1', name: 'Ada', email: 'ada@example.test', can_sit: true, username: '<b>ada</b>' },
         { id: 'p2', name: 'Visitor', email: '', can_sit: false },
       ],
       roles: [{ id: 'n1', name: 'Service desk', holders: 3 }],
@@ -102,7 +102,15 @@ function quizView(overrides = {}) {
 
 const ASSIGNEES = {
   people: [
-    { id: 'p1', name: 'Ada', email: '', position: '', role: 'Engineering', can_sit: true },
+    {
+      id: 'p1',
+      name: 'Ada',
+      email: '',
+      position: '',
+      role: 'Engineering',
+      can_sit: true,
+      username: 'ada.k',
+    },
     { id: 'p3', name: 'Ben', email: '', position: '', role: '', can_sit: false },
   ],
   accounts: [{ id: 'u9', username: 'cleo', email: '' }],
@@ -351,6 +359,9 @@ test('a quiz manager sees the quiz, its controls, people, rounds and grading cou
   );
   assert.equal(ui.document.querySelectorAll('#questionList [data-question]').length, 2);
   assert.ok(ui.el('audienceList').textContent.includes('Visitor (no account)'));
+  // A person sits quizzes through their linked account, which is shown as text.
+  assert.ok(ui.el('audienceList').textContent.includes('Ada (account <b>ada</b>)'));
+  assert.equal(ui.el('audienceList').querySelector('b'), null);
   assert.ok(ui.el('audienceList').textContent.includes('Service desk (role, 3)'));
   assert.equal(ui.el('audienceSize').textContent, '4 people can sit the next round.');
   const rows = [...ui.document.querySelectorAll('#roundRows tr')];
@@ -374,7 +385,7 @@ test('a quiz manager sees the quiz, its controls, people, rounds and grading cou
   );
   assert.deepEqual(
     [...ui.el('pickPerson').options].map((o) => o.textContent),
-    ['Choose', 'Ada (Engineering)', 'Ben - no account'],
+    ['Choose', 'Ada (Engineering) · account ada.k', 'Ben - no account'],
   );
 });
 

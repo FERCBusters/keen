@@ -5,10 +5,12 @@ import math
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import partial
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
+from anyio import to_thread
 from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2.rfc6749.errors import OAuth2Error
@@ -607,16 +609,21 @@ def _get_or_create_user_for_identity(
     return user
 
 
+def _sso_start_allowed(request: Request) -> tuple[bool, int]:
+    from app.core.valkey import get_valkey
+    from app.security.rate_limit import address_window_allow, client_ip
+
+    return address_window_allow(
+        get_valkey(), "sso-start", client_ip(request), 30, 300, fail_closed=True
+    )
+
+
 async def build_authorize_redirect(
     request: Request, db: Session, next_url: str | None, provider_key: str | None = None
 ) -> str:
     provider = _require_provider_config(provider_key)
-    from app.core.valkey import get_valkey
-    from app.security.rate_limit import address_window_allow, client_ip
-
-    allowed, retry = address_window_allow(
-        get_valkey(), "sso-start", client_ip(request), 30, 300, fail_closed=True
-    )
+    # Valkey and database work runs in the thread pool, off the event loop.
+    allowed, retry = await to_thread.run_sync(_sso_start_allowed, request)
     if not allowed:
         raise HTTPException(
             429, "Too many sign-in attempts", headers={"Retry-After": str(retry)}
@@ -624,10 +631,13 @@ async def build_authorize_redirect(
     redirect_uri = provider.redirect_uri
     secret = secrets.token_urlsafe(32)
     request.state.sso_browser_secret = secret
-    state_row = create_login_state(
-        db,
-        next_url=_normalize_next(next_url),
-        state=_browser_state(provider.key, secret),
+    state_row = await to_thread.run_sync(
+        partial(
+            create_login_state,
+            db,
+            next_url=_normalize_next(next_url),
+            state=_browser_state(provider.key, secret),
+        )
     )
 
     client = _new_client(provider, redirect_uri=redirect_uri)
@@ -731,8 +741,14 @@ async def _handle_github_callback(
     finally:
         await client.aclose()
     subject, claims = await _fetch_github_claims(provider, token)
-    user = _get_or_create_user_for_identity(
-        db, provider=provider, subject=subject, claims=claims
+    user = await to_thread.run_sync(
+        partial(
+            _get_or_create_user_for_identity,
+            db,
+            provider=provider,
+            subject=subject,
+            claims=claims,
+        )
     )
     next_url = _normalize_next(row.next_url) or None
     return user, next_url, None
@@ -830,8 +846,14 @@ async def _handle_oidc_callback(
     # provider accepts more than one issuer string.
     claims_dict["iss"] = _canonical_issuer(provider)
 
-    user = _get_or_create_user_for_identity(
-        db, provider=provider, subject=subject, claims=claims_dict
+    user = await to_thread.run_sync(
+        partial(
+            _get_or_create_user_for_identity,
+            db,
+            provider=provider,
+            subject=subject,
+            claims=claims_dict,
+        )
     )
     next_url = _normalize_next(row.next_url) or None
     return user, next_url, str(id_token)
@@ -854,7 +876,7 @@ async def handle_callback(
             status_code=400,
             detail="SSO browser verification failed; start sign-in again",
         )
-    row = pop_login_state(db, state=state)
+    row = await to_thread.run_sync(partial(pop_login_state, db, state=state))
     if not row:
         raise HTTPException(status_code=400, detail="SSO state missing or expired")
     # From here the callback completes or refuses a sign-in this browser began.

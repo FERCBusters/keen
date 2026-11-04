@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from functools import partial
 from urllib.parse import urlencode
 
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import RedirectResponse
 
 from app.api.context import change_context
@@ -213,24 +215,30 @@ async def _complete_sso_callback(
             request, db, provider_key=provider_key
         )
         account_id = user.id
-        sid = login_service.complete_sso_login(
-            db,
-            user,
-            provider=provider,
-            id_token=id_token,
-            existing_sid=request.cookies.get(settings.session_cookie_name),
-            context=context,
+        sid = await run_in_threadpool(
+            partial(
+                login_service.complete_sso_login,
+                db,
+                user,
+                provider=provider,
+                id_token=id_token,
+                existing_sid=request.cookies.get(settings.session_cookie_name),
+                context=context,
+            )
         )
     except (HTTPException, DomainError) as error:
         # Audit attempts that consumed a sign-in started in this browser, naming
         # the account only when the provider's identity reached one.
         attempted = sso_attempt(request)
         if attempted is not None:
-            login_service.record_refused_sign_in(
-                db,
-                context,
-                method=attempted,
-                account_id=linked_account_id(error) or account_id,
+            await run_in_threadpool(
+                partial(
+                    login_service.record_refused_sign_in,
+                    db,
+                    context,
+                    method=attempted,
+                    account_id=linked_account_id(error) or account_id,
+                )
             )
         raise
 

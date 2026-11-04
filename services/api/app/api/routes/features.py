@@ -2,6 +2,7 @@
 
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.errors import json_object
 from app.api.routing import Router
@@ -22,4 +23,6 @@ async def update_features(
     request: Request, user=Depends(require_admin), db: Session = Depends(get_db)
 ):
     payload = await json_object(request)
-    return features.update(db, user, payload.get("version"), payload.get("changes"))
+    return await run_in_threadpool(
+        features.update, db, user, payload.get("version"), payload.get("changes")
+    )

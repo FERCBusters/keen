@@ -135,8 +135,9 @@ def test_api_responses_are_not_cached(anonymous):
 def test_path_variants_do_not_reach_admin_data(accounts, admin, variant):
     """Encoded, doubled and dotted paths never reach the administrator listing.
 
-    nginx normalises dot segments before proxying, so some variants resolve to a
-    different ordinary route; those must still return no administrator data.
+    nginx forwards an API path as the browser sent it, and the API refuses one
+    with dot segments or a stray encoded slash; any variant that still reaches
+    a route must return no administrator data.
     """
     groups = admin.ok(admin.get("/api/v1/admin/groups"), 200).text
     group_ids = set(re.findall(r'"id"\s*:\s*"([^"]+)"', groups))
@@ -148,6 +149,26 @@ def test_path_variants_do_not_reach_admin_data(accounts, admin, variant):
     if response.status_code == 200:
         leaked = [ident for ident in group_ids if ident in response.text]
         assert not leaked, (variant, "administrator group data returned")
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "/api/v1/sources/..%2Fme",
+        "/api/v1/sources/x%2F..%2F..%2Fme",
+        "/api/v1/sources/%2e%2e%2Fme",
+        "/api/v1/sources/x%2Finsights",
+    ],
+)
+def test_an_encoded_separator_in_a_path_parameter_reaches_no_other_route(
+    accounts, variant
+):
+    """Pages build API paths from record identifiers and query values; one that
+    decoded into another route would carry the page's session and CSRF token
+    there, so the proxy and the API refuse it."""
+    session = accounts("plain")
+    assert session.get("/api/v1/me").status_code == 200
+    assert session.get(variant).status_code == 400, variant
 
 
 @pytest.mark.parametrize("method", ["TRACE", "TRACK", "CONNECT", "PROPFIND"])

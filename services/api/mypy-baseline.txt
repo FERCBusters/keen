@@ -99,7 +99,6 @@ app/ingest/elasticsearch.py: Dict entry 2 has incompatible type "str": "str"; ex
 app/ingest/elasticsearch.py: Dict entry 3 has incompatible type "str": "str"; expected "Any": "dict[str, Any]"  [dict-item]
 app/ingest/elasticsearch.py: Incompatible types in assignment (expression has type "int", variable has type "str")  [assignment]
 app/ingest/gitea_compatible.py: Need type annotation for "repos" (hint: "repos: list[<type>] = ...")  [var-annotated]
-app/ingest/gitlab.py: Need type annotation for "rows" (hint: "rows: list[<type>] = ...")  [var-annotated]
 app/ingest/google_workspace.py: Argument 1 to "int" has incompatible type "Any | None"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
 app/ingest/imap_support/mime.py: Argument 1 to "len" has incompatible type "str | None"; expected "Sized"  [arg-type]
 app/ingest/imap_support/mime.py: Need type annotation for "result" (hint: "result: list[<type>] = ...")  [var-annotated]

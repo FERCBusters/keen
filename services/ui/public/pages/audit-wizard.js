@@ -356,12 +356,14 @@ function loadPeople() {
     ]);
     people = peopleData?.items || [];
     users = userData?.items || [];
+    // A person attends through the Keen account linked to their record, so
+    // the choice names that account.
     const group = (label, kind, rows, name) =>
       rows.length
         ? `<optgroup label="${esc(label)}">${rows
             .map(
               (row) =>
-                `<option value="${kind}:${esc(row.id)}">${esc(name(row))}${row.email ? ` · ${esc(row.email)}` : ''}</option>`,
+                `<option value="${kind}:${esc(row.id)}">${esc(name(row))}${row.email ? ` · ${esc(row.email)}` : ''}${kind === 'person' && row.username ? ` · account ${esc(row.username)}` : ''}</option>`,
             )
             .join('')}</optgroup>`
         : '';
@@ -393,7 +395,7 @@ function renderAttendees() {
         a,
         index,
       ) => `<li class="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-center">
-        <span class="text-break"><span class="fw-semibold">${esc(a.name)}</span>${a.role ? ` <span class="badge badge-soft">${esc(a.role)}</span>` : ''}<span class="small-muted d-block">${esc(ROLES[a.kind])}${a.email ? ` · ${esc(a.email)}` : ''}</span></span>
+        <span class="text-break"><span class="fw-semibold">${esc(a.name)}</span>${a.role ? ` <span class="badge badge-soft">${esc(a.role)}</span>` : ''}<span class="small-muted d-block">${esc(ROLES[a.kind])}${a.email ? ` · ${esc(a.email)}` : ''}${a.account ? ` · account ${esc(a.account)}` : ''}</span></span>
         <button class="btn btn-sm btn-outline-danger" type="button" data-remove-attendee="${index}" aria-label="Remove ${esc(a.name)}">Remove</button>
       </li>`,
     )
@@ -424,6 +426,7 @@ $('addAttendee').addEventListener('click', () => {
     name: name || record.row?.name || record.row?.username || '',
     email,
     role: $('attendeeRole').value.trim(),
+    account: record?.kind === 'person' ? record.row?.username || '' : '',
   });
   for (const id of ['attendeeWho', 'attendeeName', 'attendeeEmail', 'attendeeRole'])
     $(id).value = '';

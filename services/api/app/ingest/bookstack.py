@@ -20,6 +20,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.http import client as ingestion_client
+from app.ingest.http import retained_listing
 from app.mapping.targets import resolve_targets
 from app.security.errors import collection_error
 from app.security.regex import (
@@ -395,6 +396,35 @@ def _list_pages(
             # by an unresolved slug would return the pages of every book.
             return out
 
+    # The items are kept until the listing ends, within one allowance.
+    with retained_listing():
+        return _list_page_items(
+            client,
+            out,
+            since_ts=since_ts,
+            until_ts=until_ts,
+            book_id=book_id,
+            book_slug=book_slug,
+            count=count,
+            include_drafts=include_drafts,
+            include_templates=include_templates,
+            max_pages=max_pages,
+        )
+
+
+def _list_page_items(
+    client: httpx.Client,
+    out: list[dict[str, Any]],
+    *,
+    since_ts: Optional[datetime],
+    until_ts: Optional[datetime],
+    book_id: Optional[int],
+    book_slug: Optional[str],
+    count: int,
+    include_drafts: bool,
+    include_templates: bool,
+    max_pages: int,
+) -> list[dict[str, Any]]:
     offset = 0
     while True:
         params: dict[str, Any] = {
@@ -419,6 +449,8 @@ def _list_pages(
         data = body.get("data") if isinstance(body, dict) else None
         if not isinstance(data, list) or not data:
             break
+        if len(data) > count:
+            raise ValueError("BookStack returned more items than a page holds")
 
         out.extend(
             [

@@ -138,13 +138,23 @@ class GitDiscoveryTests(unittest.TestCase):
             Mock(status_code=200, json=lambda: []),
         ]
         self.assertEqual(
-            gitlab._pages(client, "https://gitlab.example.org", "groups/team/projects"),
+            gitlab._pages(
+                client,
+                "https://gitlab.example.org",
+                "groups/team/projects",
+                keep=gitlab._project_reference,
+            ),
             [{"id": 1}],
         )
         client.get.side_effect = None
         client.get.return_value = Mock(status_code=403)
         with self.assertRaisesRegex(RuntimeError, "403"):
-            gitlab._pages(client, "https://gitlab.example.org", "groups/team/projects")
+            gitlab._pages(
+                client,
+                "https://gitlab.example.org",
+                "groups/team/projects",
+                keep=gitlab._project_reference,
+            )
 
     def test_empty_configuration_is_explicit(self):
         with (
@@ -181,11 +191,9 @@ class GitDiscoveryTests(unittest.TestCase):
             patch.object(
                 gitlab,
                 "_pages",
-                side_effect=[
-                    [{"id": 3, "path_with_namespace": "team/sub/repo"}],
-                    events,
-                ],
+                return_value=[{"id": 3, "path_with_namespace": "team/sub/repo"}],
             ) as pages,
+            patch.object(gitlab, "_page_rows", return_value=[events]),
             patch.object(
                 gitlab, "store_event_with_artifact", return_value={"deduped": False}
             ) as store,
@@ -244,7 +252,12 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
         client = Mock()
         client.get.return_value = self._page({"message": "401 Unauthorized"})
         with self.assertRaisesRegex(ValueError, "invalid list"):
-            gitlab._pages(client, self.BASE, "groups/team/projects")
+            gitlab._pages(
+                client,
+                self.BASE,
+                "groups/team/projects",
+                keep=gitlab._project_reference,
+            )
 
     def test_pages_stop_when_the_server_repeats_a_page(self):
         # A server that ignores the page parameter would otherwise be read
@@ -252,23 +265,31 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
         client = Mock()
         client.get.return_value = self._page([{"id": 1}])
         with self.assertRaisesRegex(ValueError, "repeated a page"):
-            gitlab._pages(client, self.BASE, "groups/team/projects")
+            gitlab._pages(
+                client,
+                self.BASE,
+                "groups/team/projects",
+                keep=gitlab._project_reference,
+            )
         self.assertEqual(client.get.call_count, 2)
 
-    def test_pages_stop_at_the_row_limit(self):
+    def test_a_page_holding_more_items_than_requested_is_refused(self):
+        # A page holds at most the 100 rows requested, so a listing holds at
+        # most 100,000 rows across its 1,000 pages.
         client = Mock()
-        client.get.side_effect = [
-            self._page([{"id": n} for n in range(60000)]),
-            self._page([{"id": n} for n in range(60000, 120001)]),
-        ]
-        with self.assertRaisesRegex(ValueError, "exceeds collection limit"):
-            gitlab._pages(client, self.BASE, "users/mig5/projects")
+        client.get.side_effect = [self._page([{"id": n} for n in range(101)])]
+        with self.assertRaisesRegex(ValueError, "more items than a page holds"):
+            gitlab._pages(
+                client, self.BASE, "users/mig5/projects", keep=gitlab._project_reference
+            )
 
     def test_pages_stop_after_a_thousand_pages(self):
         client = Mock()
         client.get.side_effect = [self._page([{"id": n}]) for n in range(1000)]
         with self.assertRaisesRegex(ValueError, "exceeded 1000 pages"):
-            gitlab._pages(client, self.BASE, "users/mig5/projects")
+            gitlab._pages(
+                client, self.BASE, "users/mig5/projects", keep=gitlab._project_reference
+            )
         self.assertEqual(client.get.call_count, 1000)
         self.assertEqual(client.get.call_args.kwargs["params"]["page"], 1000)
 
@@ -290,7 +311,7 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
             patch.object(
                 gitlab, "utc_now_naive", return_value=datetime(2026, 10, 7, 12, 0, 0)
             ),
-            patch.object(gitlab, "_pages", return_value=events),
+            patch.object(gitlab, "_page_rows", return_value=[events]),
             patch.object(
                 gitlab, "store_event_with_artifact", return_value={"deduped": False}
             ) as store,
@@ -311,7 +332,7 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
             patch.object(
                 gitlab, "utc_now_naive", return_value=datetime(2026, 10, 7, 12, 0, 0)
             ),
-            patch.object(gitlab, "_pages", return_value=events),
+            patch.object(gitlab, "_page_rows", return_value=[events]),
             patch.object(gitlab, "store_event_with_artifact") as store,
         ):
             with self.assertRaisesRegex(ValueError, "stable event ID"):
@@ -322,6 +343,8 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
         db.commit.assert_not_called()
 
     def _run(self, db, config, pages, safe=True):
+        # Discovery and project activity draw their replies in turn.
+        paged = Mock(side_effect=pages)
         with (
             patch.object(gitlab.settings, "gitlab_enabled", True),
             patch.object(gitlab.settings, "gitlab_base_url", self.BASE + "/"),
@@ -332,7 +355,9 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
             ),
             patch.object(gitlab, "load_document", return_value=config),
             patch.object(gitlab, "ingestion_client"),
-            patch.object(gitlab, "_pages", side_effect=pages) as paged,
+            patch.object(gitlab, "_pages", side_effect=paged),
+            # Project activity is read a page at a time; one page each here.
+            patch.object(gitlab, "_page_rows", side_effect=lambda *a, **k: [paged()]),
             patch.object(
                 gitlab, "store_event_with_artifact", return_value={"deduped": False}
             ),
@@ -423,7 +448,7 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
             patch.object(
                 gitlab, "utc_now_naive", return_value=datetime(2026, 10, 7, 12, 0, 0)
             ),
-            patch.object(gitlab, "_pages", return_value=events) as paged,
+            patch.object(gitlab, "_page_rows", return_value=[events]) as paged,
             patch.object(
                 gitlab, "store_event_with_artifact", return_value={"deduped": True}
             ) as store,

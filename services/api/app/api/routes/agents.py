@@ -165,6 +165,30 @@ def _admit_batch(request, db):
     return auth
 
 
+def _decode_otlp(request, body, plaintext, agent_id):
+    """The decompressed body and its decoded batch, or a refusal."""
+    try:
+        if plaintext and request.headers.get("content-encoding") == "gzip":
+            with gzip.GzipFile(fileobj=io.BytesIO(body)) as stream:
+                body = stream.read(MAX_BODY + 1)
+            if len(body) > MAX_BODY:
+                raise HTTPException(413, "Decompressed batch exceeds 1 MiB")
+        return body, decode_batch(body, agent_id)
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        OverflowError,
+        OSError,
+        EOFError,
+        RecursionError,
+    ):
+        raise HTTPException(
+            400, "Invalid OTLP JSON logs; maximum 64 records and bounded attributes"
+        )
+
+
 # Agent requests read their bodies asynchronously, and run their database,
 # Valkey and storage work in the thread pool, as synchronous routes do. A batch
 # writes and syncs each artifact to storage, which must not hold up the event
@@ -205,26 +229,10 @@ async def ingest(request: Request, response: Response, db: Session = Depends(get
         ):
             raise HTTPException(415, "Unsupported encoding")
         body = await bounded_body(request, MAX_BODY)
-    try:
-        if opened is None and request.headers.get("content-encoding") == "gzip":
-            with gzip.GzipFile(fileobj=io.BytesIO(body)) as stream:
-                body = stream.read(MAX_BODY + 1)
-            if len(body) > MAX_BODY:
-                raise HTTPException(413, "Decompressed batch exceeds 1 MiB")
-        batch = decode_batch(body, auth.agent_id)
-    except (
-        ValueError,
-        TypeError,
-        KeyError,
-        AttributeError,
-        OverflowError,
-        OSError,
-        EOFError,
-        RecursionError,
-    ):
-        raise HTTPException(
-            400, "Invalid OTLP JSON logs; maximum 64 records and bounded attributes"
-        )
+    # Decompressing and decoding a batch is processor work: the thread pool.
+    body, batch = await run_in_threadpool(
+        _decode_otlp, request, body, opened is None, auth.agent_id
+    )
     # Names the batch in diagnostics: a resent batch has the same digest.
     request.state.otlp_batch = hashlib.sha256(body).hexdigest()[:16]
     result = await run_in_threadpool(

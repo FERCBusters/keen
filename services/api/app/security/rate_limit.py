@@ -14,6 +14,7 @@ __all__ = [
     "address_window_allow",
     "client_ip",
     "fixed_window_allow",
+    "fixed_window_spend",
     "login_limit_key",
     "login_name",
 ]
@@ -168,6 +169,40 @@ def fixed_window_allow(
         return True, 0
     except Exception:
         # Redis unavailable
+        if fail_closed:
+            return False, window_seconds
+        return True, 0
+
+
+def fixed_window_spend(
+    r: Redis,
+    key: str,
+    amount: int,
+    limit: int,
+    window_seconds: int,
+    fail_closed: bool = False,
+) -> Tuple[bool, int]:
+    """Spend ``amount`` from a fixed-window allowance of ``limit`` units.
+
+    Counts cost (such as bytes) rather than requests. A spend that would pass
+    the limit is refused and still counted, so a caller that keeps sending
+    over its allowance stays refused until the window ends.
+    """
+    if limit <= 0 or window_seconds <= 0:
+        return True, 0
+    try:
+        pipe = r.pipeline()
+        pipe.incrby(key, max(0, int(amount)))
+        pipe.ttl(key)
+        spent, ttl = pipe.execute()
+        ttl_i = int(ttl)
+        if ttl_i < 0:
+            r.expire(key, int(window_seconds))
+            ttl_i = int(window_seconds)
+        if int(spent) > int(limit):
+            return False, ttl_i
+        return True, 0
+    except Exception:
         if fail_closed:
             return False, window_seconds
         return True, 0

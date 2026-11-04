@@ -452,10 +452,13 @@ def enroll_with_code(db, context, code, ident, body):
     )
     if agent is None or not agent.enabled or agent.credential_type != "key":
         raise DomainError(401, "Invalid enrollment credential")
-    rate(context, "code", ident, 10)
     code_hash = digest(code)
     key = previous_binding(db, agent, code_hash, body.public_key)
     if key is not None:
+        # The agent's own allowance is spent only by holders of its code, as
+        # a profile's is by holders of its key, so wrong codes from anyone
+        # who knows the agent's identifier cannot hold up its enrolment.
+        rate(context, "code", ident, 10)
         return agent, key
     if (
         not agent.enrollment_code_hash
@@ -467,6 +470,7 @@ def enroll_with_code(db, context, code, ident, body):
     if agent.enrollment_profile_id is not None:
         # Codes are issued to individually registered agents only.
         raise DomainError(401, "Invalid enrollment credential")
+    rate(context, "code", ident, 10)
     agent.enrollment_code_hash = None
     agent.enrollment_code_expires_at = None
     agent.enrollment_ip = context.client_ip

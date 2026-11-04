@@ -86,9 +86,10 @@ def test_catalogues_need_a_session_and_unknown_ones_are_not_found(keen):
     for path in (
         "/v1/ueu/catalogues/keen/1999",
         "/v1/ueu/catalogues/missing/2026.10",
-        "/v1/ueu/catalogues/..%2F..%2Fetc/passwd",
     ):
         assert client.get(path).status_code == 404, path
+    # An encoded traversal is refused as a request target before routing.
+    assert client.get("/v1/ueu/catalogues/..%2F..%2Fetc/passwd").status_code == 400
 
 
 def test_loaded_catalogues_record_their_origin(tmp_path, monkeypatch):

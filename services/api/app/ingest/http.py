@@ -30,8 +30,57 @@ suppress_provider_logs("httpx")
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_RESPONSE_SECONDS = 120
+# The upstream bytes a listing may keep in memory across all of its pages.
+MAX_RETAINED_BYTES = MAX_RESPONSE_BYTES
 
 _deadline: ContextVar[float | None] = ContextVar("keen_request_deadline", default=None)
+# Open listing allowances, outermost first: [bytes counted, limit] each.
+_listings: ContextVar[tuple[list[int], ...]] = ContextVar(
+    "keen_retained_listings", default=()
+)
+
+
+class ListingTooLarge(ValueError):
+    """A listing would keep more upstream data than a collection holds at once."""
+
+
+@contextmanager
+def retained_listing(limit: int | None = None):
+    """Count every response read in the block against one allowance.
+
+    A listing that keeps its pages until it has them all holds all of them
+    parsed at once, and a parsed document costs many times its size. The
+    allowance is one response's limit, so a listing holds no more than the
+    costliest single response, which the parse memory budget measures against
+    the worker limit, however many pages it reads.
+
+    An allowance opened inside another also counts against the outer one
+    while it is open; when it closes, normally or by an error, its bytes are
+    released from the outer one.
+    """
+    outer = _listings.get()
+    frame = [0, MAX_RETAINED_BYTES if limit is None else limit]
+    token = _listings.set((*outer, frame))
+    try:
+        yield
+    finally:
+        _listings.reset(token)
+        for enclosing in outer:
+            enclosing[0] -= frame[0]
+
+
+def _retain(size: int) -> None:
+    frames = _listings.get()
+    # Count the bytes in every open allowance before refusing any, so each
+    # allowance releases exactly what it counted.
+    for frame in frames:
+        frame[0] += size
+    for used, limit in frames:
+        if used > limit:
+            raise ListingTooLarge(
+                "Listing exceeds the upstream data one collection holds "
+                f"({limit // (1024 * 1024)} MiB); narrow the input"
+            )
 
 
 @contextmanager
@@ -186,6 +235,7 @@ class LimitedStream(httpx.SyncByteStream):
                     raise ValueError(
                         "Ingestion response exceeds 16 MiB; narrow the input"
                     )
+                _retain(len(chunk))
                 yield chunk
         finally:
             self.close()

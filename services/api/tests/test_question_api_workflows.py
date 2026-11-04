@@ -17,10 +17,7 @@ from tests.test_management_api_workflows import request
 @pytest.fixture
 def question_api(api, monkeypatch):
     # Only outbound delivery is replaced; access checks and question writes run.
-    monkeypatch.setattr(questions_operations, "_broadcast_open_count", AsyncMock())
-    monkeypatch.setattr(
-        questions_operations, "_broadcast_user_unread_count", AsyncMock()
-    )
+    monkeypatch.setattr(questions_operations._Notices, "publish", AsyncMock())
     monkeypatch.setattr(tasks.send_question_webhooks_task, "delay", Mock())
     monkeypatch.setattr(tasks.send_question_reply_webhooks_task, "delay", Mock())
     event = Event(

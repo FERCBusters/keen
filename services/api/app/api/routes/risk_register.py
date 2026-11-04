@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from functools import partial
 
 from fastapi import Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.routes.risks import require_risk_manage, require_risk_read
 from app.api.routing import Router
@@ -75,7 +77,10 @@ async def import_register(
     db: Session = Depends(get_db),
 ):
     raw = await file.read(2_000_001)
-    return service.import_register(raw=raw, framework=framework, user=user, db=db)
+    # Parsing and importing the register runs in the thread pool.
+    return await run_in_threadpool(
+        partial(service.import_register, raw=raw, framework=framework, user=user, db=db)
+    )
 
 
 @router.get("/v1/risks/library")

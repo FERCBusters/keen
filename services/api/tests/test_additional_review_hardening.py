@@ -1,6 +1,5 @@
 """Upload resource bounds and safe object names, using synthetic fixtures."""
 
-import asyncio
 import io
 import uuid
 from types import SimpleNamespace
@@ -49,15 +48,13 @@ def test_later_oversized_question_attachment_prevents_all_storage_writes(monkeyp
     monkeypatch.setattr(questions, "put_bytes", store)
     db = Mock()
     with pytest.raises(DomainError) as error:
-        asyncio.run(
-            questions._store_attachments(
-                db,
-                event_id=uuid.uuid4(),
-                thread_id=uuid.uuid4(),
-                post_id=uuid.uuid4(),
-                files=upload_inputs(uploads),
-                captured_by="synthetic",
-            )
+        questions._store_attachments(
+            db,
+            event_id=uuid.uuid4(),
+            thread_id=uuid.uuid4(),
+            post_id=uuid.uuid4(),
+            files=upload_inputs(uploads),
+            captured_by="synthetic",
         )
     assert error.value.status_code == 413
     assert uploads[1].file.tell() == 17

@@ -578,3 +578,26 @@ def test_concurrent_key_creation_keeps_one_active_key(keen, monkeypatch):
 def test_an_unreadable_renewal_is_refused(keen):
     agent, _ = enrolled(keen)
     assert agent.post("/v1/agents/renew", b"{", "renew").status_code == 400
+
+
+def test_wrong_codes_cannot_spend_an_agents_enrolment_allowance(keen, monkeypatch):
+    # Anyone who knows an agent's identifier can send sealed enrolments with a
+    # wrong code; they are refused without spending the allowance that the
+    # holder of the right code draws on.
+    import fakeredis
+    from app.security import rate_limit
+
+    store = fakeredis.FakeRedis()
+    monkeypatch.setattr(enrollment_operations, "get_valkey", lambda: store)
+    monkeypatch.setattr(
+        enrollment_operations, "fixed_window_allow", rate_limit.fixed_window_allow
+    )
+    monkeypatch.setattr(
+        enrollment_operations, "address_window_allow", rate_limit.address_window_allow
+    )
+    code = register(keen)["enrollment_code"]
+    prefix, secret, pin = code.rsplit(".", 2)
+    wrong = f"{prefix}.{'A' * len(secret)}.{pin}"
+    for _ in range(12):
+        assert SimAgent(keen.client).enroll(wrong).status_code == 401
+    assert SimAgent(keen.client).enroll(code).status_code == 201

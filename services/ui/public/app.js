@@ -13,8 +13,6 @@ import {
   errorText,
   getCurrentFramework,
   getLoadedFrameworkCatalog,
-  apiGet,
-  apiPost,
   esc,
   fmtTs,
   getUiConfig,
@@ -23,6 +21,46 @@ import {
   initNavbar as _mospInitNavbar,
   initCollapsibleFilterSections as _mospInitCollapsibleFilterSections,
 } from '/vendor/mosp-design-system/app.js';
+import * as mosp from '/vendor/mosp-design-system/app.js';
+
+// Pages build API paths from record identifiers and query values, and the
+// browser resolves a "." or ".." path segment (encoded or not) before the
+// request leaves, so an identifier of ".." would send the page's session and
+// CSRF token to another route. Every API helper refuses such a path.
+export function apiPath(path) {
+  const route = String(path ?? '').split(/[?#]/, 1)[0];
+  const dotted = route.split('/').some((segment) => {
+    let decoded = segment;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {}
+    return decoded === '.' || decoded === '..';
+  });
+  if (dotted) throw new Error('Invalid API path');
+  return path;
+}
+
+export async function apiGet(path, ...rest) {
+  return mosp.apiGet(apiPath(path), ...rest);
+}
+export async function apiPost(path, ...rest) {
+  return mosp.apiPost(apiPath(path), ...rest);
+}
+export async function apiPut(path, ...rest) {
+  return mosp.apiPut(apiPath(path), ...rest);
+}
+export async function apiPatch(path, ...rest) {
+  return mosp.apiPatch(apiPath(path), ...rest);
+}
+export async function apiDelete(path, ...rest) {
+  return mosp.apiDelete(apiPath(path), ...rest);
+}
+export async function apiPostForm(path, ...rest) {
+  return mosp.apiPostForm(apiPath(path), ...rest);
+}
+export async function apiRequest(path, ...rest) {
+  return mosp.apiRequest(apiPath(path), ...rest);
+}
 
 function _frameworkForHref() {
   try {

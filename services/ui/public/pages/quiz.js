@@ -360,7 +360,9 @@ function renderAudience() {
   const people = chips(chosen.people, 'people', (p) =>
     p.can_sit === false
       ? ' <span class="text-warning" title="No Keen account to sit quizzes with">(no account)</span>'
-      : '',
+      : p.username
+        ? ` <span class="small-muted" title="The Keen account that sits this person's quizzes">(account ${esc(p.username)})</span>`
+        : '',
   );
   const accounts = chips(
     chosen.accounts,
@@ -390,7 +392,8 @@ function fillPickers() {
     `<option value="">Choose</option>${items.map((item) => `<option value="${esc(item.id)}">${esc(label(item))}</option>`).join('')}`;
   $('pickPerson').innerHTML = options(
     assignees.people,
-    (p) => `${p.name}${p.role ? ` (${p.role})` : ''}${p.can_sit ? '' : ' - no account'}`,
+    (p) =>
+      `${p.name}${p.role ? ` (${p.role})` : ''}${p.can_sit ? (p.username ? ` · account ${p.username}` : '') : ' - no account'}`,
   );
   $('pickAccount').innerHTML = options(assignees.accounts, (a) => a.username);
   $('pickRole').innerHTML = options(assignees.roles, (r) => `${r.name} (${r.holders})`);

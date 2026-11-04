@@ -16,21 +16,14 @@ from app.db.models import (
     IsmsPersonAsset,
     IsmsPersonAssurance,
     IsmsVendor,
-    QuizAttempt,
-    QuizAudience,
-    QuizParticipant,
     RiskAsset,
     User,
 )
-from app.security.permissions import has_permission
 from app.services.errors import DomainError
 from app.services.isms.organisation import require_quiz_authority_for_audience_roles
 from app.services.people import ensure_person_for_user as ensure_person_for_user
 from app.services.people import person_for_user as person_for_user
-
-# The account linked to someone who sits quizzes decides whose rounds and
-# results it reaches, so moving that link is for quiz managers.
-QUIZ_MANAGE = "quiz.manage"
+from app.services.people import require_link_authority
 
 
 class PersonInput(BaseModel):
@@ -159,28 +152,13 @@ def list_people(*, user, db: Session):
     return {"items": [_person_out(row) for row in rows]}
 
 
-def _sits_quizzes(db: Session, person_id: uuid.UUID) -> bool:
-    """Whether the person is assigned a quiz, or takes part in its rounds."""
-    return any(
-        db.query(model.id).filter(model.person_id == person_id).first() is not None
-        for model in (QuizAudience, QuizParticipant, QuizAttempt)
-    )
-
-
 def _save_person(db: Session, row: IsmsPerson, payload: PersonInput, user: User):
     name = payload.name.strip()
     if not name:
         raise DomainError(400, "Name is required")
-    if (
-        row.id is not None
-        and payload.user_id != row.user_id
-        and _sits_quizzes(db, row.id)
-        and not has_permission(db, user, QUIZ_MANAGE)
-    ):
-        raise DomainError(
-            403,
-            "Changing the Keen account of someone who sits quizzes needs quiz.manage",
-        )
+    if row.id is not None and payload.user_id != row.user_id:
+        # The linked account receives what the record carries.
+        require_link_authority(db, user, row.id, "Changing the Keen account of")
     # People placed in a role sit the quizzes assigned to it, through the
     # account linked to them.
     if payload.org_node_id != row.org_node_id:
@@ -246,9 +224,9 @@ def update_person(*, person_id: uuid.UUID, payload: PersonInput, user, db: Sessi
 
 def delete_person(*, person_id: uuid.UUID, user, db: Session):
     row = _row(db, IsmsPerson, person_id)
-    # Deleting a person takes them out of their quizzes, rounds and attempts.
-    if _sits_quizzes(db, row.id) and not has_permission(db, user, QUIZ_MANAGE):
-        raise DomainError(403, "Deleting someone who sits quizzes needs quiz.manage")
+    # Deleting a person takes them out of their quizzes, rounds, attempts and
+    # audit attendance.
+    require_link_authority(db, user, row.id, "Deleting")
     require_quiz_authority_for_audience_roles(
         db, user, [row.org_node_id], "delete someone in"
     )

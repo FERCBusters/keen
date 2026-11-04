@@ -66,7 +66,16 @@ async function wizard(t, options = {}) {
             items: options.swot ?? [{ id: 's1', title: 'Supplier reliance', kind: 'threat' }],
           };
         case '/api/v1/isms/people':
-          return { items: [{ id: 'p1', name: 'Pat Auditee', email: 'pat@example.test' }] };
+          return {
+            items: [
+              {
+                id: 'p1',
+                name: 'Pat Auditee',
+                email: 'pat@example.test',
+                username: '<b>pat</b>',
+              },
+            ],
+          };
         case '/api/v1/audits/users':
           if (fail.users) throw new Error('Users offline');
           return { items: [{ id: 'u2', username: 'zed', email: 'zed@example.test' }] };
@@ -249,7 +258,7 @@ test('attendees come from the register, Keen accounts or plain details', async (
     [...ui.el('attendeeWho').options].map((o) => [o.value, o.textContent]),
     [
       ['', 'Someone else (enter their details)'],
-      ['person:p1', 'Pat Auditee · pat@example.test'],
+      ['person:p1', 'Pat Auditee · pat@example.test · account <b>pat</b>'],
       ['user:u2', 'zed · zed@example.test'],
     ],
   );
@@ -293,13 +302,14 @@ test('attendees come from the register, Keen accounts or plain details', async (
       li.querySelector('.small-muted').textContent,
     ]),
     [
-      ['Pat Auditee', 'Auditee', 'Person · pat@example.test'],
+      ['Pat Auditee', 'Auditee', 'Person · pat@example.test · account <b>pat</b>'],
       ['zed', 'Lead auditor', 'Keen account'],
       [`${HOSTILE}Jo`, '', 'Guest · jo@example.test'],
       ['Removed later', '', 'Guest'],
     ],
   );
   assert.equal(ui.el('attendeeList').querySelector('img'), null);
+  assert.equal(ui.el('attendeeList').querySelector('b'), null);
   rows[3].querySelector('[data-remove-attendee]').click();
   assert.equal(ui.el('attendeeList').querySelectorAll('li').length, 3);
   // The fields clear after each addition.

@@ -131,7 +131,13 @@ OBJECT_RULES = {
     ),
     "PATCH /v1/isms/people/{person_id}": (
         "Moving a person into or out of a role a quiz is assigned to, or changing "
-        "the account of someone who sits or is assigned quizzes, needs quiz.manage."
+        "the account of someone who sits or is assigned quizzes, needs quiz.manage; "
+        "changing the account of someone named as an audit attendee needs "
+        "audits.admin."
+    ),
+    "DELETE /v1/isms/people/{person_id}": (
+        "Deleting someone who sits quizzes needs quiz.manage, and someone named "
+        "as an audit attendee, audits.admin."
     ),
     "GET /v1/audits/scope-coverage": (
         "ISMS documents and their counts appear only for ISMS readers."

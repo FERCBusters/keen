@@ -4,6 +4,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import (
@@ -13,6 +14,7 @@ from fastapi.openapi.docs import (
 )
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.api.errors import domain_error_response, validation_error_response
 from app.api.routes import OPENAPI_TAGS
@@ -58,7 +60,7 @@ from app.services.errors import DomainError
 async def lifespan(_app: FastAPI):
     await _startup_realtime_notifications()
     try:
-        bootstrap_initial_admin()
+        await run_in_threadpool(bootstrap_initial_admin)
         yield
     finally:
         await _shutdown_realtime_notifications()
@@ -208,10 +210,20 @@ async def auth_middleware(request: Request, call_next):
     declared middleware runs first). Therefore auth_middleware is declared
     *after* csrf_middleware to ensure it executes earlier on the request path.
     """
-    path = policy_path(request)
-
     if is_public_request(request):
         return await call_next(request)
+
+    # Database and session-store work runs in the thread pool, so one slow
+    # lookup never holds up the requests the event loop is serving.
+    refused = await run_in_threadpool(_authenticate, request)
+    if refused is not None:
+        return refused
+    return await call_next(request)
+
+
+def _authenticate(request: Request) -> JSONResponse | None:
+    """Attach the request's user, or return the response refusing the request."""
+    path = policy_path(request)
 
     # IMPORTANT: do not keep a SQLAlchemy session open for the duration of the
     # request via middleware state. Route handlers create their own DB sessions
@@ -326,8 +338,7 @@ async def auth_middleware(request: Request, call_next):
         request.state.user = user
     finally:
         db.close()
-
-    return await call_next(request)
+    return None
 
 
 # Authorisation codes and state are single-use, but are still credentials
@@ -386,60 +397,69 @@ async def audit_trail_middleware(request: Request, call_next):
         response = await call_next(request)
         return response
     finally:
+        status_code = getattr(response, "status_code", 500)
+        dur_ms = int((time.perf_counter() - start) * 1000)
         try:
-            # Only log API calls used by the UI (UI itself is served by nginx in a separate container)
-            status_code = getattr(response, "status_code", 500)
-            dur_ms = int((time.perf_counter() - start) * 1000)
-
-            user = getattr(request.state, "user", None)
-            username = getattr(user, "username", None) if user else None
-            client_ip = _client_ip(request)
-
-            if (
-                username is not None
-                or status_code < 400
-                or _audits_unauthenticated_refusal(client_ip)
-            ):
-                qs = redact_query_string(
-                    request.url.query,
-                    _OAUTH_CALLBACK_QUERY_KEYS
-                    if _OAUTH_CALLBACK_PATH.fullmatch(path)
-                    else frozenset(),
+            # The record is written in the thread pool, off the event loop, and
+            # is kept even when the client goes away before it is written.
+            with anyio.CancelScope(shield=True):
+                await run_in_threadpool(
+                    _record_request, request, path, status_code, dur_ms
                 )
-                if qs and len(qs) > 4096:
-                    qs = qs[:4096]
-
-                ua = (request.headers.get("user-agent") or "").strip() or None
-                ref = redact_str((request.headers.get("referer") or "").strip()) or None
-
-                # Truncate potentially long strings for safety.
-                if ua and len(ua) > 256:
-                    ua = ua[:256]
-                if ref and len(ref) > 512:
-                    ref = ref[:512]
-
-                db = SessionLocal()
-                try:
-                    db.add(
-                        AuditLog(
-                            ts=utc_now_naive(),
-                            username=username,
-                            method=request.method,
-                            path=path,
-                            query_string=qs,
-                            status_code=int(status_code or 0),
-                            duration_ms=dur_ms,
-                            client_ip=client_ip,
-                            user_agent=ua,
-                            referer=ref,
-                        )
-                    )
-                    db.commit()
-                finally:
-                    db.close()
         except Exception:
             # Audit logging must never break the main request path.
             pass
+
+
+def _record_request(request: Request, path: str, status_code: int, dur_ms: int):
+    # Only log API calls used by the UI (UI itself is served by nginx in a separate container)
+    user = getattr(request.state, "user", None)
+    username = getattr(user, "username", None) if user else None
+    client_ip = _client_ip(request)
+
+    if not (
+        username is not None
+        or status_code < 400
+        or _audits_unauthenticated_refusal(client_ip)
+    ):
+        return
+    qs = redact_query_string(
+        request.url.query,
+        _OAUTH_CALLBACK_QUERY_KEYS
+        if _OAUTH_CALLBACK_PATH.fullmatch(path)
+        else frozenset(),
+    )
+    if qs and len(qs) > 4096:
+        qs = qs[:4096]
+
+    ua = (request.headers.get("user-agent") or "").strip() or None
+    ref = redact_str((request.headers.get("referer") or "").strip()) or None
+
+    # Truncate potentially long strings for safety.
+    if ua and len(ua) > 256:
+        ua = ua[:256]
+    if ref and len(ref) > 512:
+        ref = ref[:512]
+
+    db = SessionLocal()
+    try:
+        db.add(
+            AuditLog(
+                ts=utc_now_naive(),
+                username=username,
+                method=request.method,
+                path=path,
+                query_string=qs,
+                status_code=int(status_code or 0),
+                duration_ms=dur_ms,
+                client_ip=client_ip,
+                user_agent=ua,
+                referer=ref,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 @app.get("/health")

@@ -9,8 +9,9 @@ def upload_inputs(files):
             filename=getattr(file, "filename", None) or "attachment",
             content_type=getattr(file, "content_type", None)
             or "application/octet-stream",
-            read=file.read,
+            # The spooled file itself: operations read it in the thread pool.
+            read=file.file.read,
         )
         for file in files
-        if callable(getattr(file, "read", None))
+        if callable(getattr(getattr(file, "file", None), "read", None))
     ]

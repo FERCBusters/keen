@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
@@ -35,12 +35,33 @@ from app.ingest.git_activity import (
     _parse_rss_items,
     _response_status_error,
 )
+from app.ingest.http import ListingTooLarge, require_origin, retained_listing
 from app.ingest.http import client as ingestion_client
-from app.ingest.http import require_origin
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
 
 _ACCOUNT_NAME = re.compile(r"[A-Za-z0-9_.-]{1,100}")
+
+
+class ActivityListingIncomplete(ValueError):
+    """Repository activity reached the page limit before the cursor."""
+
+
+def _activity_time(item) -> datetime | None:
+    if not isinstance(item, dict):
+        return None
+    return (
+        _parse_iso_ts(item.get("created"))
+        or _parse_iso_ts(item.get("created_at"))
+        or _parse_iso_ts(item.get("updated"))
+        or _parse_iso_ts(item.get("updated_at"))
+    )
+
+
+def _reaches(item, stop_at: datetime | None) -> bool:
+    """Whether a newest-first listing has passed ``stop_at`` at ``item``."""
+    ts = _activity_time(item)
+    return stop_at is not None and ts is not None and ts < stop_at
 
 
 class GiteaCompatibleCollector:
@@ -141,8 +162,17 @@ class GiteaCompatibleCollector:
         repo: str,
         max_pages: int = 1000,
         limit: int = 50,
+        stop_at: datetime | None = None,
+        day: date | None = None,
     ) -> list[dict[str, Any]]:
-        """Fetch repository activity from the authenticated REST API."""
+        """Fetch repository activity from the authenticated REST API.
+
+        The API lists newest first, so paging stops after the first page that
+        ends before ``stop_at`` (the cursor, or the start of the lookback):
+        what follows is older and already collected or outside the window. The
+        pages are kept until all have arrived, within one listing allowance.
+        With ``day``, only that day's activity is listed.
+        """
 
         if not is_safe_url(base_url):
             raise ValueError(f"Invalid or unsafe {self.label} base URL")
@@ -152,18 +182,24 @@ class GiteaCompatibleCollector:
         auth = self._basic_auth() if self._auth_mode() == "basic" else None
 
         all_items: list[dict[str, Any]] = []
-        with ingestion_client(
-            timeout=30.0,
-            follow_redirects=False,
-            verify=True,
-            headers=headers,
-            auth=auth,
-        ) as c:
+        with (
+            ingestion_client(
+                timeout=30.0,
+                follow_redirects=False,
+                verify=True,
+                headers=headers,
+                auth=auth,
+            ) as c,
+            retained_listing(),
+        ):
             page = 1
             while page <= max_pages:
+                params = {"page": str(page), "limit": str(limit)}
+                if day is not None:
+                    params["date"] = day.isoformat()
                 r = c.get(
                     f"{base_url.rstrip('/')}/api/v1/repos/{owner}/{repo}/activities/feeds",
-                    params={"page": str(page), "limit": str(limit)},
+                    params=params,
                 )
                 status_error = _response_status_error(r)
                 if status_error:
@@ -171,12 +207,16 @@ class GiteaCompatibleCollector:
                 data = r.json() or []
                 if not isinstance(data, list) or not data:
                     break
+                if len(data) > limit:
+                    raise ValueError(
+                        f"{self.label} returned more items than a page holds"
+                    )
                 all_items.extend(data)
-                if len(data) < limit:
+                if len(data) < limit or _reaches(data[-1], stop_at):
                     break
                 page += 1
             else:
-                raise ValueError(
+                raise ActivityListingIncomplete(
                     "Activity pagination limit reached; cursor retained for retry"
                 )
 
@@ -203,12 +243,7 @@ class GiteaCompatibleCollector:
 
         # The API returns newest-first; process oldest-first for cursor stability.
         for a in reversed(all_items):
-            ts = (
-                _parse_iso_ts(a.get("created"))
-                or _parse_iso_ts(a.get("created_at"))
-                or _parse_iso_ts(a.get("updated"))
-                or _parse_iso_ts(a.get("updated_at"))
-            )
+            ts = _activity_time(a)
             if not ts:
                 continue
             if ts < since:
@@ -292,6 +327,78 @@ class GiteaCompatibleCollector:
             "mode": mode,
         }
 
+    def _catch_up_by_day(
+        self,
+        db: Session,
+        cur: IngestionCursor,
+        *,
+        base_url: str,
+        cursor_name: str,
+        feed_url: str,
+        host: str,
+        owner: str,
+        repo: str,
+        label: str | None,
+        since: datetime,
+    ) -> dict[str, Any]:
+        """Collect activity since the cursor one day at a time, oldest first.
+
+        Each day is listed within its own allowance, then stored and committed
+        with the cursor before the next is read, so a backlog larger than one
+        listing is collected in order and a run that stops keeps what it has.
+        The feed selects days in the server's own time zone, so the walk starts
+        a day before the cursor and ends a day after today; activity at or
+        before the cursor is skipped as already collected.
+        """
+        created = 0
+        day = since.date() - timedelta(days=1)
+        last = utc_now_naive().date() + timedelta(days=1)
+        while day <= last:
+            try:
+                items = self._fetch_api_activities(
+                    base_url=base_url, owner=owner, repo=repo, stop_at=since, day=day
+                )
+                stored = self._store_api_activity_items(
+                    db,
+                    cur,
+                    all_items=items,
+                    cursor_name=cursor_name,
+                    feed_url=feed_url,
+                    host=host,
+                    owner=owner,
+                    repo=repo,
+                    label=label,
+                    since=since,
+                    cursor_last=to_utc_naive(cur.last_ts) if cur.last_ts else None,
+                    mode="api",
+                )
+            except Exception as e:
+                db.rollback()
+                error = (
+                    f"{self.label} activity on {day.isoformat()} is larger than "
+                    "one collection reads"
+                    if isinstance(e, (ListingTooLarge, ActivityListingIncomplete))
+                    else collection_error(e)
+                )
+                return {
+                    "feed": feed_url,
+                    "created_events": created,
+                    "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
+                    "mode": "failed",
+                    "error": (
+                        f"{error}; activity before that day is collected and the "
+                        "cursor resumes from there"
+                    ),
+                }
+            created += stored["created_events"]
+            day += timedelta(days=1)
+        return {
+            "feed": feed_url,
+            "created_events": created,
+            "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
+            "mode": "api",
+        }
+
     def ingest_repo_feed(
         self,
         db: Session,
@@ -352,6 +459,7 @@ class GiteaCompatibleCollector:
                     base_url=base_url,
                     owner=owner,
                     repo=repo,
+                    stop_at=since,
                 )
                 return self._store_api_activity_items(
                     db,
@@ -366,6 +474,23 @@ class GiteaCompatibleCollector:
                     since=since,
                     cursor_last=cursor_last,
                     mode="api",
+                )
+            except (ListingTooLarge, ActivityListingIncomplete):
+                # The API listing could not be read to the cursor in one go.
+                # RSS lists only the newest items and would move the cursor
+                # past the rest, so the backlog is read a day at a time instead.
+                db.rollback()
+                return self._catch_up_by_day(
+                    db,
+                    cur,
+                    base_url=base_url,
+                    cursor_name=cursor_name,
+                    feed_url=feed_url,
+                    host=host,
+                    owner=owner,
+                    repo=repo,
+                    label=label,
+                    since=since,
                 )
             except Exception as e:
                 db.rollback()
@@ -510,6 +635,7 @@ class GiteaCompatibleCollector:
             auth=auth,
         ) as client:
             for page in range(1, 1001):
+                # Each page is reduced to names before the next is read.
                 response = client.get(url, params={"page": page, "limit": 50})
                 error = _response_status_error(response)
                 if error:
@@ -539,7 +665,9 @@ class GiteaCompatibleCollector:
                     key = (owner, repo_name)
                     if key not in seen:
                         seen.add(key)
-                        repos.append(repo)
+                        # Only the names reach the caller, so the list held
+                        # while feeds are collected stays small.
+                        repos.append({"owner": {"login": owner}, "name": repo_name})
                         added += 1
                 if not added:
                     raise ValueError(

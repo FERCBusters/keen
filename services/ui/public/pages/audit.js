@@ -1703,10 +1703,24 @@ function renderAttendeePersonOptions() {
     attendeePeople
       .map(
         (p) =>
-          `<option value="${esc(p.id)}">${esc(p.name)}${p.email ? ` · ${esc(p.email)}` : ''}</option>`,
+          `<option value="${esc(p.id)}">${esc(p.name)}${p.email ? ` · ${esc(p.email)}` : ''}${p.username ? ` · account ${esc(p.username)}` : ''}</option>`,
       )
       .join('');
   sel.value = attendeePeople.some((p) => p.id === current) ? current : '';
+  showAttendeePersonAccount();
+}
+
+// A People record attends through the Keen account linked to it: say which
+// account will read the audit before the person is added.
+function showAttendeePersonAccount() {
+  const note = document.getElementById('attendeePersonAccount');
+  if (!note) return;
+  const id = document.getElementById('attendeePersonId')?.value || '';
+  const person = id ? attendeePeople.find((p) => p.id === id) : null;
+  note.textContent = person?.username
+    ? `Adding this person lets the Keen account ${person.username} read this audit.`
+    : '';
+  note.hidden = !note.textContent;
 }
 
 async function loadAttendeePeople() {
@@ -1734,6 +1748,7 @@ function suggestPersonCreation() {
     document.getElementById('attendeePersonId').value = matching.id;
     document.getElementById('attendeeUserId').value = '';
   }
+  showAttendeePersonAccount();
   button.hidden = !(
     name &&
     !matching &&
@@ -1811,7 +1826,13 @@ function renderAttendees(items) {
       const meta = [x.email, x.role].filter(Boolean);
       const who = x.user_id
         ? userPillHtml({ username: x.username || x.name, email: x.email })
-        : esc(x.name || x.email || 'Attendee');
+        : esc(x.name || x.email || 'Attendee') +
+          (x.person_username
+            ? ` ${userPillHtml(
+                { username: x.person_username },
+                { prefix: 'account ', title: 'Keen account linked to this person' },
+              )}`
+            : '');
       return `<div class="list-group-item d-flex justify-content-between gap-2 align-items-start">
       <div>
         <div class="fw-semibold">${who}</div>
@@ -2216,6 +2237,7 @@ document.getElementById('attendeeForm')?.addEventListener('submit', async (ev) =
     document.getElementById('attendeeName').value = '';
     document.getElementById('attendeeEmail').value = '';
     document.getElementById('attendeeRole').value = '';
+    showAttendeePersonAccount();
     toast(status, 'Person added', 'success');
     await loadAudit({ preserveUnsaved: true });
   } catch (e) {

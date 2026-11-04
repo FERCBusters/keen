@@ -6,8 +6,10 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 
+from anyio import to_thread
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -481,30 +483,57 @@ def _notification_snapshot(headers, cookies, *, counts=False, peer=None):
         return snapshot, payloads
 
 
-async def _broadcast_open_count(db: Session) -> None:
-    """Best-effort push of open question count to all connected admins."""
-    try:
-        await notification_bus.publish_admin_open_count(
-            _count_open_questions(db),
-            fallback_hub=notification_hub,
-        )
-    except Exception:
-        return
+class _Notices:
+    """Badge counts an operation reads in its thread, pushed once it returns.
+
+    Question operations run in the thread pool, so their database and storage
+    work never holds up the event loop; only the push is awaited there.
+    """
+
+    def __init__(self) -> None:
+        self.admin_open: int | None = None
+        self.unread: dict[str, int] = {}
+
+    def open_count(self, db: Session) -> None:
+        """Best-effort open question count for connected admins."""
+        try:
+            self.admin_open = _count_open_questions(db)
+        except Exception:
+            return
+
+    def unread_count(self, db: Session, user_id) -> None:
+        """Best-effort unread-replies count for one user."""
+        try:
+            self.unread[str(user_id)] = _count_unread_replies_for_user(db, user_id)
+        except Exception:
+            return
+
+    async def publish(self) -> None:
+        if self.admin_open is not None:
+            try:
+                await notification_bus.publish_admin_open_count(
+                    self.admin_open, fallback_hub=notification_hub
+                )
+            except Exception:
+                pass
+        for user_id, count in self.unread.items():
+            try:
+                await notification_bus.publish_user_unread_replies(
+                    user_id, count, fallback_hub=notification_hub
+                )
+            except Exception:
+                pass
 
 
-async def _broadcast_user_unread_count(db: Session, user_id) -> None:
-    """Best-effort push of unread-replies count to a specific user."""
-    try:
-        await notification_bus.publish_user_unread_replies(
-            str(user_id),
-            _count_unread_replies_for_user(db, user_id),
-            fallback_hub=notification_hub,
-        )
-    except Exception:
-        return
+async def _in_thread(operation, **kwargs):
+    """Run a question operation in the thread pool, then push its counts."""
+    notices = _Notices()
+    result = await to_thread.run_sync(partial(operation, notices=notices, **kwargs))
+    await notices.publish()
+    return result
 
 
-async def _store_attachments(
+def _store_attachments(
     db: Session,
     *,
     event_id: uuid.UUID,
@@ -531,7 +560,7 @@ async def _store_attachments(
                 getattr(f, "content_type", None) or "application/octet-stream"
             )
             ext = safe_download_ext(os.path.splitext(filename)[1])
-            data = await f.read(MAX_ATTACHMENT_BYTES + 1)
+            data = f.read(MAX_ATTACHMENT_BYTES + 1)
             if len(data) > MAX_ATTACHMENT_BYTES:
                 raise DomainError(413, "Question attachment is too large")
             if not data:
@@ -654,6 +683,25 @@ def list_event_questions(*, event_id: str, context: ChangeContext, db: Session):
 async def create_event_question(
     *, event_id: str, context: ChangeContext, db: Session, body_text: str, files
 ):
+    return await _in_thread(
+        _create_event_question,
+        event_id=event_id,
+        context=context,
+        db=db,
+        body_text=body_text,
+        files=files,
+    )
+
+
+def _create_event_question(
+    *,
+    event_id: str,
+    context: ChangeContext,
+    db: Session,
+    body_text: str,
+    files,
+    notices: _Notices,
+):
     user = context.actor
     eid = _try_uuid(event_id)
     if not eid:
@@ -698,7 +746,7 @@ async def create_event_question(
     db.add(post)
     db.flush()
 
-    artifact_ids = await _store_attachments(
+    artifact_ids = _store_attachments(
         db,
         event_id=ev.id,
         thread_id=thread.id,
@@ -730,7 +778,7 @@ async def create_event_question(
     db.commit()
 
     # Push updated badge count to connected admins.
-    await _broadcast_open_count(db)
+    notices.open_count(db)
 
     # Fanout to outbound webhooks (Slack/Teams/Chat/generic) if configured.
     # Best-effort only: webhook failures must not block question creation.
@@ -746,6 +794,25 @@ async def create_event_question(
 
 async def reply_to_question(
     *, thread_id: str, context: ChangeContext, db: Session, body_text: str, files
+):
+    return await _in_thread(
+        _reply_to_question,
+        thread_id=thread_id,
+        context=context,
+        db=db,
+        body_text=body_text,
+        files=files,
+    )
+
+
+def _reply_to_question(
+    *,
+    thread_id: str,
+    context: ChangeContext,
+    db: Session,
+    body_text: str,
+    files,
+    notices: _Notices,
 ):
     user = context.actor
     tid = _try_uuid(thread_id)
@@ -786,7 +853,7 @@ async def reply_to_question(
     db.add(post)
     db.flush()
 
-    artifact_ids = await _store_attachments(
+    artifact_ids = _store_attachments(
         db,
         event_id=thread.event_id,
         thread_id=thread.id,
@@ -833,15 +900,15 @@ async def reply_to_question(
     db.commit()
 
     # Push updated badge count to connected admins.
-    await _broadcast_open_count(db)
+    notices.open_count(db)
 
     # Notify the thread author when an admin replies (auditor bell).
     if is_admin:
         if thread.created_by_user_id:
-            await _broadcast_user_unread_count(db, thread.created_by_user_id)
+            notices.unread_count(db, thread.created_by_user_id)
     else:
         # Author activity marks their own thread as seen; update their badge.
-        await _broadcast_user_unread_count(db, user.id)
+        notices.unread_count(db, user.id)
 
     # Fanout to outbound webhooks (Slack/Teams/Chat/generic) if configured.
     # Best-effort only: webhook failures must not block replies.
@@ -862,6 +929,14 @@ async def reply_to_question(
 
 async def delete_question_thread(
     *, thread_id: str, context: ChangeContext, db: Session
+):
+    return await _in_thread(
+        _delete_question_thread, thread_id=thread_id, context=context, db=db
+    )
+
+
+def _delete_question_thread(
+    *, thread_id: str, context: ChangeContext, db: Session, notices: _Notices
 ):
     user = context.actor
     tid = _try_uuid(thread_id)
@@ -927,9 +1002,9 @@ async def delete_question_thread(
     db.delete(thread)
     db.commit()
 
-    await _broadcast_open_count(db)
+    notices.open_count(db)
     if author_user_id:
-        await _broadcast_user_unread_count(db, author_user_id)
+        notices.unread_count(db, author_user_id)
 
     return {"thread_id": str(tid), "deleted": True}
 
@@ -1054,6 +1129,27 @@ async def create_entity_question(
     body_text: str,
     files,
 ):
+    return await _in_thread(
+        _create_entity_question,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        context=context,
+        db=db,
+        body_text=body_text,
+        files=files,
+    )
+
+
+def _create_entity_question(
+    *,
+    entity_type: str,
+    entity_id: str,
+    context: ChangeContext,
+    db: Session,
+    body_text: str,
+    files,
+    notices: _Notices,
+):
     user = context.actor
     eid = _try_uuid(entity_id)
     if not eid:
@@ -1069,8 +1165,13 @@ async def create_entity_question(
     target_type = entity_type
 
     if target_type == "event":
-        return await create_event_question(
-            event_id=str(eid), context=context, db=db, body_text=body_text, files=files
+        return _create_event_question(
+            event_id=str(eid),
+            context=context,
+            db=db,
+            body_text=body_text,
+            files=files,
+            notices=notices,
         )
 
     if files:
@@ -1117,12 +1218,29 @@ async def create_entity_question(
         },
     )
     db.commit()
-    await _broadcast_open_count(db)
+    notices.open_count(db)
     return {"thread_id": str(thread.id), "post_id": str(post.id)}
 
 
 async def mark_entity_questions_seen(
     *, entity_type: str, entity_id: str, context: ChangeContext, db: Session
+):
+    return await _in_thread(
+        _mark_entity_questions_seen,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        context=context,
+        db=db,
+    )
+
+
+def _mark_entity_questions_seen(
+    *,
+    entity_type: str,
+    entity_id: str,
+    context: ChangeContext,
+    db: Session,
+    notices: _Notices,
 ):
     user = context.actor
     eid = _try_uuid(entity_id)
@@ -1152,7 +1270,7 @@ async def mark_entity_questions_seen(
         updated += 1
     if updated:
         db.commit()
-    await _broadcast_user_unread_count(db, user.id)
+    notices.unread_count(db, user.id)
     return {
         "marked": updated,
         "unread_count": _count_unread_replies_for_user(db, user.id),
@@ -1163,6 +1281,14 @@ async def mark_event_questions_seen(
     *, event_id: str, context: ChangeContext, db: Session
 ):
     """Mark all questions for this event as seen by the current user (thread author)."""
+    return await _in_thread(
+        _mark_event_questions_seen, event_id=event_id, context=context, db=db
+    )
+
+
+def _mark_event_questions_seen(
+    *, event_id: str, context: ChangeContext, db: Session, notices: _Notices
+):
     user = context.actor
     eid = _try_uuid(event_id)
     if not eid:
@@ -1194,7 +1320,7 @@ async def mark_event_questions_seen(
         db.commit()
 
     # Update the auditor's bell badge in real time.
-    await _broadcast_user_unread_count(db, user.id)
+    notices.unread_count(db, user.id)
 
     return {
         "marked": updated,
@@ -1204,6 +1330,18 @@ async def mark_event_questions_seen(
 
 async def admin_set_question_status(
     *, thread_id: str, context: ChangeContext, db: Session, payload
+):
+    return await _in_thread(
+        _admin_set_question_status,
+        thread_id=thread_id,
+        context=context,
+        db=db,
+        payload=payload,
+    )
+
+
+def _admin_set_question_status(
+    *, thread_id: str, context: ChangeContext, db: Session, payload, notices: _Notices
 ):
     tid = _try_uuid(thread_id)
     user = context.actor
@@ -1241,6 +1379,6 @@ async def admin_set_question_status(
     db.commit()
 
     # Push updated badge count to connected admins.
-    await _broadcast_open_count(db)
+    notices.open_count(db)
 
     return {"thread_id": str(t.id), "status": t.status}

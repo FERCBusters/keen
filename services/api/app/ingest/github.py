@@ -13,6 +13,7 @@ from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
+from app.ingest.http import retained_listing
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
 from app.security.xml import parse_untrusted_xml
@@ -107,19 +108,25 @@ def _within_api(url: str) -> bool:
 def _fetch_pages(
     c: httpx.Client, path: str, *, per_page: int = 100, max_pages: int = 3
 ) -> list[dict[str, Any]]:
-    """Fetch up to `max_pages` pages from a GitHub REST endpoint."""
+    """Fetch up to `max_pages` pages from a GitHub REST endpoint.
+
+    The pages are kept until all have arrived, so together they stay within
+    one listing allowance."""
 
     items: list[dict[str, Any]] = []
-    for page in range(1, max_pages + 1):
-        r = c.get(path, params={"per_page": str(per_page), "page": str(page)})
-        r.raise_for_status()
-        batch = r.json() or []
-        if not isinstance(batch, list) or not batch:
-            break
-        items.extend(batch)
-        # GitHub returns up to 100 per page; stop early if we received less.
-        if len(batch) < per_page:
-            break
+    with retained_listing():
+        for page in range(1, max_pages + 1):
+            r = c.get(path, params={"per_page": str(per_page), "page": str(page)})
+            r.raise_for_status()
+            batch = r.json() or []
+            if not isinstance(batch, list) or not batch:
+                break
+            if len(batch) > per_page:
+                raise ValueError("GitHub returned more items than a page holds")
+            items.extend(batch)
+            # GitHub returns up to 100 per page; stop early if we received less.
+            if len(batch) < per_page:
+                break
     return items
 
 
@@ -476,6 +483,12 @@ def _list_org_repos(
     exclude_archived: bool = True,
     exclude_forks: bool = True,
 ) -> list[dict[str, Any]]:
+    """The organisation's repositories, as their ``full_name`` only.
+
+    Each page is reduced to the name the caller uses before the next is read,
+    so the list held while each repository is collected stays small however
+    large the upstream's repository records are; a page holds at most the
+    items requested, and the listing at most ``max_pages`` pages."""
     repos: list[dict[str, Any]] = []
     for page in range(1, max_pages + 1):
         r = c.get(
@@ -492,12 +505,18 @@ def _list_org_repos(
         batch = r.json() or []
         if not isinstance(batch, list) or not batch:
             break
+        if len(batch) > per_page:
+            raise ValueError("GitHub returned more items than a page holds")
         for repo in batch:
+            if not isinstance(repo, dict):
+                continue
             if exclude_archived and repo.get("archived") is True:
                 continue
             if exclude_forks and repo.get("fork") is True:
                 continue
-            repos.append(repo)
+            full = repo.get("full_name")
+            if isinstance(full, str) and 0 < len(full) <= 256:
+                repos.append({"full_name": full})
         if len(batch) < per_page:
             break
     return repos

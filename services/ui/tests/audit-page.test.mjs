@@ -107,7 +107,13 @@ const documents = [
 ];
 
 async function auditPage(t, options = {}) {
-  const state = { audit: options.audit || baseAudit(), patched: [], put: null, posted: [] };
+  const state = {
+    audit: options.audit || baseAudit(),
+    people: options.people,
+    patched: [],
+    put: null,
+    posted: [],
+  };
   const fail = options.fail || {};
   const ui = await page(t, 'audit', {
     query: options.query ?? '&id=a1',
@@ -674,6 +680,55 @@ test('attendees can be chosen from users or people and validation errors are sho
 
   ui.document.querySelector('[data-del-attendee="at1"]').click();
   await settle(() => state.removed?.includes('/api/v1/audits/a1/attendees/at1'));
+  await idle(ui);
+});
+
+test('a person attendee shows the Keen account that reads the audit through them', async (t) => {
+  const audit = baseAudit();
+  audit.attendees = [
+    { id: 'at3', person_id: 'p1', name: 'Dana', person_username: '<b>mallory</b>' },
+    { id: 'at4', person_id: 'p2', name: 'Erin' },
+  ];
+  const { ui } = await auditPage(t, {
+    audit,
+    people: [
+      { id: 'p1', name: 'Dana', email: 'dana@example.test', username: '<b>mallory</b>' },
+      { id: 'p2', name: 'Erin' },
+    ],
+  });
+  const list = ui.el('attendees');
+  assert.equal(list.querySelector('b'), null);
+  const pills = [...list.querySelectorAll('.user-pill')].map((pill) => pill.textContent);
+  assert.deepEqual(pills, ['account <b>mallory</b>']);
+  // The directory lists each linked account, as text.
+  assert.deepEqual(
+    [...ui.el('attendeePersonId').options].map((o) => o.textContent),
+    [
+      'Choose a person or enter a new name below',
+      'Dana · dana@example.test · account <b>mallory</b>',
+      'Erin',
+    ],
+  );
+  const note = ui.el('attendeePersonAccount');
+  assert.equal(note.hidden, true);
+  // Choosing the person, or matching them by email, says which account reads the audit.
+  ui.el('attendeePersonId').value = 'p1';
+  ui.el('attendeePersonId').dispatchEvent(new ui.window.Event('change'));
+  assert.equal(note.hidden, false);
+  assert.equal(
+    note.textContent,
+    'Adding this person lets the Keen account <b>mallory</b> read this audit.',
+  );
+  assert.equal(note.querySelector('b'), null);
+  ui.el('attendeePersonId').value = 'p2';
+  ui.el('attendeePersonId').dispatchEvent(new ui.window.Event('change'));
+  assert.equal(note.hidden, true);
+  ui.el('attendeePersonId').value = '';
+  ui.el('attendeeName').value = 'someone';
+  ui.el('attendeeEmail').value = 'DANA@example.test';
+  ui.el('attendeeEmail').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(ui.el('attendeePersonId').value, 'p1');
+  assert.equal(note.hidden, false);
   await idle(ui);
 });
 

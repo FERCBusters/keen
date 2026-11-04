@@ -222,12 +222,17 @@ def evidence_dict(
 
 def attendee_dict(x: AuditAttendee) -> dict[str, Any]:
     u = getattr(x, "user", None)
+    person = getattr(x, "person", None)
+    # A People record attends through the account linked to it, so the
+    # people who edit the audit see which account that is.
+    linked = getattr(person, "user", None) if person is not None else None
     return {
         "id": str(x.id),
         "audit_id": str(x.audit_id),
         "user_id": str(x.user_id) if x.user_id else None,
         "person_id": str(x.person_id) if x.person_id else None,
         "username": u.username if u else None,
+        "person_username": linked.username if linked else None,
         "name": x.name,
         "email": x.email or user_email(u),
         "role": x.role,
