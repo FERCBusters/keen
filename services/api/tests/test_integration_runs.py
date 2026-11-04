@@ -9,15 +9,18 @@ import json
 import socket
 import ssl
 from datetime import timedelta
+from functools import partial
+from types import SimpleNamespace
 
 import pytest
 from app.api.routes import integrations as api
 from app.core.datetime_utils import utc_now_naive
+from app.db.models import Event, SourceIngestionState
 from app.db.models import IntegrationCollector as Collector
 from app.db.models import IntegrationRun as Run
 from app.db.models import IsmsEffectivenessMeasure as Measure
-from app.db.models import SourceIngestionState
-from app.integrations import runtime
+from app.integrations import engine, runtime
+from app.integrations.engine import skipped_summary
 from app.integrations.errors import IntegrationError
 from app.integrations.schema import Definition
 from cryptography.fernet import InvalidToken
@@ -173,7 +176,9 @@ def test_a_measurement_destination_that_changed_fails_the_run(
     else:
         db.delete(measure)
     db.commit()
-    monkeypatch.setattr(runtime, "collect", lambda *a: ([], None, 1))
+    monkeypatch.setattr(
+        runtime, "collect", lambda *a: ([], None, 1, skipped_summary({}))
+    )
 
     runtime.run_job(run_id)
 
@@ -227,3 +232,59 @@ def test_a_pause_cancels_queued_runs_at_the_next_tick(
         "cancelled",
         "Source ingestion paused before collection began",
     )
+
+
+def test_an_unusable_record_is_left_out_of_a_stored_run(
+    database,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    # One upstream record with an empty title, among records the definition
+    # can use, is counted in the run's outcome; the others are stored, the
+    # cursor moves on and the run does not count towards pausing.
+    db, _ = database
+    run_id = published(db)
+    page = [
+        {"id": 1, "created_at": "2026-01-01T12:00:00Z", "title": "Backup done"},
+        {"id": 2, "created_at": "2026-01-01T12:05:00Z", "title": ""},
+        {"id": 3, "created_at": "2026-01-01T12:10:00Z", "title": "Restore tested"},
+    ]
+    monkeypatch.setattr(
+        runtime, "collect", partial(engine.collect, fetch=lambda *a, **k: (page, {}))
+    )
+    import app.ingest.common as common
+
+    monkeypatch.setattr(
+        common,
+        "put_bytes",
+        lambda **k: SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=50
+        ),
+    )
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
+    collector = db.get(Collector, "collector")
+    collector.cursor = "2025-12-31T00:00:00+00:00"
+    collector.failures = 2
+    db.commit()
+
+    runtime.run_job(run_id)
+
+    status, message = outcome(db, run_id)
+    assert status == "succeeded"
+    assert message == (
+        "2 new records; 0 duplicates. 1 record skipped: "
+        "Record identifier and summary must not be empty (1)."
+    )
+    assert sorted(e.summary for e in db.query(Event).all()) == [
+        "Backup done",
+        "Restore tested",
+    ]
+    run = db.get(Run, run_id)
+    assert run.result["skipped"] == {
+        "count": 1,
+        "reasons": [
+            {"reason": "Record identifier and summary must not be empty", "count": 1}
+        ],
+    }
+    collector = db.get(Collector, "collector")
+    assert collector.cursor == "2026-01-01T12:10:00+00:00"
+    assert collector.failures == 0 and collector.enabled

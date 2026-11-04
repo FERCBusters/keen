@@ -19,7 +19,7 @@ from app.db.models import IntegrationRun as Run
 from app.db.models import IsmsEffectivenessMeasure as Measure
 from app.db.models import IsmsEffectivenessMetricEntry as Metric
 from app.integrations import runtime, transport
-from app.integrations.engine import collect, external_id, normalize
+from app.integrations.engine import collect, external_id, normalize, skipped_summary
 from app.integrations.errors import IntegrationError
 from app.integrations.schema import Definition, pointer
 from app.integrations.templates import templates
@@ -32,6 +32,8 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 
 from tests.db_helpers import create_sqlite_schema
+
+NO_SKIPS = skipped_summary({})
 
 
 def record(n=1):
@@ -76,7 +78,7 @@ def test_pagination_modes(paging, payloads, expected):
     d = Definition(
         pagination=paging, records_path="/items" if paging["mode"] == "cursor" else ""
     )
-    rows, _, _ = collect(d, "https://example.org", {}, fetch=fetch)
+    rows, _, _, _ = collect(d, "https://example.org", {}, fetch=fetch)
     assert len(rows) == 2
     assert [x.get("page") for x in calls] == expected
 
@@ -97,7 +99,7 @@ def test_repeated_cursor_and_page_cap_fail_without_cursor():
 
 def test_preview_first_page_ten_rows_and_no_pagination():
     fetch = Mock(return_value=([record(x) for x in range(20)], {}))
-    rows, _, pages = collect(
+    rows, _, pages, _ = collect(
         Definition(pagination={"mode": "page"}),
         "https://example.org",
         {},
@@ -141,7 +143,7 @@ def test_related_details_are_encoded_and_mapped():
             "outcome": {"path": "/_related/job/status", "transform": "lower"},
         }
     ).fields["outcome"]
-    rows, _, _ = collect(d, "https://example.org", {}, fetch=fetch)
+    rows, _, _, _ = collect(d, "https://example.org", {}, fetch=fetch)
     assert calls[-1] == "https://example.org/jobs/a%2Fb"
     assert rows[0]["fields"]["outcome"] == "pass"
 
@@ -303,6 +305,7 @@ def test_preview_no_evidence_or_cursor_writes(database, monkeypatch):
             [{"fields": normalize(record(), Definition()), "record": record()}],
             "2026-01-01T12:00:00+00:00",
             1,
+            NO_SKIPS,
         ),
     )
     monkeypatch.setattr(runtime, "load_rules", lambda *a, **k: [])
@@ -366,7 +369,7 @@ def test_measurement_source_idempotency(database, monkeypatch):
     api.action_collector("collector", "publish", api.Action(version=1), db)
     rows = [{"fields": normalize(record(), d), "record": record()}]
     monkeypatch.setattr(
-        runtime, "collect", lambda *a: (rows, "2026-01-01T12:00:00+00:00", 1)
+        runtime, "collect", lambda *a: (rows, "2026-01-01T12:00:00+00:00", 1, NO_SKIPS)
     )
     import app.ingest.common as common
 
@@ -541,7 +544,7 @@ def test_failed_partial_run_preserves_cursor_and_retry_deduplicates(
     d = Definition()
     rows = [{"fields": normalize(record(n), d), "record": record(n)} for n in (1, 2)]
     monkeypatch.setattr(
-        runtime, "collect", lambda *a: (rows, "2026-01-01T12:00:00+00:00", 1)
+        runtime, "collect", lambda *a: (rows, "2026-01-01T12:00:00+00:00", 1, NO_SKIPS)
     )
     import app.ingest.common as common
 

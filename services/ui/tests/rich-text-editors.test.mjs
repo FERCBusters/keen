@@ -14,9 +14,15 @@ const FORM = `<form id="form">
 // A stand-in for the vendored Wysi editor: a toolbar and an editable region
 // placed after the textarea, as the editor builds them. Like Wysi 0.5.1, it
 // starts from the textarea's value and wraps top-level text in a paragraph by
-// assigning the text as HTML, so escaped markup it is given becomes elements.
+// assigning the text as HTML, in the live document, so escaped markup it is
+// given becomes elements; it does the same to the editor's own content on
+// every input event, from a bubbling listener on the document. The elements
+// that re-parsing creates are recorded in editors.reparsed: a browser loads
+// an image created this way, and runs its handlers, even though the element
+// is never attached to the page.
 function installWysi(window, { fail = () => false } = {}) {
   const editors = [];
+  editors.reparsed = [];
   const doc = window.document;
   const wysiContent = (raw) => {
     const template = doc.createElement('template');
@@ -25,12 +31,14 @@ function installWysi(window, { fail = () => false } = {}) {
       if (node.nodeType !== window.Node.TEXT_NODE) continue;
       const p = doc.createElement('p');
       p.innerHTML = node.textContent;
+      editors.reparsed.push(...[...p.querySelectorAll('*')].map((el) => el.tagName));
       node.replaceWith(p);
     }
     const out = doc.createElement('div');
     out.append(template.content);
     return out.innerHTML;
   };
+  editors.wysiContent = wysiContent;
   const build = (options, editor) => {
     const wrapper = doc.createElement('div');
     const toolbar = doc.createElement('div');
@@ -47,8 +55,13 @@ function installWysi(window, { fail = () => false } = {}) {
     editor.started = options.el.value;
     editable.innerHTML = wysiContent(options.el.value);
     editor.editable = editable;
-    // Wysi reports edits with its own re-parsed copy of the editor content.
-    editor.input = () => options.onChange(wysiContent(editable.innerHTML));
+    // Wysi reports edits with its own re-parsed copy of the editor content,
+    // read in a bubbling input listener on the document.
+    doc.addEventListener('input', (event) => {
+      if (event.target === editable) options.onChange(wysiContent(editable.innerHTML));
+    });
+    editor.input = (init = {}) =>
+      editable.dispatchEvent(new window.InputEvent('input', { bubbles: true, ...init }));
   };
   window.Wysi = (options) => {
     if (fail(options.el)) throw new Error('Editor failed to start');
@@ -247,6 +260,110 @@ test('escaped markup in a saved value stays text when the editor starts', async 
   notes.input();
   assert.equal(ui.document.querySelector('meta'), null);
   assert.equal(ui.document.getElementById('notes').value, notes.editable.innerHTML);
+});
+
+// Saved rich text whose top-level text holds escaped markup: Wysi re-parses
+// that text on every edit, so it must sit inside a paragraph.
+const HOSTILE_RICH = '&lt;img src="/x" id="probe" onerror="x()"&gt;<br>';
+
+test('escaped markup in saved rich text stays text while the user edits', async (t) => {
+  const ui = await loadUi('app.js', {
+    html: '<div class="rich-text-editor"><textarea id="notes" data-rich-text="1"></textarea></div>',
+    setup(window) {
+      window.editors = installWysi(window);
+    },
+  });
+  t.after(ui.close);
+  ui.api.initRichTextEditors(ui.document);
+  const [notes] = ui.window.editors;
+
+  ui.api.setRichTextEditorValue('notes', HOSTILE_RICH);
+
+  assert.equal(notes.editable.innerHTML, `<p>${HOSTILE_RICH}</p>`);
+  assert.equal(ui.document.getElementById('notes').value, notes.editable.innerHTML);
+  // The user types into the paragraph; Wysi's re-parse finds no top-level text.
+  notes.editable.firstChild.firstChild.appendData('z');
+  notes.input();
+  assert.deepEqual(ui.window.editors.reparsed, []);
+  assert.equal(ui.document.getElementById('probe'), null);
+  assert.equal(notes.editable.textContent, '<img src="/x" id="probe" onerror="x()">z');
+});
+
+test('the stand-in editor detects a re-parse of top-level text', async (t) => {
+  // The check above would fail without the paragraphs: given the same saved
+  // value unwrapped, the stand-in's re-parse creates the image.
+  const ui = await loadUi('app.js', {
+    html: '<div></div>',
+    setup(window) {
+      window.editors = installWysi(window);
+    },
+  });
+  t.after(ui.close);
+  ui.window.editors.wysiContent(HOSTILE_RICH);
+  assert.deepEqual(ui.window.editors.reparsed, ['IMG']);
+});
+
+test('text that reaches the top level is moved into a paragraph before Wysi reads it', async (t) => {
+  const ui = await loadUi('app.js', {
+    html: '<div class="rich-text-editor"><textarea id="notes" data-rich-text="1"></textarea></div>',
+    setup(window) {
+      window.editors = installWysi(window);
+    },
+  });
+  t.after(ui.close);
+  ui.api.initRichTextEditors(ui.document);
+  const [notes] = ui.window.editors;
+  const { editable } = notes;
+  // Text typed into an empty editor, or pasted as plain text, lands at the top
+  // level, here beside a phrasing element and between blocks.
+  editable.innerHTML = '<p>Kept</p>\n<ul><li>Item</li></ul>';
+  const typed = ui.document.createTextNode('<img src="/x" id="probe" onerror="x()">');
+  const bold = ui.document.createElement('strong');
+  bold.textContent = 'bold';
+  editable.append(typed, bold);
+  const selection = ui.window.getSelection();
+  selection.setBaseAndExtent(typed, 4, typed, 4);
+
+  notes.input({ inputType: 'insertText', data: 'x' });
+
+  assert.equal(
+    editable.innerHTML,
+    '<p>Kept</p>\n<ul><li>Item</li></ul><p>&lt;img src="/x" id="probe" onerror="x()"&gt;<strong>bold</strong></p>',
+  );
+  assert.deepEqual(ui.window.editors.reparsed, []);
+  // The caret stays where the user was typing.
+  assert.equal(selection.anchorNode, typed);
+  assert.equal(selection.anchorOffset, 4);
+  // Text composed through an input method is left until it is committed.
+  const composing = ui.document.createTextNode('<b>');
+  editable.append(composing);
+  editable.dispatchEvent(new ui.window.InputEvent('input', { bubbles: true, isComposing: true }));
+  assert.equal(editable.lastChild, composing);
+});
+
+test('a caret between top-level nodes keeps its place when text is wrapped', async (t) => {
+  const ui = await loadUi('app.js', {
+    html: '<div class="rich-text-editor"><textarea id="notes" data-rich-text="1"></textarea></div>',
+    setup(window) {
+      window.editors = installWysi(window);
+    },
+  });
+  t.after(ui.close);
+  ui.api.initRichTextEditors(ui.document);
+  const [notes] = ui.window.editors;
+  const { editable } = notes;
+  editable.innerHTML = 'one<hr>two';
+  const selection = ui.window.getSelection();
+  // Between "one" and the rule, and at the end of the editor.
+  selection.setBaseAndExtent(editable, 1, editable, 3);
+
+  notes.input();
+
+  assert.equal(editable.innerHTML, '<p>one</p><hr><p>two</p>');
+  assert.deepEqual(
+    [selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset],
+    [editable, 1, editable, 3],
+  );
 });
 
 test('an editor built after the document loads still starts empty and is filled safely', async (t) => {

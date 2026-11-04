@@ -54,6 +54,19 @@ def scrub(value, secrets):
     return walk(value, 1)
 
 
+def skipped_message(skipped):
+    """The run message's account of records left out, or nothing."""
+    count = skipped["count"]
+    if not count:
+        return ""
+    reasons = "; ".join(
+        f"{item['reason']} ({item['count']})" for item in skipped["reasons"][:3]
+    )
+    noun = "record" if count == 1 else "records"
+    text = f" {count} {noun} skipped: {reasons}"
+    return text if text.endswith(".") else text + "."
+
+
 def queue_run(db, collector, preview=False):
     if is_paused(db, "api-ingesters"):
         raise ValueError(
@@ -133,7 +146,9 @@ def run_job(run_id):
         auth, credential = connection_auth(conn)
         run.message = "Fetching records and checking field mappings"
         db.commit()
-        records, cursor, pages = collect(d, conn.base_url, auth, c.cursor, run.preview)
+        records, cursor, pages, skipped = collect(
+            d, conn.base_url, auth, c.cursor, run.preview
+        )
         measure = (
             db.get(Measure, uuid.UUID(d.measure_id))
             if d.output == "measurement"
@@ -241,6 +256,7 @@ def run_job(run_id):
                 "processed": index + 1,
                 "records": len(records),
                 "pages": pages,
+                "skipped": skipped,
             }
             run.message = (
                 f"Storing evidence: {index + 1} of {len(records)} records processed."
@@ -251,6 +267,7 @@ def run_job(run_id):
             "pages": pages,
             "samples": samples,
             "records": len(records),
+            "skipped": skipped,
             "request": {
                 "method": d.method,
                 "path": d.path,
@@ -263,7 +280,7 @@ def run_job(run_id):
             "Preview only: no evidence stored."
             if run.preview
             else f"{run.new_records} new records; {run.duplicates} duplicates."
-        )
+        ) + skipped_message(skipped)
         if not run.preview:
             c.cursor, c.last_success, c.failures = cursor, utc_now_naive(), 0
         db.commit()

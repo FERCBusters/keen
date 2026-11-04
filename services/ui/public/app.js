@@ -533,8 +533,13 @@ export function richTextEditorValue(raw) {
   if (!value) return '';
   // HTML-like values reach editable.innerHTML in setRichTextEditorValue, so
   // they pass through the shared allowlist sanitiser first; plain text is
-  // escaped while it is wrapped and needs no extra pass.
-  return isRichTextHtmlLike(value) ? sanitizeRichTextHtml(value) : plainTextToRichTextHtml(value);
+  // escaped while it is wrapped and needs no extra pass. Top-level text then
+  // goes into paragraphs, which Wysi leaves as they are (see below).
+  if (!isRichTextHtmlLike(value)) return plainTextToRichTextHtml(value);
+  const template = document.createElement('template');
+  template.innerHTML = sanitizeRichTextHtml(value);
+  _wrapTopLevelText(template.content);
+  return template.innerHTML.trim();
 }
 
 export function renderRichTextContent(raw, emptyHtml = '<span class="small-muted">-</span>') {
@@ -602,10 +607,13 @@ export function refreshRichTextEditorStates(root = document) {
 
 // Wysi parses the content it is given unsafely: it wraps top-level text in
 // paragraphs by assigning the text as HTML, so escaped markup in a saved value
-// (or in pasted HTML) becomes live elements. Every editor therefore starts from
-// an empty textarea, receives its content only through setRichTextEditorValue
-// and the shared sanitiser, and has pasted HTML sanitised here before Wysi's
-// own paste handler can see it. This is the only place that starts Wysi.
+// (or in pasted HTML) becomes live elements. It does this to the content it is
+// given at the start, to pasted HTML, and to the editor's own content after
+// every edit. Every editor therefore starts from an empty textarea, receives
+// its content only through setRichTextEditorValue and the shared sanitiser,
+// has pasted HTML sanitised here before Wysi's own paste handler can see it,
+// and keeps all top-level text inside paragraphs: when content is loaded, and
+// before Wysi reads each edit. This is the only place that starts Wysi.
 //
 // Wysi builds its editor once the document has loaded, so a value set before
 // then waits in _pendingRichText, and the textarea stays empty until the
@@ -632,6 +640,94 @@ function _pasteIntoRichText(event) {
   else document.execCommand('insertText', false, data.getData('text/plain') || '');
 }
 
+// Top-level elements Wysi leaves in place, with the other containers a
+// paragraph cannot hold. Text and phrasing elements between them form runs
+// that Wysi would re-parse as HTML, so each run is moved into a paragraph.
+const _RICH_TEXT_CONTAINERS = new Set([
+  'BLOCKQUOTE',
+  'DIV',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'HR',
+  'LI',
+  'OL',
+  'P',
+  'PRE',
+  'TABLE',
+  'UL',
+]);
+
+function _inTopLevelRun(node) {
+  if (node.nodeType === Node.TEXT_NODE) return true;
+  return node.nodeType === Node.ELEMENT_NODE && !_RICH_TEXT_CONTAINERS.has(node.tagName);
+}
+
+// Moves each top-level run holding text or a phrasing element into a <p>,
+// as nodes: nothing is parsed, so escaped markup stays text. Runs of only
+// white space between blocks are left alone. Returns whether anything moved.
+function _wrapTopLevelText(root) {
+  const runs = [];
+  let run = [];
+  for (const node of Array.from(root.childNodes)) {
+    if (_inTopLevelRun(node)) {
+      run.push(node);
+      continue;
+    }
+    runs.push(run);
+    run = [];
+  }
+  runs.push(run);
+  let moved = false;
+  for (const nodes of runs) {
+    const visible = nodes.some(
+      (node) => node.nodeType === Node.ELEMENT_NODE || (node.textContent || '').trim(),
+    );
+    if (!visible) continue;
+    const paragraph = root.ownerDocument.createElement('p');
+    nodes[0].before(paragraph);
+    paragraph.append(...nodes);
+    moved = true;
+  }
+  return moved;
+}
+
+// A selection boundary as a node and offset that survive _wrapTopLevelText:
+// a boundary between the editable's children is held as the child after it.
+function _selectionPoint(editable, node, offset) {
+  if (node !== editable) return { node, offset };
+  return { after: editable.childNodes[offset] || null };
+}
+
+function _restoreSelectionPoint(editable, point) {
+  if (!('after' in point)) return [point.node, point.offset];
+  const after = point.after;
+  if (!after) return [editable, editable.childNodes.length];
+  const parent = after.parentNode;
+  return [parent, Array.prototype.indexOf.call(parent.childNodes, after)];
+}
+
+// Runs in the capturing phase at the document, before Wysi's bubbling input
+// listener reads the editor's content and re-parses its top-level text.
+function _keepRichTextInParagraphs(event) {
+  const editable = event.target?.closest?.('.rich-text-editor [contenteditable]');
+  if (!editable || event.isComposing) return;
+  const selection = editable.ownerDocument.getSelection?.();
+  const inside =
+    selection?.rangeCount && editable.contains(selection.anchorNode)
+      ? [
+          _selectionPoint(editable, selection.anchorNode, selection.anchorOffset),
+          _selectionPoint(editable, selection.focusNode, selection.focusOffset),
+        ]
+      : null;
+  if (!_wrapTopLevelText(editable) || !inside) return;
+  const [anchor, focus] = inside.map((point) => _restoreSelectionPoint(editable, point));
+  selection.setBaseAndExtent(...anchor, ...focus);
+}
+
 let _richTextPasteGuarded = false;
 
 export function initRichTextEditors(root = document, opts = {}) {
@@ -640,6 +736,8 @@ export function initRichTextEditors(root = document, opts = {}) {
     // Capturing at the document runs before Wysi's bubbling paste handler,
     // which stopping propagation here then skips.
     document.addEventListener('paste', _pasteIntoRichText, true);
+    // Likewise before Wysi's bubbling input handler re-parses each edit.
+    document.addEventListener('input', _keepRichTextInParagraphs, true);
     _richTextPasteGuarded = true;
   }
   const textareas = Array.from(root?.querySelectorAll?.('textarea[data-rich-text]') || []);

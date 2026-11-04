@@ -528,7 +528,7 @@ function previewResult(r) {
     details.append(summary, pre);
     node.append(details);
   }
-  if (r.status === 'succeeded' && !r.result?.samples?.length)
+  if (r.status === 'succeeded' && !r.result?.samples?.length && !r.result?.skipped?.count)
     node.insertAdjacentHTML(
       'beforeend',
       '<p>No records returned. Check the request, date range and records path.</p>',

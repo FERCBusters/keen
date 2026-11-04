@@ -5,6 +5,9 @@ transforms; collection pages through an API within request, time, size and
 origin limits. A recording fetch function stands in for the network.
 """
 
+import ast
+import inspect
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -146,7 +149,7 @@ def test_a_short_page_ends_page_based_collection():
     upstream = Upstream(records(1, 2), records(3))
     d = Definition(pagination={"mode": "page", "size": 2})
 
-    rows, watermark, pages = collect(
+    rows, watermark, pages, _ = collect(
         d, BASE, {}, cursor="2025-12-31T00:00:00+00:00", fetch=upstream
     )
 
@@ -200,7 +203,7 @@ def test_next_links_on_the_connection_origin_are_followed():
         pagination={"mode": "next_url"},
     )
 
-    rows, _, _ = collect(d, BASE, {}, fetch=upstream)
+    rows, _, _, _ = collect(d, BASE, {}, fetch=upstream)
 
     assert len(rows) == 2
     # The next URL replaces the original query string.
@@ -216,7 +219,7 @@ def test_link_headers_drive_link_pagination():
         (records(2), {}),
     )
 
-    rows, _, pages = collect(
+    rows, _, pages, _ = collect(
         Definition(pagination={"mode": "link"}), BASE, {}, fetch=upstream
     )
 
@@ -224,58 +227,350 @@ def test_link_headers_drive_link_pagination():
     assert upstream.calls[1]["url"] == BASE + "/v1/checks?cursor=b"
 
 
-@pytest.mark.parametrize(
-    "payload,options,message",
-    [
-        ({"items": {"id": 1}}, {"records_path": "/items"}, "must select a JSON array"),
-        (
-            records(
-                1, at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-            ),
+def test_a_page_that_is_not_a_list_of_records_stops_collection():
+    with pytest.raises(IntegrationError, match="must select a JSON array"):
+        collect(
+            Definition(records_path="/items"),
+            BASE,
             {},
-            "Record timestamp is in the future",
-        ),
-        (
-            [{"id": 1, "created_at": "yesterday", "title": "x"}],
-            {},
-            "invalid timestamp or field value",
-        ),
-        (
-            [
-                {
-                    "id": 1,
-                    "created_at": "2026-01-01T12:00:00Z",
-                    "title": "x",
-                    "_related": {},
-                }
-            ],
-            {"enrichments": [{"name": "detail", "path": "/checks/{/id}"}]},
-            "without a reserved _related key",
-        ),
-        (
-            [{"id": {"nested": 1}, "created_at": "2026-01-01T12:00:00Z", "title": "x"}],
-            {"enrichments": [{"name": "detail", "path": "/checks/{/id}"}]},
-            "missing/non-scalar field",
-        ),
-        # A mapping error keeps its own explanation.
-        (
-            [{"created_at": "2026-01-01T12:00:00Z", "title": "x"}],
-            {},
-            "Required field id is missing at /id",
-        ),
-    ],
-    ids=[
-        "records-object",
-        "future",
-        "unreadable-time",
-        "reserved-key",
-        "non-scalar",
+            fetch=Upstream({"items": {"id": 1}}),
+        )
+
+
+CURSOR = "2025-12-31T00:00:00+00:00"
+
+
+def future():
+    return (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+
+DETAIL = {"enrichments": [{"name": "detail", "path": "/checks/{/id}"}]}
+LINKED = {
+    "fields": {
+        "id": {"path": "/id"},
+        "timestamp": {"path": "/created_at"},
+        "summary": {"path": "/title"},
+        "url": {"path": "/link"},
+    }
+}
+RATED = {
+    "fields": {
+        "id": {"path": "/id"},
+        "timestamp": {"path": "/created_at"},
+        "summary": {"path": "/title"},
+        "severity": {"path": "/level", "transform": "number"},
+        "outcome": {"path": "/ok", "transform": "boolean"},
+    }
+}
+MEASURED = {
+    "output": "measurement",
+    "measure_id": "00000000-0000-0000-0000-000000000001",
+    "unit": "%",
+    "fields": {
+        "id": {"path": "/id"},
+        "timestamp": {"path": "/created_at"},
+        "summary": {"path": "/title"},
+        "value": {"path": "/value"},
+        "period_start": {"path": "/from"},
+        "period_end": {"path": "/to"},
+    },
+}
+GOOD = {"link": "https://ci.example/1", "level": 3, "ok": True}
+GOOD_MEASURE = {"value": 99.5, "from": "2026-01-01", "to": "2026-01-31"}
+
+# One record each refusal applies to, with the definition that reads it. Every
+# record-level refusal the engine can make appears here; the contract test
+# below fails when a new one does not.
+UNUSABLE = [
+    ("not-object", {}, "just text", "Each record must be a JSON object"),
+    (
         "missing-id",
-    ],
+        {},
+        {"created_at": "2026-01-01T12:00:00Z", "title": "x"},
+        "Required field id is missing at /id",
+    ),
+    (
+        "empty-id",
+        {},
+        {"id": "", "created_at": "2026-01-01T12:00:00Z", "title": "x"},
+        "Record identifier and summary must not be empty",
+    ),
+    (
+        "empty-summary",
+        {},
+        {"id": 2, "created_at": "2026-01-01T12:00:00Z", "title": ""},
+        "Record identifier and summary must not be empty",
+    ),
+    (
+        "unreadable-time",
+        {},
+        {"id": 2, "created_at": "yesterday", "title": "x"},
+        "invalid timestamp or field value",
+    ),
+    (
+        "naive-time",
+        {},
+        {"id": 2, "created_at": "2026-01-01T12:00:00", "title": "x"},
+        "Timestamp must include a timezone",
+    ),
+    (
+        "future",
+        {},
+        {"id": 2, "created_at": "FUTURE", "title": "x"},
+        "Record timestamp is in the future",
+    ),
+    (
+        "mailto-link",
+        LINKED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "link": "mailto:a@example.org",
+        },
+        "Source link must be HTTP or HTTPS",
+    ),
+    (
+        "script-link",
+        LINKED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "link": "javascript:alert(1)",
+        },
+        "Source link must be HTTP or HTTPS",
+    ),
+    (
+        "severity-range",
+        RATED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "level": 11,
+            "ok": 1,
+        },
+        "Severity must be between 0 and 10",
+    ),
+    (
+        "severity-infinite",
+        RATED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "level": "inf",
+            "ok": 1,
+        },
+        "Numeric fields must be finite",
+    ),
+    (
+        "not-boolean",
+        RATED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "level": 1,
+            "ok": "yes",
+        },
+        "outcome is not a boolean",
+    ),
+    (
+        "measure-infinite",
+        MEASURED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "value": "inf",
+            "from": "2026-01-01",
+            "to": "2026-01-31",
+        },
+        "Measurement must be finite",
+    ),
+    (
+        "measure-period",
+        MEASURED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "value": 1,
+            "from": "2026-02-01",
+            "to": "2026-01-31",
+        },
+        "Measurement period ends before it starts",
+    ),
+    (
+        "reserved-key",
+        DETAIL,
+        {"id": 2, "created_at": "2026-01-01T12:00:00Z", "title": "x", "_related": {}},
+        "without a reserved _related key",
+    ),
+    (
+        "non-scalar",
+        DETAIL,
+        {"id": {"nested": 1}, "created_at": "2026-01-01T12:00:00Z", "title": "x"},
+        "missing/non-scalar field",
+    ),
+    (
+        "dot-segment",
+        DETAIL,
+        {"id": "..", "created_at": "2026-01-01T12:00:00Z", "title": "x"},
+        r"forms a \. or \.\. path segment",
+    ),
+]
+
+
+def good_record(n, options):
+    extra = GOOD_MEASURE if options.get("output") == "measurement" else GOOD
+    return {
+        "id": n,
+        "created_at": "2026-01-01T12:00:00Z",
+        "title": f"Check {n}",
+        **extra,
+    }
+
+
+def unusable_record(record):
+    if isinstance(record, dict) and record.get("created_at") == "FUTURE":
+        return {**record, "created_at": future()}
+    return record
+
+
+@pytest.mark.parametrize(
+    "options,record,reason",
+    [case[1:] for case in UNUSABLE],
+    ids=[c[0] for c in UNUSABLE],
 )
-def test_unusable_pages_stop_collection(payload, options, message):
-    with pytest.raises(IntegrationError, match=message):
-        collect(Definition(**options), BASE, {}, fetch=Upstream(payload))
+def test_an_unusable_record_is_left_out_and_the_rest_collected(options, record, reason):
+    # One upstream record, such as a ticket with an empty title or a link that
+    # is not HTTP(S), must not stop the run or hold back the records around it.
+    upstream = Upstream(
+        [good_record(1, options), unusable_record(record), good_record(3, options)],
+        {"status": "ok"},
+    )
+
+    rows, watermark, _, skipped = collect(
+        Definition(**options), BASE, {}, cursor=CURSOR, fetch=upstream
+    )
+
+    assert [row["fields"]["id"] for row in rows] == ["1", "3"]
+    assert skipped["count"] == 1
+    [only] = skipped["reasons"]
+    assert only["count"] == 1 and re.search(reason, only["reason"])
+    # The cursor moves only past collected records.
+    assert watermark == "2026-01-01T12:00:00+00:00"
+    # A refused detail path is never requested.
+    assert all("/checks/.." not in call["url"] for call in upstream.calls)
+
+
+def _record_refusals():
+    """Patterns for every refusal raised while one record is prepared."""
+    tree = ast.parse(inspect.getsource(engine))
+    patterns = set()
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.FunctionDef) and node.name in {"normalize", "prepare"}
+        ):
+            continue
+        for raised in ast.walk(node):
+            if not (
+                isinstance(raised, ast.Raise)
+                and isinstance(raised.exc, ast.Call)
+                and getattr(raised.exc.func, "id", "")
+                in {"IntegrationError", "UnusableRecord"}
+                and raised.exc.args
+            ):
+                continue
+            message = raised.exc.args[0]
+            if isinstance(message, ast.Constant):
+                patterns.add(re.escape(message.value))
+            elif isinstance(message, ast.JoinedStr):
+                patterns.add(
+                    "".join(
+                        re.escape(part.value)
+                        if isinstance(part, ast.Constant)
+                        else ".+"
+                        for part in message.values
+                    )
+                )
+    # These bound the whole run, so they end it rather than skip a record.
+    return patterns - {
+        re.escape("Detail requests exceeded the request/time budget"),
+        re.escape("Run responses exceeded 16 MiB"),
+    }
+
+
+def _uncovered(cases):
+    reasons = set()
+    for _, options, record, _ in cases:
+        _, _, _, skipped = collect(
+            Definition(**options),
+            BASE,
+            {},
+            fetch=Upstream([unusable_record(record)], {"status": "ok"}),
+        )
+        reasons |= {item["reason"] for item in skipped["reasons"]}
+    return {
+        pattern
+        for pattern in _record_refusals()
+        if not any(re.fullmatch(pattern, reason) for reason in reasons)
+    }
+
+
+def test_every_record_refusal_is_a_skip_with_a_case():
+    # A record-level refusal added to the engine must skip its record and be
+    # exercised here; otherwise it could stop runs as one unusable record did.
+    assert _record_refusals()
+    assert _uncovered(UNUSABLE) == set()
+    # The check notices a refusal no case reaches.
+    without_links = [case for case in UNUSABLE if not case[0].endswith("link")]
+    assert _uncovered(without_links) == {re.escape("Source link must be HTTP or HTTPS")}
+
+
+def test_budget_and_size_limits_still_end_the_run():
+    # Limits that bound the whole run are not record problems.
+    with pytest.raises(IntegrationError, match="Record limit reached"):
+        collect(Definition(max_records=1), BASE, {}, fetch=Upstream(records(1, 2)))
+
+
+def test_a_future_record_is_collected_once_its_time_arrives(monkeypatch):
+    soon = datetime.now(timezone.utc) + timedelta(hours=1)
+    upstream = Upstream(
+        [
+            {"id": 1, "created_at": "2026-01-01T12:00:00Z", "title": "Past"},
+            {"id": 2, "created_at": soon.isoformat(), "title": "Later"},
+        ]
+    )
+    rows, watermark, _, skipped = collect(
+        Definition(), BASE, {}, cursor=CURSOR, fetch=upstream
+    )
+    assert [r["fields"]["id"] for r in rows] == ["1"] and skipped["count"] == 1
+    assert watermark == "2026-01-01T12:00:00+00:00"
+
+    # The cursor stayed before it, so the next run reads it again.
+    real = engine.datetime
+
+    class Later(real):
+        @classmethod
+        def now(cls, tz=None):
+            return real.now(tz) + timedelta(hours=2)
+
+    monkeypatch.setattr(engine, "datetime", Later)
+    rows, _, _, skipped = collect(
+        Definition(), BASE, {}, cursor=watermark, fetch=upstream
+    )
+    assert [r["fields"]["id"] for r in rows] == ["1", "2"] and skipped["count"] == 0
+
+
+def test_the_skipped_summary_is_bounded_and_ordered():
+    reasons = {f"reason {n}": n for n in range(1, 9)}
+    summary = engine.skipped_summary(reasons)
+    assert summary["count"] == sum(range(1, 9))
+    assert [r["count"] for r in summary["reasons"]] == [8, 7, 6, 5, 4]
 
 
 def test_requests_are_bounded_per_run_including_detail_requests():
@@ -315,10 +610,12 @@ def test_upstream_values_cannot_steer_detail_requests_out_of_the_base_path(value
         enrichments=[{"name": "detail", "path": "/checks/{/id}/detail"}],
     )
 
-    with pytest.raises(IntegrationError, match=r"forms a \. or \.\. path segment"):
-        collect(
-            d, BASE + "/tenant-a", {"kind": "bearer", "secret": "s"}, fetch=upstream
-        )
+    rows, _, _, skipped = collect(
+        d, BASE + "/tenant-a", {"kind": "bearer", "secret": "s"}, fetch=upstream
+    )
+
+    assert rows == [] and skipped["count"] == 1
+    assert "path segment" in skipped["reasons"][0]["reason"]
     assert [call["url"] for call in upstream.calls] == [BASE + "/tenant-a/checks"]
 
 

@@ -9,9 +9,17 @@ from urllib.parse import quote, urljoin, urlsplit
 
 from app.security.regex import scan_pattern
 
-from .errors import IntegrationError
+from .errors import IntegrationError, UnusableRecord
 from .schema import Definition, has_dot_segment, pointer
 from .transport import request
+
+INVALID_VALUE = (
+    "A record has an invalid timestamp or field value. "
+    "Check mappings with a sample response."
+)
+# The skipped-record summary names at most this many distinct reasons.
+SKIPPED_REASONS = 5
+_DETAIL_FIELD = scan_pattern(r"\{([^}]+)\}")
 
 
 def timestamp(value):
@@ -86,7 +94,29 @@ def normalize(record, definition):
     return fields
 
 
+def skipped_summary(reasons):
+    """The records a run left out: how many, and the commonest reasons."""
+    ordered = sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
+    return {
+        "count": sum(reasons.values()),
+        "reasons": [
+            {"reason": reason, "count": count}
+            for reason, count in ordered[:SKIPPED_REASONS]
+        ],
+    }
+
+
 def collect(definition, base_url, auth, cursor=None, preview=False, fetch=request):
+    """Collect a definition's records, leaving out any record it cannot use.
+
+    One upstream record must not stop a run: a record whose values the
+    definition cannot use (a missing or empty field, an unreadable or future
+    timestamp, a link that is not HTTP(S), a detail path its values would
+    steer) is counted under its reason and the run continues. The cursor moves
+    only past records collected, so a future-dated record is read again once
+    its time arrives. Request, time, size and pagination limits, and upstream
+    failures, still end the run.
+    """
     d = (
         definition
         if isinstance(definition, Definition)
@@ -109,9 +139,58 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
         raise IntegrationError("Body pagination requires POST and a JSON body")
     number, seen = p.start, set()
     records, pages, watermark = [], 0, initial
+    skipped: dict[str, int] = {}
     total_bytes = 0
     requests = 0
     complete = False
+
+    def prepare(item):
+        """The record's fields and enriched copy, or UnusableRecord."""
+        nonlocal requests, total_bytes
+        if d.enrichments:
+            if not isinstance(item, dict) or "_related" in item:
+                raise UnusableRecord(
+                    "Detail enrichment requires objects without a reserved _related key"
+                )
+            item = dict(item)
+            item["_related"] = {}
+            for detail in d.enrichments:
+                if requests >= 100 or time.monotonic() - start > 110:
+                    raise IntegrationError(
+                        "Detail requests exceeded the request/time budget"
+                    )
+
+                def substitute(match):
+                    value = pointer(item, match.group(1))
+                    if value is None or isinstance(value, (dict, list)):
+                        raise UnusableRecord(
+                            "Detail path references a missing/non-scalar field"
+                        )
+                    return quote(str(value), safe="")
+
+                path = _DETAIL_FIELD.sub(substitute, detail.path)
+                if has_dot_segment(path):
+                    raise UnusableRecord(
+                        "A detail request value forms a . or .. path segment"
+                    )
+                related, _ = fetch(base_url.rstrip("/") + path, auth=auth, timeout=20)
+                requests += 1
+                total_bytes += len(json.dumps(related).encode())
+                if total_bytes > 16 * 1024 * 1024:
+                    raise IntegrationError("Run responses exceeded 16 MiB")
+                item["_related"][detail.name] = related
+        try:
+            fields = normalize(item, d)
+        except IntegrationError as refused:
+            # Everything normalize refuses concerns this record's values.
+            raise UnusableRecord(str(refused)) from None
+        except (ValueError, TypeError, OverflowError):
+            raise UnusableRecord(INVALID_VALUE) from None
+        ts = timestamp(fields["timestamp"])
+        if ts > datetime.now(timezone.utc) + timedelta(minutes=5):
+            raise UnusableRecord("Record timestamp is in the future")
+        return fields, item, ts
+
     while pages < (1 if preview else d.max_pages):
         if requests >= 100:
             raise IntegrationError("Run exceeded 100 requests; narrow the query")
@@ -151,51 +230,11 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
                 raise IntegrationError(
                     "Record limit reached; narrow the query or raise the bounded limit"
                 )
-            if d.enrichments:
-                if not isinstance(item, dict) or "_related" in item:
-                    raise IntegrationError(
-                        "Detail enrichment requires objects without a reserved _related key"
-                    )
-                item = dict(item)
-                item["_related"] = {}
-                for detail in d.enrichments:
-                    if requests >= 100 or time.monotonic() - start > 110:
-                        raise IntegrationError(
-                            "Detail requests exceeded the request/time budget"
-                        )
-
-                    def substitute(match):
-                        value = pointer(item, match.group(1))
-                        if value is None or isinstance(value, (dict, list)):
-                            raise IntegrationError(
-                                "Detail path references a missing/non-scalar field"
-                            )
-                        return quote(str(value), safe="")
-
-                    path = scan_pattern(r"\{([^}]+)\}").sub(substitute, detail.path)
-                    if has_dot_segment(path):
-                        raise IntegrationError(
-                            "A detail request value forms a . or .. path segment"
-                        )
-                    related, _ = fetch(
-                        base_url.rstrip("/") + path, auth=auth, timeout=20
-                    )
-                    requests += 1
-                    total_bytes += len(json.dumps(related).encode())
-                    if total_bytes > 16 * 1024 * 1024:
-                        raise IntegrationError("Run responses exceeded 16 MiB")
-                    item["_related"][detail.name] = related
             try:
-                fields = normalize(item, d)
-            except IntegrationError:
-                raise
-            except (ValueError, TypeError, OverflowError):
-                raise IntegrationError(
-                    "A record has an invalid timestamp or field value. Check mappings with a sample response."
-                )
-            ts = timestamp(fields["timestamp"])
-            if ts > datetime.now(timezone.utc) + timedelta(minutes=5):
-                raise IntegrationError("Record timestamp is in the future")
+                fields, item, ts = prepare(item)
+            except UnusableRecord as refused:
+                skipped[str(refused)] = skipped.get(str(refused), 0) + 1
+                continue
             watermark = max(watermark, ts)
             records.append({"fields": fields, "record": item})
         if preview or p.mode == "none" or not items:
@@ -231,7 +270,7 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
         raise IntegrationError(
             "Page limit reached; cursor was not advanced. Narrow the query or raise the bounded limit"
         )
-    return records, watermark.isoformat(), pages
+    return records, watermark.isoformat(), pages, skipped_summary(skipped)
 
 
 def next_link(headers) -> str | None:
