@@ -421,7 +421,7 @@ The request audit trail omits reads of the public status, sign-in methods and ag
 
 These controls address individual-request resource abuse; deployment-level connection limits, quotas, worker capacity, monitoring and network rate limiting are needed for sustained or distributed traffic. Expensive reports, broad collection jobs and large authorised datasets consume resources. PDF resource limits reduce parser exposure; maintain the native parser and isolate the application processes. Keen does not claim complete protection against denial of service, dependency defects or every memory/resource leak.
 
-A Keen installation serves one organisation, and its signed-in accounts are that organisation's staff. The bounds above keep any one request from monopolising an API process, but a signed-in account can still load the API by sending many requests, as a machine credential can within its allowances. Keen does not rate-limit ordinary authenticated use; sustained load from a signed-in account is an operational matter for administrators, who can deactivate the account.
+A Keen installation serves one organisation, and its signed-in accounts are that organisation's staff, contractors or trusted external auditors. The bounds above keep any one request from monopolising an API process, but a signed-in account can still load the API by sending many requests, as a machine credential can within its allowances. Keen does not rate-limit ordinary authenticated use; sustained load from a signed-in account is an operational matter for administrators, who can deactivate the account.
 
 ## Evidence storage and integrity
 
