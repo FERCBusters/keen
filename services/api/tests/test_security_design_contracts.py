@@ -436,7 +436,7 @@ def test_oauth_client_closed_on_failed_exchange(monkeypatch):
     with pytest.raises(RuntimeError):
         asyncio.run(
             oidc._handle_oidc_callback(
-                request(), None, provider, SimpleNamespace(code_verifier="proof")
+                "code", None, provider, SimpleNamespace(code_verifier="proof")
             )
         )
     client.aclose.assert_awaited_once()

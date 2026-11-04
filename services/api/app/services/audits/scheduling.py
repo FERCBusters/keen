@@ -23,7 +23,6 @@ from app.services.audits.scope import set_audit_scope
 from app.services.audits.serializers import attendee_dict, audit_summary, usernames
 from app.services.audits.validation import (
     clean_audit_type,
-    clean_email,
     clean_framework,
     clean_rich_text,
     validate_dates,
@@ -41,7 +40,7 @@ from app.services.schedules import (
     revise_schedule,
     schedule_start_for_rule,
 )
-from app.services.text import clean_text
+from app.services.text import clean_email, clean_text
 
 
 def schedule_summary(

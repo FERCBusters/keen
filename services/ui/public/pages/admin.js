@@ -214,19 +214,35 @@ const TAB_HASH_TO_ID = {
   '#diary': 'tab-diary',
   '#remap': 'tab-remap',
   '#audit': 'tab-audit',
+  '#audit-requests': 'tab-audit',
+};
+// Views inside a tab that a hash can open, with the hash each view keeps.
+const SUBTAB_HASH_TO_ID = {
+  '#audit': 'audit-changelog-tab',
+  '#audit-requests': 'audit-requests-tab',
 };
 
 function activateTabFromHash() {
-  const tabId = TAB_HASH_TO_ID[(location.hash || '').toLowerCase()];
-  if (!tabId) return;
-  const el = document.getElementById(tabId);
-  if (!el || !window.bootstrap?.Tab) return;
-  try {
-    window.bootstrap.Tab.getOrCreateInstance(el).show();
-  } catch {
-    // ignore
+  const hash = (location.hash || '').toLowerCase();
+  const tabId = TAB_HASH_TO_ID[hash];
+  if (!tabId || !window.bootstrap?.Tab) return;
+  for (const id of [tabId, SUBTAB_HASH_TO_ID[hash]]) {
+    const el = id && document.getElementById(id);
+    if (!el) continue;
+    try {
+      window.bootstrap.Tab.getOrCreateInstance(el).show();
+    } catch {
+      // ignore
+    }
   }
 }
+
+document.querySelectorAll('#auditTrailTabs button[data-bs-toggle="tab"]').forEach((btn) => {
+  btn.addEventListener('shown.bs.tab', (ev) => {
+    const entry = Object.entries(SUBTAB_HASH_TO_ID).find(([, v]) => v === ev.target?.id);
+    if (entry && location.hash !== entry[0]) history.replaceState(null, '', entry[0]);
+  });
+});
 
 // Update URL hash when the user switches tabs.
 document.querySelectorAll('#adminTabs button[data-bs-toggle="tab"]').forEach((btn) => {

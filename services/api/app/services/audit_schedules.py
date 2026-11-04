@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
+from app.core.email_address import single_mailbox
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -29,7 +30,6 @@ from app.db.models import (
 )
 from app.services import inbox
 from app.services.mailer import (
-    looks_like_email,
     send_audit_reminder_email,
     send_scheduled_audit_created_email,
     smtp_configured,
@@ -58,10 +58,9 @@ def _attendee_notification_email(db: Session, attendee: AuditAttendee) -> str | 
     user = db.get(User, account_id) if account_id else None
     if user is not None and not user.is_active:
         return None
-    email = str(attendee.email or "").strip()
-    if looks_like_email(email):
-        return email
-    return user_email(user) if user is not None else None
+    return single_mailbox(attendee.email) or (
+        user_email(user) if user is not None else None
+    )
 
 
 def _audit_url(audit_id: uuid.UUID) -> str:

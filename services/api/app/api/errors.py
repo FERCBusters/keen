@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from sqlalchemy.exc import DataError
 
+from app.api.forms import parse_form
 from app.security.json_shape import MAX_DEPTH, json_depth
 from app.security.redaction import storable
 from app.security.request_limits import json_body_limit, json_value_limit
@@ -125,8 +126,10 @@ class DomainRoute(APIRoute):
         handler = super().get_route_handler()
 
         async def handle(request):
-            # Parsed only when a handler reads the body, after earlier checks.
+            # Parsed only when a handler reads the body, after earlier checks,
+            # and in a worker thread, whether the handler or FastAPI reads it.
             request.json = partial(_strict_json, request)
+            request.form = partial(parse_form, request)
             try:
                 return await handler(request)
             except DomainError as error:

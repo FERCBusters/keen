@@ -9,8 +9,9 @@ These scripts keep a staging Keen installation in a known golden state, run
 - `run-security-tests` runs on the machine that runs the suite. It restores the
   host over SSH, runs the suite, saves the service logs and tears the host down.
 - `staging.env.example` is the configuration template for the host.
-- `docker-compose.staging.yml` pins the Docker network so Keen trusts exactly
-  its own proxy hops.
+- `docker-compose.staging.yml` sizes the internal worker for a small host; the
+  base Compose file already pins the network so Keen trusts exactly its own
+  proxy hops.
 - `golden_extras.py` adds stored evidence files (text, JSON, PDF, HTML and CSV)
   to the golden data.
 - `nginx-site.example` and `Caddyfile.example` are TLS fronts for the host.

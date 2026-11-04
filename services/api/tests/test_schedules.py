@@ -287,18 +287,19 @@ def test_schedule_dates_use_the_configured_timezone(monkeypatch):
 @pytest.mark.parametrize(
     "value,expected",
     [
-        ("auditor@example.test", True),
-        ("  auditor@example.test ", True),
-        ("@example.test", False),
-        ("auditor@", False),
-        ("auditor", False),
-        ("", False),
-        (None, False),
-        ("a@" + "x" * 300, False),
+        ("auditor@example.test", "auditor@example.test"),
+        ("  auditor@example.test ", "auditor@example.test"),
+        ("@example.test", None),
+        ("auditor@", None),
+        ("auditor", None),
+        ("", None),
+        (None, None),
+        ("a@" + "x" * 300, None),
+        ("auditor@example.test, other@example.test", None),
     ],
 )
 def test_notification_addresses_are_sanity_checked(value, expected):
-    assert mailer.looks_like_email(value) is expected
+    assert mailer.user_email(SimpleNamespace(email=value, username="")) == expected
 
 
 def refused(call, *args, **kwargs):

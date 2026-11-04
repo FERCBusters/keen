@@ -699,10 +699,9 @@ def test_public_reads_leave_no_audit_records(keen):
     assert audited(keen, path="/v1/events", client_ip="203.0.113.5") == 1
 
 
-def test_unauthenticated_refusals_are_audited_sixty_a_minute_per_address(
-    keen, monkeypatch
-):
+def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeypatch):
     from app import main
+    from app.ingest import webhooks
 
     first, second = client_from("203.0.113.7"), client_from("203.0.113.8")
     for _ in range(30):
@@ -734,10 +733,73 @@ def test_unauthenticated_refusals_are_audited_sixty_a_minute_per_address(
         assert signed_in.get("/v1/users").status_code == 403
     assert audited(keen, path="/v1/users", username=member.username) == 3
 
-    # An unauthenticated request that succeeds is recorded whatever the count.
+    # Public routes that succeed without any credential draw on the same
+    # allowance, so signing out from a spent address adds no records.
     for _ in range(3):
         assert first.post("/v1/auth/logout", headers={"Origin": BASE}).status_code < 400
-    assert audited(keen, path="/v1/auth/logout", client_ip="203.0.113.7") == 3
+        assert (
+            first.post("/v1/auth/mfa/cancel", headers={"Origin": BASE}).status_code
+            < 400
+        )
+        assert first.get("/v1/auth/logout", follow_redirects=False).status_code == 303
+    assert audited(keen, path="/v1/auth/logout", client_ip="203.0.113.7") == 0
+    assert audited(keen, path="/v1/auth/mfa/cancel", client_ip="203.0.113.7") == 0
+    fresh = client_from("203.0.113.10")
+    assert fresh.get("/v1/auth/logout", follow_redirects=False).status_code == 303
+    assert audited(keen, path="/v1/auth/logout", client_ip="203.0.113.10") == 1
+
+    # A delivery whose secret verified names its credential, and a request
+    # carrying a verified machine credential is recorded whatever the count.
+    from app.api.context import machine_credential
+    from starlette.requests import Request as StarletteRequest
+
+    monkeypatch.setenv("SYNTHETIC_WEBHOOK_SECRET", "synthetic-webhook-secret")
+    monkeypatch.setattr(
+        webhooks,
+        "load_webhook_policies",
+        lambda path: {
+            "providers": {
+                "synthetic": {
+                    "secret_header": "X-Synthetic-Secret",
+                    "secret_env": "SYNTHETIC_WEBHOOK_SECRET",
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(
+        webhooks,
+        "store_event_with_artifact",
+        lambda db, **kw: {"ok": True, "event_id": str(uuid.uuid4())},
+    )
+    credentials = []
+    record = main._record_request
+    monkeypatch.setattr(
+        main,
+        "_record_request",
+        lambda request, *args: credentials.append(machine_credential(request)),
+    )
+    delivery = {"X-Synthetic-Secret": "synthetic-webhook-secret"}
+    assert (
+        first.post("/v1/webhooks/synthetic/a", json={}, headers=delivery).status_code
+        == 200
+    )
+    assert first.post("/v1/webhooks/synthetic/a", json={1: 2}).status_code == 403
+    assert credentials == ["webhook:env:webhooks", None]
+    for _ in range(3):
+        request = StarletteRequest(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/v1/webhooks/synthetic/a",
+                "query_string": b"",
+                "headers": [],
+                "client": ("203.0.113.7", 50000),
+                "state": {"machine_credential": "webhook:env:webhooks"},
+            }
+        )
+        record(request, "/v1/webhooks/synthetic/a", 200, 1)
+    assert audited(keen, path="/v1/webhooks/synthetic/a", client_ip="203.0.113.7") == 3
+    monkeypatch.setattr(main, "_record_request", record)
 
     # Without Valkey the refusals cannot be counted, so they are not recorded.
     broken = Mock()

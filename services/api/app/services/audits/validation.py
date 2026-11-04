@@ -92,17 +92,6 @@ def clean_audit_type(raw: str | None, *, default: str = "internal") -> str:
     return v
 
 
-def clean_email(raw: str | None, *, label: str = "email") -> str | None:
-    v = (raw or "").strip()
-    if not v:
-        return None
-    if len(v) > 256 or "@" not in v or v.startswith("@") or v.endswith("@"):
-        raise DomainError(status_code=400, detail=f"Invalid {label}")
-    if any(ord(c) < 32 or ord(c) == 127 for c in v):
-        raise DomainError(status_code=400, detail=f"Invalid {label}")
-    return v
-
-
 def audit_status_value(audit: Audit | None) -> str:
     return str(getattr(audit, "status", None) or "open").strip().lower()
 

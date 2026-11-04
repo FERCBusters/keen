@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.api.context import change_context
+from app.api.context import change_context, mark_machine_credential
 from app.api.routing import Router
 from app.core.valkey import get_valkey
 from app.db.session import get_db
@@ -75,7 +75,9 @@ async def isms_effectiveness_metric_webhook(
     # first; all of the work runs in the thread pool, off the event loop.
     await run_in_threadpool(_require_webhook_enabled)
     body = await request.body()
-    return await run_in_threadpool(_submit_metric, metric_key, request, db, body)
+    result = await run_in_threadpool(_submit_metric, metric_key, request, db, body)
+    mark_machine_credential(request, "measure")
+    return result
 
 
 def _submit_metric(metric_key: str, request: Request, db: Session, body: bytes):
@@ -102,6 +104,7 @@ async def webhook_ingest(
     # The secret is checked before the handler reads the body; all of the
     # work runs in the thread pool, off the event loop.
     connection = await run_in_threadpool(_admit, provider, request, db, connection_id)
+    mark_machine_credential(request, "webhook:" + connection.id)
     body = await request.body()
     return await run_in_threadpool(
         _ingest, provider, event_type, request, db, connection, body

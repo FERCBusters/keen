@@ -37,16 +37,6 @@ def callback(monkeypatch, signing_key):
     row = SimpleNamespace(
         nonce="browser-nonce", code_verifier="pkce-secret", next_url="/controls.html"
     )
-    request = Request(
-        {
-            "type": "http",
-            "scheme": "https",
-            "server": ("keen.example", 443),
-            "path": "/api/v1/oidc/callback",
-            "query_string": b"code=code&state=state",
-            "headers": [],
-        }
-    )
     now = int(time.time())
     claims = {
         "iss": provider.issuer,
@@ -98,12 +88,14 @@ def callback(monkeypatch, signing_key):
         )
         fetch.return_value = {"id_token": encoded, "access_token": "access-token"}
         result = asyncio.run(
-            oidc._handle_oidc_callback(
-                request, None, selected_provider or provider, row
-            )
+            oidc._handle_oidc_callback("code", None, selected_provider or provider, row)
         )
         assert result == (user, "/controls.html", encoded)
         assert fetch.call_args.kwargs["code_verifier"] == "pkce-secret"
+        # Only the code reaches the exchange, never the callback URL.
+        assert fetch.call_args.kwargs["code"] == "code"
+        assert fetch.call_args.kwargs["grant_type"] == "authorization_code"
+        assert "authorization_response" not in fetch.call_args.kwargs
         return result
 
     return SimpleNamespace(
@@ -311,3 +303,44 @@ def test_claim_types_are_not_coerced_into_identities(callback, change):
     with pytest.raises(JoseError):
         callback.run(change)
     callback.provision.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        b"state=s",
+        b"code=&state=s",
+        b"code=a&code=b&state=s",
+        b"code=" + b"x" * 2049,
+        b"code=a%0Ab",
+        b"error=access_denied&state=s",
+    ],
+)
+def test_callback_needs_exactly_one_usable_code(query):
+    request = Request(
+        {
+            "type": "http",
+            "scheme": "https",
+            "server": ("keen.example", 443),
+            "path": "/v1/auth/oidc/callback",
+            "query_string": query,
+            "headers": [],
+        }
+    )
+    with pytest.raises(Exception) as error:
+        oidc._authorization_code(request)
+    assert error.value.status_code == 400
+
+
+def test_callback_code_is_read_from_the_query_alone():
+    request = Request(
+        {
+            "type": "http",
+            "scheme": "https",
+            "server": ("keen.example", 443),
+            "path": "/v1/auth/oidc/callback",
+            "query_string": b"state=s&code=auth-code",
+            "headers": [],
+        }
+    )
+    assert oidc._authorization_code(request) == "auth-code"

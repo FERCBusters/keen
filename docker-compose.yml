@@ -56,6 +56,12 @@ services:
       retries: 30
       start_period: 60s
     env_file: .env
+    environment:
+      # Client addresses for sign-in and other per-address limits come through
+      # two forwarding hops: the keen-ui nginx container, and the network
+      # gateway, where connections to the host's published port arrive (such
+      # as from a TLS proxy on the host). Set the variable to override.
+      KEEN_SECURITY_TRUSTED_PROXY_CIDRS: ${KEEN_SECURITY_TRUSTED_PROXY_CIDRS:-${KEEN_UI_ADDRESS:-172.30.65.10}/32,${KEEN_NETWORK_GATEWAY:-172.30.65.1}/32}
     depends_on:
       postgres:
         condition: service_healthy
@@ -163,7 +169,9 @@ services:
       - keen-api
     ports:
       - "127.0.0.1:8081:80"
-    networks: [keen]
+    networks:
+      keen:
+        ipv4_address: ${KEEN_UI_ADDRESS:-172.30.65.10}
     restart: unless-stopped
 
 volumes:
@@ -171,6 +179,13 @@ volumes:
   beatdata:
   artifacts:
 
+# A fixed subnet gives the keen-ui proxy and the gateway known addresses for
+# KEEN_SECURITY_TRUSTED_PROXY_CIDRS. Where it clashes with another network on
+# the host, set KEEN_NETWORK_SUBNET, KEEN_NETWORK_GATEWAY and KEEN_UI_ADDRESS.
 networks:
   keen:
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${KEEN_NETWORK_SUBNET:-172.30.65.0/24}
+          gateway: ${KEEN_NETWORK_GATEWAY:-172.30.65.1}

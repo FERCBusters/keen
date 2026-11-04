@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+from app.core.email_address import single_mailbox
 from app.core.references import try_uuid
 from app.services.errors import DomainError
 
@@ -29,6 +30,25 @@ def clean_text(
     if len(value) > max_len:
         raise DomainError(status_code=400, detail=f"{label} is too long")
     return value
+
+
+def clean_email(
+    raw: str | None, *, label: str = "email address", required: bool = False
+) -> str | None:
+    """Return ``raw`` as exactly one email address, or None when it is blank.
+
+    Recipient fields reach SMTP headers, where a list, display name or comment
+    would add recipients, so every stored address is one mailbox
+    (app.core.email_address.single_mailbox).
+    """
+    if not (raw or "").strip():
+        if required:
+            raise DomainError(status_code=400, detail=f"{label} is required")
+        return None
+    email = single_mailbox(raw)
+    if email is None:
+        raise DomainError(status_code=400, detail=f"Invalid {label}")
+    return email
 
 
 def split_filter_values(value: str | None) -> list[str]:

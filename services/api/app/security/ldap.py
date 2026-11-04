@@ -14,6 +14,7 @@ from ldap3.utils.dn import parse_dn
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
+from app.core.email_address import single_mailbox
 from app.core.valkey import get_valkey
 from app.db.models import User, UserIdentity
 from app.security.rate_limit import fixed_window_allow
@@ -161,9 +162,7 @@ def directory_identity(username, password):
             "issuer": issuer,
             "subject": subject,
             "username": uid,
-            "email": email
-            if isinstance(email, str) and len(email) <= 256 and "@" in email
-            else None,
+            "email": single_mailbox(email) if isinstance(email, str) else None,
         }
     except (LDAPException, ValueError, OSError):
         # Library exceptions may contain DNs or server diagnostics; keep them out of responses.

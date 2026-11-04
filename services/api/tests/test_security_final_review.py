@@ -267,7 +267,7 @@ def test_sso_provider_error_cannot_escape_as_traceback(monkeypatch):
             "scheme": "https",
             "server": ("keen.example", 443),
             "path": "/v1/auth/sso/oidc/callback",
-            "query_string": ("state=" + state).encode(),
+            "query_string": ("code=c&state=" + state).encode(),
             "headers": [
                 (b"cookie", (oidc.sso_binding_cookie() + "=" + secret).encode())
             ],

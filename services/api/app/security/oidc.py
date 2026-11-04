@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
+from app.core.email_address import single_mailbox
 from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
 from app.security.sso_http import client_options
 
@@ -481,10 +482,8 @@ def _allowed_by_domain(provider: SsoProvider, claims: dict[str, Any]) -> bool:
 
 
 def _claim_email(claims: dict[str, Any]) -> str | None:
-    email = str(claims.get("email") or "").strip().lower()
-    if not email or "@" not in email:
-        return None
-    return email
+    email = single_mailbox(claims.get("email"))
+    return email.lower() if email else None
 
 
 def _email_is_verified(provider: SsoProvider, claims: dict[str, Any]) -> bool:
@@ -727,14 +726,15 @@ async def _fetch_github_claims(
 
 
 async def _handle_github_callback(
-    request: Request, db: Session, provider: SsoProvider, row: OidcLoginState
+    code: str, db: Session, provider: SsoProvider, row: OidcLoginState
 ) -> tuple[User, str | None, str | None]:
     redirect_uri = provider.redirect_uri
     client = _new_client(provider, redirect_uri=redirect_uri)
     try:
         token = await client.fetch_token(
             provider.token_endpoint,
-            authorization_response=str(request.url),
+            grant_type="authorization_code",
+            code=code,
             redirect_uri=redirect_uri,
             code_verifier=row.code_verifier,
         )
@@ -755,7 +755,7 @@ async def _handle_github_callback(
 
 
 async def _handle_oidc_callback(
-    request: Request, db: Session, provider: SsoProvider, row: OidcLoginState
+    code: str, db: Session, provider: SsoProvider, row: OidcLoginState
 ) -> tuple[User, str | None, str | None]:
     redirect_uri = provider.redirect_uri
     client = _new_client(provider, redirect_uri=redirect_uri)
@@ -763,7 +763,8 @@ async def _handle_oidc_callback(
     try:
         token = await client.fetch_token(
             provider.token_endpoint,
-            authorization_response=str(request.url),
+            grant_type="authorization_code",
+            code=code,
             redirect_uri=redirect_uri,
             code_verifier=row.code_verifier,
         )
@@ -859,6 +860,23 @@ async def _handle_oidc_callback(
     return user, next_url, str(id_token)
 
 
+def _authorization_code(request: Request) -> str:
+    """The callback's single authorisation code.
+
+    Only the code reaches the token exchange: given the whole request URL,
+    authlib takes tokens from a fragment without calling the token endpoint,
+    and assumes a client-credentials grant when the code is missing.
+    """
+    codes = request.query_params.getlist("code")
+    code = codes[0].strip() if len(codes) == 1 else ""
+    if not code or len(code) > 2048 or not code.isascii() or not code.isprintable():
+        raise HTTPException(
+            status_code=400,
+            detail="SSO verification failed; start sign-in again or contact an administrator",
+        )
+    return code
+
+
 async def handle_callback(
     request: Request, db: Session, provider_key: str | None = None
 ) -> tuple[User, str | None, str | None, SsoProvider]:
@@ -881,15 +899,16 @@ async def handle_callback(
         raise HTTPException(status_code=400, detail="SSO state missing or expired")
     # From here the callback completes or refuses a sign-in this browser began.
     request.state.sso_provider = provider.key
+    code = _authorization_code(request)
 
     try:
         if provider.kind == "github":
             user, next_url, id_token = await _handle_github_callback(
-                request, db, provider, row
+                code, db, provider, row
             )
         else:
             user, next_url, id_token = await _handle_oidc_callback(
-                request, db, provider, row
+                code, db, provider, row
             )
     except (
         JoseError,

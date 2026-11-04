@@ -73,6 +73,29 @@ def test_signatures_must_be_complete_and_name_the_manifests_key():
     )
 
 
+def test_another_agents_signed_batch_is_refused_from_any_other_identity():
+    """A token collector cannot pass off a key agent's batch as its own verified one."""
+    key = SimpleNamespace(agent_id=PRODUCER, public_key=b"", state="active")
+    db = SimpleNamespace(get=lambda model, ident: key if ident == KEY_ID else None)
+    resource = UeuResource(
+        {
+            "ueu.producer.instance_id": PRODUCER,
+            "ueu.batch.manifest": manifest(),
+            "ueu.batch.signature": SIGNATURE,
+            "ueu.batch.key_id": KEY_ID,
+        }
+    )
+    assert "another agent" in refused(
+        lambda: ueu.verify_batch(
+            db, resource, [], "0192a6c0-0000-7000-8000-0000000000bb"
+        )
+    )
+    # The producer's own submission goes on to the signature check.
+    assert "signature invalid" in refused(
+        lambda: ueu.verify_batch(db, resource, [], PRODUCER)
+    )
+
+
 def test_an_earlier_sequence_is_out_of_order_and_leaves_the_chain():
     agent = SimpleNamespace(ueu_last_sequence=5, ueu_last_hash=HASH)
     env = SimpleNamespace(sequence=3, previous_hash=None, evidence_hash="x")

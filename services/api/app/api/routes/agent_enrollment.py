@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.agents import server_keys
-from app.api.context import change_context
+from app.api.context import change_context, mark_machine_credential
 from app.api.routing import Router
 from app.db.session import get_db
 from app.security.auth import require_admin
@@ -84,6 +84,7 @@ async def enroll(request: Request, db: Session = Depends(get_db)):
     result = await run_in_threadpool(
         partial(service.enroll, body=enrollment, context=change_context(request), db=db)
     )
+    mark_machine_credential(request, "agent-enrolment")
     return await run_in_threadpool(sealed, db, opened, 201, result)
 
 

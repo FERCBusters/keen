@@ -59,7 +59,6 @@ from app.services.audits.validation import (
     FINDING_STATUSES,
     MUTABLE_AUDIT_STATUSES,
     clean_audit_type,
-    clean_email,
     clean_framework,
     clean_rich_text,
     clean_status,
@@ -73,7 +72,7 @@ from app.services.audits.validation import (
 from app.services.errors import DomainError
 from app.services.isms.related_records import resolve_target
 from app.services.mailer import user_email
-from app.services.text import clean_text
+from app.services.text import clean_email, clean_text
 
 
 def create_audit(*, payload: AuditCreatePayload, db: Session, user: User):

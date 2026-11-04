@@ -30,6 +30,7 @@ from app.security.roles import (
 )
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
+from app.services.text import clean_email
 
 
 def _bump_user_authz(db: Session, user_ids) -> None:
@@ -38,22 +39,6 @@ def _bump_user_authz(db: Session, user_ids) -> None:
         {User.authz_version: User.authz_version + 1},
         synchronize_session=False,
     )
-
-
-def _clean_email(raw: str | None) -> str | None:
-    value = (raw or "").strip()
-    if not value:
-        return None
-    if (
-        len(value) > 256
-        or "@" not in value
-        or value.startswith("@")
-        or value.endswith("@")
-    ):
-        raise DomainError(status_code=400, detail="Invalid email address")
-    if any(ord(c) < 32 or ord(c) == 127 for c in value):
-        raise DomainError(status_code=400, detail="Invalid email address")
-    return value
 
 
 def _require_admin_actor(context: ChangeContext, db: Session) -> User:
@@ -126,7 +111,7 @@ def create_user_admin(
             username=payload.username,
             password=payload.password,
             role=payload.role,
-            email=_clean_email(payload.email),
+            email=clean_email(payload.email),
         )
     except ValueError as e:
         raise DomainError(status_code=400, detail=str(e))
@@ -214,7 +199,7 @@ def update_user_admin(
         target.is_active = bool(payload.is_active)
 
     if payload.email is not None:
-        target.email = _clean_email(payload.email)
+        target.email = clean_email(payload.email)
 
     db.add(target)
     _bump_user_authz(db, [target.id])

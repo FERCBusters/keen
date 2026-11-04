@@ -681,6 +681,12 @@
 
       <!-- Audit -->
       <div class="tab-pane fade" id="pane-audit" role="tabpanel" aria-labelledby="tab-audit" tabindex="0">
+        <ul class="nav nav-tabs mb-3" id="auditTrailTabs" role="tablist" aria-label="Audit trail views">
+          <li class="nav-item" role="presentation"><button class="nav-link active" id="audit-changelog-tab" data-bs-toggle="tab" data-bs-target="#audit-changelog-pane" type="button" role="tab" aria-controls="audit-changelog-pane" aria-selected="true">Entity changelog</button></li>
+          <li class="nav-item" role="presentation"><button class="nav-link" id="audit-requests-tab" data-bs-toggle="tab" data-bs-target="#audit-requests-pane" type="button" role="tab" aria-controls="audit-requests-pane" aria-selected="false">Requests</button></li>
+        </ul>
+        <div class="tab-content">
+        <div class="tab-pane fade show active" id="audit-changelog-pane" role="tabpanel" aria-labelledby="audit-changelog-tab" tabindex="0">
         <div class="card mb-3" id="entityChangelogCard">
           <div class="card-header">
             <div class="fw-bold">Entity changelog</div>
@@ -719,7 +725,9 @@
             <div id="entityChangeRows" class="border rounded mt-2 small-muted">Loading changelog</div>
           </div>
         </div>
+        </div>
 
+        <div class="tab-pane fade" id="audit-requests-pane" role="tabpanel" aria-labelledby="audit-requests-tab" tabindex="0">
         <div class="card mb-3" id="auditCard">
           <div class="card-header">
             <div class="fw-bold">Request audit trail</div>
@@ -778,6 +786,8 @@
             </div>
           </div>
         </div>
+        </div>
+        </div><!-- auditTrailTabs content -->
       </div>
 
     <!-- Output (auto-expands when an action writes output) -->

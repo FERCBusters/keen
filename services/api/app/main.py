@@ -15,6 +15,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from app.api.context import machine_credential
 from app.api.errors import domain_error_response, validation_error_response
 from app.api.routes import OPENAPI_TAGS
 from app.api.routes import router as api_router
@@ -349,20 +350,21 @@ _OAUTH_CALLBACK_QUERY_KEYS = frozenset({"code", "state"})
 _UNAUDITED_PUBLIC_READS = frozenset(
     {"/health", "/v1/auth/methods", "/v1/agents/server-key"}
 )
-# Refused requests without a signed-in account carry no identity, so each
-# client address (each /64 network for IPv6) adds at most this many such
-# records a minute, whatever the refusal's status.
-_UNAUTHENTICATED_REFUSAL_AUDIT_LIMIT = 60
+# Requests without a signed-in account or a verified machine credential carry
+# no identity, so each client address (each /64 network for IPv6) adds at most
+# this many such records a minute, whatever their status: refusals, and public
+# routes that succeed without a credential, such as signing out.
+_ANONYMOUS_AUDIT_LIMIT = 60
 
 
-def _audits_unauthenticated_refusal(client_ip: str | None) -> bool:
-    # Fails closed: while Valkey is unavailable these refusals cannot be
+def _audits_anonymous_request(client_ip: str | None) -> bool:
+    # Fails closed: while Valkey is unavailable these requests cannot be
     # counted, so they go unrecorded and cannot fill the database.
     allowed, _ = address_window_allow(
         get_valkey(),
-        "audit-refusal",
+        "audit-anonymous",
         client_ip,
-        _UNAUTHENTICATED_REFUSAL_AUDIT_LIMIT,
+        _ANONYMOUS_AUDIT_LIMIT,
         60,
         fail_closed=True,
     )
@@ -419,8 +421,8 @@ def _record_request(request: Request, path: str, status_code: int, dur_ms: int):
 
     if not (
         username is not None
-        or status_code < 400
-        or _audits_unauthenticated_refusal(client_ip)
+        or machine_credential(request) is not None
+        or _audits_anonymous_request(client_ip)
     ):
         return
     qs = redact_query_string(

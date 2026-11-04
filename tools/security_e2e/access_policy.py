@@ -143,7 +143,34 @@ OBJECT_RULES = {
         "ISMS documents and their counts appear only for ISMS readers."
     ),
     "POST /v1/audits": "Scoping ISMS documents needs ISMS read access.",
-    "PUT /v1/audits/{audit_id}/scope": "As above, for the audit's own scope.",
+    "PUT /v1/audits/{audit_id}/scope": (
+        "audits.manage can change the scope of audits its holder created; scoping "
+        "ISMS documents needs ISMS read access."
+    ),
+    "PUT /v1/audits/{audit_id}/controls": (
+        "audits.manage can change the controls of audits its holder created."
+    ),
+    "PATCH /v1/audits/{audit_id}/evidence/{evidence_id}": (
+        "audits.manage can edit samples in audits its holder created."
+    ),
+    "DELETE /v1/audits/{audit_id}/evidence/{evidence_id}": (
+        "audits.manage can remove samples from audits its holder created."
+    ),
+    "POST /v1/audits/{audit_id}/attendees": (
+        "audits.manage can add attendees to audits its holder created."
+    ),
+    "DELETE /v1/audits/{audit_id}/attendees/{attendee_id}": (
+        "audits.manage can remove attendees from audits its holder created."
+    ),
+    "POST /v1/audits/{audit_id}/findings": (
+        "audits.manage can record findings in audits its holder created."
+    ),
+    "PATCH /v1/audits/{audit_id}/findings/{finding_id}": (
+        "audits.manage can edit findings in audits its holder created."
+    ),
+    "DELETE /v1/audits/{audit_id}/findings/{finding_id}": (
+        "audits.manage can delete findings from audits its holder created."
+    ),
     "POST /v1/audits/scheduled": "Scoping ISMS documents needs ISMS read access.",
     "PATCH /v1/audits/{audit_id}": "audits.manage can edit audits its holder created.",
     "POST /v1/audits/{audit_id}/report": "audits.manage can upload reports to audits its holder created.",
@@ -585,7 +612,7 @@ POLICY = {
     "PATCH /v1/isms/objectives/{objective_id}": ISMS_MANAGE,
     "GET /v1/isms/org-nodes": ISMS_READ,
     "POST /v1/isms/org-nodes": ISMS_MANAGE,
-    "DELETE /v1/isms/org-nodes/{node_id}": RISK_MANAGE,
+    "DELETE /v1/isms/org-nodes/{node_id}": ISMS_MANAGE,
     "PATCH /v1/isms/org-nodes/{node_id}": ISMS_MANAGE,
     "GET /v1/isms/people": ISMS_READ,
     "GET /v1/isms/people/{person_id}": ISMS_READ,

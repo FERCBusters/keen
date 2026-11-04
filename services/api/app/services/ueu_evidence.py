@@ -93,14 +93,17 @@ def _manifest(text, producer, entries):
     return doc
 
 
-def verify_batch(db, resource, envelopes) -> Signed:
+def verify_batch(db, resource, envelopes, submitter=None) -> Signed:
     """Check a resource's manifest signature.
 
     A batch without a manifest is accepted as unsigned, and one signed by a
     key KEEN does not hold is accepted as unknown_key, the way a version
     control system shows commits signed by unknown keys. A signature that
     fails with a known key means the batch changed after signing, so the
-    whole request is rejected.
+    whole request is rejected, as is a batch signed by another enrolled
+    agent's key: key agents send their own evidence, sealed to KEEN, so
+    another identity holding it has copied it, and its receipt would name the
+    copier beside a verified signature.
     """
     attrs = resource.attributes
     manifest = attrs.get("ueu.batch.manifest")
@@ -121,6 +124,10 @@ def verify_batch(db, resource, envelopes) -> Signed:
     key = db.get(AgentKey, key_id)
     if key is None or key.agent_id != producer:
         return Signed("unknown_key", key_id, manifest, signature)
+    if submitter is not None and key.agent_id != submitter:
+        raise Rejected(
+            "UEU_EVIDENCE_VERIFICATION_FAILED", "batch signed by another agent's key"
+        )
     try:
         verify_detached(key.public_key, manifest.encode(), signature)
     except SignatureError:
@@ -226,7 +233,7 @@ def persist(db, agent, resources, received_at):
     checked = []
     for resource in resources:
         envelopes = _validated(resource, agent)
-        checked.append((envelopes, verify_batch(db, resource, envelopes)))
+        checked.append((envelopes, verify_batch(db, resource, envelopes, agent.id)))
     stored = duplicates = withheld = 0
     ceiling = MODE_RANK[agent.evidence_mode_ceiling]
     for envelopes, signed in checked:

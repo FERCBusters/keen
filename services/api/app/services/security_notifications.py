@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as now
+from app.core.email_address import single_mailbox
 from app.db.models import SecurityNotification, UserLoginIP
 from app.db.session import SessionLocal
 from app.security.mfa import CODE_ATTEMPTS
@@ -16,8 +17,8 @@ log = logging.getLogger(__name__)
 
 
 def enqueue(db, user, event, *, ip=None):
-    recipient = (user.email or "").strip()
-    if not smtp_configured() or not recipient or "\n" in recipient or "\r" in recipient:
+    recipient = single_mailbox(user.email)
+    if not smtp_configured() or not recipient:
         return
     address = ip or "Unavailable (operator action or unknown address)"
     titles = {

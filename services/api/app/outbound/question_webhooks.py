@@ -184,7 +184,8 @@ def build_generic_payload(
 # <url|label> links and <!channel> or <users/all> mentions in Slack and Google
 # Chat, [label](url) links in Teams. Slack documents entity escapes for its
 # syntax; Google Chat documents none, so its brackets become lookalikes, as do
-# Teams' link brackets. Only Keen's own link is then a link.
+# Teams' link brackets. Untrusted text then forms no labelled links or
+# mentions, though a bare URL in it can still show as a link.
 _SLACK_TEXT = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;"})
 _CHAT_TEXT = str.maketrans({"<": "\u2039", ">": "\u203a"})
 _TEAMS_TEXT = str.maketrans(

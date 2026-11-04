@@ -460,6 +460,7 @@ const RICH_TEXT_ALLOWED_TAGS = new Set([
 ]);
 const RICH_TEXT_VOID_TAGS = new Set(['br', 'hr']);
 const _richTextEditors = new WeakMap();
+const _pendingRichText = new Map();
 
 export function isRichTextHtmlLike(value) {
   return /<\/?(?:p|br|hr|h[1-6]|ul|ol|li|strong|em|u|s|strike|a|blockquote|pre|code|div)\b/i.test(
@@ -569,6 +570,7 @@ function _richTextEditable(textarea) {
 
 export function syncRichTextEditor(textarea) {
   if (!textarea) return '';
+  if (_pendingRichText.has(textarea)) return _pendingRichText.get(textarea);
   const editable = _richTextEditable(textarea);
   if (editable) textarea.value = editable.innerHTML || '';
   return textarea.value || '';
@@ -598,47 +600,99 @@ export function refreshRichTextEditorStates(root = document) {
   });
 }
 
+// Wysi parses the content it is given unsafely: it wraps top-level text in
+// paragraphs by assigning the text as HTML, so escaped markup in a saved value
+// (or in pasted HTML) becomes live elements. Every editor therefore starts from
+// an empty textarea, receives its content only through setRichTextEditorValue
+// and the shared sanitiser, and has pasted HTML sanitised here before Wysi's
+// own paste handler can see it. This is the only place that starts Wysi.
+//
+// Wysi builds its editor once the document has loaded, so a value set before
+// then waits in _pendingRichText, and the textarea stays empty until the
+// editor exists.
+
+function _applyPendingRichText() {
+  for (const [textarea, value] of _pendingRichText) {
+    if (!_richTextEditable(textarea)) continue;
+    _pendingRichText.delete(textarea);
+    setRichTextEditorValue(textarea, value);
+    const holder = textarea.closest('.rich-text-editor');
+    if (holder?.parentElement) refreshRichTextEditorStates(holder.parentElement);
+  }
+}
+
+function _pasteIntoRichText(event) {
+  const editable = event.target?.closest?.('.rich-text-editor [contenteditable]');
+  const data = event.clipboardData;
+  if (!editable || !data?.types?.includes?.('text/html')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const html = sanitizeRichTextHtml(data.getData('text/html'));
+  if (html) document.execCommand('insertHTML', false, html);
+  else document.execCommand('insertText', false, data.getData('text/plain') || '');
+}
+
+let _richTextPasteGuarded = false;
+
 export function initRichTextEditors(root = document, opts = {}) {
   if (typeof window === 'undefined' || typeof window.Wysi !== 'function') return [];
+  if (!_richTextPasteGuarded) {
+    // Capturing at the document runs before Wysi's bubbling paste handler,
+    // which stopping propagation here then skips.
+    document.addEventListener('paste', _pasteIntoRichText, true);
+    _richTextPasteGuarded = true;
+  }
   const textareas = Array.from(root?.querySelectorAll?.('textarea[data-rich-text]') || []);
   const initialized = [];
   for (const textarea of textareas) {
     if (_richTextEditors.has(textarea)) continue;
     textarea.setAttribute('data-wysi-fallback', '1');
+    const saved = textarea.value || '';
+    textarea.value = '';
     try {
-      const instance =
-        window.Wysi({
-          el: textarea,
-          height: opts.height || Number(textarea.dataset.richTextHeight || 260),
-          autoGrow: opts.autoGrow ?? true,
-          autoHide: opts.autoHide ?? false,
-          tools: opts.tools || [
-            'format',
-            '|',
-            'bold',
-            'italic',
-            'underline',
-            'strike',
-            '|',
-            'ul',
-            'ol',
-            '|',
-            'link',
-            'hr',
-            'quote',
-            '|',
-            'removeFormat',
-          ],
-          onChange: (content) => {
-            textarea.value = String(content || '');
-            opts.onChange?.(textarea, textarea.value);
-          },
-        }) || null;
-      _richTextEditors.set(textarea, instance || true);
+      window.Wysi({
+        el: textarea,
+        height: opts.height || Number(textarea.dataset.richTextHeight || 260),
+        autoGrow: opts.autoGrow ?? true,
+        autoHide: opts.autoHide ?? false,
+        tools: opts.tools || [
+          'format',
+          '|',
+          'bold',
+          'italic',
+          'underline',
+          'strike',
+          '|',
+          'ul',
+          'ol',
+          '|',
+          'link',
+          'hr',
+          'quote',
+          '|',
+          'removeFormat',
+        ],
+        // Wysi reports its own re-parsed copy of the content; the form
+        // keeps what the editor shows, through the shared sanitiser.
+        onChange: () => {
+          textarea.value = sanitizeRichTextHtml(_richTextEditable(textarea)?.innerHTML || '');
+          opts.onChange?.(textarea, textarea.value);
+        },
+      });
+      _richTextEditors.set(textarea, true);
       textarea.closest('.rich-text-editor')?.setAttribute('data-rich-text-ready', '1');
-      setRichTextEditorValue(textarea, textarea.value || '');
+      setRichTextEditorValue(textarea, saved);
+      if (document.readyState === 'loading') {
+        // A listener of its own, registered after the one Wysi has just added,
+        // so it runs once this editor exists.
+        document.addEventListener('DOMContentLoaded', () => _applyPendingRichText(), {
+          once: true,
+        });
+      }
       initialized.push(textarea);
     } catch (e) {
+      _pendingRichText.delete(textarea);
+      textarea.value = saved;
       console.warn('Failed to initialise rich text editor', e);
     }
   }
@@ -650,15 +704,16 @@ export function setRichTextEditorValue(textareaOrId, value) {
   const textarea =
     typeof textareaOrId === 'string' ? document.getElementById(textareaOrId) : textareaOrId;
   if (!textarea) return;
-  textarea.value = richTextEditorValue(value);
-  const instance = _richTextEditors.get(textarea);
-  if (instance && typeof instance?.setContent === 'function') {
-    try {
-      instance.setContent(textarea.value);
-    } catch {}
-  }
+  const html = richTextEditorValue(value);
   const editable = _richTextEditable(textarea);
-  if (editable) editable.innerHTML = textarea.value || '';
+  if (_richTextEditors.has(textarea) && !editable) {
+    _pendingRichText.set(textarea, html);
+    textarea.value = '';
+    return;
+  }
+  _pendingRichText.delete(textarea);
+  textarea.value = html;
+  if (editable) editable.innerHTML = html;
 }
 
 function _hexToRgb(hex) {

@@ -6,34 +6,19 @@ from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 
 from app.core.config import settings
+from app.core.email_address import single_mailbox
 from app.security.regex import scan_pattern
-
-
-def looks_like_email(raw: str | None) -> bool:
-    """Whether a stored address is plausible enough to send to."""
-    value = (raw or "").strip()
-    return bool(
-        value
-        and "@" in value
-        and not value.startswith("@")
-        and not value.endswith("@")
-        and len(value) <= 256
-    )
 
 
 def user_email(user) -> str | None:
     """The address Keen emails a user at: their email, or an email username."""
     if user is None:
         return None
-    email = getattr(user, "email", None)
-    if looks_like_email(email):
-        return str(email).strip()
     # A username that is an email address serves as the user's email. Where
     # usernames are other identifiers, administrators set the email field.
-    username = getattr(user, "username", None)
-    if looks_like_email(username):
-        return str(username).strip()
-    return None
+    return single_mailbox(getattr(user, "email", None)) or single_mailbox(
+        getattr(user, "username", None)
+    )
 
 
 def smtp_configured() -> bool:
@@ -75,14 +60,14 @@ def send_email(
 ) -> None:
     """Send a plain-text email using Keen's SMTP settings.
 
-    If SMTP is not configured or the recipient is empty, this is a no-op;
-    callers should decide whether failed delivery is fatal.
+    If SMTP is not configured or the recipient is not exactly one address,
+    this is a no-op; callers should decide whether failed delivery is fatal.
     """
 
     if not smtp_configured():
         return
 
-    to_addr = (to_email or "").strip()
+    to_addr = single_mailbox(to_email)
     if not to_addr:
         return
 
@@ -122,7 +107,7 @@ def send_email(
         with smtplib.SMTP_SSL(host, port, timeout=timeout, context=context) as smtp:
             if user and pwd:
                 smtp.login(user, pwd)
-            smtp.send_message(msg)
+            smtp.send_message(msg, to_addrs=[to_addr])
         return
 
     with smtplib.SMTP(host, port, timeout=timeout) as smtp:
@@ -132,7 +117,7 @@ def send_email(
             smtp.ehlo()
         if user and pwd:
             smtp.login(user, pwd)
-        smtp.send_message(msg)
+        smtp.send_message(msg, to_addrs=[to_addr])
 
 
 def _ics_escape(value: str | None) -> str:

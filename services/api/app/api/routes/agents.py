@@ -21,6 +21,7 @@ from app.agents import server_keys
 from app.agents.credentials import authenticate, live_only
 from app.agents.otlp import decode_batch
 from app.agents.schema import Health
+from app.api.context import mark_machine_credential
 from app.api.errors import DomainRoute
 from app.api.routing import Router
 from app.core.valkey import get_valkey
@@ -258,7 +259,7 @@ def authenticate_agent(request, db, failure_scope, *, operation, allow_retired=F
     accepted agents are bounded by their own per-agent limits.
     """
     try:
-        return authenticate(
+        auth = authenticate(
             request, db, operation=operation, lock=False, allow_retired=allow_retired
         )
     except HTTPException as exc:
@@ -272,6 +273,8 @@ def authenticate_agent(request, db, failure_scope, *, operation, allow_retired=F
                 429, "Rate limited", headers={"Retry-After": str(retry)}
             ) from None
         raise
+    mark_machine_credential(request, "agent:" + auth.agent_id)
+    return auth
 
 
 async def bounded_body(request, limit):

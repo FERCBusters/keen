@@ -24,6 +24,7 @@ from app.services.isms.organisation import require_quiz_authority_for_audience_r
 from app.services.people import ensure_person_for_user as ensure_person_for_user
 from app.services.people import person_for_user as person_for_user
 from app.services.people import require_link_authority
+from app.services.text import clean_email
 
 
 class PersonInput(BaseModel):
@@ -186,7 +187,7 @@ def _save_person(db: Session, row: IsmsPerson, payload: PersonInput, user: User)
     ids = _asset_ids(db, payload.asset_ids)
     row.name, row.email, row.position, row.notes = (
         name,
-        payload.email.strip(),
+        clean_email(payload.email) or "",
         payload.position.strip(),
         payload.notes.strip(),
     )

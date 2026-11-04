@@ -36,9 +36,10 @@ class FakeSMTP:
     def login(self, user, password):
         self.calls.append(("login", user, password))
 
-    def send_message(self, message):
+    def send_message(self, message, from_addr=None, to_addrs=None):
         self.calls.append(("send",))
         self.messages.append(message)
+        self.recipients = to_addrs
 
 
 @pytest.fixture
@@ -92,6 +93,8 @@ def test_starttls_precedes_login_and_sending(smtp, monkeypatch):
     assert (client.host, client.port, client.timeout) == ("smtp.example.test", 587, 7)
     names = [call[0] for call in client.calls]
     assert names == ["ehlo", "starttls", "ehlo", "login", "send", "quit"]
+    # The one address is the envelope recipient, never the parsed To header.
+    assert client.recipients == ["auditor@example.test"]
     assert isinstance(client.calls[1][1], ssl.SSLContext)
     assert client.calls[1][1].verify_mode == ssl.CERT_REQUIRED
     assert client.calls[1][1].check_hostname is True
@@ -144,11 +147,12 @@ def test_credentials_are_never_sent_without_tls(smtp, monkeypatch):
     assert [call[0] for call in client.calls] == ["ehlo", "send", "quit"]
 
 
-def test_header_injection_is_refused_by_the_message_builder(smtp):
-    with pytest.raises(ValueError):
-        mailer.send_email(
-            to_email="a@example.test\r\nBcc: other@example.test", subject="S", body="B"
-        )
+def test_header_injection_reaches_no_mail_server(smtp):
+    # A recipient holding a header break is not one address, so nothing is sent.
+    mailer.send_email(
+        to_email="a@example.test\r\nBcc: other@example.test", subject="S", body="B"
+    )
+    assert FakeSMTP.instances == []
 
 
 def test_audit_invites_are_all_day_escaped_and_folded():

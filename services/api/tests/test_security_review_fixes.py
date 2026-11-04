@@ -153,7 +153,7 @@ def test_other_browser_or_provider_rejected_before_exchange(
             oidc.handle_callback(
                 req(
                     cookie=f"{oidc.sso_binding_cookie()}={secret}",
-                    query=f"state={state}",
+                    query=f"code=c&state={state}",
                 ),
                 db,
                 "google",
@@ -170,12 +170,13 @@ def test_correct_browser_single_use_and_expiry(db, user, monkeypatch):
     state = oidc._browser_state("google", "secret")
     oidc.create_login_state(db, next_url="/", state=state)
 
-    async def exchange(request, db, provider, row):
+    async def exchange(code, db, provider, row):
+        assert code == "c"
         assert row.nonce and row.code_verifier
         return user, "/", None
 
     monkeypatch.setattr(oidc, "_handle_oidc_callback", exchange)
-    r = req(cookie=f"{oidc.sso_binding_cookie()}=secret", query=f"state={state}")
+    r = req(cookie=f"{oidc.sso_binding_cookie()}=secret", query=f"code=c&state={state}")
     assert asyncio.run(oidc.handle_callback(r, db, "google"))[0].id == user.id
     with pytest.raises((HTTPException, DomainError)):
         asyncio.run(oidc.handle_callback(r, db, "google"))

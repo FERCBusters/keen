@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.email_address import single_mailbox
 from app.db.models import (
     IsmsOrgNode,
     IsmsOrgNodeUser,
@@ -34,7 +35,6 @@ from app.services.assurance import ensure_person_for_user
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.mailer import (
-    looks_like_email,
     send_quiz_open_email,
     smtp_configured,
     user_email,
@@ -54,10 +54,7 @@ def person_email(person: IsmsPerson) -> str | None:
     account = person.user
     if account is None or not account.is_active:
         return None
-    email = str(person.email or "").strip()
-    if looks_like_email(email):
-        return email
-    return user_email(account)
+    return single_mailbox(person.email) or user_email(account)
 
 
 def round_invite_uid(round_id: uuid.UUID) -> str:

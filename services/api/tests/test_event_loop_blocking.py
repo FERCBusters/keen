@@ -380,3 +380,98 @@ def test_a_webhook_body_is_read_only_after_its_secret_and_allowances(hook, monke
     monkeypatch.setattr(settings, "webhooks_enabled", True)
     assert _deliver(client, b'{"x": 2}').status_code == 200
     assert reads == ["/v1/webhooks/monitor/alert"]
+
+
+def _form_parse_threads(monkeypatch):
+    """A Router app that records where forms are parsed and handlers run."""
+    import threading
+
+    from app.api.routing import Router
+    from fastapi import FastAPI, File, Request, UploadFile
+    from starlette import formparsers
+
+    threads = {"parse": [], "handler": []}
+    parse = formparsers.MultiPartParser.parse
+
+    async def recording_parse(self):
+        threads["parse"].append(threading.get_ident())
+        return await parse(self)
+
+    monkeypatch.setattr(formparsers.MultiPartParser, "parse", recording_parse)
+    router = Router()
+
+    @router.post("/manual")
+    async def manual(request: Request):
+        threads["handler"].append(threading.get_ident())
+        form = await request.form()
+        upload = form["attachment"]
+        return {"body": form["body"], "size": len(await upload.read())}
+
+    @router.post("/encoded")
+    async def encoded(request: Request):
+        return dict((await request.form()).multi_items())
+
+    @router.post("/declared")
+    async def declared(attachment: UploadFile = File(...)):
+        threads["handler"].append(threading.get_ident())
+        return {"size": len(await attachment.read())}
+
+    app = FastAPI()
+    app.include_router(router)
+    return app, threads
+
+
+def test_forms_are_parsed_off_the_event_loop(monkeypatch):
+    """Multipart parsing holds no event loop, whoever reads the form."""
+    from fastapi.testclient import TestClient
+
+    app, threads = _form_parse_threads(monkeypatch)
+    client = TestClient(app)
+    payload = b"x" * (3 * 1024 * 1024)
+    manual = client.post(
+        "/manual",
+        data={"body": "question"},
+        files={"attachment": ("a.bin", payload, "application/octet-stream")},
+    )
+    assert manual.status_code == 200, manual.text
+    assert manual.json() == {"body": "question", "size": len(payload)}
+    declared = client.post(
+        "/declared",
+        files={"attachment": ("a.bin", payload, "application/octet-stream")},
+    )
+    assert declared.status_code == 200, declared.text
+    assert declared.json() == {"size": len(payload)}
+    assert len(threads["parse"]) == 2 and len(threads["handler"]) == 2
+    assert not set(threads["parse"]) & set(threads["handler"])
+    # URL-encoded forms are read the same way.
+    encoded = client.post("/encoded", data={"body": "question", "n": "1"})
+    assert encoded.status_code == 200, encoded.text
+    assert encoded.json() == {"body": "question", "n": "1"}
+    # Malformed multipart bodies are refused as Starlette refuses them.
+    broken = client.post(
+        "/manual",
+        content=b"--x\r\nContent-Disposition: form-data\r\n\r\nno name\r\n--x--\r\n",
+        headers={"Content-Type": "multipart/form-data; boundary=x"},
+    )
+    assert broken.status_code == 400
+
+
+def test_every_body_route_uses_the_shared_route_class():
+    """Routes outside DomainRoute would parse JSON and forms on the event loop."""
+    from app import main
+    from app.api.errors import DomainRoute
+    from fastapi.routing import APIRoute
+
+    def routes(items):
+        for route in items:
+            if isinstance(route, APIRoute):
+                yield route
+            elif hasattr(route, "routes"):
+                yield from routes(route.routes)
+
+    plain = sorted(
+        f"{sorted(route.methods)} {route.path}"
+        for route in routes(main.app.routes)
+        if not isinstance(route, DomainRoute) and route.methods - {"GET", "HEAD"}
+    )
+    assert plain == []

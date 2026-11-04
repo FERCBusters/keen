@@ -16,7 +16,7 @@ from app.core.valkey import get_valkey
 from app.db.models import SsoEmailChallenge, User, UserSsoEmail
 from app.security.rate_limit import fixed_window_allow
 from app.security.sessions import get_session
-from app.services import mailer
+from app.services import mailer, text
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.security_notifications import enqueue, queue_email
@@ -35,14 +35,9 @@ def digest(value):
 
 
 def clean_email(value):
-    from app.services.users import _clean_email
-
-    email = _clean_email(value)
-    if (
-        not email
-        or email.count("@") != 1
-        or any(c.isspace() or c in '<>,;:"\\' for c in email)
-    ):
+    """A linking address: one mailbox, compared without regard to case."""
+    email = text.clean_email(value)
+    if not email:
         raise DomainError(400, "Invalid email address")
     return email.lower()
 

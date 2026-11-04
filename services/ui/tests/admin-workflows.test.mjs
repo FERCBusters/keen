@@ -976,6 +976,29 @@ test('tabs follow the address hash and update it when changed', async (t) => {
   assert.equal(el('admin-output-card').hidden, true);
 });
 
+test('the audit trail keeps its entity changelog and requests in tabs of their own', async (t) => {
+  const { el, ui, state } = await admin(t, { hash: '#audit-requests' });
+  // A link to the requests view opens the audit trail and that view.
+  const tabs = state.calls.filter((c) => c.method === 'TAB').map((c) => c.url);
+  assert.deepEqual(tabs.slice(-2), ['tab-audit', 'audit-requests-tab']);
+  for (const [tab, pane, card] of [
+    ['audit-changelog-tab', 'audit-changelog-pane', 'entityChangelogCard'],
+    ['audit-requests-tab', 'audit-requests-pane', 'auditCard'],
+  ]) {
+    assert.equal(el(tab).getAttribute('data-bs-target'), '#' + pane);
+    assert.equal(el(tab).closest('#pane-audit').id, 'pane-audit');
+    assert.equal(el(card).closest('.tab-pane').id, pane);
+  }
+  // Switching views keeps a hash that reopens the same view.
+  el('admin-output-card').hidden = false;
+  el('audit-changelog-tab').dispatchEvent(new ui.window.Event('shown.bs.tab', { bubbles: true }));
+  assert.equal(ui.window.location.hash, '#audit');
+  el('audit-requests-tab').dispatchEvent(new ui.window.Event('shown.bs.tab', { bubbles: true }));
+  assert.equal(ui.window.location.hash, '#audit-requests');
+  // The view switch is not a change of admin tab.
+  assert.equal(el('admin-output-card').hidden, false);
+});
+
 test('the access dialog opens with empty lists when groups and permissions are unavailable', async (t) => {
   FakeModal.shown = [];
   const { el, ui } = await admin(t, { fail: { groups: true, permissions: true, controls: true } });
