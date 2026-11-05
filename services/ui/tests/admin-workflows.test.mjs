@@ -299,6 +299,20 @@ test('the source catalogue shows ingestion state and pauses or resumes collectio
     /2 collection items · 3 definitions[\s\S]*40 events · last seen 2026-10-01/,
   );
   assert.match(cards[1].textContent, /last seen never[\s\S]*Collection is paused/);
+  // Pause and Resume are filled: the yellow outline measured 1.5:1 on the
+  // light canvases, and amber with dark text measures 12.9:1.
+  const toggles = cards.slice(0, 2).map((c) => c.querySelector('button'));
+  assert.deepEqual(
+    toggles.map((b) => [
+      b.textContent,
+      b.classList.contains('btn-warning'),
+      b.classList.contains('btn-success'),
+    ]),
+    [
+      ['Pause ingestion', true, false],
+      ['Resume ingestion', false, true],
+    ],
+  );
   // A source disabled by installation settings gets no pause control at all.
   assert.equal(cards[2].querySelector('button'), null);
   assert.equal(cards[3].querySelector('button'), null);
