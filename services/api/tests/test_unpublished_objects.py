@@ -6,6 +6,8 @@ objects that nothing references; a savepoint's outcome never queues objects the
 outer transaction may still commit.
 """
 
+import logging
+
 import pytest
 from app.db.session import track_unpublished_object
 from sqlalchemy import create_engine, text
@@ -83,3 +85,26 @@ def test_a_session_joined_to_a_connection_queues_in_its_transaction(contract_db)
         text("SELECT storage_uri FROM evidence_object_cleanup")
     ).scalars()
     assert list(rows) == ["local://local/joined.json"]
+
+
+def test_objects_that_cannot_be_queued_are_logged_without_failing_the_rollback(
+    caplog,
+):
+    # A database without the cleanup queue, as when it is unavailable.
+    bare = create_engine("sqlite://", poolclass=StaticPool)
+    try:
+        db = Session(bare)
+        db.execute(text("SELECT 1"))
+        track_unpublished_object(db, "local://local/synthetic-secret-name.json")
+        track_unpublished_object(db, "local://local/second.json")
+        with caplog.at_level(logging.WARNING, logger="app.db.session"):
+            db.rollback()
+            db.execute(text("SELECT 1"))
+            db.rollback()
+        db.close()
+    finally:
+        bare.dispose()
+
+    (warning,) = [r for r in caplog.records if r.name == "app.db.session"]
+    assert warning.getMessage() == "Could not queue 2 unpublished evidence objects"
+    assert "synthetic-secret-name" not in caplog.text

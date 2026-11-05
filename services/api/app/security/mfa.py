@@ -285,10 +285,9 @@ def verified(row):
     row.data = {}  # consume any WebAuthn or pending TOTP challenge
 
 
-def bump(db, user, row=None):
+def bump(db, user, row):
     user.mfa_version += 1
-    if row is not None:
-        row.version = user.mfa_version
+    row.version = user.mfa_version
     db.flush()
 
 

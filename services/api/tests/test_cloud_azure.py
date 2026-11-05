@@ -9,6 +9,7 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 from app.core.config import settings
+from app.ingest import http as ingest_http
 from app.ingest.cloud import azure as az
 from app.ingest.cloud.base import Unavailable, parse_time
 
@@ -944,6 +945,27 @@ def test_activity_reports_truncation(monkeypatch, credentials):
 def test_connect_hands_the_settings_to_one_session(monkeypatch, credentials):
     monkeypatch.setattr(az, "Azure", lambda *args: args)
     assert az.connect() == (TENANT, CLIENT, SECRET)
+
+
+def test_a_demo_never_signs_in_to_microsoft(monkeypatch, credentials):
+    microsoft = Api()
+    clients = []
+
+    def client(**kwargs):
+        clients.append(kwargs)
+        return httpx.Client(transport=httpx.MockTransport(microsoft.handler))
+
+    monkeypatch.setattr(ingest_http, "client", client)
+    monkeypatch.setattr(settings, "demo_mode", True)
+    with pytest.raises(Unavailable) as caught:
+        az.connect()
+    # Configured credentials go unused: no client exists, so no token is asked.
+    assert caught.value.reason == "not_configured"
+    assert clients == [] and microsoft.requests == []
+    # Outside a demo the same settings sign in, through these clients.
+    monkeypatch.setattr(settings, "demo_mode", False)
+    az.connect().close()
+    assert len(clients) == 3 and len(microsoft.tokens) == 2
 
 
 def test_unreadable_errors_and_tokens_are_unavailable():

@@ -249,8 +249,7 @@ def _category_or_create(
     category_id: uuid.UUID | None,
     category_name: str | None,
     existing: RiskCategory | None = None,
-    required: bool = True,
-) -> RiskCategory | None:
+) -> RiskCategory:
     if category_id:
         return asset_category_by_id(db, category_id)
 
@@ -269,9 +268,7 @@ def _category_or_create(
 
     if existing is not None:
         return existing
-    if required:
-        raise DomainError(status_code=400, detail="asset category is required")
-    return None
+    raise DomainError(status_code=400, detail="asset category is required")
 
 
 def _subcategory_by_id(
@@ -293,8 +290,7 @@ def _subcategory_or_create(
     subcategory_id: uuid.UUID | None,
     subcategory_name: str | None,
     existing: RiskAssetSubcategory | None = None,
-    required: bool = True,
-) -> RiskAssetSubcategory | None:
+) -> RiskAssetSubcategory:
     if subcategory_id:
         return _subcategory_by_id(db, subcategory_id, category=category)
 
@@ -323,9 +319,7 @@ def _subcategory_or_create(
 
     if existing is not None and existing.category_id == category.id:
         return existing
-    if required:
-        raise DomainError(status_code=400, detail="asset subcategory is required")
-    return None
+    raise DomainError(status_code=400, detail="asset subcategory is required")
 
 
 def _license_from_payload(
@@ -351,27 +345,8 @@ def _asset_or_create(
     payload: RiskUpsertPayload | RiskAssetPayload,
     *,
     existing: RiskAsset | None = None,
-    require_asset: bool = True,
 ) -> RiskAsset:
     fields = set(getattr(payload, "model_fields_set", set()) or set())
-    asset_detail_fields = {
-        "asset_id",
-        "asset_name",
-        "name",
-        "category_id",
-        "category_name",
-        "subcategory_id",
-        "subcategory_name",
-        "license_id",
-        "license_name",
-        "owner_org_node_id",
-        "register_held_by_org_node_id",
-        "description",
-    }
-
-    if existing is not None and not (fields & asset_detail_fields):
-        return existing
-
     asset_id = getattr(payload, "asset_id", None)
     if asset_id and not (
         fields
@@ -392,29 +367,23 @@ def _asset_or_create(
     name = clean_text(
         _asset_name_from_payload(payload) or (base_asset.name if base_asset else None),
         max_len=256,
-        required=require_asset,
+        required=True,
         label="asset",
     )
-    if not name:
-        raise DomainError(status_code=400, detail="asset is required")
 
     category = _category_or_create(
         db,
         category_id=getattr(payload, "category_id", None),
         category_name=getattr(payload, "category_name", None),
         existing=base_asset.category if base_asset else None,
-        required=True,
     )
-    assert category is not None
     subcategory = _subcategory_or_create(
         db,
         category=category,
         subcategory_id=getattr(payload, "subcategory_id", None),
         subcategory_name=getattr(payload, "subcategory_name", None),
         existing=base_asset.subcategory if base_asset else None,
-        required=True,
     )
-    assert subcategory is not None
 
     row = (
         db.query(RiskAsset)
@@ -450,16 +419,7 @@ def _asset_or_create(
     return row
 
 
-def _owner_or_none(
-    db: Session, payload: RiskUpsertPayload, existing: Risk | None = None
-) -> User | None:
-    # PATCH semantics: if neither owner field was sent, keep existing owner.
-    sent_fields = set(payload.model_fields_set or set())
-    if existing is not None and not (
-        {"risk_owner_user_id", "risk_owner_username"} & sent_fields
-    ):
-        return existing.owner
-
+def _owner_or_none(db: Session, payload: RiskUpsertPayload) -> User | None:
     if (
         payload.risk_owner_user_id is None
         and not (payload.risk_owner_username or "").strip()
@@ -899,7 +859,6 @@ def _apply_payload(
             db,
             payload,
             existing=None if is_create else risk.asset,
-            require_asset=True,
         )
 
     if is_create or "title" in fields:
@@ -1163,9 +1122,7 @@ def create_risk_subcategory(*, payload: RiskSubcategoryPayload, user, db: Sessio
         db,
         category_id=payload.category_id,
         category_name=None,
-        required=True,
     )
-    assert category is not None
     name = clean_text(payload.name, max_len=128, required=True, label="name")
     existing = (
         db.query(RiskAssetSubcategory)
@@ -1279,7 +1236,7 @@ def list_risk_assets(
 
 
 def create_risk_asset(*, payload: RiskAssetPayload, user, db: Session):
-    row = _asset_or_create(db, payload, require_asset=True)
+    row = _asset_or_create(db, payload)
     db.commit()
     db.refresh(row)
     return _asset_out(row)
@@ -1292,18 +1249,14 @@ def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Ses
         category_id=payload.category_id,
         category_name=payload.category_name,
         existing=row.category,
-        required=True,
     )
-    assert category is not None
     subcategory = _subcategory_or_create(
         db,
         category=category,
         subcategory_id=payload.subcategory_id,
         subcategory_name=payload.subcategory_name,
         existing=row.subcategory,
-        required=True,
     )
-    assert subcategory is not None
     name = clean_text(payload.name, max_len=256, required=True, label="asset")
     conflict = (
         db.query(RiskAsset)

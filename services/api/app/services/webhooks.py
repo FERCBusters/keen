@@ -69,10 +69,9 @@ def refuse(redis, client_ip: str | None, detail: str) -> NoReturn:
 
 
 def _webhook_parse_date(value: Any) -> date | None:
+    # Values come from a decoded JSON body, which holds no date objects.
     if value in (None, ""):
         return None
-    if isinstance(value, date) and not isinstance(value, datetime):
-        return value
     try:
         return date.fromisoformat(str(value)[:10])
     except Exception:
@@ -89,10 +88,9 @@ def _webhook_parse_uuid(value: Any) -> uuid.UUID | None:
 
 
 def _webhook_parse_datetime(value: Any) -> datetime | None:
+    # Values come from a decoded JSON body, which holds no datetime objects.
     if value in (None, ""):
         return None
-    if isinstance(value, datetime):
-        return value
     text = str(value).strip().replace("Z", "+00:00")
     try:
         parsed = datetime.fromisoformat(text)

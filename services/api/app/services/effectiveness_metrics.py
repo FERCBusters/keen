@@ -71,9 +71,8 @@ def _is_monthly_zero_target(measure: IsmsEffectivenessMeasure) -> bool:
     event_driven = "required" in frequency and not _NEGATED_REQUIRED.search(frequency)
     if frequency not in monthly_values and not event_driven:
         return False
-    if measure.target_value is None or float(measure.target_value) != 0.0:
-        return False
-    # Auto-zero is only safe for zero-is-good measures.  A target of "more than 0"
+    # The caller reads only measures whose target is zero. Auto-zero is only
+    # safe for zero-is-good measures.  A target of "more than 0"
     # or "less than 0" should not be inferred from silence.
     op = str(measure.threshold_operator or "").strip().lower()
     return op in ZERO_TARGET_OPERATORS

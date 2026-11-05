@@ -112,9 +112,7 @@ def _add_label_value(out: list[str], value: Any, depth: int = 1) -> None:
             # a key=value representation so rules can target either form.
             _add_label_value(out, v, depth + 1)
             if isinstance(v, (str, int, float, bool)):
-                txt = f"{k}={v}".strip()
-                if txt:
-                    out.append(txt)
+                out.append(f"{k}={v}".strip())
 
 
 def _extract_label_values_from_obj(obj: Any, out: list[str], depth: int = 1) -> None:

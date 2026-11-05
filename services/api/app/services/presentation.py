@@ -75,8 +75,6 @@ def event_identifier(event: Any) -> str | None:
     def _get_dotted(obj: Any, path: str) -> Any:
         cur: Any = obj
         for part in (path or "").split("."):
-            if not part:
-                continue
             if isinstance(cur, dict) and part in cur:
                 cur = cur.get(part)
             else:
@@ -241,17 +239,13 @@ def normalize_saved_search_url(url: str | None) -> str:
         raise DomainError(status_code=400, detail="Invalid saved search URL")
 
     pairs = []
+    # Without keep_blank_values, parse_qsl returns only non-empty string values.
     for k, v in parse_qsl(parts.query or "", keep_blank_values=False):
         if not k:
             continue
         if k == "offset":
             continue
-        if v is None:
-            continue
-        vv = str(v)
-        if vv == "":
-            continue
-        pairs.append((k, vv))
+        pairs.append((k, v))
 
     query = urlencode(pairs, doseq=True)
     out = path + (("?" + query) if query else "")

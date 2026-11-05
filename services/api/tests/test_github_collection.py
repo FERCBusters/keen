@@ -898,6 +898,16 @@ def test_feed_entries_without_dates_or_repository_links_are_handled(gh):
         ),
         (
             {
+                "type": "IssuesEvent",
+                "payload": {
+                    "action": "opened",
+                    "issue": {"number": 3, "title": "Leak"},
+                },
+            },
+            'GitHub issue opened "Leak"',
+        ),
+        (
+            {
                 "type": "ReleaseEvent",
                 "repo": {"name": "acme/app"},
                 "payload": {"release": {"tag_name": "v1.0", "name": "v1.0"}},
@@ -914,6 +924,14 @@ def test_feed_entries_without_dates_or_repository_links_are_handled(gh):
                 },
             },
             'GitHub release created v2 "Second" by eve',
+        ),
+        (
+            {
+                "type": "ReleaseEvent",
+                "repo": {"name": "acme/app"},
+                "payload": {"release": {"name": "Spring release"}},
+            },
+            'GitHub release published acme/app "Spring release"',
         ),
         (
             {
@@ -1013,3 +1031,75 @@ def test_feed_entries_without_any_link_store_no_repository(gh):
     pointer = event.raw_pointer["github"]
     assert pointer["link"] is None and pointer.get("repo") is None
     assert event.summary == "github feed: no link"
+
+
+def test_repository_enumeration_reads_at_most_its_page_limit(gh):
+    pages = []
+
+    def repos(request):
+        n = request.url.params["page"]
+        pages.append(n)
+        return httpx.Response(200, json=[{"full_name": f"acme/app-{n}"}])
+
+    gh.fake.routes[("api.github.com", "/orgs/acme/repos")] = repos
+
+    with github._client() as client:
+        listed = github._list_org_repos(client, "acme", per_page=1, max_pages=2)
+
+    # Every page is full, so only the page limit ends the listing.
+    assert listed == [{"full_name": "acme/app-1"}, {"full_name": "acme/app-2"}]
+    assert pages == ["1", "2"]
+
+
+def test_a_repository_page_larger_than_requested_is_refused(gh):
+    gh.fake.routes[("api.github.com", "/orgs/acme/repos")] = httpx.Response(
+        200, json=[{"full_name": "acme/one"}, {"full_name": "acme/two"}]
+    )
+
+    with github._client() as client:
+        with pytest.raises(ValueError, match="more items than a page holds"):
+            github._list_org_repos(client, "acme", per_page=1)
+
+
+def test_repositories_without_a_usable_name_are_left_out(gh):
+    gh.fake.routes[("api.github.com", "/orgs/acme/repos")] = httpx.Response(
+        200,
+        json=[
+            "acme/listed-as-text",
+            {"full_name": ""},
+            {"full_name": "acme/" + "x" * 252},
+            {"full_name": 42},
+            {"name": "unnamed"},
+            {"full_name": "acme/app"},
+        ],
+    )
+
+    with github._client() as client:
+        listed = github._list_org_repos(client, "acme", per_page=10)
+
+    assert listed == [{"full_name": "acme/app"}]
+
+
+def test_audit_entries_without_an_actor_name_only_their_target(audit):
+    entry = _audit(1, _recently(), action="team.create")
+    del entry["actor"], entry["user"]
+    audit.serve([{**entry, "target": "security-team"}])
+
+    github.ingest_github_org_auditlog(audit.db, "acme")
+
+    (event,) = audit.events()
+    assert event.actor is None
+    assert event.summary == "github org acme team.create target=security-team"
+
+
+def test_a_feed_entry_listed_twice_is_stored_and_counted_once(gh):
+    feed = "https://feeds.example/acme.atom"
+    entry = (1, "PushEvent", "repeated", "2099-01-01T00:00:00Z", "alice")
+    gh.fake.routes[("feeds.example", "/acme.atom")] = httpx.Response(
+        200, text=_atom(entry, entry)
+    )
+
+    result = github.ingest_github_atom_feed(gh.db, feed)
+
+    assert result["created_events"] == 1
+    assert [e.summary for e in gh.events()] == ["github feed: repeated"]

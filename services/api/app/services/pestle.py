@@ -364,12 +364,10 @@ def _apply_item_payload(
     fields = set(payload.model_fields_set or set())
     if is_create or "framework" in fields:
         item.framework_slug = framework_parameter(payload.framework)
-    if is_create or "type" in fields:
-        item.type = _clean_type(payload.type)
-    if is_create or "lens" in fields:
-        item.lens = _clean_lens(payload.lens)
-    if is_create or "item" in fields:
-        item.item = clean_text(payload.item, max_len=20000, required=True, label="item")
+    # Type, lens and item are required fields, so every payload sets them.
+    item.type = _clean_type(payload.type)
+    item.lens = _clean_lens(payload.lens)
+    item.item = clean_text(payload.item, max_len=20000, required=True, label="item")
     if (
         is_create
         or "overall_relevance_id" in fields

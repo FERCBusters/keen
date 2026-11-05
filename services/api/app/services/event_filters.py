@@ -141,7 +141,7 @@ def split_values(raw: str | None, *, label: str) -> tuple[str, ...]:
     for value in values:
         if len(value) > MAX_VALUE_CHARS:
             raise DomainError(
-                400, f"A {label} value must be under {MAX_VALUE_CHARS} characters"
+                400, f"A {label} value must be at most {MAX_VALUE_CHARS} characters"
             )
     return tuple(values)
 
@@ -162,7 +162,7 @@ def parse_text_condition(raw: str) -> TextCondition:
         raise DomainError(400, "A text filter needs a value")
     if len(value) > MAX_VALUE_CHARS:
         raise DomainError(
-            400, f"A text filter value must be under {MAX_VALUE_CHARS} characters"
+            400, f"A text filter value must be at most {MAX_VALUE_CHARS} characters"
         )
     if op.endswith("regex"):
         try:

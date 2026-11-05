@@ -11,7 +11,6 @@ purpose is never valid for another.
 from __future__ import annotations
 
 import base64
-import binascii
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -128,10 +127,7 @@ def parse_request(headers, operation: str, *, now: float | None = None):
     now = datetime.now(timezone.utc).timestamp() if now is None else now
     if abs(now - created) > WINDOW_SECONDS:
         raise SignatureError("signature outside the time window")
-    try:
-        raw = base64.b64decode(value[1], validate=True)
-    except binascii.Error as exc:
-        raise SignatureError("missing or malformed signature") from exc
+    raw = base64.b64decode(value[1], validate=True)
     return SignedRequest(
         key_id=match[2],
         agent_id=match[2].split(":", 1)[0],

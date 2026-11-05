@@ -97,10 +97,8 @@ class OutboundWebhookConfig:
         event: "created" (new question) or "reply" (new post on existing thread).
         """
 
+        # Anything other than a reply reads the question URLs.
         ev = (event or "created").strip().lower()
-        if ev not in ("created", "reply"):
-            ev = "created"
-
         if ev == "reply":
             use_fallback = bool(
                 getattr(

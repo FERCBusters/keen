@@ -136,6 +136,19 @@ def test_an_inconsistent_identity_row_is_refused(keen):
     assert keen.client.get("/v1/agents/server-key").status_code == 503
 
 
+def test_an_erased_identity_key_is_never_loaded(keen):
+    old = register(keen)["enrollment_code"].rsplit(".", 1)[1]
+    with keen.db() as db:
+        server_keys.reset_identity(db)
+        db.commit()
+        erased = db.get(AgentServerKey, old)
+        assert (erased.state, erased.private_key) == ("destroyed", None)
+        with pytest.raises(DomainError) as refused:
+            server_keys.load_identity(erased)
+    assert refused.value.status_code == 503
+    assert refused.value.detail == "KEEN's identity key has been erased"
+
+
 # -- sealed requests ---------------------------------------------------------
 
 

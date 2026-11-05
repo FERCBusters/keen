@@ -1,6 +1,8 @@
 """Cache misses/outages never alter visibility scope or suppress real failures."""
 
-from datetime import date
+import uuid
+from datetime import date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -76,3 +78,38 @@ def test_prefix_deletion_does_not_delete_sessions(redis):
     redis.set("keen:session:keep", "session")
     assert cache.cache_delete_prefix() == 510
     assert redis.get("keen:session:keep") == "session"
+
+
+def test_cached_values_store_dates_as_iso_text_and_other_values_as_text(redis):
+    identifier = uuid.UUID("7f6cc9e2-4372-4b4b-b8d6-dfa10c001234")
+    value = {
+        "at": datetime(2026, 10, 9, 12, 30, 5),
+        "on": date(2026, 10, 9),
+        "id": identifier,
+        "amount": Decimal("12.50"),
+    }
+    cache.cache_set_json("events", {"q": 1}, value)
+    assert cache.cache_get_json("events", {"q": 1}) == {
+        "at": "2026-10-09T12:30:05",
+        "on": "2026-10-09",
+        "id": "7f6cc9e2-4372-4b4b-b8d6-dfa10c001234",
+        "amount": "12.50",
+    }
+    # Cache keys read the same values in the same way.
+    assert cache.make_cache_key("events", {"id": identifier}) == cache.make_cache_key(
+        "events", {"id": str(identifier)}
+    )
+
+
+@pytest.mark.parametrize("failing", ["connect", "scan", "delete"])
+def test_prefix_deletion_reports_nothing_deleted_while_valkey_is_down(
+    redis, monkeypatch, failing
+):
+    cache.cache_set_json("events", {"i": 1}, 1)
+    down = Mock(side_effect=ConnectionError("offline"))
+    if failing == "connect":
+        monkeypatch.setattr(cache, "get_valkey", down)
+    else:
+        monkeypatch.setattr(redis, "scan_iter" if failing == "scan" else "delete", down)
+    assert cache.cache_delete_prefix() == 0
+    down.assert_called_once()

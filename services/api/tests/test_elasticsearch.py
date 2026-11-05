@@ -581,3 +581,50 @@ def test_unusable_credentials_are_refused_before_connecting(
 def test_document_dates_need_a_time_zone(value):
     with pytest.raises(es.ElasticsearchInputError, match="single valid date"):
         es._timestamp(value)
+
+
+def test_a_connection_without_credentials_searches_anonymously():
+    with scoped(), es._client() as client:
+        assert client.auth is None
+        assert "authorization" not in client.headers
+
+
+def test_a_window_whose_budget_ends_before_its_first_search_reads_nothing(
+    contract_db, storage, monkeypatch
+):
+    calls = []
+    # The run starts within its deadline; it has passed when the first page is due.
+    clock = iter([0, 50])
+    monkeypatch.setattr(es, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    with scoped(), mock_client([], calls) as client:
+        with pytest.raises(es.ElasticsearchInputError, match="time budget"):
+            es.ingest_elasticsearch_once(contract_db, client, input_config(), 10)
+
+    # The point in time is opened and closed again without any search.
+    assert [(method, url.path.rsplit("/", 1)[-1]) for method, url, _ in calls] == [
+        ("POST", "_pit"),
+        ("DELETE", "_pit"),
+    ]
+    assert contract_db.query(Event).count() == 0
+    assert contract_db.query(IngestionCursor).one().last_ts is None
+
+
+def test_a_backlog_beyond_the_windows_of_one_run_waits_for_the_next(
+    contract_db, storage
+):
+    calls = []
+    entry = input_config(
+        initial_lookback_minutes=60, window_minutes=10, windows_per_run=2
+    )
+    with scoped(), mock_client([page([]), page([])], calls) as client:
+        result = es.ingest_elasticsearch_once(
+            contract_db, client, entry, time.monotonic() + 120
+        )
+
+    # Two ten-minute windows of the hour's backlog are read, and no more.
+    assert (result["windows_completed"], result["caught_up"]) == (2, False)
+    cursor = contract_db.query(IngestionCursor).one()
+    start = es._timestamp(cursor.meta["initial_start"])
+    assert cursor.last_ts == (start + timedelta(minutes=20)).replace(tzinfo=None)
+    searches = [body for _, url, body in calls if url.path.endswith("_search")]
+    assert len(searches) == 2

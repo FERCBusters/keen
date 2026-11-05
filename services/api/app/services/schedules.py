@@ -518,11 +518,11 @@ def materialise_one(
         run_date, missed = advance_past_missed_runs(schedule, run_today=run_today)
         schedule.schedule_next_run_date = run_date
         schedule.updated_at = utc_now_naive()
-        if missed:
-            skipped = {
-                "skipped_run_dates": missed,
-                "next_run_date": run_date.isoformat() if run_date else None,
-            }
+        # A next run date before today is always skipped, so missed is never empty.
+        skipped = {
+            "skipped_run_dates": missed,
+            "next_run_date": run_date.isoformat() if run_date else None,
+        }
         if not run_date or run_date > latest_create_date:
             return None, skipped
 

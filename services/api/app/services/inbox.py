@@ -102,8 +102,13 @@ def notify(
             "subject_id": subject_id,
             "actor_user_id": actor.id if actor is not None else None,
             "created_at": now,
-            "read_at": now if address and delivery == "email" else None,
+            "read_at": None,
         }
+        # An email shows the record as its reader can open it. Until they can,
+        # nothing is emailed and the notification waits unread in Keen.
+        shown = _shown(db, account, [InboxItem(**item)]) if address else []
+        if shown and delivery == "email":
+            item["read_at"] = now
         created = db.execute(
             insert(InboxItem)
             .values(**item)
@@ -113,17 +118,13 @@ def notify(
         if created is None:
             continue
         told += 1
-        if address:
-            _email(db, account, address, InboxItem(**item))
+        if address and shown:
+            _email(db, account, address, shown[0])
     return told
 
 
-def _email(db: Session, account: User, address: str, item: InboxItem) -> None:
-    """Queue a notification's email, if its reader can open the record."""
-    shown = _shown(db, account, [item])
-    if not shown:
-        return
-    view = shown[0]
+def _email(db: Session, account: User, address: str, view: dict[str, Any]) -> None:
+    """Queue a notification's email, showing the record as its reader opens it."""
     line = f"{view['summary']}: {view['title']}"
     when = f"{view['date_label']} {view['date']} · " if view["date"] else ""
     by = f"by {view['actor']}" if view["actor"] else "by Keen"

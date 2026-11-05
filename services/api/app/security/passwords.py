@@ -46,8 +46,6 @@ def _pbkdf2_sha256(password: str, salt: bytes, iterations: int) -> bytes:
 
 
 def _parse_hash(password_hash: str) -> ParsedHash | None:
-    if not password_hash:
-        return None
     parts = str(password_hash).split("$")
     if len(parts) != 4:
         return None

@@ -1014,3 +1014,102 @@ def test_a_days_activity_is_listed_with_the_feeds_date_parameter(collector):
             day=datetime(2026, 10, 8).date(),
         )
     assert requests[0].url.params["date"] == "2026-10-08"
+
+
+def _api_then_rss(activities, feed):
+    def handler(request):
+        if request.url.path.endswith("/activities/feeds"):
+            return httpx.Response(200, json=activities)
+        return httpx.Response(
+            200, headers={"content-type": "application/rss+xml"}, text=feed
+        )
+
+    return handler
+
+
+def test_activity_entries_other_than_objects_are_passed_over(collector):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one_or_none.return_value = None
+    stored = []
+    with (
+        configured(collector),
+        serving(collector, _api_then_rss([ACTIVITY, "unexpected", 7], RSS)),
+        patch.object(
+            gc,
+            "store_event_with_artifact",
+            side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+        ),
+    ):
+        result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
+
+    assert (result["mode"], result["created_events"]) == ("api", 1)
+    assert [kw["normalized_payload"]["activity"]["id"] for kw in stored] == [9]
+    assert result["cursor_last_ts"] == "2026-10-09T12:00:00"
+
+
+def test_an_activity_page_larger_than_requested_falls_back_to_the_feed(collector):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one_or_none.return_value = None
+    oversized = [dict(ACTIVITY, id=n) for n in range(51)]
+    stored = []
+    with (
+        configured(collector),
+        serving(collector, _api_then_rss(oversized, RSS)),
+        patch.object(
+            gc,
+            "store_event_with_artifact",
+            side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+        ),
+    ):
+        result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
+
+    # Nothing from the over-full page is kept; the feed is read in its place.
+    assert result["mode"] == "rss_fallback"
+    assert result["api_error"] == (
+        "Collection failed; check the input, credentials, upstream service and "
+        "storage configuration"
+    )
+    assert [kw["artifact_kind"] for kw in stored] == [source(collector) + "_rss"]
+    db.rollback.assert_called_once()
+
+
+def test_feed_items_out_of_order_leave_the_cursor_at_the_newest(collector):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one_or_none.return_value = None
+    feed = (
+        "<rss><channel>"
+        "<item><title>first</title><pubDate>Thu, 08 Oct 2026 00:00:00 GMT"
+        "</pubDate><guid>g1</guid></item>"
+        "<item><title>newest</title><pubDate>Fri, 09 Oct 2026 06:00:00 GMT"
+        "</pubDate><guid>g3</guid></item>"
+        "<item><title>middle</title><pubDate>Thu, 08 Oct 2026 12:00:00 GMT"
+        "</pubDate><guid>g2</guid></item>"
+        "</channel></rss>"
+    )
+
+    def handler(request):
+        if request.url.path.endswith("/activities/feeds"):
+            return httpx.Response(403)
+        return httpx.Response(
+            200, headers={"content-type": "application/rss+xml"}, text=feed
+        )
+
+    stored = []
+    with (
+        configured(collector),
+        serving(collector, handler),
+        patch.object(
+            gc,
+            "store_event_with_artifact",
+            side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+        ),
+    ):
+        result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
+
+    # Every item is stored; an older item read last never moves the cursor back.
+    assert [kw["raw_pointer"][source(collector)]["guid"] for kw in stored] == [
+        "g2",
+        "g3",
+        "g1",
+    ]
+    assert result["cursor_last_ts"] == "2026-10-09T06:00:00"

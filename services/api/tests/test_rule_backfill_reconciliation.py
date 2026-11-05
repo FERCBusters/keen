@@ -1,5 +1,6 @@
 """Reapplying a rule reconciles its own mappings without losing other evidence."""
 
+import uuid
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
@@ -13,7 +14,14 @@ from app.db.models import (
     Mapping,
     RuleBackfillJob,
 )
+from app.mapping.collector import collector_id
 from app.worker import rule_backfill
+from sqlalchemy import create_engine, insert
+from sqlalchemy import event as sql_event
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
+from tests.db_helpers import create_sqlite_schema
 
 
 def rule(refs=("keep",), **when):
@@ -303,3 +311,157 @@ def test_recover_jobs_returns_queued_and_stale_running_jobs_only(setup):
     add("failed", now - timedelta(hours=1), now - timedelta(hours=2))
     db.commit()
     assert rule_backfill.recover_jobs() == [stale.id, queued.id]
+
+
+@pytest.mark.parametrize("order", [("strong", "weak"), ("weak", "strong")])
+def test_the_most_confident_supporting_rule_keeps_a_shared_target(setup, order):
+    # A control target and a plain reference name the same control; whichever
+    # rule is listed first, the more confident one keeps the mapping.
+    db, controls, event, mapping, job, clear = setup
+    old = mapping("removed")
+    strong = rule(("removed",))
+    strong.update(id="strong", confidence=0.9)
+    strong["map_to"][0]["kind"] = "control"
+    weak = rule(("removed",))
+    weak.update(id="weak", confidence=0.6)
+    others = {"strong": strong, "weak": weak}
+    task = job(rule(), [others[name] for name in order])
+
+    rule_backfill.process_batch(task.id)
+
+    db.refresh(old)
+    assert (old.confidence, old.rationale) == (0.9, "auto by rule strong (TEST)")
+    assert db.query(Mapping).count() == 2
+
+
+def test_an_owned_mapping_its_rule_still_supports_as_it_is_is_left_alone(setup):
+    db, controls, event, mapping, job, clear = setup
+    kept = mapping("keep")
+    kept.confidence = 0.8  # the rule's own confidence
+    task = job(rule())
+
+    assert rule_backfill.process_batch(task.id) is False
+
+    db.refresh(kept)
+    assert (kept.confidence, kept.rationale) == (0.8, "auto by rule edited (TEST)")
+    assert [m.id for m in db.query(Mapping)] == [kept.id]
+    assert task.matched == 1 and task.created_mappings == 0
+    clear.assert_not_called()
+
+
+def test_a_mapping_another_writer_adds_during_the_batch_is_kept_uncounted(setup):
+    db, controls, event, mapping, job, clear = setup
+    task = job(rule())
+    raced = []
+
+    def concurrent_writer(state):
+        # Another worker maps the event after the batch read its mappings.
+        if raced or not state.is_insert or state.statement.table.name != "mappings":
+            return
+        raced.append(True)
+        state.session.connection().execute(
+            insert(Mapping.__table__).values(
+                id=uuid.uuid4(),
+                event_id=event.id,
+                control_item_id=controls["keep"].id,
+                method="manual",
+                mapped_by="auditor",
+                confidence=1.0,
+                rationale="added meanwhile",
+            )
+        )
+
+    sql_event.listen(db, "do_orm_execute", concurrent_writer)
+    try:
+        assert rule_backfill.process_batch(task.id) is False
+    finally:
+        sql_event.remove(db, "do_orm_execute", concurrent_writer)
+
+    assert raced == [True]
+    (row,) = db.query(Mapping).all()
+    assert (row.control_item_id, row.method) == (controls["keep"].id, "manual")
+    assert task.matched == 1 and task.created_mappings == 0
+    clear.assert_not_called()
+
+
+def test_a_rule_for_one_collection_item_examines_only_that_items_events(setup):
+    db, controls, event, mapping, job, clear = setup
+    if db.get_bind().dialect.name != "postgresql":
+        pytest.skip("Provenance containment runs on PostgreSQL JSONB")
+    for name in ("deploy", "nightly"):
+        db.add(
+            Event(
+                source="jenkins",
+                external_id=name,
+                timestamp=datetime(2026, 1, 5),
+                created_at=datetime(2026, 1, 5),
+                summary=f"{name} build",
+                raw_pointer={"jenkins": {"job": name}},
+            )
+        )
+    identity = collector_id("jenkins", "jobs", "deploy")
+    task = job(rule(source="jenkins", collector=identity))
+
+    assert rule_backfill.process_batch(task.id) is False
+
+    assert task.examined == 1 and task.total_estimate == 1
+    assert [db.get(Event, m.event_id).external_id for m in db.query(Mapping)] == [
+        "deploy"
+    ]
+
+
+def test_a_batch_on_another_database_takes_no_postgresql_lock(monkeypatch):
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    create_sqlite_schema(engine)
+    statements = []
+    sql_event.listen(
+        engine,
+        "before_cursor_execute",
+        lambda conn, cursor, statement, *args: statements.append(statement),
+    )
+    try:
+        with Session(engine) as db:
+            control = ControlItem(
+                framework_slug="TEST", type="custom", ref="keep", title="keep"
+            )
+            event = Event(
+                source="test",
+                external_id="one",
+                timestamp=datetime(2026, 1, 1),
+                created_at=datetime(2026, 1, 1),
+                summary="original",
+            )
+            document = rule()
+            db.add_all(
+                [
+                    control,
+                    event,
+                    ManagedConfiguration(
+                        name="rules", version=1, document={"rules": [document]}
+                    ),
+                ]
+            )
+            task = RuleBackfillJob(
+                rule_id="edited",
+                source="test",
+                rule_document=deepcopy(document),
+                rules_version=1,
+                cutoff=datetime(2026, 2, 1),
+            )
+            db.add(task)
+            db.commit()
+            task_id, control_id = task.id, control.id
+
+        monkeypatch.setattr(rule_backfill, "SessionLocal", lambda: Session(engine))
+        monkeypatch.setattr(rule_backfill, "clear_stats_caches", Mock())
+
+        assert rule_backfill.process_batch(task_id) is False
+
+        with Session(engine) as db:
+            assert db.get(RuleBackfillJob, task_id).status == "completed"
+            assert [m.control_item_id for m in db.query(Mapping)] == [control_id]
+        assert statements and not any("pg_advisory" in s for s in statements)
+    finally:
+        engine.dispose()

@@ -9,11 +9,11 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlsplit
 
 import httpx
-from sqlalchemy import text
 
 from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.connections import (
+    advisory_lock,
     connection_runs,
     load_document,
     namespace,
@@ -341,22 +341,8 @@ def _run_lock(db, base):
     lock_id = int.from_bytes(
         hashlib.sha256(("redmine:" + base).encode()).digest()[:8], "big", signed=True
     )
-    with db.get_bind().engine.connect() as connection:
-        acquired = connection.execute(
-            text("SELECT pg_try_advisory_lock(:key)"), {"key": lock_id}
-        ).scalar()
-        try:
-            yield bool(acquired)
-        finally:
-            if acquired:
-                try:
-                    connection.execute(
-                        text("SELECT pg_advisory_unlock(:key)"), {"key": lock_id}
-                    )
-                    connection.commit()
-                except Exception:
-                    connection.invalidate()
-                    raise
+    with advisory_lock(db, lock_id) as acquired:
+        yield acquired
 
 
 @pausable("redmine")

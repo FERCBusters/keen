@@ -612,3 +612,39 @@ def test_an_empty_window_leaves_a_new_cursor_without_a_timestamp(db):
     assert result["cursor_last_ts"] is None
     cursor = db.add.call_args.args[0]
     assert cursor.last_ts is None and cursor.updated_at is not None
+
+
+def test_unnamed_events_and_parameters_without_one_value_are_left_out(db):
+    activity = {
+        "id": {"time": "2026-10-09T12:00:00.000Z", "uniqueQualifier": "uq-9"},
+        "actor": {"email": "admin@example.com"},
+        "events": [
+            {"name": "  ", "parameters": [{"name": "USER_EMAIL", "value": "a@x.test"}]},
+            {
+                "name": "ADD_GROUP_MEMBER",
+                "parameters": [
+                    # A list-valued parameter has no single value to record.
+                    {"name": "MEMBERS", "multiValue": ["b@x.test", "c@x.test"]},
+                    {"name": "GROUP_EMAIL", "multiValue": ["d@x.test"]},
+                    {"name": "GROUP_EMAIL", "value": "team@x.test"},
+                ],
+            },
+        ],
+    }
+    stored = []
+    with patch.object(
+        gws,
+        "store_event_with_artifact",
+        side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+    ):
+        gws.ingest_google_workspace_stream(
+            db, _service([activity]), {"application": "admin"}, {}
+        )
+
+    (call,) = stored
+    assert call["action"] == "ADD_GROUP_MEMBER"
+    parsed = json.loads(call["artifact_bytes"])["parsed"]
+    assert parsed == {
+        "event_names": ["ADD_GROUP_MEMBER"],
+        "params": {"USER_EMAIL": "a@x.test", "GROUP_EMAIL": "team@x.test"},
+    }

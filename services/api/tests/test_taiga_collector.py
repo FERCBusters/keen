@@ -362,3 +362,93 @@ def test_load_taiga_config():
     with patch.object(tg, "load_document", return_value={"projects": []}) as document:
         assert tg.load_taiga_config("fixture.yml") == {"projects": []}
     document.assert_called_once_with("taiga", "fixture.yml")
+
+
+def test_entries_are_timed_by_the_first_readable_field_or_skipped(db):
+    body = [
+        {"id": 60, "created": "yesterday", "date": "2026-10-09T14:00:00Z"},
+        {"id": 61, "created": "not a date"},
+        {"id": 62, "data": {}},
+    ]
+
+    result, store = _timeline(db, body)
+
+    # The unreadable created time falls through to the date; an entry with no
+    # readable time is skipped, as the timeline documents.
+    (call,) = [c.kwargs for c in store.call_args_list]
+    assert call["external_id"] == "taiga:12:60"
+    assert call["timestamp"] == _datetime(2026, 10, 9, 14, 0)
+    assert result["created_events"] == 1
+    assert result["cursor_last_ts"] == "2026-10-09T14:00:00"
+
+
+def test_entries_sharing_an_instant_are_all_stored_and_duplicates_not_counted(db):
+    body = [
+        dict(ENTRY, id=70),
+        dict(ENTRY, id=71),
+        dict(ENTRY, id=72),
+    ]
+    with (
+        auth(),
+        serving(lambda request: httpx.Response(200, json=body)),
+        patch.object(
+            tg,
+            "store_event_with_artifact",
+            side_effect=[{"deduped": False}, {"deduped": True}, {"deduped": False}],
+        ) as store,
+    ):
+        result = tg.ingest_taiga_project_timeline(db, 12, "prod")
+
+    assert [c.kwargs["external_id"] for c in store.call_args_list] == [
+        "taiga:12:70",
+        "taiga:12:71",
+        "taiga:12:72",
+    ]
+    assert result["created_events"] == 2
+    assert result["cursor_last_ts"] == "2026-10-09T12:00:00"
+
+
+def test_an_object_without_a_reference_gets_no_taiga_link(db):
+    unreferenced = dict(
+        ENTRY,
+        data={
+            "project": {"name": "Security", "slug": "security"},
+            "userstory": {"subject": "Draft story"},
+        },
+    )
+
+    result, store = _timeline(db, [unreferenced])
+
+    call = store.call_args.kwargs
+    assert call["raw_pointer"]["taiga"]["url"] is None
+    assert call["summary"] == "[prod] timeline userstory Draft story"
+    assert result["created_events"] == 1
+
+
+class _CloseFails(httpx.MockTransport):
+    def close(self):
+        raise OSError("connection already reset")
+
+
+def test_a_client_that_fails_to_close_still_stores_the_timeline(db):
+    def fake_client(**kwargs):
+        kwargs.pop("timeout", None)
+        return httpx.Client(
+            transport=_CloseFails(lambda request: httpx.Response(200, json=[ENTRY])),
+            **kwargs,
+        )
+
+    with (
+        auth(),
+        patch.object(tg, "ingestion_client", fake_client),
+        patch.object(tg, "is_safe_url", return_value=True),
+        patch.object(tg.settings, "taiga_base_url", "https://taiga.example"),
+        patch.object(
+            tg, "store_event_with_artifact", return_value={"deduped": False}
+        ) as store,
+    ):
+        result = tg.ingest_taiga_project_timeline(db, 12, "prod")
+
+    assert result["created_events"] == 1
+    assert store.call_args.kwargs["external_id"] == "taiga:12:55"
+    db.commit.assert_called_once()

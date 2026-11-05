@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import httpx
-from sqlalchemy import text
 
 from app.db.models import (
     ControlItem,
@@ -30,7 +29,13 @@ from app.db.models import (
     RiskControlLink,
 )
 from app.ingest.common import store_event_with_artifact
-from app.ingest.connections import connection_runs, load_document, namespace, settings
+from app.ingest.connections import (
+    advisory_lock,
+    connection_runs,
+    load_document,
+    namespace,
+    settings,
+)
 from app.ingest.http import client as ingestion_client
 from app.security.redaction import mask_event_data_obj, redact_obj
 from app.services.ingestion_pause import pausable
@@ -475,20 +480,8 @@ def _snapshot(db, org, selector, label, kind, row, fields=None):
 @contextmanager
 def _run_lock(db):
     # Single import across keys prevents races creating the shared framework/category.
-    with db.get_bind().engine.connect() as connection:
-        acquired = connection.execute(
-            text("SELECT pg_try_advisory_lock(1262830937)")
-        ).scalar()
-        try:
-            yield bool(acquired)
-        finally:
-            if acquired:
-                try:
-                    connection.execute(text("SELECT pg_advisory_unlock(1262830937)"))
-                    connection.commit()
-                except Exception:
-                    connection.invalidate()
-                    raise
+    with advisory_lock(db, 1262830937) as acquired:
+        yield acquired
 
 
 def _collect(db, client, cfg):

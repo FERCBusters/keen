@@ -588,7 +588,7 @@ def change_my_password(
         # A session holder must not be able to test many current passwords by
         # spreading attempts across addresses.
         per_user = settings.login_rate_limit_per_username
-        if ok and per_user > 0:
+        if ok:
             ok, retry = fixed_window_allow(
                 r,
                 f"keen:rl:password_change:user:{user.id}",

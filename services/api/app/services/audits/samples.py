@@ -375,10 +375,9 @@ def audit_sample_entity_reference(
             .one_or_none()
         )
         if row:
+            # The inner join above means every entry found has its measure.
             measure = row.measure
-            title = (
-                f"ISMS metric: {short_text(measure.summary if measure else '', 160)}"
-            )
+            title = f"ISMS metric: {short_text(measure.summary, 160)}"
             value_parts = []
             if row.metric_value is not None:
                 value_parts.append(f"{row.metric_value:g}")
@@ -389,10 +388,9 @@ def audit_sample_entity_reference(
             subtitle = (
                 " ".join(value_parts).strip() or row.source_title or "Metric entry"
             )
-            if measure:
-                controls = isms_sample_controls(
-                    db, "isms_effectiveness_measure", measure.id, framework
-                )
+            controls = isms_sample_controls(
+                db, "isms_effectiveness_measure", measure.id, framework
+            )
     elif entity_type == "story":
         from app.services.stories import story_controls
 

@@ -1155,8 +1155,7 @@ def save_evidence_definition(
         raise DomainError(409, "Existing rules have duplicate IDs")
     entries = document.setdefault(section, {} if adapter == "webhooks" else [])
     if adapter == "webhooks":
-        if payload.entry_key is None and key in entries:
-            raise DomainError(409, "Collection item already exists; reload and edit it")
+        # A provider is named by its entry key, which every request carries.
         entries[key] = deepcopy(payload.entry)
     else:
         found = next(

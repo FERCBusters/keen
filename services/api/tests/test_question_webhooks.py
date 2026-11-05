@@ -427,3 +427,72 @@ def test_reply_webhooks_delegate_to_fanout():
         entry for entry in seen if "hooks.slack.example" in entry.get("url", "")
     )
     assert b":speech_balloon:" in slack_post["body"]
+
+
+@pytest.mark.parametrize(
+    "event,expected",
+    [
+        ("created", "https://created.slack"),
+        (" Reply ", "https://reply.slack"),
+        ("deleted", "https://created.slack"),
+        ("", "https://created.slack"),
+    ],
+)
+def test_from_settings_reads_question_urls_for_anything_but_a_reply(event, expected):
+    with contextlib.ExitStack() as stack:
+        for attr, value in {
+            "question_webhook_slack_urls": "https://created.slack",
+            "question_reply_webhook_slack_urls": "https://reply.slack",
+        }.items():
+            stack.enter_context(patch.object(qw.settings, attr, value))
+        config = qw.OutboundWebhookConfig.from_settings(event=event)
+    assert config.slack_urls == [expected]
+
+
+def test_a_reply_without_its_thread_author_role_or_status_leaves_those_lines_out():
+    reply = {
+        "type": "keen.question.replied",
+        "event": PAYLOAD["event"],
+        "thread": {},
+        "post": {"author_username": "bob", "body": "Fixed in the next build."},
+        "reply": {},
+    }
+    text = qw._compact_text(reply)
+    assert text.splitlines() == [
+        "New reply on question",
+        "Event: Suspicious login",
+        "Source: taiga · 2026-10-09T12:00:00",
+        "Replied by: bob",
+        "",
+        "Fixed in the next build.",
+    ]
+
+
+def test_chat_messages_without_an_event_link_carry_no_link():
+    # The question's own text may hold what a link line would.
+    body = "Open: the shared drive, then the audit folder"
+    unlinked = dict(PAYLOAD, links={}, post={"body": body})
+    slack = qw.slack_payload(unlinked)["text"]
+    teams = qw.teams_payload(unlinked)["text"]
+    for text in (slack, teams):
+        assert body in text and "View in Keen" not in text
+        assert text.endswith("Controls: A.9.1, A.5.3")
+
+
+def test_a_generic_receiver_refusing_a_delivery_is_logged_by_host_alone(caplog):
+    fake_client, seen = build_client_handler({})
+    config = make_config(generic_urls=["https://gw.example/synthetic-token/404"])
+    with (
+        patch.object(qw, "secure_http_client", fake_client),
+        caplog.at_level("WARNING", logger=qw.log.name),
+    ):
+        out = qw.send_question_created_webhooks(config, PAYLOAD)
+    assert (out["generic_sent"], out["generic_failed"]) == (0, 1)
+    # A refused delivery is not retried.
+    assert [entry["url"] for entry in seen if "url" in entry] == [
+        "https://gw.example/synthetic-token/404"
+    ]
+    assert [r.getMessage() for r in caplog.records] == [
+        "generic webhook returned HTTP 404 (https://gw.example)"
+    ]
+    assert "synthetic-token" not in caplog.text

@@ -831,3 +831,69 @@ def test_a_retry_after_a_failed_chunk_stores_every_line(lk, monkeypatch):
         artifact.storage_uri for event in lk.events() for artifact in event.artifacts
     }
     assert len(stored) == 2 and not stored & queued
+
+
+def test_a_username_without_a_password_sends_no_basic_credentials(lk, monkeypatch):
+    monkeypatch.setattr(settings, "loki_password", "")
+
+    lk.run()
+
+    (request,) = lk.upstream.requests
+    assert "authorization" not in request.headers
+    # The tenant header is configured on its own and is still sent.
+    assert request.headers["X-Scope-OrgID"] == "tenant-a"
+
+
+def test_an_unknown_overlong_strategy_reads_the_gap_in_chunks(lk):
+    lk.configure(lk.query(max_query_range_hours=4, overlong_range_strategy="skip"))
+    behind = NOW - timedelta(hours=10)
+    lk.db.add(IngestionCursor(name=lk.cursor_name(), last_ts=behind, meta={}))
+    lk.db.commit()
+
+    (result,) = lk.run()
+
+    # The gap is read, starting at the cursor.
+    (window,) = [lk.upstream.window(i) for i in range(len(lk.upstream.requests))]
+    assert abs(window[0] - (_ns(behind) + 1000)) < 1000
+    assert abs(window[1] - _ns(behind + timedelta(hours=4))) < 2000
+    assert "skipped" not in result and result["chunks_remaining"] is True
+    # The run records the strategy it applied.
+    assert result["strategy"] == "chunk"
+    assert lk.cursor().meta["last_run_strategy"] == "chunk"
+
+
+def test_without_a_range_limit_one_query_reads_from_the_cursor_to_now(lk):
+    lk.configure(lk.query(max_query_range_hours=0))
+    behind = NOW - timedelta(days=60)
+    lk.db.add(IngestionCursor(name=lk.cursor_name(), last_ts=behind, meta={}))
+    lk.db.commit()
+
+    (result,) = lk.run()
+
+    (window,) = [lk.upstream.window(i) for i in range(len(lk.upstream.requests))]
+    assert abs(window[0] - (_ns(behind) + 1000)) < 1000
+    assert window[1] == _ns(NOW)
+    assert result["caught_up"] is True
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW
+
+
+def test_lines_returned_newest_first_still_hold_the_cursor_at_the_newest(lk):
+    lk.configure(lk.query(limit=2))
+    newest = NOW - timedelta(minutes=4)
+    lk.upstream.replies.append(
+        [
+            {
+                "stream": {"app": "sshd"},
+                "values": [
+                    _line(newest, "two"),
+                    _line(NOW - timedelta(minutes=6), "one"),
+                ],
+            }
+        ]
+    )
+
+    (result,) = lk.run()
+
+    assert result["chunks"][0]["hit_limit"] is True
+    assert [e.summary for e in lk.events()] == ["one", "two"]
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == newest

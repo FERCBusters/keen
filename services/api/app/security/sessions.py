@@ -129,9 +129,8 @@ def update_session_authz(
         with redis_client.pipeline() as pipe:
             pipe.watch(key)
             raw = pipe.get(key)
-            if not raw:
-                return
             try:
+                # A session ended meanwhile reads as None, a TypeError here.
                 payload = json.loads(raw)
             except (TypeError, ValueError):
                 return

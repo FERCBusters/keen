@@ -366,10 +366,8 @@ def update_asset(
         )
     if "asset" in fields:
         row.name = _asset_name_from_payload(payload)
-    if category:
-        row.category_id = category.id
-    if subcategory:
-        row.subcategory_id = subcategory.id
+    row.category_id = category.id
+    row.subcategory_id = subcategory.id
     conflict = (
         db.query(RiskAsset)
         .filter(

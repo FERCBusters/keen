@@ -435,7 +435,9 @@ def test_oauth_client_closed_on_failed_exchange(monkeypatch):
     )
     monkeypatch.setattr(oidc, "_new_client", lambda *a, **kw: client)
     provider = replace(
-        oidc._oidc_provider(), redirect_uri="https://keen.example/callback"
+        oidc._oidc_provider(),
+        redirect_uri="https://keen.example/callback",
+        issuer="https://idp.example",
     )
     with pytest.raises(RuntimeError):
         asyncio.run(

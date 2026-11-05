@@ -721,17 +721,12 @@ class Settings(BaseSettings):
     @field_validator("reminder_days_before")
     @classmethod
     def validate_reminder_days_before(cls, value: int) -> int:
-        try:
-            days = int(value or 0)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "KEEN_REMINDER_DAYS_BEFORE must be an integer from 0 to 90"
-            ) from exc
-        if days < 0 or days > 90:
+        # Runs after pydantic has parsed the value as an integer.
+        if value < 0 or value > 90:
             raise ValueError(
                 "KEEN_REMINDER_DAYS_BEFORE must be an integer from 0 to 90"
             )
-        return days
+        return value
 
     @field_validator("scheduled_audit_create_days_ahead")
     @classmethod

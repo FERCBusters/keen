@@ -7,7 +7,6 @@ import json
 import os
 import uuid
 from datetime import date, datetime, time, timezone
-from typing import Any
 
 from sqlalchemy import desc, distinct, func
 from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
@@ -94,17 +93,8 @@ from app.services.presentation import parse_iso_dt as _parse_iso_dt
 from app.services.presentation import (
     validate_control_justification as _validate_control_justification,
 )
+from app.services.users import bump_authz_versions
 from app.storage.s3 import attempt_key, put_bytes
-
-
-def _bump_user_authz(db: Session, user_ids) -> None:
-    ids = sorted({uid for uid in (user_ids or []) if uid})
-    if not ids:
-        return
-    db.query(User).filter(User.id.in_(ids)).update(
-        {User.authz_version: User.authz_version + 1},
-        synchronize_session=False,
-    )
 
 
 def _group_member_ids(db: Session, group_id: uuid.UUID) -> list[uuid.UUID]:
@@ -116,14 +106,11 @@ def _group_member_ids(db: Session, group_id: uuid.UUID) -> list[uuid.UUID]:
     ]
 
 
-def _ensure_dt_iso_for_admin(value: Any) -> str | None:
+def _ensure_dt_iso_for_admin(value: datetime | None) -> str | None:
     if value is None:
         return None
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc).isoformat()
-    return str(value)
+    # Cursor timestamps are stored without a zone, in UTC.
+    return value.replace(tzinfo=timezone.utc).isoformat()
 
 
 def admin_import_controls(*, payload: ControlImportPayload, user, db: Session):
@@ -677,7 +664,8 @@ def admin_update_clause_controls(
                 )
                 .one_or_none()
             )
-        elif item.ref:
+        else:
+            # Without a reference this finds no control, and the item is refused.
             control = control_by_ref(db, clause.framework_slug, item.ref)
         if not control:
             raise DomainError(status_code=400, detail="Unknown control for framework")
@@ -1120,7 +1108,7 @@ def admin_update_group(
             raise DomainError(400, "Cannot remove the last effective admin")
 
     db.add(g)
-    _bump_user_authz(db, affected_user_ids)
+    bump_authz_versions(db, affected_user_ids)
     db.commit()
     db.refresh(g)
     return admin_get_group(group_id=str(gid), user=user, db=db)
@@ -1145,7 +1133,7 @@ def admin_delete_group(*, group_id: str, user, db: Session) -> dict:
     if was_admin and count_effective_admins(db) == 0:
         db.rollback()
         raise DomainError(400, "Cannot remove the last effective admin")
-    _bump_user_authz(db, affected_user_ids)
+    bump_authz_versions(db, affected_user_ids)
     db.commit()
     return {"ok": True}
 
@@ -1182,7 +1170,7 @@ def admin_set_group_members(
         db.rollback()
         raise DomainError(400, "Cannot remove the last effective admin")
 
-    _bump_user_authz(db, set(old_user_ids) | set(ids))
+    bump_authz_versions(db, set(old_user_ids) | set(ids))
     db.commit()
     return admin_get_group(group_id=str(gid), user=user, db=db)
 
@@ -1221,7 +1209,7 @@ def admin_set_group_permissions(
         rows = [{"group_id": gid, "permission_id": pid} for pid in perm_ids]
         db.execute(group_permissions.insert(), rows)
 
-    _bump_user_authz(db, affected_user_ids)
+    bump_authz_versions(db, affected_user_ids)
     db.commit()
     return admin_get_group(group_id=str(gid), user=user, db=db)
 
@@ -1252,9 +1240,8 @@ def admin_remap_run(
     def _coerce_range_dt(s: str | None, *, end: bool) -> datetime | None:
         if not s:
             return None
+        # Blank text is neither a date nor a datetime, so it gives None below.
         txt = str(s).strip()
-        if not txt:
-            return None
         # Date-only (preferred)
         try:
             d = date.fromisoformat(txt)

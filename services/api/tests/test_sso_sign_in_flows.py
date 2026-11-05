@@ -764,6 +764,13 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
             "KEEN_OIDC_TOKEN_ENDPOINT",
         ),
         (
+            # A setting of separators alone names no issuer.
+            {"oidc_issuer": " , "},
+            500,
+            f"{LABEL} SSO is enabled but required settings are missing: "
+            "KEEN_OIDC_ISSUER",
+        ),
+        (
             # Keen never derives a callback address from the request.
             {"oidc_redirect_uri": ""},
             500,
@@ -814,6 +821,7 @@ def test_the_key_set_is_fetched_once_an_hour(sso, monkeypatch):
         "auto-provision",
         "incomplete",
         "no-client-or-endpoints",
+        "separators-for-an-issuer",
         "no-redirect-uri",
         "redirect-elsewhere",
         "redirect-on-a-longer-host",

@@ -33,8 +33,15 @@ from app.services.errors import DomainError
 from app.services.text import clean_email
 
 
-def _bump_user_authz(db: Session, user_ids) -> None:
+def bump_authz_versions(db: Session, user_ids) -> None:
+    """Make each account's sessions recompute their permissions on next use.
+
+    Every change to who holds which role, group or permission calls this in the
+    transaction that makes the change.
+    """
     ids = sorted({uid for uid in (user_ids or []) if uid})
+    if not ids:
+        return
     db.query(User).filter(User.id.in_(ids)).update(
         {User.authz_version: User.authz_version + 1},
         synchronize_session=False,
@@ -202,7 +209,7 @@ def update_user_admin(
         target.email = clean_email(payload.email)
 
     db.add(target)
-    _bump_user_authz(db, [target.id])
+    bump_authz_versions(db, [target.id])
     db.commit()
     db.refresh(target)
 
@@ -346,7 +353,7 @@ def set_user_access_admin(
             status_code=400, detail="Cannot remove the last effective admin"
         )
 
-    _bump_user_authz(db, [user_id])
+    bump_authz_versions(db, [user_id])
     db.commit()
     return get_user_access_admin(user_id=user_id, context=context, db=db)
 
@@ -382,6 +389,6 @@ def set_user_password_admin(
 
     enqueue(db, target, "password-reset", ip=context.client_ip)
     db.add(target)
-    _bump_user_authz(db, [target.id])
+    bump_authz_versions(db, [target.id])
     db.commit()
     return {"ok": True}

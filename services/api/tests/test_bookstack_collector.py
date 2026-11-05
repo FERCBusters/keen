@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from app.db.models import IngestionCursor
 from app.ingest import bookstack as bs
 from app.security.regex import compile_pattern
 from app.services.errors import DomainError
@@ -1484,6 +1485,8 @@ def test_book_scope_reads_one_or_several_books(cfg, expected):
         {"books": [{"slug": ""}]},
         {"books": ["isms", None]},
         {"books": [""]},
+        # An entry naming neither an id nor a slug, only a display name.
+        {"books": [{"name": "ISMS"}]},
         # Blank or empty values name no book, so they are refused as well.
         {"book": {}},
         {"book_id": ""},
@@ -1530,3 +1533,162 @@ def test_saving_an_unusable_book_scope_is_refused():
         _validate_connector("bookstack", {"books": [{"id": "isms"}]})
     assert refused.value.status_code == 400
     assert "positive whole number" in refused.value.detail
+
+
+def window_listings(run):
+    return [
+        r
+        for r in run.requests
+        if r.url.path == "/api/pages" and "filter[updated_at:gt]" in r.url.params
+    ]
+
+
+def test_a_later_run_lists_only_pages_changed_since_the_cursor(db, env):
+    cursor = IngestionCursor(
+        name="bookstack:pages", last_ts=datetime(2026, 10, 9, 12, 0), meta={}
+    )
+    db.query.return_value.filter.return_value.one_or_none.return_value = cursor
+
+    run = seeded_run(db, env, {"label": "docs"}, SEEDED_PAGES[:2], window=[11])
+
+    (listing,) = window_listings(run)
+    # The window opens at the cursor, ahead of the lookback.
+    assert listing.url.params["filter[updated_at:gt]"] == "2026-10-09T12:00:00Z"
+    assert run.pages == [11]
+    assert run.stored[0]["action"] == "updated"
+    assert cursor.last_ts > datetime(2026, 10, 9, 12, 0)
+
+
+def test_drafts_and_templates_are_listed_when_the_poll_includes_them(db, env):
+    cfg = {"label": "docs", "poll": {"include_drafts": True, "include_templates": True}}
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES[:1], window=[11])
+
+    (listing,) = window_listings(run)
+    assert "filter[draft]" not in listing.url.params
+    assert "filter[template]" not in listing.url.params
+    assert run.pages == [11]
+
+
+def test_a_listing_page_larger_than_requested_is_refused_and_read_again(db, env):
+    stack, api = env(list_items=[PAGE_LIST_ITEM], full_pages={11: PAGE_FULL})
+    oversized = [PAGE_LIST_ITEM, dict(PAGE_LIST_ITEM, id=12, slug="second")]
+
+    def handler(request):
+        api.requests.append(request)
+        return httpx.Response(200, json={"data": oversized, "total": 2})
+
+    api.handler = handler
+    cfg = {"label": "docs", "books": [{"id": 7}], "poll": {"count": 1}}
+    stored = []
+
+    with contextlib.ExitStack() as total:
+        total.enter_context(stack)
+        connections, run_lock = connections_env()
+        total.enter_context(connections)
+        total.enter_context(run_lock)
+        total.enter_context(patch.object(bs, "load_bookstack_config", return_value=cfg))
+        total.enter_context(patch.object(bs.settings, "bookstack_enabled", True))
+        total.enter_context(
+            patch.object(
+                bs, "store_event_with_artifact", lambda db, **kw: stored.append(kw)
+            )
+        )
+        (summary,) = bs.ingest_bookstack_all(db)
+
+    # Nothing from the over-full page is kept, and the book is read again.
+    assert stored == []
+    assert summary["errors"] == [
+        "book=7: Collection failed; check the input, credentials, upstream "
+        "service and storage configuration"
+    ]
+    assert summary["cursor_set_to"] is None
+    assert not [r for r in api.requests if r.url.path.startswith("/api/pages/")]
+
+
+def test_pages_without_a_usable_id_are_passed_over(db, env):
+    numbered_as_text = dict(listed(12, "draft-notes", "Draft notes", 7), id="12")
+    pages = [*SEEDED_PAGES, numbered_as_text]
+    cfg = {
+        "label": "docs",
+        "selected_pages": [{"id": 0}, {"id": "44"}, "51", {"id": -3}, {"id": 61}],
+    }
+
+    run = seeded_run(db, env, cfg, pages, window=[11, "12"])
+
+    # The listed page and the one selected by a usable id are read; a text id,
+    # a non-positive id and an entry other than an object select nothing.
+    assert run.pages == [11, 61]
+    details = sorted(
+        r.url.path for r in run.requests if r.url.path.startswith("/api/pages/")
+    )
+    assert details == ["/api/pages/11", "/api/pages/61"]
+    assert run.summary["errors"] == []
+
+
+def test_a_pattern_match_without_a_usable_id_is_passed_over(db, env):
+    numbered_as_text = dict(listed(90, "supplier-exit", "Supplier exit", 7), id="90")
+    cfg = {
+        "label": "docs",
+        "page_mappings": [
+            {"match": {"slug_regex": "^supplier-"}, "map_to": ["A.5.19"]}
+        ],
+    }
+
+    run = seeded_run(db, env, cfg, [*SEEDED_PAGES, numbered_as_text])
+
+    assert run.pages == [51, 52]
+    assert run.mapped == [("ev-51", ["A.5.19"]), ("ev-52", ["A.5.19"])]
+    # The match without a numeric id is never read, so it reports nothing.
+    details = sorted(
+        r.url.path for r in run.requests if r.url.path.startswith("/api/pages/")
+    )
+    assert details == ["/api/pages/51", "/api/pages/52"]
+    assert run.summary["errors"] == []
+
+
+def test_a_title_pattern_mapping_seeds_nothing_and_maps_listed_pages(db, env):
+    cfg = {
+        "label": "docs",
+        "page_mappings": [{"match": {"title_regex": "^Board"}, "map_to": ["A.5.4"]}],
+    }
+
+    run = seeded_run(db, env, cfg, SEEDED_PAGES, window=[70, 80])
+
+    # A title pattern names no page to look up, so only the window is read.
+    lookups = [
+        r
+        for r in run.requests
+        if r.url.path == "/api/pages" and "filter[updated_at:gt]" not in r.url.params
+    ]
+    assert lookups == []
+    assert run.pages == [70, 80]
+    assert run.mapped == [("ev-70", ["A.5.4"])]
+
+
+def test_a_book_slug_only_the_page_detail_names_scopes_the_stored_page(db, env):
+    listed_item = dict(PAGE_LIST_ITEM, book={"id": 7, "name": "ISMS"})
+    full = dict(PAGE_FULL, book={"id": 7, "slug": "isms"})
+    stack, api = env(list_items=[listed_item], full_pages={11: full})
+    stored = []
+
+    def store(db, **kwargs):
+        stored.append(kwargs)
+        return {"deduped": False, "event_id": "ev-11"}
+
+    with contextlib.ExitStack() as total:
+        total.enter_context(stack)
+        connections, run_lock = connections_env()
+        total.enter_context(connections)
+        total.enter_context(run_lock)
+        total.enter_context(
+            patch.object(bs, "load_bookstack_config", return_value={"label": "docs"})
+        )
+        total.enter_context(patch.object(bs.settings, "bookstack_enabled", True))
+        total.enter_context(patch.object(bs, "store_event_with_artifact", store))
+        bs.ingest_bookstack_all(db)
+
+    # The listed book names no slug, so the detail's book slug is used.
+    (page,) = stored
+    assert page["system"] == "docs:isms:access-control-policy"
+    assert page["raw_pointer"]["bookstack"]["book_slug"] == "isms"

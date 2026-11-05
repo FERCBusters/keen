@@ -7,6 +7,7 @@ boto3 client that records exactly what Keen asks the bucket to do.
 import hashlib
 import io
 import os
+import re
 import stat
 from types import SimpleNamespace
 
@@ -414,3 +415,31 @@ def test_an_unknown_backend_stores_nothing(local, monkeypatch):
     with pytest.raises(ValueError, match="Unsupported artifact storage backend"):
         s3.put_bytes("events/a.json", b"x", "text/plain")
     assert list(local.root.iterdir()) == []
+
+
+def test_automatic_storage_writes_to_the_bucket_once_s3_is_configured(
+    bucket, monkeypatch
+):
+    monkeypatch.setattr(settings, "artifact_storage_backend", "auto")
+
+    stored = s3.put_bytes("events/a.json", b"{}", "application/json")
+
+    assert stored.uri == "s3://evidence/events/a.json?versionId=v%2F1"
+    assert [call[0] for call in bucket.calls] == ["put_object"]
+    assert bucket.objects[("events/a.json", "v/1")] == b"{}"
+
+
+@pytest.mark.parametrize(
+    "key,pattern",
+    [
+        ("events/report.pdf", r"events/report-[0-9a-f]{16}\.pdf"),
+        ("events/README", r"events/README-[0-9a-f]{16}"),
+        ("events/.env", r"events/\.env-[0-9a-f]{16}"),
+        ("notes.", r"notes-[0-9a-f]{16}"),
+        ("archive.tar.gz", r"archive\.tar-[0-9a-f]{16}\.gz"),
+    ],
+)
+def test_each_storage_attempt_gets_its_own_key_keeping_the_extension(key, pattern):
+    first, second = s3.attempt_key(key), s3.attempt_key(key)
+    assert re.fullmatch(pattern, first), first
+    assert re.fullmatch(pattern, second) and first != second

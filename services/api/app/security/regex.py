@@ -154,7 +154,7 @@ def _scan_compiled(pattern, flags, timed):
 
 def validate_pattern(pattern):
     if len(pattern) > 512:
-        raise ValueError("Pattern must be under 512 characters")
+        raise ValueError("Pattern must be at most 512 characters")
     try:
         parsed = _parser.parse(pattern, 0)
     except (re.error, RecursionError) as exc:

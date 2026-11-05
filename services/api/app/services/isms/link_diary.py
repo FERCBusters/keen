@@ -108,11 +108,11 @@ def _record_type(entity_type: str) -> str:
     return entity_type
 
 
-def _record_url(entity_type: str, entity_id: uuid.UUID) -> str | None:
+def _record_url(entity_type: str, entity_id: uuid.UUID) -> str:
     page = _RECORD_PAGES.get(entity_type)
     if page:
         return page.format(id=entity_id)
-    return _SECTION_PAGES.get(entity_type)
+    return _SECTION_PAGES[entity_type]
 
 
 def _ref_text(refs: list[str]) -> str:
@@ -191,7 +191,7 @@ def _entry_payload(
     entity_type: str, entity_id: uuid.UUID, refs: dict[str, list[str]]
 ) -> dict[str, Any]:
     label = _LABELS[entity_type]
-    payload: dict[str, Any] = {
+    return {
         "summary": f"{label} linked to framework controls",
         "details": {
             "linked": {
@@ -199,11 +199,8 @@ def _entry_payload(
                 for framework, values in sorted(refs.items())
             }
         },
+        "links": [{"url": _record_url(entity_type, entity_id), "text": label}],
     }
-    url = _record_url(entity_type, entity_id)
-    if url:
-        payload["links"] = [{"url": url, "text": label}]
-    return payload
 
 
 def _payload_bytes(payload: dict[str, Any]) -> bytes:
@@ -377,8 +374,6 @@ def _revise_entry(
     current = event.normalized_payload or {}
     fresh = _entry_payload(entity_type, entity_id, refs)
     desired = {**current, **fresh}
-    if "links" not in fresh:
-        desired.pop("links", None)
     revision = {**fresh, "author": current.get("author") or event.actor}
     fields = normalise_ingested_fields(
         system=event.system,

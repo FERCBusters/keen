@@ -201,7 +201,7 @@ def _compute(src, framework, window_days, db, user, clock) -> dict:
         "quiet_threshold_seconds": None,
         "message": "This source has no events yet.",
         "quiet_periods": [],
-        "daily": _daily_series(counts_by_day, window_start, clock, window_days),
+        "daily": _daily_series(counts_by_day, window_start, window_days),
         "spikes": [],
         "trend": _trend(counts_by_day, clock),
         "repeated_summaries": _repeated(sample),
@@ -251,13 +251,12 @@ def _compute(src, framework, window_days, db, user, clock) -> dict:
     return result
 
 
-def _daily_series(counts_by_day, window_start, clock, window_days) -> list[dict]:
+def _daily_series(counts_by_day, window_start, window_days) -> list[dict]:
+    # The window starts window_days before the clock, so it ends on the clock's day.
     first = window_start.date()
     series = []
     for offset in range(window_days + 1):
         day = first + timedelta(days=offset)
-        if day > clock.date():
-            break
         key = day.isoformat()
         series.append({"date": key, "count": counts_by_day.get(key, 0)})
     return series

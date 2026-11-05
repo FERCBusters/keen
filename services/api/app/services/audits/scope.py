@@ -134,8 +134,6 @@ def linked_scope_for_documents(
 def linked_controls_for_clauses(
     db: Session, audit: Audit, clause_ids: list[uuid.UUID]
 ) -> list[ControlItem]:
-    if not clause_ids:
-        return []
     return (
         db.query(ControlItem)
         .join(ControlClauseLink, ControlClauseLink.control_item_id == ControlItem.id)

@@ -159,8 +159,6 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
     for key, feature in hidden.items():
         if not features.enabled(feature):
             payload.pop(key, None)
-            if "counts" in payload:
-                payload["counts"].pop(key, None)
     return payload
 
 
@@ -303,6 +301,5 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
     for key, feature in hidden.items():
         if not features.enabled(feature):
             payload.pop(key, None)
-            if "counts" in payload:
-                payload["counts"].pop(key, None)
+            payload["counts"].pop(key, None)
     return payload

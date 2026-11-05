@@ -37,7 +37,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from app.agents.credentials import revoke_keys
 from app.agents.ueu.jcs import canonical
@@ -119,13 +119,30 @@ class Identity:
     private: Ed25519PrivateKey
 
 
-def active(db: Session, purpose: str) -> AgentServerKey | None:
+def active_keys(db: Session, purpose: str) -> Query[AgentServerKey]:
     return (
         db.query(AgentServerKey)
         .filter_by(purpose=purpose, state="active")
         .populate_existing()
-        .one_or_none()
     )
+
+
+def active(db: Session, purpose: str) -> AgentServerKey | None:
+    return active_keys(db, purpose).one_or_none()
+
+
+def winner(db: Session, purpose: str) -> AgentServerKey:
+    """The one active key, after this transaction adds a key or another
+    request's key wins.
+
+    KEEN's transactions read committed data: KEEN sets no isolation level, so
+    PostgreSQL's default applies. PostgreSQL reports a clash on
+    uq_agent_server_keys_one_active only after the other key's transaction
+    commits, and this query reads that commit. Each change that ends an
+    active key commits its replacement in the same transaction. A clash on
+    key_id alone would need a random key to repeat.
+    """
+    return active_keys(db, purpose).one()
 
 
 def insert(db: Session, row: AgentServerKey) -> AgentServerKey:
@@ -135,14 +152,11 @@ def insert(db: Session, row: AgentServerKey) -> AgentServerKey:
             db.add(row)
     except IntegrityError:
         pass
-    found = active(db, row.purpose)
-    if found is None:  # pragma: no cover - the unique index guarantees one
-        raise DomainError(503, "KEEN's agent keys are being changed; retry")
-    return found
+    return winner(db, row.purpose)
 
 
 def load_identity(row: AgentServerKey) -> Identity:
-    if row.private_key is None:  # pragma: no cover - only active keys are loaded
+    if row.private_key is None:
         raise DomainError(503, "KEEN's identity key has been erased")
     private = Ed25519PrivateKey.from_private_bytes(open_private(row.private_key))
     public = private.public_key().public_bytes_raw()
@@ -245,10 +259,8 @@ def rotate_if_due(db: Session, ident: Identity, now: datetime) -> AgentServerKey
             db.flush()
             return row
     except IntegrityError:
-        found = active(db, "encryption")
-        if found is None:  # pragma: no cover - the unique index guarantees one
-            raise DomainError(503, "KEEN's agent keys are being changed; retry")
-        return found
+        # Another request committed a new key first.
+        return winner(db, "encryption")
 
 
 def destroy_expired(db: Session, now: datetime) -> int:

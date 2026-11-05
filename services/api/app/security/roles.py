@@ -55,9 +55,7 @@ def compute_effective_role(db: Session, user: User) -> str:
     norm = {normalize_role(r) for (r,) in roles if r}
     if ROLE_ADMIN in norm:
         return ROLE_ADMIN
-    if ROLE_NORMAL in norm:
-        return ROLE_NORMAL
-    # Default for inherit with no group role set
+    # A normal group role, or none at all
     return ROLE_NORMAL
 
 

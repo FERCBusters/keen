@@ -42,8 +42,6 @@ def _report_untrusted_proxy(peer):
 
 
 def request_ip(request):
-    if request is None:
-        return None
     peer = normalise_ip(getattr(request.client, "host", "") or "")
     if not peer:
         return None

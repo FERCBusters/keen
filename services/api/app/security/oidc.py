@@ -278,7 +278,7 @@ def _required_missing(provider: SsoProvider) -> list[str]:
     if provider.kind == "oidc":
         if not provider.jwks_uri:
             missing.append(f"{prefix}_JWKS_URI")
-        if not provider.issuer:
+        if not _split_csv(provider.issuer):
             missing.append(f"{prefix}_ISSUER")
     return missing
 
@@ -650,9 +650,6 @@ async def build_authorize_redirect(
         )
     finally:
         await client.aclose()
-    url = str(url or "").strip()
-    if not url:
-        raise HTTPException(status_code=500, detail="Failed to build SSO authorize URL")
     return url
 
 
@@ -757,6 +754,11 @@ async def _handle_github_callback(
 async def _handle_oidc_callback(
     code: str, db: Session, provider: SsoProvider, row: OidcLoginState
 ) -> tuple[User, str | None, str | None]:
+    issuer_values = _split_csv(provider.issuer)
+    if not issuer_values:
+        # _require_provider_config refuses such a provider first; an empty list
+        # here would switch off the token's issuer check.
+        raise HTTPException(status_code=500, detail="SSO issuer is not configured")
     redirect_uri = provider.redirect_uri
     client = _new_client(provider, redirect_uri=redirect_uri)
 
@@ -778,10 +780,6 @@ async def _handle_oidc_callback(
         )
 
     jwks = await _get_jwks(provider.jwks_uri)
-
-    issuer_values = _split_csv(provider.issuer)
-    if not issuer_values:
-        issuer_values = [provider.issuer]
 
     claims_options = {
         "iss": {"essential": True, "values": issuer_values},

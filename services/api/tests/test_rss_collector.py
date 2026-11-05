@@ -7,6 +7,7 @@ cursors use the contract database and local artefact storage.
 """
 
 import base64
+import hashlib
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -497,3 +498,100 @@ def test_a_connection_can_name_its_own_user_agent(feeds):
         collect(feeds)
 
     assert feeds.server.requests[0].headers["user-agent"] == "Supplier-Monitor/2.0"
+
+
+def test_atom_links_without_an_alternate_use_the_first_usable_one(feeds):
+    feeds.server.bodies[FEED_URL] = b"""<feed xmlns="http://www.w3.org/2005/Atom">
+<title>Mirror</title>
+<link rel="self" href="https://mirror.example/feed.atom"/>
+<link rel="hub" href="https://hub.example/"/>
+<entry><id>urn:mirror:1</id><title>Notice</title>
+<link rel="related" href="https://mirror.example/related"/>
+<link rel="enclosure" href="https://mirror.example/file"/>
+<updated>2026-02-01T08:00:00Z</updated></entry>
+</feed>"""
+
+    collect(feeds)
+
+    (event,) = feeds.events()
+    assert event.raw_pointer["rss"]["entry_link"] == "https://mirror.example/related"
+    feed = event.normalized_payload["rss"]["feed"]
+    assert feed["link"] == "https://mirror.example/feed.atom"
+
+
+def test_an_rss_channel_after_other_elements_is_still_read(feeds):
+    feeds.server.bodies[FEED_URL] = (
+        b'<rss version="2.0"><cloud domain="rpc.example" port="80"/>'
+        b"<channel><title>Late channel</title>"
+        b"<item><guid>late-1</guid><title>Found</title>"
+        b"<pubDate>Mon, 05 Jan 2026 09:00:00 GMT</pubDate></item></channel></rss>"
+    )
+
+    result = collect(feeds)
+
+    assert result["created_events"] == 1
+    (event,) = feeds.events()
+    assert event.summary == "[Advisories] Found"
+    assert event.normalized_payload["rss"]["feed"]["title"] == "Late channel"
+
+
+def test_a_label_without_usable_name_characters_keeps_a_digest_cursor(feeds):
+    collect(feeds, label="供应商公告")
+
+    (cursor,) = feeds.db.query(IngestionCursor).all()
+    assert cursor.name == "rss:" + hashlib.sha256(FEED_URL.encode()).hexdigest()[:12]
+    assert cursor.meta["label"] == "供应商公告"
+
+
+def test_feed_credentials_without_a_password_send_no_authorisation(feeds):
+    collect(feeds, auth={"username": "reader", "password": "  "})
+
+    (request,) = feeds.server.requests
+    assert "authorization" not in request.headers
+
+
+@pytest.mark.parametrize(
+    "configuration,credentials,header,authorised",
+    [
+        ({"header_name": "X-Feed-Key"}, {"header_value": "synthetic-key"}, True, False),
+        ({"username": "reader"}, {"password": "synthetic-password"}, False, True),
+    ],
+    ids=["header-only", "password-only"],
+)
+def test_a_connection_sends_only_the_credentials_it_holds(
+    feeds, configuration, credentials, header, authorised
+):
+    connection = Connection(
+        "db:advisories",
+        "rss",
+        "Advisories",
+        {"base_url": ORIGIN, **configuration},
+        credentials,
+        None,
+    )
+
+    with connection_scope(connection):
+        collect(feeds)
+
+    (request,) = feeds.server.requests
+    assert ("x-feed-key" in request.headers) is header
+    assert ("authorization" in request.headers) is authorised
+    if header:
+        assert request.headers["x-feed-key"] == "synthetic-key"
+    if authorised:
+        assert request.headers["authorization"] == (
+            "Basic " + base64.b64encode(b"reader:synthetic-password").decode()
+        )
+
+
+def test_a_first_run_of_an_empty_feed_leaves_the_cursor_without_a_time(feeds):
+    feeds.server.bodies[FEED_URL] = (
+        b"<rss><channel><title>Quiet</title></channel></rss>"
+    )
+
+    result = collect(feeds)
+
+    assert (result["created_events"], result["cursor_last_ts"]) == (0, None)
+    assert feeds.events() == []
+    # With no imported time, the next run fetches the feed in full again.
+    assert feeds.cursor().last_ts is None

@@ -75,14 +75,16 @@ def _asset_category_or_create(
 
 
 def _asset_subcategory_by_id(
-    db: Session, subcategory_id: uuid.UUID, *, category: RiskCategory | None = None
+    db: Session, subcategory_id: uuid.UUID, *, category: RiskCategory
 ) -> RiskAssetSubcategory:
-    qry = db.query(RiskAssetSubcategory).filter(
-        RiskAssetSubcategory.id == subcategory_id
+    row = (
+        db.query(RiskAssetSubcategory)
+        .filter(
+            RiskAssetSubcategory.id == subcategory_id,
+            RiskAssetSubcategory.category_id == category.id,
+        )
+        .one_or_none()
     )
-    if category is not None:
-        qry = qry.filter(RiskAssetSubcategory.category_id == category.id)
-    row = qry.one_or_none()
     if not row:
         raise DomainError(status_code=400, detail="Unknown asset subcategory")
     return row
@@ -351,17 +353,15 @@ def _replace_objective_resources(
 def _replace_access_control_roles(
     db: Session,
     row: IsmsAccessControlMatrixEntry,
-    role_org_node_ids: list[uuid.UUID] | None,
+    role_org_node_ids: list[uuid.UUID],
 ) -> None:
-    if role_org_node_ids is None:
-        return
     db.query(IsmsAccessControlMatrixRole).filter(
         IsmsAccessControlMatrixRole.entry_id == row.id
     ).delete(synchronize_session="fetch")
     seen = set()
     now = _utcnow()
     # Callers have already checked that every role exists.
-    for org_node_id in role_org_node_ids or []:
+    for org_node_id in role_org_node_ids:
         if org_node_id in seen:
             continue
         seen.add(org_node_id)
@@ -379,11 +379,9 @@ def _replace_access_control_roles(
 def _replace_org_node_users(
     db: Session,
     node: IsmsOrgNode,
-    user_ids: list[uuid.UUID] | None,
+    user_ids: list[uuid.UUID],
     relationship_type: str | None,
 ) -> None:
-    if user_ids is None:
-        return
     rel = clean_text(
         relationship_type or "member",
         max_len=32,
@@ -395,7 +393,7 @@ def _replace_org_node_users(
     )
     seen = set()
     now = _utcnow()
-    for uid in user_ids or []:
+    for uid in user_ids:
         if uid in seen:
             continue
         if (
@@ -417,17 +415,15 @@ def _replace_org_node_users(
 def _replace_meeting_people(
     db: Session,
     meeting: IsmsMeeting,
-    attendee_ids: list[uuid.UUID] | None,
-    apology_ids: list[uuid.UUID] | None,
+    attendee_ids: list[uuid.UUID],
+    apology_ids: list[uuid.UUID],
 ) -> None:
-    if attendee_ids is None and apology_ids is None:
-        return
     db.query(IsmsMeetingAttendee).filter(
         IsmsMeetingAttendee.meeting_id == meeting.id
     ).delete(synchronize_session="fetch")
     now = _utcnow()
     seen = set()
-    for kind, ids in (("attendee", attendee_ids or []), ("apology", apology_ids or [])):
+    for kind, ids in (("attendee", attendee_ids), ("apology", apology_ids)):
         for uid in ids:
             key = (uid, kind)
             if key in seen:
@@ -454,12 +450,10 @@ def _replace_meeting_people(
 def _replace_meeting_person_links(
     db: Session,
     meeting: IsmsMeeting,
-    attendees: list[uuid.UUID] | None,
-    apologies: list[uuid.UUID] | None,
+    attendees: list[uuid.UUID],
+    apologies: list[uuid.UUID],
 ) -> None:
-    if attendees is None and apologies is None:
-        return
-    ids = set(attendees or []) | set(apologies or [])
+    ids = set(attendees) | set(apologies)
     people = (
         {p.id: p for p in db.query(IsmsPerson).filter(IsmsPerson.id.in_(ids)).all()}
         if ids
@@ -470,7 +464,7 @@ def _replace_meeting_person_links(
     db.query(IsmsMeetingPerson).filter(
         IsmsMeetingPerson.meeting_id == meeting.id
     ).delete(synchronize_session=False)
-    for kind, selected in (("attendee", attendees or []), ("apology", apologies or [])):
+    for kind, selected in (("attendee", attendees), ("apology", apologies)):
         for pid in dict.fromkeys(selected):
             person = people[pid]
             db.add(
@@ -487,15 +481,13 @@ def _replace_meeting_person_links(
 
 
 def _replace_meeting_links(
-    db: Session, meeting: IsmsMeeting, links: list[MeetingLinkPayload] | None
+    db: Session, meeting: IsmsMeeting, links: list[MeetingLinkPayload]
 ) -> None:
-    if links is None:
-        return
     db.query(IsmsMeetingLink).filter(IsmsMeetingLink.meeting_id == meeting.id).delete(
         synchronize_session=False
     )
     now = _utcnow()
-    for payload in links or []:
+    for payload in links:
         link_type = clean_text(
             payload.link_type or "external_url",
             max_len=32,

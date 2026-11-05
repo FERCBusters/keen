@@ -270,9 +270,10 @@ def _save_vendor(db: Session, row: IsmsVendor, payload: VendorInput):
     db.flush()
     # Only change the links explicitly selected for this vendor. Other vendors
     # retain their assets, while changing ownership of an asset is intentional.
-    for asset in db.query(RiskAsset).filter(RiskAsset.vendor_id == row.id).all():
-        if asset.id not in ids:
-            asset.vendor_id = None
+    for asset in db.query(RiskAsset).filter(
+        RiskAsset.vendor_id == row.id, RiskAsset.id.notin_(ids)
+    ):
+        asset.vendor_id = None
     for asset in db.query(RiskAsset).filter(RiskAsset.id.in_(ids)).all():
         asset.vendor_id = row.id
     db.commit()

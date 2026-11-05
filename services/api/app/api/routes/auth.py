@@ -90,34 +90,34 @@ def login(
         per_ip = settings.login_rate_limit_per_ip
         per_user = settings.login_rate_limit_per_username
 
-        if per_ip > 0:
-            ok, retry = address_window_allow(
-                r, "login", _client_ip(request), per_ip, window, fail_closed=True
+        # An allowance of zero or less is unlimited: the limiter allows it
+        # without counting.
+        ok, retry = address_window_allow(
+            r, "login", _client_ip(request), per_ip, window, fail_closed=True
+        )
+        if not ok:
+            resp = JSONResponse(
+                {"detail": "Too many login attempts. Please try again later."},
+                status_code=429,
             )
-            if not ok:
-                resp = JSONResponse(
-                    {"detail": "Too many login attempts. Please try again later."},
-                    status_code=429,
-                )
-                resp.headers["Retry-After"] = str(retry)
-                return resp
+            resp.headers["Retry-After"] = str(retry)
+            return resp
 
         # Every username draws on an allowance; the payload refuses blank ones.
-        if per_user > 0:
-            ok, retry = fixed_window_allow(
-                r,
-                login_limit_key(payload.username),
-                per_user,
-                window,
-                fail_closed=True,
+        ok, retry = fixed_window_allow(
+            r,
+            login_limit_key(payload.username),
+            per_user,
+            window,
+            fail_closed=True,
+        )
+        if not ok:
+            resp = JSONResponse(
+                {"detail": "Too many login attempts. Please try again later."},
+                status_code=429,
             )
-            if not ok:
-                resp = JSONResponse(
-                    {"detail": "Too many login attempts. Please try again later."},
-                    status_code=429,
-                )
-                resp.headers["Retry-After"] = str(retry)
-                return resp
+            resp.headers["Retry-After"] = str(retry)
+            return resp
     except Exception:
         # If Redis is unavailable, fail closed and deny login.
         resp = JSONResponse(

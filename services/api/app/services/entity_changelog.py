@@ -516,7 +516,8 @@ def risk_changelog_state(
             )
         elif link.person_id and link.person:
             parties.append(f"{link.person.name} (person)")
-        elif link.vendor_id and link.vendor:
+        else:
+            # A link names exactly one party, and the party's removal removes it.
             parties.append(f"{link.vendor.name} (vendor)")
     return {
         "id": str(risk.id),
@@ -558,8 +559,6 @@ def risk_changelog_state(
 
 def _pestle_relevance_label(link: Any) -> str | None:
     rel = getattr(link, "relevance", None)
-    if rel is None:
-        return None
     return str(getattr(rel, "label", None) or getattr(rel, "code", None) or "") or None
 
 

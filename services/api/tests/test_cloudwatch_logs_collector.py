@@ -491,3 +491,45 @@ def test_unresolved_or_conflicting_mappings_are_not_counted(db):
         result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
 
     assert result["created_mappings"] == 0
+
+
+def test_without_a_configured_region_the_sdk_chooses_it(db):
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.return_value = {"events": []}
+    set_cursor(db, MagicMock(last_ts=None))
+    with configured(region=""), fake["factory"] as factory:
+        result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
+
+    # No region name is passed, so boto3 resolves it from its usual chain.
+    factory.assert_called_once_with("logs")
+    assert result["region"] is None
+
+
+def test_paging_stops_at_the_page_limit_with_the_cursor_at_the_newest_event(db):
+    calls = []
+
+    def paginate(**params):
+        calls.append(params.copy())
+        n = len(calls)
+        return {
+            "events": [
+                {"timestamp": MS + n * 1000, "eventId": f"ev{n}", "message": "x"}
+            ],
+            "nextToken": f"tok-{n}",
+        }
+
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.side_effect = paginate
+    cursor = MagicMock(last_ts=None)
+    set_cursor(db, cursor)
+    with configured() as stored, fake["factory"]:
+        result = cl.ingest_cloudwatch_logs_once(
+            db, "name", {"log_group": "g"}, {"max_pages": 2}
+        )
+
+    # Every page offered another token; the run reads two and stops there.
+    assert result["pages"] == 2 and len(calls) == 2
+    assert calls[1]["nextToken"] == "tok-1"
+    assert [event["external_id"] for event in stored] == ["ev1", "ev2"]
+    assert cursor.last_ts == datetime.fromtimestamp((MS + 2000) / 1000, tz=timezone.utc)
+    db.commit.assert_called_once()

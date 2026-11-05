@@ -236,9 +236,7 @@ class PageMapping:
 
         slug_candidates = [slug] if slug else []
         if book_slug and slug:
-            combined_slug = f"{book_slug}-{slug}"
-            if combined_slug not in slug_candidates:
-                slug_candidates.append(combined_slug)
+            slug_candidates.append(f"{book_slug}-{slug}")
 
         if self.match_book_id is not None and int(book_id or -1) != int(
             self.match_book_id
@@ -945,104 +943,100 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
         # 2) Ensure configured pages are captured at least once (as snapshots).
         if seed_mapped_pages and (page_mappings or capture_pages):
             for pm in [*page_mappings, *capture_pages]:
-                try:
-                    if pm.match_id is not None:
-                        pages_by_id.setdefault(
-                            int(pm.match_id),
-                            {
-                                "id": int(pm.match_id),
-                                "book_id": pm.match_book_id,
-                                "book_slug": pm.match_book_slug,
-                            },
-                        )
-                        continue
-                    if pm.match_slug:
-                        # Resolve within the most specific scope available: mapping -> top-level book -> books list -> global.
-                        scopes: list[tuple[Optional[int], Optional[str]]] = []
-                        if pm.match_book_id is not None or pm.match_book_slug:
-                            scopes = [(pm.match_book_id, pm.match_book_slug)]
-                        elif book_id is not None or book_slug:
-                            scopes = [(book_id, book_slug)]
-                        elif books:
-                            scopes = books
-                        else:
-                            scopes = [(None, None)]
-
-                        found = None
-                        for bid, bslug in scopes:
-                            try:
-                                found = _find_page_by_slug(
-                                    client, pm.match_slug, book_id=bid, book_slug=bslug
-                                )
-                            except Exception:
-                                found = None
-                            if found:
-                                break
-                        if found and isinstance(found.get("id"), int):
-                            pages_by_id.setdefault(int(found["id"]), found)
-                        continue
-                    if pm.match_slug_regex:
-                        # Regex page-slug mappings can match multiple pages. There is no
-                        # generic BookStack regex filter, so list within the narrowest
-                        # available book scope and apply the regex in Keen.
-                        scopes = []
-                        if pm.match_book_id is not None or pm.match_book_slug:
-                            scopes = [(pm.match_book_id, pm.match_book_slug)]
-                        elif book_id is not None or book_slug:
-                            scopes = [(book_id, book_slug)]
-                        elif books:
-                            scopes = books
-                        else:
-                            scopes = [(None, None)]
-
-                        for bid, bslug in scopes:
-                            try:
-                                for p in _find_pages_by_slug_regex(
-                                    client,
-                                    pm.match_slug_regex,
-                                    book_id=bid,
-                                    book_slug=bslug,
-                                    count=count,
-                                    include_drafts=include_drafts,
-                                    include_templates=include_templates,
-                                    max_pages=max_pages,
-                                ):
-                                    if isinstance(p.get("id"), int):
-                                        pages_by_id.setdefault(
-                                            int(p["id"]),
-                                            _stamp_book_scope(
-                                                p, book_id=bid, book_slug=bslug
-                                            ),
-                                        )
-                            except Exception:
-                                continue
-                        continue
-                    if pm.match_title:
-                        scopes = []
-                        if pm.match_book_id is not None or pm.match_book_slug:
-                            scopes = [(pm.match_book_id, pm.match_book_slug)]
-                        elif book_id is not None or book_slug:
-                            scopes = [(book_id, book_slug)]
-                        elif books:
-                            scopes = books
-                        else:
-                            scopes = [(None, None)]
-
-                        found = None
-                        for bid, bslug in scopes:
-                            try:
-                                found = _find_page_by_title(
-                                    client, pm.match_title, book_id=bid, book_slug=bslug
-                                )
-                            except Exception:
-                                found = None
-                            if found:
-                                break
-                        if found and isinstance(found.get("id"), int):
-                            pages_by_id.setdefault(int(found["id"]), found)
-                except Exception:
-                    # Keep ingestion robust even if a mapping entry is wrong.
+                if pm.match_id is not None:
+                    pages_by_id.setdefault(
+                        int(pm.match_id),
+                        {
+                            "id": int(pm.match_id),
+                            "book_id": pm.match_book_id,
+                            "book_slug": pm.match_book_slug,
+                        },
+                    )
                     continue
+                if pm.match_slug:
+                    # Resolve within the most specific scope available: mapping -> top-level book -> books list -> global.
+                    scopes: list[tuple[Optional[int], Optional[str]]] = []
+                    if pm.match_book_id is not None or pm.match_book_slug:
+                        scopes = [(pm.match_book_id, pm.match_book_slug)]
+                    elif book_id is not None or book_slug:
+                        scopes = [(book_id, book_slug)]
+                    elif books:
+                        scopes = books
+                    else:
+                        scopes = [(None, None)]
+
+                    found = None
+                    for bid, bslug in scopes:
+                        try:
+                            found = _find_page_by_slug(
+                                client, pm.match_slug, book_id=bid, book_slug=bslug
+                            )
+                        except Exception:
+                            found = None
+                        if found:
+                            break
+                    if found and isinstance(found.get("id"), int):
+                        pages_by_id.setdefault(int(found["id"]), found)
+                    continue
+                if pm.match_slug_regex:
+                    # Regex page-slug mappings can match multiple pages. There is no
+                    # generic BookStack regex filter, so list within the narrowest
+                    # available book scope and apply the regex in Keen.
+                    scopes = []
+                    if pm.match_book_id is not None or pm.match_book_slug:
+                        scopes = [(pm.match_book_id, pm.match_book_slug)]
+                    elif book_id is not None or book_slug:
+                        scopes = [(book_id, book_slug)]
+                    elif books:
+                        scopes = books
+                    else:
+                        scopes = [(None, None)]
+
+                    for bid, bslug in scopes:
+                        try:
+                            for p in _find_pages_by_slug_regex(
+                                client,
+                                pm.match_slug_regex,
+                                book_id=bid,
+                                book_slug=bslug,
+                                count=count,
+                                include_drafts=include_drafts,
+                                include_templates=include_templates,
+                                max_pages=max_pages,
+                            ):
+                                if isinstance(p.get("id"), int):
+                                    pages_by_id.setdefault(
+                                        int(p["id"]),
+                                        _stamp_book_scope(
+                                            p, book_id=bid, book_slug=bslug
+                                        ),
+                                    )
+                        except Exception:
+                            continue
+                    continue
+                if pm.match_title:
+                    scopes = []
+                    if pm.match_book_id is not None or pm.match_book_slug:
+                        scopes = [(pm.match_book_id, pm.match_book_slug)]
+                    elif book_id is not None or book_slug:
+                        scopes = [(book_id, book_slug)]
+                    elif books:
+                        scopes = books
+                    else:
+                        scopes = [(None, None)]
+
+                    found = None
+                    for bid, bslug in scopes:
+                        try:
+                            found = _find_page_by_title(
+                                client, pm.match_title, book_id=bid, book_slug=bslug
+                            )
+                        except Exception:
+                            found = None
+                        if found:
+                            break
+                    if found and isinstance(found.get("id"), int):
+                        pages_by_id.setdefault(int(found["id"]), found)
 
         created = 0
         deduped = 0
@@ -1186,8 +1180,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                 system_parts = [label]
                 if book_slug_eff:
                     system_parts.append(book_slug_eff)
-                if safe_page:
-                    system_parts.append(safe_page)
+                system_parts.append(safe_page)
                 system = ":".join(system_parts)
                 summary = f"bookstack: {action} page '{page_title}'" + (
                     f" ({safe_slug})" if safe_slug else ""

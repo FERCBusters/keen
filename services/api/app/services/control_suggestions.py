@@ -124,12 +124,8 @@ def _catalogue(control):
     values = []
     for key in ("description", "justification", "guidance", "objective", "keywords"):
         values.extend(_strings(meta.get(key)))
-    tags = control.tags
-    if isinstance(tags, dict):
-        for value in list(tags.values())[:100]:
-            values.extend(_strings(value))
-    else:
-        values.extend(_strings(tags))
+    for value in list(control.tags.values())[:100]:
+        values.extend(_strings(value))
     return normalise(control.title or ""), normalise(" ".join(values)[:24000])
 
 

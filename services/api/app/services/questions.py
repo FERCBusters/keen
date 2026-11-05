@@ -648,31 +648,27 @@ def list_event_questions(*, event_id: str, context: ChangeContext, db: Session):
         if p.author_user_id:
             user_ids.add(p.author_user_id)
 
-    # Attachments
+    # Attachments. Every thread starts with a post, so there are posts here;
+    # their attachments are the files stored with them, whose metadata names
+    # the uploaded file.
     attachments_by_post: dict[uuid.UUID, list[dict]] = {pid: [] for pid in post_ids}
-    if post_ids:
-        rows = (
-            db.query(EventQuestionPostAttachment, Artifact)
-            .join(Artifact, Artifact.id == EventQuestionPostAttachment.artifact_id)
-            .filter(EventQuestionPostAttachment.post_id.in_(post_ids))
-            .order_by(EventQuestionPostAttachment.created_at.asc())
-            .all()
+    rows = (
+        db.query(EventQuestionPostAttachment, Artifact)
+        .join(Artifact, Artifact.id == EventQuestionPostAttachment.artifact_id)
+        .filter(EventQuestionPostAttachment.post_id.in_(post_ids))
+        .order_by(EventQuestionPostAttachment.created_at.asc())
+        .all()
+    )
+    for att, art in rows:
+        attachments_by_post.setdefault(att.post_id, []).append(
+            {
+                "artifact_id": str(art.id),
+                "filename": (art.meta or {}).get("filename"),
+                "content_type": art.content_type,
+                "size_bytes": art.size_bytes,
+                "download_url": f"/api/v1/artifacts/{art.id}/download",
+            }
         )
-        for att, art in rows:
-            filename = None
-            try:
-                filename = (art.meta or {}).get("filename")
-            except Exception:
-                filename = None
-            attachments_by_post.setdefault(att.post_id, []).append(
-                {
-                    "artifact_id": str(art.id),
-                    "filename": filename,
-                    "content_type": art.content_type,
-                    "size_bytes": art.size_bytes,
-                    "download_url": f"/api/v1/artifacts/{art.id}/download",
-                }
-            )
 
     # Users
     users = db.query(User).filter(User.id.in_(list(user_ids))).all()

@@ -282,6 +282,18 @@ def run_lock(db, key):
     number = int.from_bytes(
         hashlib.sha256(("keen:connection:" + key).encode()).digest()[:8], "big"
     ) & ((1 << 63) - 1)
+    with advisory_lock(db, number) as acquired:
+        yield acquired
+
+
+@contextmanager
+def advisory_lock(db, number: int):
+    """Whether a PostgreSQL session advisory lock was free, held while in use.
+
+    The lock lives on a connection of its own, so it lasts across the commits a
+    collection makes. It is released as the block ends; when the release fails,
+    the connection is discarded so a held lock never returns to the pool.
+    """
     with db.get_bind().engine.connect() as handle:
         acquired = bool(
             handle.execute(
@@ -339,9 +351,7 @@ def environment_has_inputs(source, db):
         return True
     if source == "imap":
         return False  # IMAP requires explicit named connections.
-    sections = INPUT_SECTIONS.get(source)
-    if sections is None:
-        return True
+    sections = INPUT_SECTIONS[source]
     path_field = "loki_queries_path" if source == "loki" else source + "_config_path"
     document = deployment_document(
         source, getattr(deployment_settings, path_field), db=db

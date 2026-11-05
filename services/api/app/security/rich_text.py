@@ -66,8 +66,6 @@ _SAFE_HREF_SCHEMES: frozenset[str] = frozenset({"http", "https", "mailto", "tel"
 def _safe_href(value: str | None) -> str:
     """Return a sanitised href, or '' if the URL is not safe to render."""
     raw = (value or "").strip()
-    if not raw:
-        return ""
     if len(raw) > 2048 or "\\" in raw or any(ord(c) < 32 or ord(c) == 127 for c in raw):
         return ""
     # Same-origin relative paths and fragment links are allowed.

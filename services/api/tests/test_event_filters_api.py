@@ -389,7 +389,7 @@ def test_list_filters_combine_lists_rules_and_text_conditions(events, params, ex
         ("actor:contains:   ", "A text filter needs a value"),
         (
             "actor:contains:" + "x" * 513,
-            "A text filter value must be under 512 characters",
+            "A text filter value must be at most 512 characters",
         ),
         (
             "actor:regex:(a+)+b",

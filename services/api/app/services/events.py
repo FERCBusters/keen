@@ -40,7 +40,6 @@ from app.security.csv import spreadsheet_cell
 from app.security.diary_visibility import diary_filter_condition, is_diary_event_visible
 from app.security.permissions import has_permission
 from app.security.redaction import mask_event_data_obj as _mask_event_data_obj
-from app.security.redaction import mask_event_data_str as _mask_event_data_str
 from app.security.redaction import redact_obj as _redact_obj
 from app.security.redaction import redact_str as _redact_str
 from app.security.roles import is_effective_admin
@@ -99,8 +98,7 @@ def _mask_event_data_for_sample_exports(sample_export: bool) -> bool:
 def _maybe_mask_event_sample_value(value: Any, sample_export: bool) -> Any:
     if not _mask_event_data_for_sample_exports(sample_export):
         return value
-    if isinstance(value, str) or value is None:
-        return _mask_event_data_str(value)
+    # Masks strings directly, and the strings within objects; None stays None.
     return _mask_event_data_obj(value)
 
 

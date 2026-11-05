@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import Artifact, ControlItem, Event, Mapping
+from app.db.models import Artifact, ControlItem, Event, Framework, Mapping
 from app.db.session import track_unpublished_object
 from app.mapping.rules import CLAUSE, evaluate_by_framework, load_rules
 from app.mapping.targets import Target, resolve_targets
@@ -46,11 +46,7 @@ def fingerprint(parts: list[str], payload: bytes) -> str:
 
 
 def ensure_controls(
-    db: Session,
-    framework_slug: str,
-    targets: list[Target],
-    *,
-    require_framework: bool = True,
+    db: Session, framework_slug: str, targets: list[Target]
 ) -> dict[Target, ControlItem]:
     """Return the catalogue row each (reference, kind) rule target names.
 
@@ -58,13 +54,8 @@ def ensure_controls(
     title and details come later from a catalogue or SoA import. Clause targets
     name existing catalogue clauses only, so a missing clause attaches nothing.
     """
-    if not targets:
-        return {}
-    if require_framework:
-        from app.db.models import Framework
-
-        if not db.query(Framework.id).filter_by(slug=framework_slug).first():
-            return {}  # A stale rule must not resurrect a removed catalogue.
+    if not db.query(Framework.id).filter_by(slug=framework_slug).first():
+        return {}  # A stale rule must not resurrect a removed catalogue.
     found, absent = resolve_targets(db, framework_slug, targets)
     placeholders: dict[str, ControlItem] = {}
     for ref, kind in absent:

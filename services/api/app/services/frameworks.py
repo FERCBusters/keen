@@ -210,8 +210,7 @@ def framework_nodes(*, slug: str, db: Session):
         .filter(ControlItem.framework_slug == slug)
         .all()
     ):
-        if link.clause:
-            links.setdefault(link.control_item_id, []).append(link.clause.ref)
+        links.setdefault(link.control_item_id, []).append(link.clause.ref)
     return {"items": [_node(row, clauses, links) for row in rows]}
 
 

@@ -16,6 +16,9 @@ from app.db.models import (
     IngestionCursor,
     IsmsVendor,
     Risk,
+    RiskAsset,
+    RiskAssetSubcategory,
+    RiskCategory,
     RiskControlLink,
     SourceIngestionState,
 )
@@ -195,9 +198,11 @@ def test_a_supplier_whose_level_id_is_not_text_is_outside_the_chosen_levels(
     assert db.query(Risk).count() == 1
 
 
-def test_domain_entries_other_than_objects_are_passed_over(db, records):
-    records["supplier"]["complianceByDomain"].extend(["D", 7, None])
-    records["supplier"]["framework"]["addOnDomains"] = ["x", [DOM]]
+def test_domain_entries_other_than_identified_objects_are_passed_over(db, records):
+    records["supplier"]["complianceByDomain"].extend(
+        ["D", 7, None, {"percentageCompliance": 10}]
+    )
+    records["supplier"]["framework"]["addOnDomains"] = ["x", [DOM], {"name": "Add-on"}]
     result = rl._collect(db, FakeAPI(records), {"organizations": [{"org": "*"}]})
     assert (result["created_events"], result["domains_discovered"]) == (4, 1)
     assert db.query(IsmsVendor).count() == 1
@@ -376,3 +381,105 @@ def test_redaction_precedes_native_import_and_unsafe_website_removed(db, records
         "verysecret" not in db.query(Risk).one().threat_summary
         and db.query(IsmsVendor).one().website == ""
     )
+
+
+class RisksAPI(FakeAPI):
+    def __init__(self, records, risks):
+        super().__init__(records)
+        self.risks = risks
+        self.reads = []
+
+    def one(self, kind, ident):
+        self.reads.append(kind)
+        return super().one(kind, ident)
+
+    def pages(self, kind, cfg):
+        if kind == "risks":
+            yield from copy.deepcopy(self.risks)
+        else:
+            yield from super().pages(kind, cfg)
+
+
+def _more_risks(records):
+    first = records["risk"]
+    return [
+        first,
+        {**first, "id": "00000000-0000-4000-8000-000000000011", "name": "Same control"},
+        {
+            **first,
+            "id": "00000000-0000-4000-8000-000000000012",
+            "name": "Supplier concentration",
+            "associatedType": "supplier",
+            "associatedID": SUP,
+        },
+        {
+            "id": "00000000-0000-4000-8000-000000000013",
+            "name": "Organisation risk",
+            "description": "Not tied to a supplier",
+        },
+    ]
+
+
+def test_risks_of_one_supplier_share_its_asset_and_others_stand_alone(db, records):
+    api = RisksAPI(records, _more_risks(records))
+
+    result = rl._collect(db, api, {"organizations": [{"org": "*"}]})
+
+    assert (result["examined"], result["controls_discovered"]) == (5, 1)
+    by_name = {r.threat_summary.split("\n")[0]: r for r in db.query(Risk)}
+    supplier_assets = {
+        by_name[name].asset_id
+        for name in ("Patching risk", "Same control", "Supplier concentration")
+    }
+    (shared,) = supplier_assets
+    standalone = by_name["Organisation risk"].asset
+    assert standalone.id != shared and standalone.vendor_id is None
+    assert standalone.name.startswith("Organisation risks [RL ")
+    assert db.query(RiskAsset).count() == 2
+    assert (db.query(RiskCategory).count(), db.query(RiskAssetSubcategory).count()) == (
+        1,
+        1,
+    )
+    # Only the risks naming the control link to it; the control is read once.
+    linked = {link.risk_id for link in db.query(RiskControlLink)}
+    assert linked == {by_name["Patching risk"].id, by_name["Same control"].id}
+    assert db.query(ControlItem).filter_by(type="control").count() == 1
+    assert sorted(api.reads) == ["control", "domain"]
+
+
+def test_without_the_framework_suppliers_and_risks_import_unlinked(db, records):
+    result = rl._collect(
+        db,
+        FakeAPI(records),
+        {"organizations": [{"org": "*"}], "import_framework": False},
+    )
+
+    assert (result["controls_discovered"], result["domains_discovered"]) == (0, 0)
+    assert db.query(ControlItem).count() == 0
+    assert db.query(RiskControlLink).count() == 0
+    risk = db.query(Risk).one()
+    assert risk.asset.vendor.name == "Supplier"
+    kinds = sorted(
+        e.raw_pointer["riskledger"]["kind"]
+        for e in db.query(Event).filter_by(source="riskledger")
+    )
+    assert kinds == ["risk", "supplier"]
+
+
+def test_risks_can_be_imported_without_their_suppliers(db, records):
+    result = rl._collect(
+        db,
+        FakeAPI(records),
+        {"organizations": [{"org": "*"}], "import_suppliers": False},
+    )
+
+    assert db.query(IsmsVendor).count() == 0
+    risk = db.query(Risk).one()
+    assert risk.asset.vendor_id is None
+    # The supplier is still examined for the domains it reports, and snapshotted.
+    assert (result["examined"], result["domains_discovered"]) == (2, 1)
+    kinds = sorted(
+        e.raw_pointer["riskledger"]["kind"]
+        for e in db.query(Event).filter_by(source="riskledger")
+    )
+    assert kinds == ["control", "domain", "risk", "supplier"]

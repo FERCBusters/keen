@@ -333,12 +333,11 @@ def inherited_control_ids(db, control_ids):
     event.
     """
     found = set(control_ids)
-    if found:
-        found.update(
-            *crosswalk_sources(
-                db, enabled=_enabled_frameworks(db), target_ids=found
-            ).values()
-        )
+    found.update(
+        *crosswalk_sources(
+            db, enabled=_enabled_frameworks(db), target_ids=found
+        ).values()
+    )
     return sorted(found, key=str)
 
 
@@ -563,8 +562,6 @@ def evidenced_control_ids(db, framework, visibility=None):
     events that count as evidence.
     """
     candidates = effective_framework_ids(framework, db)
-    if not candidates:
-        return set()
     mapping = aliased(Mapping)
     evidence = select(mapping.id).where(mapping.control_item_id == ControlItem.id)
     restriction = _visible_events_only(visibility)
@@ -618,8 +615,6 @@ def events_mapped_to(db, control_ids):
     from any mapping the enclosing query joins, so the predicate works in
     aggregate queries too.
     """
-    if not control_ids:
-        return false()
     mapping = aliased(Mapping)
     matched = select(mapping.event_id).where(mapping.control_item_id.in_(control_ids))
     rows = db.execute(matched.limit(LISTED_MAPPINGS + 1)).scalars().all()

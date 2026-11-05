@@ -482,9 +482,9 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         if newest_ts is None or ts > newest_ts:
             newest_ts = ts
 
-    # advance cursor
-    if newest_ts:
-        cur.last_ts = newest_ts
+    # Advance the cursor. It starts at the stored cursor and only moves on to
+    # an entry's time, so a run without entries leaves the cursor unchanged.
+    cur.last_ts = newest_ts
     cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()

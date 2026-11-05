@@ -457,6 +457,36 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
                 self.assertEqual(read["created_events"], 0)
                 self.assertEqual(client.get.call_count, 3)
 
+    def test_a_discovered_project_other_than_an_object_fails_alone(self):
+        client = Mock()
+        client.get.side_effect = [
+            self._page(["a/listed-as-text", {"id": 2, "path_with_namespace": "a/b"}]),
+            self._page([]),
+        ]
+        projects = gitlab._pages(
+            client, self.BASE, "users/a/projects", keep=gitlab._project_reference
+        )
+        # The entry keeps no ID, so reading its activity fails for it alone.
+        self.assertEqual(
+            projects, [{"id": None}, {"id": 2, "path_with_namespace": "a/b"}]
+        )
+        db = self._db()
+        db.scalars.return_value.all.return_value = []
+        results, _ = self._run(db, {"users": [{"user": "a"}]}, [projects, []])
+        self.assertEqual(
+            [(r["project_id"], r["error"]) for r in results if "project_id" in r],
+            [
+                (
+                    None,
+                    "Collection failed; check the input, credentials, upstream "
+                    "service and storage configuration",
+                )
+            ],
+        )
+        self.assertEqual(
+            [r["created_events"] for r in results if r.get("project") == "a/b"], [0]
+        )
+
     def test_a_failing_scope_is_reported_and_the_next_scope_still_runs(self):
         db = self._db()
         db.scalars.return_value.all.return_value = []

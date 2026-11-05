@@ -517,9 +517,11 @@ def _stats_events_timeseries(
     source = ",".join(scope.sources) or None
 
     def _iso_z(dt: datetime) -> str:
-        """Format a naive datetime as UTC with a trailing Z."""
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+        """Format a naive datetime as UTC with a trailing Z.
+
+        Every bucket and bound is naive UTC by the time it is shown.
+        """
+        dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     def _naive_utc(dt: datetime) -> datetime:
@@ -536,9 +538,8 @@ def _stats_events_timeseries(
             return dt.replace(minute=0, second=0, microsecond=0)
         if unit == "minute":
             return dt.replace(second=0, microsecond=0)
-        if unit == "second":
-            return dt.replace(microsecond=0)
-        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        # The interval is normalised to day, hour, minute or second.
+        return dt.replace(microsecond=0)
 
     def _step_for(unit: str) -> timedelta:
         unit = (unit or "day").strip().lower()
@@ -605,9 +606,6 @@ def _stats_events_timeseries(
     MAX_BUCKETS = MAX_TIMESERIES_BUCKETS
     interval_eff = interval_req
     start_bucket = _floor(start, interval_eff)
-    if end_excl is None:
-        # Safety: should not happen (end_excl is always set in the branches above).
-        end_excl = utc_now_naive()
     # end_excl is an exclusive bound; generate buckets up to the last bucket
     # that has any overlap with the window.
     end_bucket = _floor(end_excl - timedelta(microseconds=1), interval_eff)
@@ -627,10 +625,10 @@ def _stats_events_timeseries(
             "minute": "hour",
             "hour": "day",
         }.get(interval_eff, "day")
+        # More than MAX_BUCKETS of the finer interval span at least one whole
+        # coarser interval, so the coarser window still ends after it starts.
         start_bucket = _floor(start, interval_eff)
         end_bucket = _floor(end_excl - timedelta(microseconds=1), interval_eff)
-        if end_bucket <= start_bucket:
-            end_bucket = start_bucket + _step_for(interval_eff)
     # Daily buckets are the coarsest interval; a wider window must be narrowed
     # before any query runs or the dense series is generated.
     if _bucket_count(interval_eff) > MAX_BUCKETS:
@@ -669,9 +667,8 @@ def _stats_events_timeseries(
         by_q = by_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
 
         by_rows = run_scan(db, scope, by_q.group_by("b", "src").order_by("b").all)
+        # Event timestamps are never null, so every row has a bucket.
         for b, src, n in by_rows:
-            if b is None:
-                continue
             s = str(src)
             v = int(n or 0)
             if b not in by_bucket_source:
@@ -708,8 +705,6 @@ def _stats_events_timeseries(
         )
         total_q = total_q.filter(Event.timestamp < end_excl).filter(*scope_filters)
         for b, n in run_scan(db, scope, total_q.group_by("b").order_by("b").all):
-            if b is None:
-                continue
             total_by_bucket[b] = int(n or 0)
 
     # A semi-join counts each mapped event once, so the buckets need no
@@ -727,8 +722,6 @@ def _stats_events_timeseries(
         mapped_rows = run_scan(db, scope, mapped_q.group_by("b").order_by("b").all)
     mapped_by_bucket: dict[datetime, int] = {}
     for b, n in mapped_rows:
-        if b is None:
-            continue
         mapped_by_bucket[b] = int(n or 0)
 
     # Generate a dense sequence of buckets so the chart doesn't have gaps.

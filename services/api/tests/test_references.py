@@ -289,3 +289,21 @@ def test_the_shipped_links_file_loads_every_entry(caplog):
     ]
     assert sum(len(refs) for refs in loaded.values()) == len(lines)
     assert {"iso_27001_2022", "UK-DVSTF:1.0"} <= set(loaded)
+
+
+def test_a_blank_reference_segment_sorts_after_every_other_kind_of_segment():
+    # Inner blank segments, as in "A. .1", come last, after even free-form text.
+    refs = ["A. .1", "A.x-y.1", "A.z.1", "A.a5.1", "A.5.1"]
+    assert sorted(refs, key=rf.ref_sort_key) == [
+        "A.5.1",
+        "A.a5.1",
+        "A.z.1",
+        "A.x-y.1",
+        "A. .1",
+    ]
+
+
+def test_a_link_the_url_parser_refuses_is_not_a_link():
+    for url in ("https://[::1/guidance", "http://[fe80::1%25eth0/x", "https://[a]/"):
+        assert rf.absolute_http_url(url) is None, url
+    assert rf.absolute_http_url("https://[::1]/guidance") == "https://[::1]/guidance"

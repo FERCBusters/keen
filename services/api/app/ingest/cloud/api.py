@@ -60,21 +60,24 @@ class JsonApi:
             # A link to another origin never receives the credential.
             raise Unavailable("unavailable")
         sent = {**self._headers, **(headers or {})}
-        for attempt in (0, 1):
-            try:
-                response = self.http.request(
-                    method, url, params=params, json=body, headers=sent
-                )
-            except (httpx.HTTPError, ValueError, TimeoutError, OSError):
-                raise Unavailable("unavailable") from None
-            if response.status_code != 429 or attempt:
-                return response
+        response = self._request(method, url, params, body, sent)
+        if response.status_code == 429:
+            # Throttled: wait as asked, within MAX_RETRY_WAIT, then try once more.
             try:
                 wait = float(response.headers.get("Retry-After") or 1)
             except ValueError:
                 wait = 1.0
             time.sleep(min(max(wait, 0.0), MAX_RETRY_WAIT))
-        return response  # pragma: no cover - the loop always returns
+            response = self._request(method, url, params, body, sent)
+        return response
+
+    def _request(self, method, url, params, body, headers) -> httpx.Response:
+        try:
+            return self.http.request(
+                method, url, params=params, json=body, headers=headers
+            )
+        except (httpx.HTTPError, ValueError, TimeoutError, OSError):
+            raise Unavailable("unavailable") from None
 
     def body(self, response: httpx.Response, missing=None) -> dict:
         if missing is not None and response.status_code == 404:

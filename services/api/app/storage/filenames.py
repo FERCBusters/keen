@@ -32,9 +32,7 @@ def guess_extension(content_type: str | None, storage_key: str | None) -> str:
             return ext
 
     ctype = (content_type or "").split(";")[0].strip().lower()
-    if not ctype:
-        return ""
-
+    # Host MIME tables differ, for example listing .jpe first for JPEG.
     if ctype in {"image/jpeg", "image/jpg"}:
         return ".jpg"
     if ctype == "image/svg+xml":

@@ -148,8 +148,8 @@ def _ics_fold(line: str) -> str:
         else:
             current += char
             current_len += char_len
-    if current:
-        parts.append(current)
+    # The line is longer than 75 bytes, so the loop ran and left a part.
+    parts.append(current)
     return "\r\n".join(parts)
 
 

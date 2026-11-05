@@ -317,10 +317,9 @@ def add_audit_evidence(
             .one_or_none()
         )
         if existing:
-            if evidence_url:
-                existing.evidence_url = evidence_url
-            if title:
-                existing.title = title
+            # The sampled record always supplies a link and a title.
+            existing.evidence_url = evidence_url
+            existing.title = title
             if notes:
                 existing.notes = notes
             a.updated_at = utcnow()

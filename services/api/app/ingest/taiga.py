@@ -348,8 +348,8 @@ def ingest_taiga_project_timeline(
         if not res.get("deduped"):
             created += 1
 
-        if (newest_ts is None) or (ts > newest_ts):
-            newest_ts = ts
+        # Entries are read oldest first, each after the cursor.
+        newest_ts = ts
 
     cur.last_ts = newest_ts or cur.last_ts
     # updated_at is stored as a naive UTC timestamp in DB.

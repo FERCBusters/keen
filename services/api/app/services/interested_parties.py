@@ -545,10 +545,8 @@ def _replace_communications(
             )
         )
     db.flush()
-    try:
-        db.expire(party, ["communications"])
-    except Exception:
-        pass
+    # Every caller passes a party already persistent in this session.
+    db.expire(party, ["communications"])
 
 
 def list_interested_party_names(*, q: str | None = None, user, db: Session):
@@ -718,11 +716,11 @@ def interested_parties_visualisations(
         nature = (item.get("nature") or {}).get("name") or "Unspecified"
         nature_counts[nature] = nature_counts.get(nature, 0) + 1
         for control in item.get("controls") or []:
-            key = control.get("id")
-            if key:
-                control_counts.setdefault(key, {"control": control, "count": 0})[
-                    "count"
-                ] += 1
+            # Each control is a catalogue row, so it always has an id.
+            key = control["id"]
+            control_counts.setdefault(key, {"control": control, "count": 0})[
+                "count"
+            ] += 1
             control_links.append(
                 {
                     "party_id": item["id"],

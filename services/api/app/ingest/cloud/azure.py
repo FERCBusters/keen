@@ -278,7 +278,8 @@ def _split(value) -> list[str]:
 
 
 def connect() -> Azure:
-    if settings.demo_mode:  # pragma: no cover - the runner answers demo reads
+    if settings.demo_mode:
+        # The runner answers demo reads; a demo never signs in to Microsoft.
         raise Unavailable("not_configured")
     tenant = str(settings.azure_tenant_id or "").strip().lower()
     client_id = str(settings.azure_client_id or "").strip().lower()

@@ -12,7 +12,6 @@ from app.core.cache import cached_json, user_cache_scope
 from app.core.config import settings
 from app.core.datetime_utils import after_inclusive_date
 from app.core.references import control_upstream_url as _control_upstream_url
-from app.core.references import try_uuid as _try_uuid
 from app.core.source_meta import apply_user_source_overrides, get_source_meta
 from app.db.models import (
     ControlClauseLink,
@@ -284,15 +283,13 @@ def graph_control_source(
             )
 
         if ctrl_ids:
-            ctrl_objs = (
+            # Each control read here gave the edge rows above their control node.
+            for control in (
                 db.query(ControlItem).filter(ControlItem.id.in_(list(ctrl_ids))).all()
-            )
-            ctrl_map = {c.id: c for c in ctrl_objs}
-            for node in nodes.values():
-                if node.get("node_kind") == "control":
-                    cid = _try_uuid(node["control_id"])
-                    if cid and cid in ctrl_map:
-                        node["upstream_url"] = _control_upstream_url(ctrl_map[cid])
+            ):
+                nodes[f"control:{control.id}"]["upstream_url"] = _control_upstream_url(
+                    control
+                )
 
         return {
             "nodes": list(nodes.values()),
@@ -520,7 +517,7 @@ def graph_clause_control(
             if n.get("node_kind") == "clause":
                 n["mapped_events"] = clause_counts.get(nid, 0)
                 n["link_count"] = clause_counts.get(nid, 0)
-            elif n.get("node_kind") == "control":
+            else:  # The graph's other nodes are its controls.
                 n["mapped_events"] = control_counts.get(nid, 0)
                 n["link_count"] = control_counts.get(nid, 0)
 
@@ -662,7 +659,7 @@ def graph_risk_control(
                 # how many controls are mapped to the risk. Keep risk_score as its
                 # own field for weighting graph edges/heatmap cells.
                 node["mapped_events"] = risk_counts.get(nid, 0)
-            elif node.get("node_kind") == "control":
+            else:  # The graph's other nodes are its controls.
                 node["link_count"] = control_counts.get(nid, 0)
                 node["mapped_events"] = control_counts.get(nid, 0)
 

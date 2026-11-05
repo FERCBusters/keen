@@ -223,3 +223,29 @@ def test_nothing_changes_without_stored_rules_or_the_framework(contract_db):
     db.commit()
     assert add_rules(db.connection(), RULES) == 0
     assert _stored(db).version == 1
+
+
+def test_removing_rules_none_still_as_added_changes_nothing(installation):
+    db = installation
+    add_rules(db.connection(), RULES)
+    row = _stored(db)
+    # Every built-in rule has been edited since it was added.
+    edited = [
+        {**rule, "enabled": False}
+        if rule["id"] not in {OWN["id"], OTHER["id"]}
+        else rule
+        for rule in deepcopy(row.document["rules"])
+    ]
+    row.document = {"rules": edited}
+    db.commit()
+    revisions = db.query(ManagedConfigurationRevision).filter_by(name="rules").count()
+
+    assert remove_rules(db.connection(), RULES) == 0
+
+    after = _stored(db)
+    assert after.document["rules"] == edited
+    assert after.version == 4
+    assert (
+        db.query(ManagedConfigurationRevision).filter_by(name="rules").count()
+        == revisions
+    )

@@ -867,11 +867,10 @@ def analyse_risk_mitigation(
     )
     selected_types = _normalise_risk_types(risk_types, text_blob, rules)
     weights = {rt: _clamp_weight((risk_weights or {}).get(rt, 0)) for rt in _RISK_TYPES}
+    # At least one type is always selected, so at least one weight is set.
     for rt in selected_types:
         if weights.get(rt, 0) <= 0:
             weights[rt] = 50
-    if not any(weights.values()):
-        weights[selected_types[0]] = 50
 
     terms_for_matching: list[str] = []
     signals: list[dict[str, Any]] = []
@@ -1103,8 +1102,6 @@ def analyse_risk_mitigation(
         else:
             score *= 0.85
 
-        if score <= 0:
-            continue
         matched_terms = _unique_strs(matched_terms)[:12]
         if not reasons:
             reasons.append(

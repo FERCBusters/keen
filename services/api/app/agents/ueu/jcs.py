@@ -127,10 +127,7 @@ def _write(value: Any, out: list[str], depth: int) -> None:
 def canonical(value: Any) -> bytes:
     """Return the canonical UTF-8 bytes for a value."""
     out: list[str] = []
-    try:
-        _write(value, out, 0)
-    except RecursionError as exc:
-        raise CanonicalError("nesting too deep") from exc
+    _write(value, out, 0)
     return "".join(out).encode("utf-8")
 
 

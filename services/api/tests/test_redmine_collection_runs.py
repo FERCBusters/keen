@@ -429,3 +429,53 @@ def test_a_first_run_can_start_from_a_lookback_window(tracker):
     )
     assert listing.url.params["updated_on"].startswith(">=")
     assert tracker.cursor().meta["history_since"]
+
+
+def test_without_journals_a_run_stores_only_issue_snapshots(tracker):
+    tracker.inputs["include_journals"] = False
+
+    (result,) = tracker.run()
+
+    assert result["created_events"] == 1
+    assert [e.action for e in tracker.events()] == ["issue.snapshot"]
+    (detail,) = [
+        r for r in tracker.api.requests if r.url.path.endswith("/issues/7.json")
+    ]
+    assert "include" not in detail.url.params
+
+
+def test_an_open_status_and_a_newly_set_field_record_only_what_redmine_sent(
+    tracker,
+):
+    tracker.api.issues[7] = issue(
+        status={"id": 1, "name": "New"},
+        journals=[
+            {
+                "id": 70,
+                "created_on": "2026-09-02T00:00:00Z",
+                "details": [
+                    {
+                        "property": "attr",
+                        "name": "assigned_to_id",
+                        "old_value": None,
+                        "new_value": "6",
+                    }
+                ],
+            }
+        ],
+    )
+
+    tracker.run()
+
+    snapshot, change = sorted(
+        tracker.events(), key=lambda e: e.action != "issue.snapshot"
+    )
+    fields = snapshot.normalized_payload["fields"]
+    assert fields["issue.status.name"] == "New"
+    assert "issue.status.is_closed" not in fields
+    changed = change.normalized_payload["fields"]
+    # The field had no value before, so no old value is recorded for it.
+    assert {k: v for k, v in changed.items() if k.startswith("change.")} == {
+        "change.attr.assigned_to_id.changed": True,
+        "change.attr.assigned_to_id.new_value": "6",
+    }
