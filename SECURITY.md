@@ -277,9 +277,9 @@ Custom API collectors additionally require an operator-managed host and port all
 
 ### Credentials stay with their connection
 
-Upstream credentials and cached authentication state belong to the selected connection. GitHub audit-log collection follows upstream pagination links only within the configured API origin and base path, refusing dot segments whether or not they are percent-encoded, so its token stays with that API.
+Upstream credentials and cached authentication state belong to the selected connection. GitHub audit-log collection follows upstream pagination links only within the configured API origin and base path, refusing dot segments whether or not they are percent-encoded, and links still encoded after 16 decodings, so its token stays with that API.
 
-Saved credentials are write-only: changing a connection's endpoint, origin, authentication mode or credential header requires its credentials to be supplied again. Custom API connections apply the same rule to any change to the base URL's scheme, host, port or path, to the credential header or query parameter name and to the OAuth token path. Custom API request, detail and OAuth token paths cannot contain `.` or `..` segments, percent-encoded, behind encoded slashes or backslashes, or with `;` parameters, and a detail request whose substituted record value forms one is refused, so the credential stays under the base path. Next-page links may lead anywhere on the connection's origin.
+Saved credentials are write-only: changing a connection's endpoint, origin, authentication mode or credential header requires its credentials to be supplied again. Custom API connections apply the same rule to any change to the base URL's scheme, host, port or path, to the credential header or query parameter name and to the OAuth token path. Custom API request, detail and OAuth token paths cannot contain `.` or `..` segments, percent-encoded, behind encoded slashes or backslashes, or with `;` parameters, and a detail request whose substituted record value forms one is refused, so the credential stays under the base path. A path still percent-encoded after 16 decodings counts as one, which keeps each check to a bounded number of passes; detail paths are filled in one pass over their text. Next-page links may lead anywhere on the connection's origin.
 
 ### Outbound notifications
 

@@ -19,7 +19,9 @@ INVALID_VALUE = (
 )
 # The skipped-record summary names at most this many distinct reasons.
 SKIPPED_REASONS = 5
-_DETAIL_FIELD = scan_pattern(r"\{([^}]+)\}")
+# A placeholder holds no brace, so each "{" starts at most one attempt and a
+# detail path is filled in time linear in its length.
+_DETAIL_FIELD = scan_pattern(r"\{([^{}]+)\}")
 
 
 def timestamp(value):

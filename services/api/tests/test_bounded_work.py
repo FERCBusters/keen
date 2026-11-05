@@ -21,6 +21,7 @@ import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 import app.worker.tasks  # noqa: F401 - registers the worker tasks
 import pytest
@@ -36,10 +37,12 @@ from app.db.models import (
 )
 from app.ingest import github, rss
 from app.ingest.log_pipeline import try_parse_json_line
+from app.integrations import engine
 from app.integrations.engine import next_link
 from app.integrations.runtime import scrub
+from app.integrations.schema import MAX_DECODINGS, has_dot_segment
 from app.outbound import question_webhooks as qw
-from app.security import auth, mfa
+from app.security import auth, mfa, request_limits
 from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
 from app.security.redaction import (
     REDACTED,
@@ -237,6 +240,47 @@ def test_link_headers_are_read_in_linear_time():
     started = time.process_time()
     assert next_link({"Link": "<" * 65_536}) is None
     assert time.process_time() - started < 0.1
+
+
+# A tenth of a custom API run's 110-second time budget.
+RUN_SHARE_SECONDS = 11
+
+
+def test_detail_paths_are_filled_in_linear_time():
+    fill = engine._DETAIL_FIELD.sub
+    assert fill("7", "/checks/{/id}/runs/{/run}") == "/checks/7/runs/7"
+    # Every "{" an administrator leaves unclosed starts an attempt, which ends
+    # at the next brace; a pattern reading on to the end took 16 s for this.
+    started = time.process_time()
+    assert fill("7", "{" * 65_536) == "{" * 65_536
+    assert time.process_time() - started < 0.1
+    # The longest path a saved definition can hold.
+    started = time.process_time()
+    fill("7", "{" * request_limits.MAX_BODY)
+    assert time.process_time() - started < RUN_SHARE_SECONDS
+
+
+def encoded_path(levels, tail):
+    """A path whose last segment decodes to ``tail`` after ``levels`` decodings."""
+    return "/checks/%" + "25" * (levels - 1) + tail
+
+
+def test_dot_segments_are_found_within_a_bounded_number_of_decodings():
+    for levels in (1, 2, MAX_DECODINGS):
+        assert has_dot_segment(encoded_path(levels, "2e"))
+        assert not has_dot_segment(encoded_path(levels, "41"))
+    assert not has_dot_segment("/checks/a%25252Fb")
+    # Encoded more deeply than any server decodes: refused unread.
+    assert has_dot_segment(encoded_path(MAX_DECODINGS + 1, "41"))
+    # Each decoding of a value encoded within itself removes two characters;
+    # decoding it until it stopped changing took 4 s for this record value.
+    started = time.process_time()
+    assert has_dot_segment("/checks/" + quote("%" + "25" * 32_768, safe=""))
+    assert time.process_time() - started < 0.1
+    # As long as the responses a run may read.
+    started = time.process_time()
+    has_dot_segment("/checks/" + quote("%" + "25" * (8 * 1024 * 1024), safe=""))
+    assert time.process_time() - started < RUN_SHARE_SECONDS
 
 
 def test_github_paging_links_stay_under_the_api_base_path(monkeypatch):

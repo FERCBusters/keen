@@ -5,6 +5,10 @@ from urllib.parse import unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# Servers and proxies decode a path a few times at most. A value encoded within
+# itself ("%2525...25") loses one level per decoding, so the check stops here.
+MAX_DECODINGS = 16
+
 
 def has_dot_segment(path: str) -> bool:
     """Whether a server could read ``path`` as climbing out of the base path.
@@ -12,11 +16,17 @@ def has_dot_segment(path: str) -> bool:
     Requests join paths to the connection's base URL and send them as written,
     and servers resolve ``.`` and ``..`` after decoding. Percent-encoded forms,
     backslashes and encoded slashes or backslashes within a segment, and a
-    segment's ``;`` parameters, which some servers drop first, all count.
+    segment's ``;`` parameters, which some servers drop first, all count, as
+    does a path still encoded after MAX_DECODINGS decodings, so the check reads
+    a path a bounded number of times.
     """
     decoded = path
-    while (next_form := unquote(decoded)) != decoded:
+    for _ in range(MAX_DECODINGS + 1):
+        if (next_form := unquote(decoded)) == decoded:
+            break
         decoded = next_form
+    else:
+        return True
     return any(
         segment.split(";", 1)[0] in {".", ".."}
         for segment in decoded.replace("\\", "/").split("/")

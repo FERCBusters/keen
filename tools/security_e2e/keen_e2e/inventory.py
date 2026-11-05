@@ -99,7 +99,7 @@ def html_pages() -> list[str]:
 
 def concrete(path: str, value: str = "00000000-0000-0000-0000-000000000000") -> str:
     """Fill path parameters with a syntactically valid identifier."""
-    return re.sub(r"\{[^}]+\}", value, path)
+    return re.sub(r"\{[^{}]+\}", value, path)
 
 
 def is_public(method: str, path: str) -> bool:
