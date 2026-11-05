@@ -20,11 +20,10 @@ export function monthRange(value) {
   return { start, end, startIso: isoOf(start), endIso: isoOf(end) };
 }
 
+// Moves from the month the calendar shows, so an unreadable value moves from this month.
 export function shiftMonth(value, delta) {
-  const [yRaw, mRaw] = String(value || monthValue()).split('-');
-  return monthValue(
-    new Date(Number(yRaw) || new Date().getFullYear(), (Number(mRaw) || 1) - 1 + delta, 1),
-  );
+  const { start } = monthRange(value);
+  return monthValue(new Date(start.getFullYear(), start.getMonth() + delta, 1));
 }
 
 // Draws the weeks of `month` into `el`. Each entry has a `date` and a `title`;

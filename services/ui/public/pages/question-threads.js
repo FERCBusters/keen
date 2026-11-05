@@ -42,7 +42,7 @@ export function questionStatusBadge(value, unread = false) {
 export function questionHref(item, framework) {
   const href = withFramework(
     item?.target_url ||
-      `/event.html?id=${encodeURIComponent(item?.event_id || '')}&thread=${encodeURIComponent(item?.thread_id || '')}#questions`,
+      `/event.html?id=${encodeURIComponent(item?.event_id || '')}&thread=${encodeURIComponent(item.thread_id)}#questions`,
     framework,
   );
   // The server builds target_url as a Keen path; anything else, another site
@@ -65,7 +65,7 @@ export function questionSubline(item) {
 
 export function questionActionsHtml(item, { framework, canDelete }) {
   const remove = canDelete
-    ? `<button class="btn btn-outline-danger" type="button" data-delete-question="${esc(item?.thread_id || '')}">Delete</button>`
+    ? `<button class="btn btn-outline-danger" type="button" data-delete-question="${esc(item.thread_id)}">Delete</button>`
     : '';
   return `<div class="btn-group btn-group-sm" role="group" aria-label="Question actions"><a class="btn btn-outline-primary" href="${esc(questionHref(item, framework))}">Open</a>${remove}</div>`;
 }
@@ -138,8 +138,7 @@ export function mountQuestionThreads({
     if (!attachments) return apiPost(url, { body });
     const data = new FormData();
     data.append('body', body);
-    for (const file of [...(files?.files || [])].slice(0, 10))
-      data.append('attachments', file, file.name);
+    for (const file of [...files.files].slice(0, 10)) data.append('attachments', file, file.name);
     return apiPostForm(url, data);
   }
 
@@ -148,7 +147,7 @@ export function mountQuestionThreads({
       .map((a) => {
         const href = safeExternalHref(a?.download_url);
         if (!href) return '';
-        const name = a.filename || `attachment-${String(a.artifact_id || '').slice(0, 8)}`;
+        const name = a.filename || `attachment-${a.artifact_id.slice(0, 8)}`;
         return `<a class="mono" href="${esc(href)}" target="_blank" rel="noopener noreferrer"><i class="bi bi-paperclip"></i> ${esc(name)}</a>`;
       })
       .filter(Boolean)
@@ -159,13 +158,13 @@ export function mountQuestionThreads({
   function postHtml(post) {
     return `<div class="question-post">
         <div class="question-post-meta"><div class="small-muted"><span class="fw-bold">${esc(post?.author_username || '-')}</span> · ${esc(post?.created_at ? fmtTs(post.created_at) : '-')}</div></div>
-        <div class="mt-2">${esc(post?.body || '').replace(/\n/g, '<br>')}</div>
+        <div class="mt-2">${esc(post.body).replace(/\n/g, '<br>')}</div>
         ${attachmentLinks(post?.attachments)}
       </div>`;
   }
 
   function threadHtml(thread) {
-    const tid = esc(thread?.id || '');
+    const tid = esc(thread.id);
     const current = statusOf(thread?.status);
     const author =
       me?.user_id && thread?.created_by_user_id
@@ -187,12 +186,12 @@ export function mountQuestionThreads({
             <div class="form-text">${REPLY_RULE}</div>
           </div>`
         : `<div class="small-muted mt-3">${REPLY_RULE}</div>`;
-    const posts = (Array.isArray(thread?.posts) ? thread.posts : []).map(postHtml).join('');
+    const posts = thread.posts.map(postHtml).join('');
     return `<div class="question-thread" id="thread-${tid}" data-thread="${tid}">
         <div class="question-header">
           <div>
             <div class="question-title">Thread by <span class="mono">${esc(thread?.created_by_username || '-')}</span></div>
-            <div class="small-muted">Created ${esc(thread?.created_at ? fmtTs(thread.created_at) : '-')} · Updated ${esc(thread?.updated_at ? fmtTs(thread.updated_at) : '-')}</div>
+            <div class="small-muted">Created ${esc(thread?.created_at ? fmtTs(thread.created_at) : '-')} · Updated ${esc(fmtTs(thread.updated_at))}</div>
           </div>
           <div class="d-flex flex-wrap gap-2 align-items-center">${questionStatusBadge(current)}${menu}${remove}</div>
         </div>
@@ -225,7 +224,7 @@ export function mountQuestionThreads({
     }
     try {
       const res = await apiGet(url);
-      const threads = Array.isArray(res?.threads) ? res.threads : [];
+      const threads = res.threads;
       list.innerHTML =
         threads.map(threadHtml).join('') || '<div class="small-muted">No questions yet.</div>';
       onCount?.(threads.length);
@@ -262,7 +261,6 @@ export function mountQuestionThreads({
     ev.preventDefault();
     const url = base();
     const body = form.elements.body.value.trim();
-    if (!url) return;
     if (!body) return toast(status, 'Please enter a question', 'warning');
     await busyWhile(form.querySelector('[type="submit"]'), 'Submitting', async () => {
       await send(url, body, form.elements.attachments);

@@ -33,8 +33,7 @@ async function fetchLandingPage() {
     const r = await fetch('/api/v1/me', { credentials: 'same-origin' });
     if (!r.ok) return '/';
     const me = await r.json();
-    const lp = me?.preferences?.landing_page || '/';
-    return safeNext(lp);
+    return safeNext(me?.preferences?.landing_page);
   } catch {
     return '/';
   }
@@ -86,9 +85,7 @@ function renderSsoButtons(providers) {
   if (!ssoSection || !ssoButtons || !providers.length) return;
   ssoButtons.replaceChildren();
   for (const provider of providers) {
-    const key = String(provider?.key || '')
-      .trim()
-      .toLowerCase();
+    const key = String(provider?.key).trim().toLowerCase();
     const label = String(provider?.label || 'single sign-on').trim() || 'single sign-on';
     const button = document.createElement('button');
     button.className = 'btn btn-outline-primary w-100';
@@ -156,7 +153,7 @@ if (form) {
     ev.preventDefault();
     if (status) status.style.display = 'none';
 
-    const username = (usernameEl?.value || '').trim();
+    const username = usernameEl.value.trim();
     const password = passwordEl?.value || '';
 
     if (!username || !password) {
@@ -194,7 +191,7 @@ if (form) {
       if (!hadExplicitNext && (n === '/' || n === '/index.html')) {
         n = await fetchLandingPage();
       }
-      location.replace(n || '/');
+      location.replace(n);
     } catch (e) {
       toast(status, `Login failed: ${errorText(e)}`, 'danger');
     } finally {

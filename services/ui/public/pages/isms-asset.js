@@ -29,7 +29,7 @@ import {
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
-const params = new URLSearchParams(window.location.search || '');
+const params = new URLSearchParams(window.location.search);
 const assetId = params.get('id') || params.get('asset') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
@@ -41,37 +41,37 @@ let asset = null;
 let risksLoaded = false;
 
 function assetHref(id = assetId) {
-  return withFramework(`/isms-asset.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(`/isms-asset.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function renderAsset(row) {
-  asset = row || {};
-  const title = asset.asset || asset.name || 'Asset';
+  asset = row;
+  const title = asset.asset || asset.name;
   document.title = `Keen - ${title}`;
   $('assetTitle').textContent = title;
   $('assetMeta').textContent = [
     asset.category?.name || asset.category_name,
-    asset.subcategory?.name || asset.subcategory_name,
+    asset.subcategory_name,
     asset.license_name || asset.license,
-    `updated ${fmtTs(asset.updated_at) || '-'}`,
+    `updated ${fmtTs(asset.updated_at)}`,
   ]
     .filter(Boolean)
     .join(' · ');
   $('assetDescription').textContent = asset.description || 'No description recorded.';
   $('assetCategory').textContent = asset.category?.name || asset.category_name || '-';
-  $('assetSubcategory').textContent = asset.subcategory?.name || asset.subcategory_name || '-';
+  $('assetSubcategory').textContent = asset.subcategory_name || '-';
   $('assetLicense').textContent = asset.license_name || asset.license || '-';
   $('assetOwner').textContent = asset.owner_org_node?.name || '-';
   $('assetRegister').textContent = asset.register_held_by_org_node?.name || '-';
   $('assetRiskCount').textContent = Number(asset.risk_count || 0);
-  $('assetUpdated').textContent = fmtTs(asset.updated_at) || '-';
+  $('assetUpdated').textContent = fmtTs(asset.updated_at);
   $('assetControls').innerHTML = controlBadges(asset.controls, framework);
   $('assetClauses').innerHTML = clauseBadges(asset.clauses, framework);
 
   const edit = $('editAssetLink');
   if (edit) {
     edit.href = withFramework(
-      `/isms.html?tab=assets&edit=asset:${encodeURIComponent(asset.id || '')}`,
+      `/isms.html?tab=assets&edit=asset:${encodeURIComponent(asset.id)}`,
       framework,
     );
     edit.style.display = canManageIsms ? '' : 'none';
@@ -93,10 +93,10 @@ function risksHtml(items) {
     return '<p class="small-muted mb-0">No risks are recorded against this asset.</p>';
   const rows = items
     .map((r) => {
-      const types = (r.risk_types || [])
+      const types = r.risk_types
         .map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`)
         .join('');
-      const due = r.treatment_due_at ? isoDateToDisplay(r.treatment_due_at) : '';
+      const due = isoDateToDisplay(r.treatment_due_at);
       return `<tr>
         <td><a class="fw-semibold" href="${esc(riskHref(r.id, framework))}">${esc(riskDisplayTitle(r))}</a>${types ? `<div>${types}</div>` : ''}</td>
         <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${due ? ` · due ${esc(due)}` : ''}</div></td>
@@ -119,7 +119,7 @@ async function loadRisks() {
       `/api/v1/risks?asset_id=${encodeURIComponent(assetId)}&framework=${encodeURIComponent(framework)}&limit=500`,
     );
     risksLoaded = true;
-    host.innerHTML = risksHtml(data?.items || []);
+    host.innerHTML = risksHtml(data.items);
   } catch (e) {
     host.textContent = `Risks could not be loaded: ${errorText(e)}`;
   }
@@ -151,12 +151,11 @@ async function load() {
 }
 
 $('sampleAssetAudit')?.addEventListener('click', () => {
-  if (!asset) return;
   openAuditSampleModal({
     me,
     entityType: 'isms_asset',
     entityId: asset.id,
-    title: asset.asset || asset.name || 'ISMS asset',
+    title: asset.asset,
     evidenceUrl: assetHref(asset.id),
     framework,
     statusEl: status,

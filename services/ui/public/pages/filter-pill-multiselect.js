@@ -3,7 +3,6 @@ import { esc } from '/app.js';
 const instances = new Map();
 
 function targetEl(target) {
-  if (!target) return null;
   if (typeof target === 'string') return document.getElementById(target.replace(/^#/, ''));
   return target;
 }
@@ -19,26 +18,24 @@ function uniqueValues(values) {
   return Array.from(new Set((values || []).map((v) => String(v || '').trim()).filter(Boolean)));
 }
 
+// normaliseOptions gives an option without text or title its value.
 function optionFromDom(opt) {
   return {
     value: String(opt?.value || '').trim(),
-    label: String(opt?.textContent || opt?.value || '').trim(),
-    title: String(opt?.title || opt?.textContent || opt?.value || '').trim(),
+    label: String(opt?.textContent).trim(),
+    title: String(opt?.title || opt?.textContent).trim(),
   };
 }
 
 function readElementValues(el) {
-  if (!el) return [];
-  if (el.dataset.filterPillValue !== undefined) return splitValues(el.dataset.filterPillValue);
   if (el.tagName === 'SELECT' && el.multiple)
-    return Array.from(el.selectedOptions || [])
+    return Array.from(el.selectedOptions)
       .map((opt) => String(opt.value || '').trim())
       .filter(Boolean);
   return splitValues(el.value || '');
 }
 
 function writeElementValues(el, values) {
-  if (!el) return;
   const selected = uniqueValues(values);
   const serialised = selected.join(',');
   el.dataset.filterPillValue = serialised;
@@ -46,7 +43,7 @@ function writeElementValues(el, values) {
     el.value = serialised;
     return;
   }
-  const optionValues = new Set(Array.from(el.options || []).map((opt) => String(opt.value || '')));
+  const optionValues = new Set(Array.from(el.options).map((opt) => String(opt.value || '')));
   if (!selected.length) {
     el.value = '';
   } else if (selected.length === 1 && optionValues.has(selected[0])) {
@@ -62,14 +59,15 @@ function normaliseOptions(options) {
       if (typeof opt === 'string') return { value: opt, label: opt, title: opt };
       const value = String(opt?.value || '').trim();
       const label = String(opt?.label || opt?.name || opt?.text || value).trim() || value;
-      return { value, label, title: String(opt?.title || label || value).trim() || label || value };
+      // An option with a value always has a label: its own, or the value.
+      return { value, label, title: String(opt?.title || label).trim() || label };
     })
     .filter((opt) => opt.value);
 }
 
 function optionsFromElement(el) {
-  if (!el || el.tagName !== 'SELECT') return [];
-  return Array.from(el.options || [])
+  if (el.tagName !== 'SELECT') return [];
+  return Array.from(el.options)
     .map(optionFromDom)
     .filter((opt) => opt.value);
 }
@@ -83,7 +81,7 @@ function sortOptions(options, selectedSet) {
     const aSel = selectedSet.has(a.value) ? 0 : 1;
     const bSel = selectedSet.has(b.value) ? 0 : 1;
     if (aSel !== bSel) return aSel - bSel;
-    return String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, {
+    return String(a.label).localeCompare(String(b.label), undefined, {
       numeric: true,
       sensitivity: 'base',
     });
@@ -92,9 +90,7 @@ function sortOptions(options, selectedSet) {
 
 function createModal(id, config) {
   const modalId = `${id}FilterPillModal`;
-  let modal = document.getElementById(modalId);
-  if (modal) return modal;
-  modal = document.createElement('div');
+  const modal = document.createElement('div');
   modal.className = 'modal fade keen-filter-pill-modal';
   modal.id = modalId;
   modal.tabIndex = -1;
@@ -132,10 +128,11 @@ function createModal(id, config) {
   return modal;
 }
 
+// Chips show normalised options, whose value, label and title are never blank.
 function chipHtml(option, { selected = false, removable = false } = {}) {
-  const value = String(option?.value || '').trim();
-  const label = String(option?.label || value).trim() || value;
-  const title = String(option?.title || label).trim() || label;
+  const value = String(option.value).trim();
+  const label = String(option.label).trim();
+  const title = String(option.title).trim();
   const tag = removable ? 'span' : 'button';
   const attrs = removable ? '' : ' type="button"';
   return `<${tag}${attrs} class="keen-filter-pill-chip${selected ? ' selected' : ''}${removable ? ' removable' : ''}" data-value="${esc(value)}" title="${esc(title)}">
@@ -238,8 +235,7 @@ function buildInstance(el, config = {}) {
     });
   }
   function toggle(value) {
-    const v = String(value || '').trim();
-    if (!v) return;
+    const v = String(value).trim();
     const s = selectedSet();
     if (s.has(v)) s.delete(v);
     else s.add(v);
@@ -247,7 +243,7 @@ function buildInstance(el, config = {}) {
     commit({ dispatchChange: true });
   }
   function remove(value) {
-    const v = String(value || '').trim();
+    const v = String(value).trim();
     state.selected = state.selected.filter((item) => item !== v);
     commit({ dispatchChange: true });
   }
@@ -270,7 +266,7 @@ function buildInstance(el, config = {}) {
     }
     inline.innerHTML = selected
       .sort((a, b) =>
-        String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, {
+        String(a.label).localeCompare(String(b.label), undefined, {
           numeric: true,
           sensitivity: 'base',
         }),
@@ -314,7 +310,7 @@ function buildInstance(el, config = {}) {
   clearBtn?.addEventListener('click', () => clear({ dispatchChange: true }));
   modalClear?.addEventListener('click', () => clear({ dispatchChange: true }));
   search?.addEventListener('input', () => {
-    state.query = String(search.value || '');
+    state.query = search.value;
     renderModal();
   });
   inline?.addEventListener('click', (ev) => {
@@ -343,9 +339,7 @@ function buildInstance(el, config = {}) {
 }
 
 export function enhanceFilterPillMultiSelect(target, config = {}) {
-  const el = targetEl(target);
-  if (!el) return null;
-  return buildInstance(el, config);
+  return buildInstance(targetEl(target), config);
 }
 
 export function selectedFilterPillValues(target) {

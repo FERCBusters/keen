@@ -25,9 +25,6 @@ const currentFramework = getCurrentFramework();
 
 const autoApplyFilters = !!me?.preferences?.auto_apply_filters;
 
-const frameworkInput = document.getElementById('framework');
-if (frameworkInput && !frameworkInput.value) frameworkInput.value = currentFramework;
-
 const isAdmin = !!me?.is_admin;
 
 async function loadSourceCatalogue() {
@@ -35,7 +32,7 @@ async function loadSourceCatalogue() {
   if (!node || !isAdmin) return;
   try {
     const data = await apiGet('/api/v1/admin/source-catalogue');
-    node.innerHTML = (data.items || [])
+    node.innerHTML = data.items
       .map(
         (item) => `
       <div class="col-md-6 col-xl-4"><div class="border rounded p-3 h-100">
@@ -85,8 +82,7 @@ const status = document.getElementById('status');
 const out = document.getElementById('out');
 
 function selectedFrameworkFallback() {
-  const f = (document.getElementById('framework')?.value || '').trim();
-  return f || currentFramework || 'iso_27001_2022';
+  return currentFramework || 'iso_27001_2022';
 }
 
 // ------------------------------------------------------------------
@@ -98,14 +94,12 @@ let cachedGroups = [];
 let cachedPerms = [];
 
 function selValues(selectEl) {
-  if (!selectEl) return [];
-  return Array.from(selectEl.selectedOptions || []).map((o) => String(o.value));
+  return Array.from(selectEl.selectedOptions).map((o) => String(o.value));
 }
 
-function setOptions(selectEl, items, getValue, getLabel, selected = []) {
-  if (!selectEl) return;
-  const sel = new Set((selected || []).map((v) => String(v)));
-  selectEl.innerHTML = (items || [])
+function setOptions(selectEl, items, getValue, getLabel, selected) {
+  const sel = new Set(selected.map((v) => String(v)));
+  selectEl.innerHTML = items
     .map((it) => {
       const v = String(getValue(it));
       const label = String(getLabel(it));
@@ -118,14 +112,11 @@ function setOptions(selectEl, items, getValue, getLabel, selected = []) {
 function enhanceWrappedMultiSelect(selectEl) {
   // Turns a <select multiple> into a scrollable checkbox list with wrapped labels.
   // Keeps the original <select> in sync so existing code can continue using selValues(selectEl).
-  if (!selectEl) return;
-  if (!selectEl.classList?.contains('keen-wrap-multiselect')) return;
-
   let wrap = selectEl.nextElementSibling;
   if (!wrap || !wrap.classList.contains('keen-multiselect-wrap')) {
     wrap = document.createElement('div');
     wrap.className = 'keen-multiselect-wrap';
-    wrap.setAttribute('data-for', selectEl.id || '');
+    wrap.setAttribute('data-for', selectEl.id);
     selectEl.insertAdjacentElement('afterend', wrap);
   }
 
@@ -133,19 +124,19 @@ function enhanceWrappedMultiSelect(selectEl) {
   selectEl.classList.add('keen-multiselect-native-hidden');
 
   wrap.innerHTML = '';
-  const opts = Array.from(selectEl.options || []);
+  const opts = Array.from(selectEl.options);
   for (const opt of opts) {
     const label = document.createElement('label');
     label.className = 'keen-ms-option';
 
     const cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.value = String(opt.value ?? '');
+    cb.value = opt.value;
     cb.checked = !!opt.selected;
 
     const span = document.createElement('span');
     span.className = 'keen-ms-label';
-    span.textContent = opt.textContent || '';
+    span.textContent = opt.textContent;
 
     // Hover tooltip for very long entries
     label.title = span.textContent;
@@ -160,17 +151,20 @@ function enhanceWrappedMultiSelect(selectEl) {
   }
 }
 
+// The ingest runner buttons. The framework comparison renders a Compare button
+// with a bare data-run of its own, which this leaves out.
+const INGEST_RUNNERS = '[data-run^="/api/v1/admin/ingest/"]';
+
 // Hide ingest runners that are disabled at runtime (e.g. KEEN_TAIGA_ENABLED=false).
 async function hideDisabledIngestButtons() {
   try {
     const data = await apiGet('/api/v1/admin/ingest/status');
-    const enabled = data?.enabled || {};
+    const enabled = data.enabled;
     const cloud = data?.cloud || {};
-    document.querySelectorAll('[data-run]').forEach((btn) => {
-      const path = (btn.getAttribute('data-run') || '').trim();
+    document.querySelectorAll(INGEST_RUNNERS).forEach((btn) => {
+      const path = btn.getAttribute('data-run').trim();
       const m = path.match(/\/admin\/ingest\/(cloud\/)?([^/]+)\/run/i);
-      const name = (m?.[2] || '').toLowerCase();
-      if (!name) return;
+      const name = m[2].toLowerCase();
       // Cloud posture providers have their own map: Google Workspace is
       // both an ingester and a posture provider.
       if ((m[1] ? cloud : enabled)[name] === false) {
@@ -229,11 +223,7 @@ function activateTabFromHash() {
   for (const id of [tabId, SUBTAB_HASH_TO_ID[hash]]) {
     const el = id && document.getElementById(id);
     if (!el) continue;
-    try {
-      window.bootstrap.Tab.getOrCreateInstance(el).show();
-    } catch {
-      // ignore
-    }
+    window.bootstrap.Tab.getOrCreateInstance(el).show();
   }
 }
 
@@ -250,9 +240,7 @@ document.querySelectorAll('#adminTabs button[data-bs-toggle="tab"]').forEach((bt
     const id = ev.target?.id;
     // A hash naming a part of this tab, such as #rule-suggestions, is kept.
     if (TAB_HASH_TO_ID[(location.hash || '').toLowerCase()] === id) return;
-    const entry = Object.entries(TAB_HASH_TO_ID).find(([, v]) => v === id);
-    if (!entry) return;
-    const [hash] = entry;
+    const [hash] = Object.entries(TAB_HASH_TO_ID).find(([, v]) => v === id);
     if (location.hash !== hash) history.replaceState(null, '', hash);
   });
 });
@@ -267,14 +255,9 @@ function setOut(msg) {
   if (out) out.textContent = msg;
   // If output is collapsed, pop it open whenever we write something non-trivial.
   const collapseEl = document.getElementById('outCollapse');
-  if (!collapseEl) return;
-  const shouldOpen = (msg || '').trim() && (msg || '').trim() !== 'Ready.';
+  const shouldOpen = msg.trim() && msg.trim() !== 'Ready.';
   if (!shouldOpen || !window.bootstrap?.Collapse) return;
-  try {
-    window.bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false }).show();
-  } catch {
-    // ignore
-  }
+  window.bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false }).show();
 }
 
 async function runJsonPost(path, body) {
@@ -329,9 +312,9 @@ document.querySelectorAll('select[data-role-menu]').forEach((select) => {
 });
 
 function roleLabel(role) {
-  const r = String(role || '').toLowerCase();
+  const r = String(role).toLowerCase();
   if (r === 'inherit') return 'Inherit';
-  return ROLE_CHOICES.find(([value]) => value === r)?.[1] || r || 'Normal';
+  return ROLE_CHOICES.find(([value]) => value === r)[1];
 }
 
 function groupRoleSuffix(g) {
@@ -341,11 +324,10 @@ function groupRoleSuffix(g) {
 }
 
 function renderUsers(users) {
-  if (!usersRows) return;
-  const rows = (users || [])
+  const rows = users
     .map((u) => {
-      const role = (u.role || 'normal').toLowerCase();
-      const effRole = (u.effective_role || role || 'normal').toLowerCase();
+      const role = u.role.toLowerCase();
+      const effRole = (u.effective_role || role).toLowerCase();
       const showEff = effRole && effRole !== role;
       const activeChecked = u.is_active ? 'checked' : '';
       const created = u.created_at ? fmtTs(u.created_at) : '-';
@@ -353,7 +335,7 @@ function renderUsers(users) {
 
       return `
       <tr data-user-id="${esc(u.id)}">
-        <td data-username="${esc(u.username || '')}">
+        <td data-username="${esc(u.username)}">
           ${userPillHtml(u)}
           <div class="small-muted mt-1">Created ${esc(created)}</div>
           <div class="small-muted">Updated ${esc(updated)}</div>
@@ -388,14 +370,10 @@ function renderUsers(users) {
   usersRows.querySelectorAll('[data-save]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const tr = btn.closest('tr');
-      if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
-      const roleEl = tr.querySelector('[data-role]');
-      const activeEl = tr.querySelector('[data-active]');
-      const emailEl = tr.querySelector('[data-email]');
-      const role = roleEl ? roleEl.value : null;
-      const isActive = activeEl ? !!activeEl.checked : null;
-      const email = emailEl ? String(emailEl.value || '').trim() : '';
+      const role = tr.querySelector('[data-role]').value;
+      const isActive = tr.querySelector('[data-active]').checked;
+      const email = tr.querySelector('[data-email]').value.trim();
 
       usersStatus.style.display = 'none';
       try {
@@ -415,9 +393,8 @@ function renderUsers(users) {
   usersRows.querySelectorAll('[data-access]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const tr = btn.closest('tr');
-      if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
-      const username = tr.querySelector('[data-username]')?.dataset.username || 'user';
+      const username = tr.querySelector('[data-username]').dataset.username;
       await openUserAccessModal(userId, username);
     });
   });
@@ -425,9 +402,8 @@ function renderUsers(users) {
   usersRows.querySelectorAll('[data-reset]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const tr = btn.closest('tr');
-      if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
-      const username = tr.querySelector('[data-username]')?.dataset.username || 'user';
+      const username = tr.querySelector('[data-username]').dataset.username;
 
       const pw = prompt(`Set a new password for ${username}:`);
       if (!pw) return;
@@ -445,9 +421,8 @@ function renderUsers(users) {
   usersRows.querySelectorAll('[data-delete]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const tr = btn.closest('tr');
-      if (!tr) return;
       const userId = tr.getAttribute('data-user-id');
-      const username = tr.querySelector('[data-username]')?.dataset.username || 'user';
+      const username = tr.querySelector('[data-username]').dataset.username;
       if (
         !(await confirmAction({
           title: `Delete ${username}`,
@@ -471,7 +446,6 @@ function renderUsers(users) {
 }
 
 async function refreshUsers(showLoading = true) {
-  if (!usersRows) return;
   if (showLoading) {
     usersRows.innerHTML = `<tr><td colspan="5" class="small-muted">Loading</td></tr>`;
   }
@@ -496,7 +470,7 @@ if (userCreateForm) {
       const username = (newUsername?.value || '').trim();
       const email = (newEmail?.value || '').trim();
       const password = newPassword?.value || '';
-      const role = (newRole?.value || 'inherit').trim();
+      const role = newRole.value.trim();
 
       if (!username) throw new Error('Username is required');
       if (!password) throw new Error('Password is required');
@@ -530,8 +504,7 @@ const userAccessSave = document.getElementById('userAccessSave');
 async function ensurePermissionsLoaded() {
   if (cachedPerms && cachedPerms.length) return;
   try {
-    const perms = await apiGet('/api/v1/admin/permissions');
-    cachedPerms = Array.isArray(perms) ? perms : [];
+    cachedPerms = await apiGet('/api/v1/admin/permissions');
   } catch {
     cachedPerms = [];
   }
@@ -540,24 +513,21 @@ async function ensurePermissionsLoaded() {
 async function ensureGroupsLoaded() {
   if (cachedGroups && cachedGroups.length) return;
   try {
-    const groups = await apiGet('/api/v1/admin/groups');
-    cachedGroups = Array.isArray(groups) ? groups : [];
+    cachedGroups = await apiGet('/api/v1/admin/groups');
   } catch {
     cachedGroups = [];
   }
 }
 
 function showUserAccessStatus(msg, kind = 'info') {
-  if (!userAccessStatus) return;
   userAccessStatus.className = `alert alert-${kind} mt-3`;
   userAccessStatus.textContent = msg;
   userAccessStatus.style.display = msg ? 'block' : 'none';
 }
 
 async function openUserAccessModal(userId, username) {
-  if (!userAccessModalEl || !window.bootstrap?.Modal) return;
   if (userAccessStatus) userAccessStatus.style.display = 'none';
-  if (userAccessUserId) userAccessUserId.value = String(userId || '');
+  if (userAccessUserId) userAccessUserId.value = String(userId);
   if (userAccessUsername) userAccessUsername.textContent = `Editing access for: ${username}`;
 
   await ensureGroupsLoaded();
@@ -566,14 +536,14 @@ async function openUserAccessModal(userId, username) {
   // Populate option lists
   setOptions(
     userAccessGroups,
-    (cachedGroups || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    cachedGroups.slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
     (g) => g.id,
     (g) => `${g.name}${groupRoleSuffix(g)}`,
     [],
   );
   setOptions(
     userAccessPerms,
-    (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
+    cachedPerms.slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
     (p) => p.code,
     (p) => (p.description ? `${p.code} - ${p.description}` : p.code),
     [],
@@ -586,22 +556,21 @@ async function openUserAccessModal(userId, username) {
 
     setOptions(
       userAccessGroups,
-      (cachedGroups || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
+      cachedGroups.slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
       (g) => g.id,
       (g) => `${g.name}${groupRoleSuffix(g)}`,
-      access.group_ids || [],
+      access.group_ids,
     );
     setOptions(
       userAccessPerms,
-      (cachedPerms || []).slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
+      cachedPerms.slice().sort((a, b) => String(a.code).localeCompare(String(b.code))),
       (p) => p.code,
       (p) => (p.description ? `${p.code} - ${p.description}` : p.code),
-      access.explicit_permission_codes || [],
+      access.explicit_permission_codes,
     );
 
     if (userAccessEffective) {
-      const eff = access.effective_permission_codes || [];
-      userAccessEffective.textContent = Array.isArray(eff) ? eff.join(', ') : String(eff || '');
+      userAccessEffective.textContent = access.effective_permission_codes.join(', ');
     }
   } catch (e) {
     showUserAccessStatus(`Failed to load: ${errorText(e)}`, 'danger');
@@ -626,8 +595,7 @@ if (userAccessSave) {
       });
 
       if (userAccessEffective) {
-        const eff = res.effective_permission_codes || [];
-        userAccessEffective.textContent = Array.isArray(eff) ? eff.join(', ') : String(eff || '');
+        userAccessEffective.textContent = res.effective_permission_codes.join(', ');
       }
 
       showUserAccessStatus('Saved', 'success');
@@ -690,24 +658,21 @@ function openNewGroup() {
 }
 
 function showGroupsStatus(msg, kind = 'info') {
-  if (!groupsStatus) return;
   groupsStatus.className = `alert alert-${kind}`;
   groupsStatus.textContent = msg;
   groupsStatus.style.display = msg ? 'block' : 'none';
 }
 
 function renderGroups(groups) {
-  if (!groupsRows) return;
-  const items = Array.isArray(groups) ? groups : [];
-  const rows = items
+  const rows = groups
     .map((g) => {
       const isSel = selectedGroupId && String(g.id) === String(selectedGroupId);
       const roleText = g.role ? roleLabel(g.role) : '-';
       return `
       <tr data-group-id="${esc(g.id)}" style="cursor:pointer;" class="${isSel ? 'table-active' : ''}">
-        <td class="mono">${esc(g.name || '')}</td>
+        <td class="mono">${esc(g.name)}</td>
         <td class="mono">${esc(roleText)}</td>
-        <td class="mono">${esc(String(g.member_count ?? 0))}</td>
+        <td class="mono">${esc(String(g.member_count))}</td>
         <td class="mono">${esc(String(g.permission_count ?? 0))}</td>
       </tr>
     `;
@@ -717,15 +682,12 @@ function renderGroups(groups) {
   groupsRows.innerHTML = rows || `<tr><td colspan="4" class="small-muted">No groups.</td></tr>`;
   groupsRows.querySelectorAll('tr[data-group-id]').forEach((tr) => {
     tr.addEventListener('click', () => {
-      const gid = tr.getAttribute('data-group-id');
-      if (!gid) return;
-      openGroupDetail(gid);
+      openGroupDetail(tr.getAttribute('data-group-id'));
     });
   });
 }
 
 async function refreshGroups(showLoading = true) {
-  if (!groupsRows) return;
   if (showLoading) {
     groupsRows.innerHTML = `<tr><td colspan="4" class="small-muted">Loading</td></tr>`;
   }
@@ -759,14 +721,13 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
     await refreshPermissions();
     const detail = await apiGet(`/api/v1/admin/groups/${encodeURIComponent(String(gid))}`);
 
-    if (groupName) groupName.value = detail.name || '';
-    if (groupDesc) groupDesc.value = detail.description || '';
+    if (groupName) groupName.value = detail.name;
+    if (groupDesc) groupDesc.value = detail.description;
     if (groupRole) groupRole.value = (detail.role || '').trim();
-    if (groupDetailMeta)
-      groupDetailMeta.textContent = detail.created_at ? `Created ${fmtTs(detail.created_at)}` : '';
+    if (groupDetailMeta) groupDetailMeta.textContent = `Created ${fmtTs(detail.created_at)}`;
 
     // Options
-    const usersSorted = (cachedUsers || [])
+    const usersSorted = cachedUsers
       .slice()
       .sort((a, b) => String(a.username).localeCompare(String(b.username)));
     setOptions(
@@ -774,10 +735,10 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
       usersSorted,
       (u) => u.id,
       (u) => u.username,
-      detail.user_ids || [],
+      detail.user_ids,
     );
 
-    const permsSorted = (cachedPerms || [])
+    const permsSorted = cachedPerms
       .slice()
       .sort((a, b) => String(a.code).localeCompare(String(b.code)));
     setOptions(
@@ -785,7 +746,7 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
       permsSorted,
       (p) => p.code,
       (p) => (p.description ? `${p.code} - ${p.description}` : p.code),
-      detail.permission_codes || [],
+      detail.permission_codes,
     );
     enhanceWrappedMultiSelect(groupPermissions);
 
@@ -815,7 +776,7 @@ groupForm?.addEventListener('submit', async (ev) => {
       );
       toast(groupsStatus, 'Group updated', 'success');
       await refreshGroups(false);
-      await openGroupDetail(res.id || selectedGroupId, { keepStatus: true });
+      await openGroupDetail(res.id, { keepStatus: true });
       return;
     }
     const g = await apiPost('/api/v1/admin/groups', {
@@ -897,9 +858,8 @@ if (groupApplyPermissions) {
 // Ingest runners / remap
 // ------------------------------------------------------------------
 
-document.querySelectorAll('[data-run]').forEach((btn) => {
+document.querySelectorAll(INGEST_RUNNERS).forEach((btn) => {
   btn.addEventListener('click', async () => {
-    if (btn.disabled) return;
     btn.disabled = true;
     try {
       await runJsonPost(btn.getAttribute('data-run'), {});
@@ -942,8 +902,7 @@ document.getElementById('remapBtn')?.addEventListener('click', async () => {
   if (action) params.set('action', action);
   if (outcome) params.set('outcome', outcome);
 
-  const qs = params.toString();
-  await runJsonPost(`/api/v1/admin/remap/run${qs ? `?${qs}` : ''}`, {});
+  await runJsonPost(`/api/v1/admin/remap/run?${params.toString()}`, {});
 });
 
 // ------------------------------------------------------------------
@@ -956,14 +915,13 @@ let allControls = [];
 let selectedControls = [];
 
 function diaryControlLabel(item) {
-  return `${item?.type === 'clause' ? 'Clause ' : ''}${item?.ref || ''}`;
+  return `${item.type === 'clause' ? 'Clause ' : ''}${item.ref}`;
 }
 
 // Diary link rows (optional)
 const diaryLinksWrap = document.getElementById('diaryLinks');
 
 function diaryAddLinkRow(url = '', text = '') {
-  if (!diaryLinksWrap) return;
   const row = document.createElement('div');
   row.className = 'row g-2 align-items-end';
   row.setAttribute('data-link-row', '1');
@@ -988,7 +946,6 @@ function diaryAddLinkRow(url = '', text = '') {
 }
 
 function diaryReadLinks() {
-  if (!diaryLinksWrap) return [];
   const links = [];
   diaryLinksWrap.querySelectorAll('[data-link-row]').forEach((row) => {
     const url = (row.querySelector('[data-link-url]')?.value || '').trim();
@@ -1004,7 +961,6 @@ if (diaryLinksWrap && diaryLinksWrap.children.length === 0) diaryAddLinkRow();
 
 function renderSelected() {
   const wrap = document.getElementById('controlSelected');
-  if (!wrap) return;
 
   wrap.innerHTML = selectedControls
     .map((item) => {
@@ -1028,7 +984,6 @@ function renderSelected() {
 
 function renderResults(items) {
   const resEl = document.getElementById('controlResults');
-  if (!resEl) return;
 
   if (!items.length) {
     resEl.innerHTML = '';
@@ -1068,7 +1023,7 @@ async function loadControls() {
     const res = await apiGet(
       `/api/v1/controls?framework=${encodeURIComponent(selectedFrameworkFallback())}&limit=5000`,
     );
-    allControls = (res.items || []).filter((it) => it.id && it.ref);
+    allControls = res.items.filter((it) => it.id && it.ref);
   } catch {
     allControls = [];
   }
@@ -1181,7 +1136,7 @@ let entityChangeDebouncedApply = null;
 
 function renderEntityChanges(items, total) {
   if (entityChangeRows) {
-    entityChangeRows.innerHTML = entityChangelogHtml(items || [], {
+    entityChangeRows.innerHTML = entityChangelogHtml(items, {
       empty: 'No Control, Clause or Risk changes match these filters.',
     });
   }
@@ -1210,7 +1165,7 @@ async function refreshEntityChanges() {
 
   try {
     const res = await apiGet(url.pathname + url.search);
-    renderEntityChanges(res.items || [], res.total || 0);
+    renderEntityChanges(res.items, res.total || 0);
   } catch (e) {
     renderEntityChanges([], 0);
     toast(status, `Failed to load entity changelog: ${errorText(e)}`, 'danger');
@@ -1279,9 +1234,7 @@ const auditNext = document.getElementById('auditNext');
 let auditDebouncedApply = null;
 
 function renderAudit(items, total) {
-  if (!auditRows) return;
-
-  auditRows.innerHTML = (items || [])
+  auditRows.innerHTML = items
     .map((a) => {
       const qs = a.query_string ? `?${esc(a.query_string)}` : '';
       return `
@@ -1326,7 +1279,7 @@ async function refreshAudit() {
 
   try {
     const res = await apiGet(url.pathname + url.search);
-    renderAudit(res.items || [], res.total || 0);
+    renderAudit(res.items, res.total || 0);
   } catch (e) {
     renderAudit([], 0);
     setOut(errorText(e));

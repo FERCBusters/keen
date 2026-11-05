@@ -52,9 +52,9 @@ function renderRows(items) {
           (story) => `<tr data-story-id="${esc(story.id)}">
         <td class="wrap"><a class="fw-semibold" href="${withFramework(`/story.html?id=${encodeURIComponent(story.id)}`, framework)}">${esc(story.title)}</a>${story.summary ? `<div class="small-muted text-truncate" style="max-width:48rem;">${esc(story.summary)}</div>` : ''}</td>
         <td>${statusBadge(story.status)}</td>
-        <td>${esc(story.item_count ?? 0)}</td>
+        <td>${esc(story.item_count)}</td>
         <td class="small-muted">${esc(fmtTs(story.updated_at))}</td>
-        <td class="small-muted">${esc(story.created_by || '')}</td>
+        <td class="small-muted">${esc(story.created_by)}</td>
       </tr>`,
         )
         .join('')
@@ -70,12 +70,12 @@ async function load() {
   $('meta').textContent = 'Loading';
   try {
     const data = await apiGet(`/api/v1/stories?${params}`);
-    state.total = data.total || 0;
+    state.total = data.total;
     const page = offsetPagerState(state);
     $('meta').textContent = `${page.start}-${page.end} of ${page.total}`;
     $('prev').disabled = state.offset <= 0;
     $('next').disabled = state.offset + state.limit >= state.total;
-    renderRows(data.items || []);
+    renderRows(data.items);
   } catch (error) {
     toast($('status'), `Failed to load stories: ${errorText(error)}`, 'danger');
     $('meta').textContent = '-';

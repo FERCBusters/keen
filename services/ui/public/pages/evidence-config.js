@@ -29,8 +29,7 @@ function status(message, tone = 'danger') {
     try {
       const detail = JSON.parse(readable).detail;
       if (typeof detail === 'string') readable = detail;
-      else if (Array.isArray(detail))
-        readable = detail.map((item) => item.msg || String(item)).join('; ');
+      else if (Array.isArray(detail)) readable = detail.map((item) => item.msg).join('; ');
     } catch {
       /* Keep plain text errors as they are. */
     }
@@ -285,7 +284,7 @@ function selectBookstackPage() {
     name: page.name,
   })) {
     const input = $('definition-fields').querySelector(`[data-field="${name}"]`);
-    if (input) input.value = value ?? '';
+    if (input) input.value = value;
   }
   $('bookstack-status').textContent =
     `Selected ${book.name} → ${page.name}. Save to capture this page and map its evidence.`;
@@ -295,7 +294,6 @@ function definitionKey(adapter, section, entry) {
   if (adapter === 'webhooks') return definitionEntryKey;
   if (adapter === 'github' && section === 'repos')
     return `${entry.owner || ''}/${entry.repo || ''}`;
-  if (adapter === 'riskledger') return String(entry.org || '').trim();
   if (adapter === 'redmine') return String(entry.project || '').trim();
   const field =
     section === 'groups'
@@ -312,7 +310,6 @@ function definitionKey(adapter, section, entry) {
   return String(entry[field] ?? '').trim();
 }
 function definitionEntry() {
-  if ($('definition-section').value === 'source') return {};
   const entry = JSON.parse($('definition-extra').value || '{}');
   if (!entry || Array.isArray(entry) || typeof entry !== 'object')
     throw new Error('Additional collection settings must be a JSON object.');
@@ -528,7 +525,6 @@ function definitionFromForm() {
       connection_id: null,
     };
   }
-  if (!adapter) throw new Error('Enable an ingester before creating a mapping.');
   if (
     layouts[adapter] &&
     adapter !== 'webhooks' &&
@@ -561,7 +557,7 @@ function definitionFromForm() {
     collector: definitionId(adapter, section, key),
     entry_key: definitionEntryKey,
     connector_version: definitionVersion,
-    connection_id: selectedConnection() || null,
+    connection_id: selectedConnection(),
   };
 }
 let step = 1,
@@ -601,7 +597,7 @@ function eventSentence() {
     'From ' +
       (severalMode
         ? sourcesText($('when-source_regex').value.trim())
-        : $('definition-adapter').selectedOptions[0]?.textContent || 'the selected source'),
+        : $('definition-adapter').selectedOptions[0].textContent),
   ];
   for (const [key, title] of [
     ['system', 'on system'],
@@ -624,7 +620,6 @@ function eventSentence() {
   return parts.join(', ') + '.';
 }
 function ruleSentence() {
-  if (!$('rule-sentence')) return;
   $('rule-sentence').textContent =
     eventSentence() +
     ' ' +
@@ -757,7 +752,7 @@ const inputType = (section) =>
     projects: 'project',
     streams: 'stream',
     providers: 'provider',
-  })[section] || label(section);
+  })[section];
 function fieldNode(name, value, kind = 'text') {
   const wrapper = document.createElement('div');
   wrapper.className = 'mb-2';
@@ -850,7 +845,7 @@ function sampleRequest() {
 async function loadSamples() {
   const request = sampleRequest();
   const result = request ? await apiGet(request) : { items: [] };
-  samples = result.items || [];
+  samples = result.items;
   $('sample').replaceChildren(
     new Option(
       samples.length
@@ -871,7 +866,6 @@ async function loadSamples() {
     );
   for (const field of conditions.filter((x) => x !== 'source' && x !== 'severity')) {
     const list = $('observed-' + field);
-    if (!list) continue;
     list.replaceChildren();
     for (const value of [
       ...new Set(
@@ -952,7 +946,6 @@ function uniqueRuleId(stem) {
 }
 function readRule() {
   const definition = definitionFromForm();
-  if (!$('description').value.trim()) throw new Error('Give the mapping a name.');
   const when = {};
   const fieldConditions = readFieldConditions();
   const legacySummary = [...$('field-rows').children].find(
@@ -1077,8 +1070,8 @@ function showSelectedInput() {
   text.textContent = severalMode
     ? `Selected input: Events from ${sourcesText($('when-source_regex').value.trim())}.`
     : section === 'source'
-      ? `Selected input: All ${$('when-source').value || adapter} events from ${connectionLabel}.`
-      : `Selected input: ${adapter} ${inputType(section)} “${collector?.key || $('definition-entry').selectedOptions[0]?.textContent || ''}” from ${connectionLabel}.`;
+      ? `Selected input: All ${$('when-source').value} events from ${connectionLabel}.`
+      : `Selected input: ${adapter} ${inputType(section)} “${collector.key}” from ${connectionLabel}.`;
   // A saved rule can read other sources; saving it then rechecks past evidence.
   const change = document.createElement('button');
   change.type = 'button';
@@ -1127,7 +1120,7 @@ async function editRule(rule, { suggestion = null } = {}) {
   $('enabled').checked = rule.enabled !== false;
   for (const field of [...conditions, ...regexConditions, ...bookstackConditions])
     $(`when-${field}`).value = rule.when?.[field] ?? '';
-  targets = structuredClone(rule.map_to || []);
+  targets = structuredClone(rule.map_to);
   renderTargets();
   resetControlPicker();
   const linked = collectors.find(
@@ -1144,7 +1137,8 @@ async function editRule(rule, { suggestion = null } = {}) {
     sourceChoices(linked.adapter);
     $('definition-adapter').value = linked.adapter;
     await selectDefinitionAdapter();
-    $('definition-connection').value = rule.when?.connection_id || '';
+    // A rule naming an environment collection may predate connections.
+    $('definition-connection').value = rule.when?.connection_id || 'env:' + linked.adapter;
     await selectDefinitionAdapter(true);
     $('definition-section').value = linked.section;
     paintDefinitionChoices();
@@ -1202,7 +1196,7 @@ function renderRules() {
         (rule.when?.source || origin?.adapter) === chosenSource ||
         (readsSeveral(rule.when) && sourcesOf(rule.when.source_regex)?.includes(chosenSource))) &&
       (!query ||
-        `${rule.id} ${rule.description || ''} ${rule.when?.source || ''} ${rule.when?.source_regex || ''} ${JSON.stringify(rule.map_to || [])} ${origin?.adapter || ''} ${origin?.key || ''}`
+        `${rule.id} ${rule.description || ''} ${rule.when?.source || ''} ${rule.when?.source_regex || ''} ${JSON.stringify(rule.map_to)} ${origin?.adapter || ''} ${origin?.key || ''}`
           .toLowerCase()
           .includes(query)),
   );
@@ -1309,11 +1303,11 @@ function insightFor(ruleId) {
   return insights?.rules?.find((item) => item.id === ruleId) || null;
 }
 function statusBadge(insight) {
-  const [tone, label] = RULE_STATUS[insight.status] || RULE_STATUS.insufficient;
+  const [tone, label] = RULE_STATUS[insight.status];
   const badge = document.createElement('span');
   badge.className = `badge ${tone}`;
   badge.textContent = label;
-  badge.title = insight.message || '';
+  badge.title = insight.message;
   return badge;
 }
 // A rule named in an insight opens in the editor.
@@ -1408,7 +1402,7 @@ function renderInsights() {
   consolidation.replaceChildren();
   $('insights-consolidation-heading').hidden = !suggestions.length;
   for (const item of suggestions) {
-    const card = insightCard(SUGGESTION_KIND[item.kind] || 'Suggestion');
+    const card = insightCard(SUGGESTION_KIND[item.kind]);
     const named = paragraph('Rules: ', 'small mb-1');
     named.append(ruleLinks(item.rules));
     card.append(paragraph(item.message), named);
@@ -1798,7 +1792,6 @@ $('sample').addEventListener('change', () => {
 $('use-sample').addEventListener('click', () => {
   if (!$('sample').value) return;
   const sample = samples[Number($('sample').value)];
-  if (!sample) return;
   $('sample').dispatchEvent(new Event('change'));
   // System, action and outcome usually identify the event type. Actor and
   // severity vary more often, so leave those for the administrator to choose.
@@ -1903,7 +1896,7 @@ $('suggest-controls').addEventListener('click', async () => {
       title.textContent = `${targetLabel(kind, suggestion.ref)} · ${suggestion.title || 'Control'}`;
       const reason = document.createElement('div');
       reason.className = 'small-muted';
-      reason.textContent = `${suggestion.reason || `Matched: ${(suggestion.matched_terms || []).join(', ')}.`} Click to add; review suitability before publishing.`;
+      reason.textContent = `${suggestion.reason} Click to add; review suitability before publishing.`;
       button.append(title, reason);
       button.addEventListener('click', () => {
         addTarget({ framework, ref: suggestion.ref, kind });
@@ -1957,7 +1950,7 @@ $('preview').addEventListener('click', async () => {
       p.append('Matches: ', previewEventLink(item), maps);
       container.append(p);
     }
-    for (const item of data.nonmatches || []) {
+    for (const item of data.nonmatches) {
       const p = document.createElement('p');
       p.className = 'alert alert-warning py-2 mb-2';
       p.append(
@@ -2168,10 +2161,9 @@ async function init() {
 async function load() {
   conditionForm();
   const observed = await apiGet(`${apiRoot}/evidence-event-samples`);
-  for (const source of observed.sources || [])
-    $('source-options').append(new Option(source, source));
+  for (const source of observed.sources) $('source-options').append(new Option(source, source));
   const catalogue = await apiGet(`${apiRoot}/source-catalogue`);
-  enabledSources = (catalogue.items || [])
+  enabledSources = catalogue.items
     .filter((item) => item.enabled && item.mapping_source !== false)
     .map((item) => ({
       value: item.adapter,
@@ -2183,7 +2175,7 @@ async function load() {
   for (const adapter of definitionAdapters)
     $('settings-adapter').add(new Option(adapter.replaceAll('_', ' '), adapter));
   const integrations = await apiGet('/api/v1/admin/integrations');
-  for (const collector of integrations.collectors || [])
+  for (const collector of integrations.collectors)
     if (collector.enabled && collector.live_revision)
       enabledSources.push({ value: 'integration:' + collector.id, label: collector.name });
   sourceChoices();
@@ -2201,7 +2193,7 @@ async function load() {
     // Webhook events carry their provider's source, such as webhook:github.
     options: [
       ...enabledSources.filter((item) => item.value !== 'webhooks'),
-      ...(observed.sources || [])
+      ...observed.sources
         .filter((source) => !enabledSources.some((item) => item.value === source))
         .map((source) => ({ value: source, label: source })),
     ],
@@ -2433,8 +2425,6 @@ function readFieldConditions() {
       } catch {
         throw new Error('Choose an event field.');
       }
-      if (!Array.isArray(keys) || !keys.length || keys.some((k) => typeof k !== 'string' || !k))
-        throw new Error('Field paths must be arrays of non-empty keys.');
       return {
         ...(path.value === 'event:summary'
           ? { scope: 'event', path: ['summary'] }
@@ -2477,9 +2467,7 @@ async function draftFromEvent() {
     .map((ref) => ref.trim())
     .filter(Boolean)
     .slice(0, 20);
-  const catalogue = new Map(
-    (pickerControls || []).map((control) => [control.ref, targetKind(control)]),
-  );
+  const catalogue = new Map(pickerControls.map((control) => [control.ref, targetKind(control)]));
   const added = requested.filter((ref) => catalogue.has(ref));
   for (const ref of added)
     addTarget({ framework: $('framework').value, ref, kind: catalogue.get(ref) });

@@ -227,10 +227,11 @@ const clauseTree = {
 async function clausesPage(t, options = {}) {
   const ui = await page(t, 'clauses', {
     query: options.query || '',
+    vendor: options.vendor,
     get: async (u) => {
       if (u.pathname === '/api/v1/clauses') {
         if (options.fail) throw new Error('Clauses offline');
-        return clauseTree;
+        return options.tree ?? clauseTree;
       }
       throw new Error('Unexpected GET ' + u);
     },
@@ -340,4 +341,65 @@ test('without ISMS access, requirements count the evidence alone', async (t) => 
   assert.match(first.querySelector('a').title, /Measures and tests: not met \(none linked\)/);
   const none = await controlsPage(t, { me: {}, items: [controls[2]] });
   assert.equal(none.ui.el('kpiRequirementsMet').textContent, '-');
+});
+
+test('a search for the word null leaves untitled controls out', async (t) => {
+  const { ui } = await controlsPage(t, {
+    items: [
+      { id: 'c5', ref: 'A.5', title: null, evidence_count: 0, in_scope: true },
+      { id: 'c6', ref: 'A.6', title: 'Null sessions', evidence_count: 0, in_scope: true },
+    ],
+  });
+  assert.equal(ui.el('rows').querySelector('tr').cells[1].textContent, '');
+  ui.el('filterText').value = 'null';
+  ui.el('filterText').dispatchEvent(new ui.window.Event('input'));
+  assert.deepEqual(refs(ui), ['A.6']);
+});
+
+test('a saved search of unmet requirements is named for them, and dismissing the prompt saves nothing', async (t) => {
+  let named = '';
+  let answer = 'Unmet';
+  const { ui, posted } = await controlsPage(t, {
+    globals: { prompt: (_, def) => ((named = def), answer) },
+  });
+  ui.el('onlyUnmet').checked = true;
+  ui.el('onlyUnmet').dispatchEvent(new ui.window.Event('change'));
+  ui.el('saveSearch').click();
+  await settle(() => posted.length === 1);
+  assert.equal(named, 'Controls (unmet requirements)');
+  assert.deepEqual(posted[0].body, {
+    name: 'Unmet',
+    url: '/controls.html?framework=A&unmet=1',
+  });
+  answer = null;
+  ui.el('saveSearch').click();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(posted.length, 1);
+});
+
+test('a framework with one clause counts it in the singular', async (t) => {
+  const ui = await clausesPage(t, {
+    tree: { tree: [{ id: 'k9', ref: '9', title: 'Review', control_link_count: 0, children: [] }] },
+  });
+  assert.equal(ui.el('meta').textContent, '1 of 1 clause');
+});
+
+test('an emptied clause search leaves the address, as does a framework the page does not use', async (t) => {
+  const ui = await clausesPage(t);
+  ui.el('q').value = 'context';
+  ui.el('q').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(new URLSearchParams(ui.window.location.search).get('q'), 'context');
+  ui.el('q').value = '  ';
+  ui.el('q').dispatchEvent(new ui.window.Event('input'));
+  assert.equal(new URLSearchParams(ui.window.location.search).has('q'), false);
+  assert.equal(ui.el('meta').textContent, '3 of 3 clauses');
+
+  // Without framework selection the address carries no framework.
+  const unframed = await clausesPage(t, { vendor: { getCurrentFramework: () => '' } });
+  unframed.el('q').value = 'context';
+  unframed.el('q').dispatchEvent(new unframed.window.Event('input'));
+  assert.equal(new URLSearchParams(unframed.window.location.search).has('framework'), false);
+  unframed.window.history.replaceState({}, '', '/clauses.html?framework=A&q=context');
+  unframed.el('clearFilters').click();
+  assert.equal(unframed.window.location.search, '');
 });

@@ -220,18 +220,18 @@ function renderRelations() {
     : row;
   $('relatedList').innerHTML = types
     .map((type) => {
-      const links = (current.links || []).filter((link) => link.target_type === type);
+      const links = current.links.filter((link) => link.target_type === type);
       return `<section class="col-12 col-md-6 col-xl-4"><div class="card h-100"><div class="card-body p-3"><h3 class="h6 d-flex justify-content-between">${esc(label(type))}<span class="badge text-bg-secondary">${links.length}</span></h3><div class="d-grid gap-2">${links.map((link) => `<div class="border rounded p-2 d-flex align-items-center gap-2"><a class="text-break flex-grow-1" href="${esc(localPath(withFramework(link.url, framework)) || '#')}"${isNew ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(link.title)}</a>${manage ? `<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-unlink-type="${type}" data-unlink-id="${esc(link.target_id)}" aria-label="Remove ${esc(link.title)}">Unlink</button>` : ''}</div>`).join('') || '<span class="small-muted">No linked items.</span>'}</div></div></div></section>`;
     })
     .join('');
   renderGraph($('graph'), current, framework);
 }
 function mappingOptions(id, records = [], selected = [], filter = false) {
-  const chosen = new Set((selected || []).map((record) => String(record.id)));
+  const chosen = new Set(selected.map((record) => String(record.id)));
   $(id).replaceChildren();
   if (filter)
     $(id).append(new Option('All ' + (id === 'controlFilter' ? 'controls' : 'clauses'), ''));
-  for (const record of records || []) {
+  for (const record of records) {
     const option = new Option(
       `${record.ref} ${record.title || ''}`.trim(),
       filter ? record.ref : record.id,
@@ -288,6 +288,9 @@ async function loadDetail() {
       `/api/v1/isms/swot/${encodeURIComponent(itemId)}/changelog?limit=100`,
       { empty: 'No changes recorded.' },
     );
+  } else {
+    // A draft's Questions pane asks for a save first.
+    await swotQuestions.refresh();
   }
 }
 let filterTimer;
@@ -493,16 +496,14 @@ $('itemForm').addEventListener(
 );
 
 let exportCancelled = false;
-let exporting = false;
 $('cancelExport').addEventListener('click', () => {
   exportCancelled = true;
 });
 window.addEventListener('pagehide', () => {
   exportCancelled = true;
 });
+// Both export buttons stay disabled until an export finishes, so one runs at a time.
 async function exportSwot(format) {
-  if (exporting) return;
-  exporting = true;
   exportCancelled = false;
   for (const id of ['exportExcel', 'exportPdf']) $(id).disabled = true;
   $('cancelExport').hidden = false;
@@ -519,7 +520,7 @@ async function exportSwot(format) {
     );
     const meta = await apiGet(`/api/v1/isms/meta?${fw}`);
     const owners = new Map(
-      (meta.users || []).map((user) => [user.id, user.display_name || user.username || user.name]),
+      (meta.users || []).map((user) => [user.id, user.display_name || user.username]),
     );
     if (exportCancelled) throw new Error('Export cancelled.');
     const blob =
@@ -539,7 +540,6 @@ async function exportSwot(format) {
   } catch (error) {
     fail(error);
   } finally {
-    exporting = false;
     for (const id of ['exportExcel', 'exportPdf']) $(id).disabled = false;
     $('cancelExport').hidden = true;
   }

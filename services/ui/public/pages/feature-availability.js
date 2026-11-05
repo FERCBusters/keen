@@ -117,9 +117,7 @@ export function applyFeatures(me) {
     }
     for (const tab of document.querySelectorAll('[data-feature="visualisations"].active')) {
       const fallback = [
-        ...(tab
-          .closest('[role="tablist"], .nav-tabs')
-          ?.querySelectorAll('[data-bs-toggle="tab"]') || []),
+        ...tab.closest('[role="tablist"], .nav-tabs').querySelectorAll('[data-bs-toggle="tab"]'),
       ].find((candidate) => !candidate.closest('[data-feature-hidden]'));
       if (fallback) window.bootstrap?.Tab.getOrCreateInstance(fallback).show();
     }

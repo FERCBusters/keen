@@ -89,8 +89,6 @@ function updateScheduleSections() {
     },
   ];
   for (const section of sections) {
-    const el = document.getElementById(section.id);
-    if (!el) continue;
     const badge = document.getElementById(section.badge);
     if (badge) {
       const set = section.count > 0;
@@ -177,8 +175,7 @@ function auditTypeLabel(v) {
   return String(v || 'internal').toLowerCase() === 'external' ? 'External' : 'Internal';
 }
 
-function renderAudits(items) {
-  const arr = Array.isArray(items) ? items : [];
+function renderAudits(arr) {
   if (!arr.length) {
     rows.innerHTML = `<tr><td colspan="10" class="p-4 small-muted">No audits found.</td></tr>`;
     return;
@@ -198,7 +195,7 @@ function renderAudits(items) {
       const scopeBreakdown = `${a.document_scope_count ?? 0} documents, ${a.clause_scope_count ?? 0} clauses, ${a.control_scope_count ?? 0} controls`;
       return `<tr>
       <td>
-        <a class="fw-semibold" href="${esc(url)}">${esc(a.title || 'Audit')}</a>
+        <a class="fw-semibold" href="${esc(url)}">${esc(a.title)}</a>
         <div class="small-muted">Updated ${esc(fmtTs(a.updated_at))}</div>
       </td>
       <td><span class="badge badge-soft">${esc(a.framework_slug || '')}</span></td>
@@ -212,7 +209,7 @@ function renderAudits(items) {
       <td class="text-end">
         <div class="btn-group btn-group-sm">
           <a class="btn btn-outline-primary" href="${esc(url)}">Open</a>
-          ${canDeleteAudits() && String(a.status || '').toLowerCase() !== 'template' ? `<button class="btn btn-outline-danger" type="button" data-delete-audit="${esc(a.id)}" data-delete-audit-title="${esc(a.title || 'Audit')}">Delete</button>` : ''}
+          ${canDeleteAudits() && String(a.status).toLowerCase() !== 'template' ? `<button class="btn btn-outline-danger" type="button" data-delete-audit="${esc(a.id)}" data-delete-audit-title="${esc(a.title)}">Delete</button>` : ''}
         </div>
       </td>
     </tr>`;
@@ -220,11 +217,7 @@ function renderAudits(items) {
     .join('');
   rows.querySelectorAll('[data-delete-audit]').forEach((btn) =>
     btn.addEventListener('click', async () => {
-      if (!canDeleteAudits()) {
-        toast(status, 'Admin role required.', 'danger');
-        return;
-      }
-      const title = btn.getAttribute('data-delete-audit-title') || 'this audit';
+      const title = btn.getAttribute('data-delete-audit-title');
       if (
         !(await confirmAction({
           title: `Delete audit ${title}`,
@@ -260,7 +253,7 @@ async function loadAudits() {
   if (st) params.set('status', st);
   try {
     const data = await apiGet(`/api/v1/audits?${params.toString()}`);
-    renderAudits(data?.items || []);
+    renderAudits(data.items);
   } catch (e) {
     rows.innerHTML = `<tr><td colspan="10" class="p-4 text-danger">Could not load the audit list. Use the refresh button to try again. ${esc(errorText(e))}</td></tr>`;
   }
@@ -282,47 +275,40 @@ function setDefaultCoverageDates() {
   if (coverageStart && !coverageStart.value) coverageStart.value = _yearStartIso();
 }
 
+// Coverage reports only these three types of item.
 function coverageTypeLabel(type) {
-  return (
-    { controls: 'Control', clauses: 'Clause', documents: 'Document' }[String(type || '')] || 'Item'
-  );
+  return { controls: 'Control', clauses: 'Clause', documents: 'Document' }[type];
 }
 
 function coverageItemTitle(type, item) {
-  if (type === 'documents') return item?.title || 'Document';
-  return `${item?.ref || ''} ${item?.title || ''}`.trim() || 'Item';
+  if (type === 'documents') return item.title;
+  return `${item.ref} ${item.title || ''}`.trim();
 }
 
 function coverageItemHref(type, item) {
-  const fw = coverageData?.framework_slug || getCurrentFramework();
+  const fw = coverageData.framework_slug;
   if (type === 'controls')
-    return withFramework(`/controls.html?selected=${encodeURIComponent(item?.id || '')}`, fw);
+    return withFramework(`/controls.html?selected=${encodeURIComponent(item.id)}`, fw);
   if (type === 'clauses')
-    return withFramework(`/clauses.html?selected=${encodeURIComponent(item?.id || '')}`, fw);
-  if (type === 'documents')
-    return withFramework(
-      `/isms.html?tab=documents&edit=document:${encodeURIComponent(item?.id || '')}`,
-      fw,
-    );
-  return '#';
+    return withFramework(`/clauses.html?selected=${encodeURIComponent(item.id)}`, fw);
+  return withFramework(`/isms.html?tab=documents&edit=document:${encodeURIComponent(item.id)}`, fw);
 }
 
 function flattenCoverage(group, type) {
   return (group?.[type] || []).map((item) => ({ type, item }));
 }
 
-function coverageSourceHtml(sources) {
-  const arr = Array.isArray(sources) ? sources : [];
+function coverageSourceHtml(arr) {
   if (!arr.length) return '<span class="small-muted">-</span>';
   return (
     arr
       .slice(0, 8)
       .map((src) => {
         const label =
-          `${isoDateToDisplay(src.start_date || src.occurrence_date) || ''} ${src.title || 'Audit'}`.trim();
+          `${isoDateToDisplay(src.start_date || src.occurrence_date)} ${src.title}`.trim();
         const href = withFramework(
-          `/audit.html?id=${encodeURIComponent(src.audit_id || src.id || '')}`,
-          src.framework_slug || coverageData?.framework_slug || getCurrentFramework(),
+          `/audit.html?id=${encodeURIComponent(src.audit_id || src.id)}`,
+          src.framework_slug || coverageData.framework_slug,
         );
         const badge = src.source === 'scheduled' ? 'Scheduled' : 'Completed';
         return `<div class="mb-1"><a href="${esc(href)}">${esc(label)}</a> <span class="badge text-bg-light">${esc(badge)}</span></div>`;
@@ -337,11 +323,12 @@ function coverageMatches(row, query) {
     coverageTypeLabel(row.type),
     coverageItemTitle(row.type, row.item),
     row.item?.description || '',
+    // join() writes null as nothing.
     ...(row.item?.sources || []).flatMap((s) => [
-      s.title || '',
-      s.start_date || '',
-      s.occurrence_date || '',
-      s.source || '',
+      s.title,
+      s.start_date,
+      s.occurrence_date,
+      s.source,
     ]),
   ]
     .join(' ')
@@ -355,12 +342,11 @@ function coverageTypes(data) {
 }
 
 function renderCoverageSummary(data) {
-  if (!coverageSummary) return;
-  const summary = data?.summary || {};
+  const summary = data.summary;
   coverageSummary.innerHTML =
     coverageTypes(data)
       .map((key) => {
-        const row = summary[key] || {};
+        const row = summary[key];
         const label = key.charAt(0).toUpperCase() + key.slice(1);
         return `<div class="col-12 col-md-4"><div class="card h-100"><div class="card-body">
       <div class="small-muted">${esc(label)}</div>
@@ -372,13 +358,13 @@ function renderCoverageSummary(data) {
     </div></div></div>`;
       })
       .join('') +
-    `<div class="col-12"><div class="small-muted">Audit scope entries analysed: ${esc(data?.source_audit_count || 0)} audit/template records${data?.scheduled_occurrence_count ? ` across ${esc(data.scheduled_occurrence_count)} scheduled occurrences` : ''}. Window: ${esc(data?.start || '')} → ${esc(data?.end || '')}.</div></div>`;
+    `<div class="col-12"><div class="small-muted">Audit scope entries analysed: ${esc(data.source_audit_count)} audit/template records${data.scheduled_occurrence_count ? ` across ${esc(data.scheduled_occurrence_count)} scheduled occurrences` : ''}. Window: ${esc(data.start)} → ${esc(data.end)}.</div></div>`;
 }
 
 function coverageSummaryRows(data) {
-  const summary = data?.summary || {};
+  const summary = data.summary;
   return coverageTypes(data).map((key) => {
-    const row = summary[key] || {};
+    const row = summary[key];
     const included = Number(row.included || 0);
     const gaps = Number(row.gaps || 0);
     const total = Number(row.total || included + gaps || 0);
@@ -394,7 +380,6 @@ function coverageSummaryRows(data) {
 }
 
 function renderCoverageVisualisations(data) {
-  if (!coverageChart && !coverageGapMatrix) return;
   const d3lib = globalThis.d3;
   if (!d3lib) {
     if (coverageChart)
@@ -583,7 +568,6 @@ function renderCoverageVisualisations(data) {
 }
 
 function renderCoverageRows(target, rows, emptyText, isGap = false) {
-  if (!target) return;
   const query = String(coverageQ?.value || '')
     .trim()
     .toLowerCase();
@@ -600,18 +584,19 @@ function renderCoverageRows(target, rows, emptyText, isGap = false) {
       const meta =
         row.type === 'documents'
           ? [row.item?.document_type, row.item?.status].filter(Boolean).join(' · ')
-          : row.item?.ref || '';
+          : row.item.ref;
       return `<tr>
       <td><span class="badge text-bg-light">${esc(type)}</span></td>
-      <td><a class="fw-semibold" href="${esc(href)}">${esc(title)}</a>${meta ? `<div class="small-muted">${esc(meta)}</div>` : ''}</td>
+      <td><a class="fw-semibold" href="${esc(href)}">${esc(title)}</a><div class="small-muted">${esc(meta)}</div></td>
       <td>${isGap ? '<span class="small-muted">Not included in selected window</span>' : coverageSourceHtml(row.item?.sources)}</td>
     </tr>`;
     })
     .join('');
 }
 
+// Coverage renders once it has loaded.
 function renderCoverage() {
-  const data = coverageData || {};
+  const data = coverageData;
   renderCoverageSummary(data);
   renderCoverageVisualisations(data);
   const included = [
@@ -633,7 +618,6 @@ function renderCoverage() {
 }
 
 async function loadScopeCoverage() {
-  if (!coverageIncludedRows || !coverageGapRows) return;
   if (!ensureAuditRead()) return;
   setDefaultCoverageDates();
   coverageIncludedRows.innerHTML = '<tr><td colspan="3" class="p-4 small-muted">Loading</td></tr>';
@@ -661,22 +645,19 @@ function _todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// The list loads once, before anyone can choose from it.
 function renderScheduledAttendeeUserOptions() {
-  const sel = schedAttendeeUserId;
-  if (!sel) return;
-  const cur = sel.value || '';
-  const rows = (scheduledAttendeeUsers || [])
+  const rows = scheduledAttendeeUsers
     .slice()
-    .sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
-  sel.innerHTML = `<option value="">Custom / external attendee</option>${rows.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}${u.email ? ` · ${esc(u.email)}` : ''}</option>`).join('')}`;
-  sel.value = rows.some((u) => String(u.id) === cur) ? cur : '';
+    .sort((a, b) => String(a.username).localeCompare(String(b.username)));
+  schedAttendeeUserId.innerHTML = `<option value="">Custom / external attendee</option>${rows.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}${u.email ? ` · ${esc(u.email)}` : ''}</option>`).join('')}`;
 }
 
 async function loadScheduledAttendeeUsers() {
   if (!canManageAudits()) return;
   try {
     const data = await apiGet('/api/v1/audits/users');
-    scheduledAttendeeUsers = Array.isArray(data?.items) ? data.items : [];
+    scheduledAttendeeUsers = data.items;
   } catch (e) {
     scheduledAttendeeUsers = [];
     toast(
@@ -691,7 +672,7 @@ async function loadScheduledAttendeeUsers() {
 function selectedScheduledAttendeeUser() {
   const id = schedAttendeeUserId?.value || '';
   if (!id) return null;
-  return (scheduledAttendeeUsers || []).find((u) => String(u.id) === String(id)) || null;
+  return scheduledAttendeeUsers.find((u) => String(u.id) === String(id));
 }
 
 function syncScheduledAttendeeUserSelection() {
@@ -699,16 +680,15 @@ function syncScheduledAttendeeUserSelection() {
   const nameEl = document.getElementById('schedAttendeeName');
   const emailEl = document.getElementById('schedAttendeeEmail');
   if (user && nameEl && !String(nameEl.value || '').trim()) {
-    nameEl.value = user.username || '';
+    nameEl.value = user.username;
   }
   if (user && emailEl && !String(emailEl.value || '').trim()) {
-    emailEl.value = user.email || '';
+    emailEl.value = user.email;
   }
 }
 
 function renderScheduledAttendees() {
   const el = document.getElementById('schedAttendees');
-  if (!el) return;
   if (!scheduledAttendees.length) {
     el.innerHTML = 'No attendees added.';
     return;
@@ -716,7 +696,8 @@ function renderScheduledAttendees() {
   el.innerHTML = `<div class="list-group">${scheduledAttendees
     .map((a, idx) => {
       const meta = [a.email, a.role].filter(Boolean);
-      const who = a.username ? userPillHtml(a) : esc(a.name || a.email || 'Attendee');
+      // A name or email is required, and the name falls back to the email.
+      const who = a.username ? userPillHtml(a) : esc(a.name);
       return `
     <div class="list-group-item d-flex justify-content-between gap-2 align-items-start py-2">
       <div>
@@ -736,9 +717,7 @@ function renderScheduledAttendees() {
   updateScheduleSections();
 }
 
-function renderScheduledRows(items) {
-  if (!scheduledRows) return;
-  const arr = Array.isArray(items) ? items : [];
+function renderScheduledRows(arr) {
   if (!arr.length) {
     scheduledRows.innerHTML =
       '<tr><td colspan="5" class="p-4 small-muted">No scheduled audit templates yet.</td></tr>';
@@ -753,7 +732,7 @@ function renderScheduledRows(items) {
       const attendees = Array.isArray(a.attendees) ? a.attendees : [];
       return `<tr>
       <td>
-        <a class="fw-semibold" href="${esc(url)}">${esc(a.title || 'Scheduled audit')}</a>
+        <a class="fw-semibold" href="${esc(url)}">${esc(a.title)}</a>
         <div class="small-muted">${esc(auditTypeLabel(a.audit_type))} · ${esc(a.framework_slug || '')}</div>
       </td>
       <td>${esc(isoDateToDisplay(a.schedule_next_run_date) || '-')}</td>
@@ -770,8 +749,6 @@ function renderScheduledRows(items) {
     .join('');
   scheduledRows.querySelectorAll('[data-delete-schedule]').forEach((btn) =>
     btn.addEventListener('click', async () => {
-      if (!ensureAuditManage()) return;
-      if (!canDeleteAudits()) return;
       if (
         !(await confirmAction({
           title: 'Delete scheduled audit template',
@@ -796,14 +773,13 @@ function renderScheduledRows(items) {
 async function loadScheduledAudits() {
   if (!featureEnabled(me, 'audit_scheduling')) return;
   if (!canViewAudits()) return;
-  if (!scheduledRows) return;
   scheduledRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading</td></tr>';
   const month = document.getElementById('schedMonth').value;
   const range = monthRange(month);
   const params = new URLSearchParams({ start: range.startIso, end: range.endIso });
   try {
     const data = await apiGet(`/api/v1/audits/scheduled?${params.toString()}`);
-    scheduledTemplates = data?.items || [];
+    scheduledTemplates = data.items;
     scheduledOccurrences = data?.occurrences || [];
     renderScheduledRows(scheduledTemplates);
     renderMonthCalendar(document.getElementById('scheduleCalendar'), month, scheduledOccurrences, {
@@ -816,19 +792,18 @@ async function loadScheduledAudits() {
 
 async function loadScheduledDocuments() {
   if (!featureEnabled(me, 'documents')) return;
-  if (!schedDocuments) return;
-  const fw = (getCurrentFramework() || '').trim();
+  const fw = getCurrentFramework().trim();
   if (!fw) return;
   schedDocuments.innerHTML = '<option>Loading ISMS documents</option>';
   try {
     const data = await apiGet(
       `/api/v1/isms/documents?framework=${encodeURIComponent(fw)}&limit=1000`,
     );
-    scheduledDocuments = data?.items || [];
+    scheduledDocuments = data.items;
     schedDocuments.innerHTML = scheduledDocuments
       .map((d) => {
         const linked = `${(d.clauses || []).length} clauses, ${(d.controls || []).length} controls`;
-        return `<option value="${esc(d.id)}">${esc(d.title || 'Document')} (${esc(d.document_type || 'document')}; ${esc(linked)})</option>`;
+        return `<option value="${esc(d.id)}">${esc(d.title)} (${esc(d.document_type || 'document')}; ${esc(linked)})</option>`;
       })
       .join('');
   } catch (e) {
@@ -844,7 +819,7 @@ function resetScheduleForm() {
   const schedFramework = document.getElementById('schedFramework');
   const schedInterval = document.getElementById('schedInterval');
   // Audits belong to the framework chosen in the top navigation; the form only shows it.
-  if (schedFramework) schedFramework.value = frameworkLabel(getCurrentFramework() || '');
+  if (schedFramework) schedFramework.value = frameworkLabel(getCurrentFramework());
   if (schedStart) schedStart.value = _todayIsoDate();
   if (schedFuzzyYear) schedFuzzyYear.value = String(new Date().getFullYear());
   if (schedFuzzyMonth) schedFuzzyMonth.value = String(new Date().getMonth() + 1);
@@ -881,7 +856,12 @@ coverageReload?.addEventListener('click', loadScopeCoverage);
 coverageMode?.addEventListener('change', loadScopeCoverage);
 coverageStart?.addEventListener('change', loadScopeCoverage);
 coverageEnd?.addEventListener('change', loadScopeCoverage);
-coverageQ?.addEventListener('input', debounce(renderCoverage, 200));
+coverageQ?.addEventListener(
+  'input',
+  debounce(() => {
+    if (coverageData) renderCoverage();
+  }, 200),
+);
 document.getElementById('coverage-tab')?.addEventListener('shown.bs.tab', () => {
   if (!coverageData) loadScopeCoverage();
 });
@@ -929,25 +909,23 @@ scheduleForm?.addEventListener('submit', async (ev) => {
       return;
     }
     const body = {
-      title: (document.getElementById('schedTitle')?.value || '').trim(),
-      framework_slug: (getCurrentFramework() || '').trim(),
-      audit_type: document.getElementById('schedType')?.value || 'internal',
+      title: document.getElementById('schedTitle').value.trim(),
+      framework_slug: getCurrentFramework().trim(),
+      audit_type: document.getElementById('schedType').value,
       start_date: scheduleDates.startForSubmit(schedStartWire) || null,
       end_date: schedEnd?.value || null,
-      schedule_recurrence: document.getElementById('schedRecurrence')?.value || 'once',
+      schedule_recurrence: document.getElementById('schedRecurrence').value,
       schedule_interval: Number(document.getElementById('schedInterval')?.value || 1),
-      schedule_date_rule: schedDateRule?.value || 'exact',
+      schedule_date_rule: schedDateRule.value,
       schedule_anchor_month: scheduleDates.anchorMonth(),
       schedule_until_date: schedUntil?.value || null,
       report_notes: syncRichTextEditor(document.getElementById('schedNotes')) || '',
-      documents: schedDocuments
-        ? Array.from(schedDocuments.selectedOptions || [])
-            .map((o) => String(o.value))
-            .filter(Boolean)
-        : [],
+      documents: Array.from(schedDocuments.selectedOptions)
+        .map((o) => String(o.value))
+        .filter(Boolean),
       attendees: scheduledAttendees.map((a) => ({
         user_id: a.user_id || null,
-        name: a.name || null,
+        name: a.name,
         email: a.email || null,
         role: a.role || null,
       })),

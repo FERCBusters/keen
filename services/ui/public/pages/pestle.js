@@ -80,9 +80,7 @@ function filterValues(el) {
 }
 
 function setCsvParam(url, key, values) {
-  const cleaned = Array.from(
-    new Set((values || []).map((v) => String(v || '').trim()).filter(Boolean)),
-  );
+  const cleaned = Array.from(new Set(values.map((v) => String(v).trim()).filter(Boolean)));
   if (cleaned.length) url.searchParams.set(key, cleaned.join(','));
 }
 
@@ -159,39 +157,39 @@ function wireTabs() {
 
 function relevanceLabel(rowOrCode) {
   if (typeof rowOrCode === 'object' && rowOrCode) return rowOrCode.label || 'N/A';
-  const code = String(rowOrCode || 'na');
+  const code = String(rowOrCode);
   return meta.relevance_levels.find((x) => x.code === code)?.label || 'N/A';
 }
 
 function fillSelects() {
   setFilterPillOptions(
     pestleTypeFilter,
-    (meta.types || []).map((x) => ({ value: String(x), label: String(x) })),
+    meta.types.map((x) => ({ value: String(x), label: String(x) })),
     { selectedValues: filterValues(pestleTypeFilter), dispatchChange: false },
   );
   setFilterPillOptions(
     pestleLensFilter,
-    (meta.lenses || []).map((x) => ({ value: String(x), label: String(x) })),
+    meta.lenses.map((x) => ({ value: String(x), label: String(x) })),
     { selectedValues: filterValues(pestleLensFilter), dispatchChange: false },
   );
   setFilterPillOptions(
     pestleRelevanceFilter,
-    (meta.relevance_levels || []).map((r) => ({
+    meta.relevance_levels.map((r) => ({
       value: String(r.code),
-      label: String(r.label || r.code),
-      title: String(r.label || r.code),
+      label: String(r.label),
+      title: String(r.label),
     })),
     { selectedValues: filterValues(pestleRelevanceFilter), dispatchChange: false },
   );
 }
 
 function pestleItemHref(id, tab = 'details') {
-  const path = `/pestle_item.html?id=${encodeURIComponent(id || '')}${tab ? `&tab=${encodeURIComponent(tab)}` : ''}`;
+  const path = `/pestle_item.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(tab)}`;
   return withFramework(path, framework);
 }
 
 function badgeForRelevance(rel) {
-  const code = rel?.code || rel || 'na';
+  const code = rel?.code || rel;
   let cls = 'text-bg-light';
   if (code === 'high') cls = 'text-bg-danger';
   else if (code === 'medium') cls = 'text-bg-warning';
@@ -200,7 +198,6 @@ function badgeForRelevance(rel) {
 }
 
 function renderItems() {
-  if (!pestleRows) return;
   if (!canViewPestle) {
     pestleRows.innerHTML =
       '<tr><td colspan="8" class="p-4 small-muted">You do not have permission to view PESTLE(E) assessments.</td></tr>';
@@ -215,9 +212,9 @@ function renderItems() {
     .map((it) => {
       const href = pestleItemHref(it.id);
       return `<tr>
-      <td>${esc(it.type || '')}</td>
-      <td>${esc(it.lens || '')}</td>
-      <td><a class="fw-semibold" href="${esc(href)}">${esc(shorten(it.item || '', 160))}</a></td>
+      <td>${esc(it.type)}</td>
+      <td>${esc(it.lens)}</td>
+      <td><a class="fw-semibold" href="${esc(href)}">${esc(shorten(it.item, 160))}</a></td>
       <td>${badgeForRelevance(it.overall_relevance)}</td>
       <td class="wrap small-muted">${esc(shorten(it.rationale || '', 220) || '-')}</td>
       <td><span class="badge text-bg-light">${esc(String(it.business_process_count || 0))} process${Number(it.business_process_count || 0) === 1 ? '' : 'es'}</span></td>
@@ -230,26 +227,30 @@ function renderItems() {
   pestleRows.querySelectorAll('[data-sample-pestle]').forEach((btn) =>
     btn.addEventListener('click', (ev) => {
       ev.preventDefault();
-      const id = btn.getAttribute('data-sample-pestle') || '';
-      const item = (items || []).find((x) => String(x.id) === String(id));
+      const id = btn.getAttribute('data-sample-pestle');
+      const item = items.find((x) => String(x.id) === String(id));
       openAuditSampleModal({
         me,
         entityType: 'pestle_item',
         entityId: id,
-        title: item?.item || 'PESTLE(E) item',
-        framework: item?.framework || framework,
+        title: item.item,
+        framework: item.framework || framework,
         statusEl: status,
       });
     }),
   );
 }
 
-function renderBusinessProcesses() {
+// The editor follows the person's permissions from the start, so it stays
+// right when the business processes fail to load.
+function applyBusinessProcessAccess() {
   if (businessProcessEditorCard)
     businessProcessEditorCard.style.display = canViewPestle ? '' : 'none';
   if (addBusinessProcess) addBusinessProcess.style.display = canManagePestle ? '' : 'none';
   if (businessProcessName) businessProcessName.disabled = !canManagePestle;
-  if (!businessProcessList) return;
+}
+
+function renderBusinessProcesses() {
   if (!businessProcesses.length) {
     businessProcessList.innerHTML =
       '<div class="border rounded p-3 bg-light small-muted">No business processes have been created yet.</div>';
@@ -260,7 +261,7 @@ function renderBusinessProcesses() {
     <tbody>${businessProcesses
       .map(
         (bp) => `<tr>
-      <td class="fw-semibold">${esc(bp.name || '')}</td>
+      <td class="fw-semibold">${esc(bp.name)}</td>
       <td class="no-print">${canManagePestle ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-process="${esc(bp.id)}">Delete</button>` : '<span class="small-muted">-</span>'}</td>
     </tr>`,
       )
@@ -268,13 +269,12 @@ function renderBusinessProcesses() {
   </table></div>`;
   businessProcessList.querySelectorAll('[data-delete-process]').forEach((btn) =>
     btn.addEventListener('click', async () => {
-      if (!canManagePestle) return;
-      const id = btn.dataset.deleteProcess || '';
+      const id = btn.dataset.deleteProcess;
       const bp = businessProcesses.find((x) => String(x.id) === String(id));
       if (
         !(await confirmAction({
           title: 'Delete business process',
-          message: `Delete ${bp?.name || 'this process'}? Its relevance links are removed with it.`,
+          message: `Delete ${bp.name}? Its relevance links are removed with it.`,
           confirmLabel: 'Delete',
           danger: true,
         }))
@@ -292,13 +292,11 @@ function renderBusinessProcesses() {
   );
 }
 
-function _clearViz(el, msg = '') {
-  if (!el) return;
-  el.innerHTML = msg || '';
+function _clearViz(el, msg) {
+  el.innerHTML = msg;
 }
 
 function _svgFor(el, height = 320) {
-  if (!el || !window.d3) return null;
   el.innerHTML = '';
   const width = Math.max(360, el.clientWidth || 640);
   return window.d3
@@ -332,16 +330,16 @@ const PESTLE_RELEVANCE_COLOURS = {
 function pestleColourScale(values) {
   return window.d3
     .scaleOrdinal()
-    .domain((values || []).map((v) => String(v)))
+    .domain(values.map((v) => String(v)))
     .range(PESTLE_PALETTE);
 }
 
 function pestleRelevanceColour(code) {
-  return PESTLE_RELEVANCE_COLOURS[String(code || 'na')] || '#64748b';
+  return PESTLE_RELEVANCE_COLOURS[String(code)] || '#64748b';
 }
 
 function pestleParseRgbColour(value) {
-  const raw = String(value || '').trim();
+  const raw = String(value).trim();
   let match = raw.match(/^rgba?\(([^)]+)\)$/i);
   if (match) {
     const parts = match[1].split(',').map((part) => part.trim());
@@ -377,8 +375,7 @@ function pestleEffectiveBackgroundColour(node) {
     el = el.parentElement;
   }
   // With no opaque background anywhere, the page itself shows white.
-  const bodyBg = pestleParseRgbColour(window.getComputedStyle(document.body).backgroundColor);
-  return bodyBg && bodyBg.a > 0.05 ? bodyBg : { r: 255, g: 255, b: 255, a: 1 };
+  return { r: 255, g: 255, b: 255, a: 1 };
 }
 
 function pestleRelativeLuminance({ r, g, b }) {
@@ -390,8 +387,7 @@ function pestleRelativeLuminance({ r, g, b }) {
 }
 
 function pestleReadableTextColours(selection) {
-  const node = selection.node();
-  const host = node?.ownerSVGElement?.parentElement || node?.parentElement || document.body;
+  const host = selection.node().ownerSVGElement.parentElement;
   const bg = pestleEffectiveBackgroundColour(host);
   const isLightBackground = pestleRelativeLuminance(bg) >= 0.45;
   return {
@@ -416,10 +412,9 @@ function makePestleTextReadable(selection, { halo = false, opacity = 1 } = {}) {
 function drawLensTypeViz(data) {
   const el = pestleLensTypeViz;
   const d3 = window.d3;
-  const types = data?.types || meta.types || [];
-  const lenses = data?.lenses || meta.lenses || [];
+  const types = data.types;
+  const lenses = data.lenses;
   const counts = data?.lens_type_counts || {};
-  if (!el || !d3) return;
   if (!types.length || !lenses.length)
     return _clearViz(el, '<div class="small-muted">No PESTLE(E) items to visualise yet.</div>');
   const width = Math.max(420, el.clientWidth || 640);
@@ -438,8 +433,9 @@ function drawLensTypeViz(data) {
     .domain(lenses)
     .range([margin.top, margin.top + innerH])
     .padding(0.12);
-  const max =
-    d3.max(lenses.flatMap((lens) => types.map((type) => Number(counts?.[lens]?.[type] || 0)))) || 1;
+  const max = d3.max(
+    lenses.flatMap((lens) => types.map((type) => Number(counts?.[lens]?.[type] || 0))),
+  );
   const opacity = d3.scaleLinear().domain([0, max]).range([0.18, 0.9]);
   const lensColour = pestleColourScale(lenses);
   svg
@@ -498,8 +494,7 @@ function drawLensTypeViz(data) {
 function drawRelevanceVenn(data) {
   const el = pestleRelevanceVenn;
   const d3 = window.d3;
-  if (!el || !d3) return;
-  const rows = data?.relevance_counts || [];
+  const rows = data.relevance_counts;
   const order = ['high', 'medium', 'low', 'na'];
   const byCode = new Map(rows.map((r) => [String(r.code), r]));
   const max = d3.max(order.map((code) => Number(byCode.get(code)?.count || 0))) || 1;
@@ -549,14 +544,11 @@ function drawRelevanceVenn(data) {
 }
 
 function pestleClauseHref(id) {
-  return withFramework(`/clause.html?id=${encodeURIComponent(id || '')}&tab=pestle`, framework);
+  return withFramework(`/clause.html?id=${encodeURIComponent(id)}&tab=pestle`, framework);
 }
 
 function estimatedPestleLabelChars(nodes, fallback = 36) {
-  const max = Math.max(
-    ...(nodes || []).map((node) => String(node.label || node.ref || '').length),
-    fallback,
-  );
+  const max = Math.max(...nodes.map((node) => node.label.length), fallback);
   return Math.min(Math.max(max, fallback), 58);
 }
 
@@ -565,7 +557,7 @@ function clauseRelationshipSummary({ clauses, items: graphItems, links }) {
 }
 
 function relevanceWeight(code) {
-  const c = String(code || '').toLowerCase();
+  const c = String(code).toLowerCase();
   if (c === 'high') return 3;
   if (c === 'medium') return 2;
   if (c === 'low') return 1;
@@ -575,16 +567,15 @@ function relevanceWeight(code) {
 function drawClauseNetwork(data) {
   const el = pestleClauseNetwork;
   const d3 = window.d3;
-  if (!el || !d3) return;
-  const linksRaw = (data?.clause_links || [])
+  const linksRaw = data.clause_links
     .filter((link) => link?.item_id && link?.clause_id)
     .sort(
       (a, b) =>
         relevanceWeight(b.relevance_code) - relevanceWeight(a.relevance_code) ||
-        String(a.clause_ref || '').localeCompare(String(b.clause_ref || ''), undefined, {
+        String(a.clause_ref).localeCompare(String(b.clause_ref), undefined, {
           numeric: true,
         }) ||
-        String(a.item || '').localeCompare(String(b.item || '')),
+        String(a.item).localeCompare(String(b.item)),
     )
     .slice(0, 320);
   if (!linksRaw.length)
@@ -600,15 +591,14 @@ function drawClauseNetwork(data) {
   const itemMap = new Map();
   const links = [];
   for (const row of linksRaw) {
-    const clauseId = String(row.clause_id || '');
-    const itemId = String(row.item_id || '');
-    if (!clauseId || !itemId) continue;
+    const clauseId = String(row.clause_id);
+    const itemId = String(row.item_id);
     if (!clauseMap.has(clauseId)) {
       clauseMap.set(clauseId, {
         id: clauseId,
         kind: 'clause',
-        ref: row.clause_ref || '',
-        label: `${row.clause_ref || ''} ${row.clause_title || ''}`.trim() || 'Clause',
+        ref: row.clause_ref,
+        label: `${row.clause_ref} ${row.clause_title || ''}`.trim(),
         subtitle: row.clause_title || '',
         count: 0,
       });
@@ -617,7 +607,7 @@ function drawClauseNetwork(data) {
       itemMap.set(itemId, {
         id: itemId,
         kind: 'pestle_item',
-        label: row.item || 'PESTLE(E) item',
+        label: row.item,
         subtitle: [row.type || row.item_type, row.lens].filter(Boolean).join(' / '),
         type: row.type || row.item_type || 'PESTLE(E)',
         lens: row.lens || '',
@@ -629,27 +619,18 @@ function drawClauseNetwork(data) {
     links.push({
       source: clauseId,
       target: itemId,
-      relevance: row.relevance_code || 'low',
+      relevance: row.relevance_code,
       relevanceLabel: row.relevance_label || relevanceLabel(row.relevance_code),
       count: relevanceWeight(row.relevance_code),
     });
   }
 
   const clauses = Array.from(clauseMap.values()).sort((a, b) =>
-    String(a.ref || a.label || '').localeCompare(String(b.ref || b.label || ''), undefined, {
-      numeric: true,
-    }),
+    String(a.ref).localeCompare(String(b.ref), undefined, { numeric: true }),
   );
   const graphItems = Array.from(itemMap.values()).sort(
-    (a, b) =>
-      Number(b.count || 0) - Number(a.count || 0) ||
-      String(a.label || '').localeCompare(String(b.label || '')),
+    (a, b) => b.count - a.count || String(a.label).localeCompare(String(b.label)),
   );
-  if (!clauses.length || !graphItems.length || !links.length)
-    return _clearViz(
-      el,
-      '<div class="small-muted">No non-N/A clause relevance mappings exist yet.</div>',
-    );
 
   const compact = el.clientWidth && el.clientWidth < 720;
   const viewportWidth = Math.max(compact ? 460 : 720, Math.floor(el.clientWidth || 980));
@@ -684,9 +665,7 @@ function drawClauseNetwork(data) {
     .range([topPad + 30, contentHeight - bottomPad])
     .padding(0.6);
   const strokeWidth = d3.scaleLinear().domain([1, 3]).range([1.4, 5.4]);
-  const itemColour = pestleColourScale([
-    ...new Set(graphItems.map((node) => node.type || 'PESTLE(E)')),
-  ]);
+  const itemColour = pestleColourScale([...new Set(graphItems.map((node) => node.type))]);
 
   const svg = d3
     .select(el)
@@ -714,11 +693,11 @@ function drawClauseNetwork(data) {
     .attr('d', curvedLink(leftX, rightX, clauseY, itemY, topPad))
     .attr('stroke', (link) => pestleRelevanceColour(link.relevance))
     .attr('stroke-opacity', 0.34)
-    .attr('stroke-width', (link) => strokeWidth(link.count || 1))
+    .attr('stroke-width', (link) => strokeWidth(link.count))
     .append('title')
     .text((link) => {
-      const clause = clauseMap.get(link.source)?.label || 'Clause';
-      const item = itemMap.get(link.target)?.label || 'PESTLE(E) item';
+      const clause = clauseMap.get(link.source).label;
+      const item = itemMap.get(link.target).label;
       return `${clause} × ${item}\nRelevance: ${link.relevanceLabel}`;
     });
 
@@ -730,14 +709,14 @@ function drawClauseNetwork(data) {
     const maxSecondaryChars = isClause ? (compact ? 28 : 42) : compact ? 26 : 38;
     selection
       .attr('class', 'interested-party-bipartite-node')
-      .attr('transform', (node) => `translate(${x},${yScale(node.id) || topPad})`);
+      .attr('transform', (node) => `translate(${x},${yScale(node.id)})`);
     selection
       .append('circle')
       .attr('r', isClause ? 6 : 7)
-      .attr('fill', (node) => (isClause ? '#475569' : itemColour(node.type || 'PESTLE(E)')))
+      .attr('fill', (node) => (isClause ? '#475569' : itemColour(node.type)))
       .attr('opacity', isClause ? 0.62 : 0.86);
     selection.each(function (node) {
-      const primary = `${isClause ? node.ref || node.label : node.label}${node.count ? ` (${node.count})` : ''}`;
+      const primary = `${isClause ? node.ref : node.label} (${node.count})`;
       addNodeLabel(d3.select(this), {
         left: isClause,
         primaryLines: splitLabel(primary, maxPrimaryChars, isClause ? 2 : 3),
@@ -750,7 +729,7 @@ function drawClauseNetwork(data) {
       .append('title')
       .text(
         (node) =>
-          `${node.label || ''}${node.subtitle ? `\n${node.subtitle}` : ''}${node.count ? `\nMappings: ${node.count}` : ''}`,
+          `${node.label}${node.subtitle ? `\n${node.subtitle}` : ''}\nMappings: ${node.count}`,
       );
   };
   scene.append('g').selectAll('g').data(clauses).join('g').call(renderNode, 'clause');
@@ -789,23 +768,21 @@ async function loadItems() {
   setCsvParam(u, 'relevance_code', filterValues(pestleRelevanceFilter));
   u.searchParams.set('limit', '5000');
   const data = await apiGet(u.pathname + u.search);
-  items = data?.items || [];
+  items = data.items;
   renderItems();
   if (pestleItemsMeta) {
     const total = Number(data?.total || items.length);
-    pestleItemsMeta.textContent = `${total} PESTLE(E) item${total === 1 ? '' : 's'} for ${data?.framework || framework || 'the selected framework'}.`;
+    pestleItemsMeta.textContent = `${total} PESTLE(E) item${total === 1 ? '' : 's'} for ${data.framework}.`;
   }
 }
 
 async function loadBusinessProcesses() {
-  if (!canViewPestle) return;
   const data = await apiGet('/api/v1/pestle/business-processes?limit=5000');
-  businessProcesses = data?.items || [];
+  businessProcesses = data.items;
   renderBusinessProcesses();
 }
 
 addBusinessProcess?.addEventListener('click', async () => {
-  if (!canManagePestle) return;
   const name = (businessProcessName?.value || '').trim();
   if (!name) return toast(status, 'Enter a business process name', 'warning');
   addBusinessProcess.disabled = true;
@@ -842,6 +819,7 @@ if (newPestleItem) {
 
 setupPestleFilterPickers();
 wireTabs();
+applyBusinessProcessAccess();
 
 try {
   await loadMeta();

@@ -87,10 +87,10 @@ const url = (kind, ref) =>
 async function refreshFrameworks(preferred) {
   const data = await apiGet('/api/v1/admin/framework-selection');
   renderOrganisationFrameworks(data);
-  frameworks = data.items || [];
+  frameworks = data.items;
   $('frameworks').replaceChildren();
   for (const fw of frameworks) $('frameworks').add(new Option(`${fw.name} (${fw.slug})`, fw.slug));
-  $('frameworks').value = preferred || $('frameworks').value || data.default;
+  $('frameworks').value = preferred || $('frameworks').value;
   await selectFramework();
 }
 
@@ -108,7 +108,7 @@ async function selectFramework() {
   }))
     $(field).value = value;
   const data = await apiGet(`/api/v1/admin/frameworks/${encodeURIComponent(fw.slug)}/nodes`);
-  nodes = data.items || [];
+  nodes = data.items;
   selected = null;
   newNode();
   renderTree();
@@ -149,9 +149,8 @@ function markSelectedRow({ scroll = false } = {}) {
 // Opens the row before or after the marked one in the tree's current order.
 function step(offset) {
   const rows = [...$('tree').children];
-  const current = selected ? rows.findIndex((row) => row.dataset.nodeKey === key(selected)) : -1;
+  const current = rows.findIndex((row) => row.dataset.nodeKey === key(selected));
   const target = rows[current + offset];
-  if (!target) return;
   const item = nodes.find((node) => key(node) === target.dataset.nodeKey);
   if (item) editNode(item, { scroll: true });
 }
@@ -299,7 +298,7 @@ $('save-node').addEventListener('click', async () => {
       parent_ref: $('parent').value || null,
       clause_refs: [...$('clauses').selectedOptions].map((option) => option.value),
       in_scope: $('scope').checked,
-      sort_order: Number($('sort').value || 0),
+      sort_order: Number($('sort').value),
     });
     await selectFramework();
     const item = nodes.find((n) => n.kind === kind && n.ref === ref);
@@ -338,7 +337,7 @@ function renderOrganisationFrameworks(data) {
   selectionVersion = data.version;
   const container = $('organisation-frameworks');
   container.replaceChildren();
-  for (const framework of data.items || []) {
+  for (const framework of data.items) {
     const wrapper = document.createElement('div');
     wrapper.className = 'col-sm-6 col-xl-3 framework-catalogue-column';
     wrapper._regions = regionsFor(framework.slug);
@@ -401,7 +400,7 @@ function renderOrganisationFrameworks(data) {
     $('organisation-default').replaceChildren();
     for (const checkbox of container.querySelectorAll('input:checked')) {
       const framework = data.items.find((item) => item.slug === checkbox.value);
-      $('organisation-default').add(new Option(framework?.name || checkbox.value, checkbox.value));
+      $('organisation-default').add(new Option(framework.name, checkbox.value));
     }
     $('organisation-default').disabled = !$('organisation-default').options.length;
     if ([...$('organisation-default').options].some((option) => option.value === previous))
@@ -433,7 +432,7 @@ function renderOrganisationFrameworks(data) {
     'Asia-Pacific',
     'Other',
   ]) {
-    const count = (data.items || []).filter(
+    const count = data.items.filter(
       (f) => category === 'All' || regionsFor(f.slug).includes(category),
     ).length;
     const button = document.createElement('button');

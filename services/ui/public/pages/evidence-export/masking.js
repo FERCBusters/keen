@@ -39,6 +39,13 @@ const MAILBOX = new RegExp(
   'giu',
 );
 
+// Asks the API to mask what it returns for a sample export. Evidence and audit
+// exports add the flag only here, so a request that already carries a query
+// keeps it as a parameter of its own.
+export function sampleExportUrl(url) {
+  return `${url}${String(url).includes('?') ? '&' : '?'}sample_export=1`;
+}
+
 export function maskEventDataString(value) {
   if (value == null) return value;
   let txt = String(value);

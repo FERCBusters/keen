@@ -4,7 +4,7 @@
 // (ownersList, ownersEdit, ownersEditor, ownersSelect, ownersSave).
 import { apiGet, apiPut, errorText, toast, userPillsHtml } from '/app.js';
 
-export const ownerNames = (owners) => (owners || []).map((owner) => owner.username).join(', ');
+export const ownerNames = (owners) => owners.map((owner) => owner.username).join(', ');
 
 export function mountOwners({ me, path, status, onSaved }) {
   const [list, edit, editor, select, save] = [
@@ -18,7 +18,7 @@ export function mountOwners({ me, path, status, onSaved }) {
   let accounts = null;
 
   function show(owners) {
-    current = owners || [];
+    current = owners;
     list.innerHTML = userPillsHtml(current, { empty: 'No owners yet.' });
     edit.hidden = !me?.is_admin;
   }

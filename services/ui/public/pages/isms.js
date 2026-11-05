@@ -50,7 +50,6 @@ let meta = {
   assets: [],
   asset_categories: [],
   licenses: [],
-  business_processes: [],
   controls: [],
   clauses: [],
   effectiveness_metric_sources: [],
@@ -83,7 +82,7 @@ function tagChip(tag, removable = false) {
 }
 function renderDocumentTags() {
   $('docSelectedTags').innerHTML = documentTags.map((tag) => tagChip(tag, true)).join('');
-  const known = [...new Set((data.documents || []).flatMap((doc) => doc.tags || []))].filter(
+  const known = [...new Set(data.documents.flatMap((doc) => doc.tags))].filter(
     (tag) => !documentTags.includes(tag),
   );
   $('docTagChoices').innerHTML = known
@@ -105,7 +104,7 @@ function addDocumentTag(value) {
   renderDocumentTags();
 }
 function documentMedium() {
-  return document.querySelector('input[name="docMedium"]:checked')?.value || 'write';
+  return document.querySelector('input[name="docMedium"]:checked').value;
 }
 function showDocumentMedium() {
   const medium = documentMedium();
@@ -143,7 +142,7 @@ async function loadDocumentFolders() {
 async function loadMeetingPeople() {
   if (!featureEnabled(me, 'people')) return;
   try {
-    meetingPeople = (await apiGet('/api/v1/isms/people')).items || [];
+    meetingPeople = (await apiGet('/api/v1/isms/people')).items;
   } catch (err) {
     meetingPeople = [];
     toast(status, `Could not load People: ${errorText(err)}`, 'warning');
@@ -292,7 +291,7 @@ function setCount(id, n) {
 function names(list) {
   return (
     (list || [])
-      .map((x) => x?.username || x?.user?.username || x?.name || '')
+      .map((x) => x?.username || x?.user?.username)
       .filter(Boolean)
       .join(', ') || '-'
   );
@@ -319,12 +318,9 @@ function optionList(
 ) {
   const opts = [];
   if (includeBlank) opts.push(`<option value="">${esc(blankLabel)}</option>`);
-  for (const it of items || []) {
-    const text =
-      typeof label === 'function'
-        ? label(it)
-        : it?.[label] || it?.name || it?.title || it?.asset || it?.username || 'Item';
-    opts.push(`<option value="${esc(it?.[value] || '')}">${esc(text)}</option>`);
+  for (const it of items) {
+    const text = typeof label === 'function' ? label(it) : it[label];
+    opts.push(`<option value="${esc(it[value])}">${esc(text)}</option>`);
   }
   return opts.join('');
 }
@@ -335,7 +331,7 @@ function selectedValues(select) {
 }
 
 function initMeetingNotesEditor() {
-  initRichTextEditors(document.getElementById('meetingForm') || document);
+  initRichTextEditors(document.getElementById('meetingForm'));
 }
 
 function setMeetingNotesValue(value) {
@@ -432,7 +428,7 @@ const ismsTableSections = [
 ];
 
 function formCardIdForKind(kind) {
-  return formCardIds[kind] || `${kind}FormCard`;
+  return formCardIds[kind];
 }
 
 function formCardForKind(kind) {
@@ -441,7 +437,6 @@ function formCardForKind(kind) {
 
 function setFormCardVisible(kind, visible) {
   const card = formCardForKind(kind);
-  if (!card) return;
   card.dataset.ismsFormOpen = visible ? '1' : '0';
   card.style.display = visible ? '' : 'none';
 }
@@ -460,11 +455,10 @@ function hideAllIsmsForms(exceptKind = '') {
 }
 
 function tableCardForSection(cfg) {
-  return $(cfg.countId)?.closest('.card') || $(cfg.rowsId)?.closest('.card') || null;
+  return $(cfg.countId).closest('.card');
 }
 
 function addHeaderButton(header, { html, dataset }) {
-  if (!header) return null;
   let actionWrap = header.querySelector('[data-isms-section-actions]');
   if (!actionWrap) {
     actionWrap = document.createElement('div');
@@ -473,18 +467,14 @@ function addHeaderButton(header, { html, dataset }) {
     const count = Array.from(header.querySelectorAll('.badge[id]')).find((el) =>
       /Count$/.test(el.id),
     );
-    if (count) {
-      count.replaceWith(actionWrap);
-      actionWrap.appendChild(count);
-    } else {
-      header.appendChild(actionWrap);
-    }
+    count.replaceWith(actionWrap);
+    actionWrap.appendChild(count);
   }
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn btn-sm btn-primary';
   button.innerHTML = html;
-  for (const [k, v] of Object.entries(dataset || {})) button.setAttribute(k, v);
+  for (const [k, v] of Object.entries(dataset)) button.setAttribute(k, v);
   actionWrap.appendChild(button);
   return button;
 }
@@ -492,8 +482,6 @@ function addHeaderButton(header, { html, dataset }) {
 function installIsmsSectionChrome() {
   for (const cfg of ismsTableSections) {
     const card = tableCardForSection(cfg);
-    if (!card || card.dataset.ismsChromeInstalled === '1') continue;
-    card.dataset.ismsChromeInstalled = '1';
     const header = card.querySelector(':scope > .card-header');
     if (canManage) {
       addHeaderButton(header, {
@@ -543,9 +531,8 @@ function installIsmsSectionChrome() {
 }
 
 function applyIsmsTableFilter(input) {
-  const rowsId = input?.getAttribute?.('data-isms-table-filter') || '';
-  const tbody = rowsId ? $(rowsId) : null;
-  if (!tbody) return;
+  const rowsId = input.getAttribute('data-isms-table-filter');
+  const tbody = $(rowsId);
   const q = String(input.value || '')
     .trim()
     .toLowerCase();
@@ -554,9 +541,7 @@ function applyIsmsTableFilter(input) {
       tr.style.display = '';
       continue;
     }
-    const text = String(
-      tr.getAttribute('data-isms-filter-text') || tr.textContent || '',
-    ).toLowerCase();
+    const text = String(tr.getAttribute('data-isms-filter-text') || tr.textContent).toLowerCase();
     const statusMatches =
       rowsId !== 'objectivesRows' ||
       !$('objectivesStatus')?.value ||
@@ -567,7 +552,6 @@ function applyIsmsTableFilter(input) {
 }
 
 function showNewIsmsForm(kind) {
-  if (!canManage) return;
   hideAllIsmsForms(kind);
   resetForm(kind);
   setFormMode(kind, null);
@@ -575,28 +559,20 @@ function showNewIsmsForm(kind) {
   const form = $(formIds[kind]);
   form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const first = form?.querySelector('input:not([type="hidden"]), textarea, select');
-  setTimeout(() => {
-    try {
-      first?.focus?.();
-    } catch {}
-  }, 80);
+  setTimeout(() => first?.focus?.(), 80);
 }
 
 function toggleAuxCard(id) {
   const card = $(id);
-  if (!card || !canManage) return;
   const nextVisible = card.style.display === 'none' || card.hidden;
-  if (nextVisible)
-    hideAllIsmsForms(
-      id === 'assetCategoryCard' ? 'assetCategory' : id === 'licenseCard' ? 'license' : '',
-    );
+  if (nextVisible) hideAllIsmsForms(id === 'assetCategoryCard' ? 'assetCategory' : 'license');
   card.hidden = false;
   card.style.display = nextVisible ? '' : 'none';
   if (nextVisible) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function assetCategories() {
-  return meta.asset_categories || [];
+  return meta.asset_categories;
 }
 function currentAssetCategory() {
   const id = $('assetCategory')?.value || '';
@@ -604,19 +580,16 @@ function currentAssetCategory() {
 }
 function renderAssetSubcategoryOptions(targetValue = '') {
   const select = $('assetSubcategory');
-  if (!select) return;
   const category = currentAssetCategory();
   const subs = category?.subcategories || [];
   const cur = targetValue || select.value || subs[0]?.id || '';
   select.innerHTML =
-    subs
-      .map((s) => `<option value="${esc(s.id)}">${esc(s.name || 'Subcategory')}</option>`)
-      .join('') || '<option value="">Add a subcategory first</option>';
+    subs.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('') ||
+    '<option value="">Add a subcategory first</option>';
   select.value = subs.some((s) => String(s.id) === String(cur)) ? cur : subs[0]?.id || '';
 }
 function renderAssetCategoryList() {
   const holder = $('assetCategoryList');
-  if (!holder) return;
   const cats = assetCategories();
   if (!cats.length) {
     holder.innerHTML = '<span class="small-muted">No asset categories yet.</span>';
@@ -626,20 +599,17 @@ function renderAssetCategoryList() {
     .map(
       (c) => `
     <div class="border rounded-3 p-2">
-      <div class="fw-semibold">${esc(c.name || 'Category')}</div>
-      <div class="d-flex flex-wrap gap-1 mt-1">${(c.subcategories || []).map((s) => `<span class="badge badge-soft">${esc(s.name || 'Subcategory')}</span>`).join('') || '<span class="small-muted">No subcategories</span>'}</div>
+      <div class="fw-semibold">${esc(c.name)}</div>
+      <div class="d-flex flex-wrap gap-1 mt-1">${c.subcategories.map((s) => `<span class="badge badge-soft">${esc(s.name)}</span>`).join('') || '<span class="small-muted">No subcategories</span>'}</div>
     </div>`,
     )
     .join('')}</div>`;
 }
 function populateAssetCategoryControls(targetCategoryId = '', targetSubcategoryId = '') {
   const cats = assetCategories();
-  const opts = cats
-    .map((c) => `<option value="${esc(c.id)}">${esc(c.name || 'Category')}</option>`)
-    .join('');
+  const opts = cats.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
   for (const id of ['assetCategory', 'assetSubcategoryCategory']) {
     const el = $(id);
-    if (!el) continue;
     const cur = targetCategoryId || el.value || cats[0]?.id || '';
     el.innerHTML = opts || '<option value="">Add a category first</option>';
     el.value = cats.some((c) => String(c.id) === String(cur)) ? cur : cats[0]?.id || '';
@@ -650,7 +620,7 @@ function populateAssetCategoryControls(targetCategoryId = '', targetSubcategoryI
 }
 
 function licenses() {
-  return meta.licenses || [];
+  return meta.licenses;
 }
 function licenseLabel(value) {
   const text = String(value || '').trim();
@@ -658,20 +628,18 @@ function licenseLabel(value) {
 }
 function renderLicenseOptions(targetValue = '') {
   const select = $('assetLicense');
-  if (!select) return;
   const opts = optionList(licenses(), { label: 'name', includeBlank: true, blankLabel: '-' });
   const cur = targetValue || select.value || '';
   select.innerHTML = opts;
   select.value = licenses().some((l) => String(l.id) === String(cur)) ? cur : '';
 }
 function renderLicenses() {
-  if (!rows.licenses) return;
   const items = licenses();
   rows.licenses.innerHTML =
     items
       .map(
         (l) => `<tr>
-    <td class="fw-semibold">${esc(l.name || 'License')}</td>
+    <td class="fw-semibold">${esc(l.name)}</td>
     <td class="wrap small-muted">${esc(shorten(l.description || '', 180) || '-')}</td>
     <td>${Number(l.asset_count || 0)}</td>
     <td class="text-nowrap no-print"><div class="btn-group btn-group-sm" role="group"><button class="btn btn-outline-primary" type="button" data-license-edit="${esc(l.id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit license</span></button><button class="btn btn-outline-danger" type="button" data-license-delete="${esc(l.id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete license</span></button></div></td>
@@ -680,8 +648,6 @@ function renderLicenses() {
       .join('') || emptyRow(4, 'No licenses yet.');
 }
 function resetLicenseForm(item = null) {
-  const form = $('licenseForm');
-  if (!form) return;
   $('licenseId').value = item?.id || '';
   $('licenseName').value = item?.name || '';
   $('licenseDescription').value = item?.description || '';
@@ -690,25 +656,24 @@ function resetLicenseForm(item = null) {
 }
 
 function setSelectValues(select, values = []) {
-  if (!select) return;
-  const wanted = new Set((values || []).map((v) => String(v)));
-  for (const opt of Array.from(select.options || [])) opt.selected = wanted.has(String(opt.value));
+  const wanted = new Set(values.map((v) => String(v)));
+  for (const opt of Array.from(select.options)) opt.selected = wanted.has(String(opt.value));
 }
 function clearFileInput(input) {
   if (input) input.value = '';
 }
+// The API sends a meeting's times as HH:MM:SS, or null when none was recorded.
 function timeForInput(value) {
-  return String(value || '').slice(0, 5);
+  return value ? value.slice(0, 5) : '';
 }
 function itemControls(item) {
-  return (item?.controls || []).map((x) => x.id).filter(Boolean);
+  return item.controls.map((x) => x.id).filter(Boolean);
 }
 function itemClauses(item) {
-  return (item?.clauses || []).map((x) => x.id).filter(Boolean);
+  return item.clauses.map((x) => x.id).filter(Boolean);
 }
 function actionsHtml(kind, id, extraClass = '') {
   const cls = ['text-nowrap', 'no-print', extraClass].filter(Boolean).join(' ');
-  if (!id) return `<td class="${esc(cls)}"></td>`;
   const sample = canSampleAudits
     ? `<button class="btn btn-outline-success" type="button" data-audit-sample-entity="${esc(kind)}" data-isms-id="${esc(id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>`
     : '';
@@ -732,7 +697,7 @@ function findItem(kind, id) {
     meeting: 'meetings',
   };
   if (!Object.hasOwn(keys, kind)) return null;
-  return (data?.[keys[kind]] || []).find((x) => String(x.id) === String(id)) || null;
+  return data[keys[kind]].find((x) => String(x.id) === String(id)) || null;
 }
 
 const auditSampleEntityTypes = {
@@ -746,58 +711,54 @@ const auditSampleEntityTypes = {
 };
 
 function objectiveHref(item) {
-  return withFramework(`/isms-objective.html?id=${encodeURIComponent(item?.id || '')}`, framework);
+  return withFramework(`/isms-objective.html?id=${encodeURIComponent(item.id)}`, framework);
 }
 
 function documentHref(item) {
-  return withFramework(`/isms-document.html?id=${encodeURIComponent(item?.id || '')}`, framework);
+  return withFramework(`/isms-document.html?id=${encodeURIComponent(item.id)}`, framework);
 }
 
 function assetHref(item) {
-  return withFramework(`/isms-asset.html?id=${encodeURIComponent(item?.id || '')}`, framework);
+  return withFramework(`/isms-asset.html?id=${encodeURIComponent(item.id)}`, framework);
 }
 
 function accessControlHref(item) {
-  return withFramework(`/isms-access.html?id=${encodeURIComponent(item?.id || '')}`, framework);
+  return withFramework(`/isms-access.html?id=${encodeURIComponent(item.id)}`, framework);
 }
 
 function meetingHref(item) {
-  return withFramework(`/isms-meeting.html?id=${encodeURIComponent(item?.id || '')}`, framework);
+  return withFramework(`/isms-meeting.html?id=${encodeURIComponent(item.id)}`, framework);
 }
 
-function ismsEntityEvidenceUrl(kind, id, item = null) {
-  const row = item || { id };
-  if (kind === 'objective') return objectiveHref(row);
-  if (kind === 'document') return documentHref(row);
-  if (kind === 'asset') return assetHref(row);
-  if (kind === 'access') return accessControlHref(row);
-  if (kind === 'effectiveness') return effectivenessMeasureHref(row);
-  if (kind === 'meeting') return meetingHref(row);
+function ismsEntityEvidenceUrl(kind, item) {
+  if (kind === 'objective') return objectiveHref(item);
+  if (kind === 'document') return documentHref(item);
+  if (kind === 'asset') return assetHref(item);
+  if (kind === 'access') return accessControlHref(item);
+  if (kind === 'effectiveness') return effectivenessMeasureHref(item);
+  if (kind === 'meeting') return meetingHref(item);
   return null;
 }
 
 function ismsSampleTitle(kind, item) {
-  if (!item) return 'ISMS item';
-  if (kind === 'objective') return item.goal || item.requirement || 'ISMS objective';
-  if (kind === 'document') return item.title || 'ISMS document';
-  if (kind === 'org') return item.name || 'Organisation chart node';
-  if (kind === 'asset') return item.asset || item.name || 'ISMS asset';
-  if (kind === 'access') return item.task_action || 'Access control matrix row';
+  if (kind === 'objective') return item.goal;
+  if (kind === 'org') return item.name;
+  if (kind === 'asset') return item.asset;
+  if (kind === 'access') return item.task_action;
   if (kind === 'effectiveness') return item.summary || 'Effectiveness measure';
-  if (kind === 'meeting') return item.title || 'ISMS meeting';
-  return item.display || 'ISMS item';
+  // Documents and meetings are named by their titles.
+  return item.title;
 }
 
 function sampleIsmsEntity(kind, id) {
   const entityType = auditSampleEntityTypes[kind];
   const item = findItem(kind, id);
-  if (!entityType) return;
   openAuditSampleModal({
     me,
     entityType,
     entityId: id,
     title: ismsSampleTitle(kind, item),
-    evidenceUrl: ismsEntityEvidenceUrl(kind, id, item),
+    evidenceUrl: ismsEntityEvidenceUrl(kind, item),
     framework,
     statusEl: status,
   });
@@ -806,7 +767,6 @@ function ensureCancelButton(kind) {
   const form = $(formIds[kind]);
   if (!form || form.querySelector('[data-isms-cancel-edit]')) return;
   const submit = form.querySelector('button[type="submit"]');
-  if (!submit) return;
   submit.insertAdjacentHTML(
     'afterend',
     ` <button class="btn btn-outline-secondary ms-2" type="button" style="display:none;" data-isms-cancel-edit="${esc(kind)}">Cancel edit</button>`,
@@ -818,7 +778,6 @@ function setFormMode(kind, item = null) {
     for (const [otherKind, formId] of Object.entries(formIds)) {
       if (otherKind === kind) continue;
       const otherForm = $(formId);
-      if (!otherForm) continue;
       otherForm.dataset.editingId = '';
       const otherSubmit = otherForm.querySelector('button[type="submit"]');
       if (otherSubmit) otherSubmit.textContent = submitLabels[otherKind][0];
@@ -829,7 +788,6 @@ function setFormMode(kind, item = null) {
   editState.kind = item ? kind : null;
   editState.id = item?.id || null;
   const form = $(formIds[kind]);
-  if (!form) return;
   const submit = form.querySelector('button[type="submit"]');
   if (submit) submit.textContent = item ? submitLabels[kind][1] : submitLabels[kind][0];
   const cancel = form.querySelector('[data-isms-cancel-edit]');
@@ -838,7 +796,6 @@ function setFormMode(kind, item = null) {
 }
 function resetForm(kind) {
   const form = $(formIds[kind]);
-  if (!form) return;
   form.reset();
   setFormMode(kind, null);
   if (kind === 'document') {
@@ -863,7 +820,6 @@ function resetForm(kind) {
 }
 function addMeetingExternalLinkRow(title = '', url = '') {
   const holder = $('meetingExternalLinks');
-  if (!holder) return;
   const row = document.createElement('div');
   row.className = 'meeting-external-link-row row g-2 align-items-start';
   row.innerHTML = `
@@ -874,13 +830,12 @@ function addMeetingExternalLinkRow(title = '', url = '') {
 }
 function resetMeetingExternalLinks(links = null) {
   const holder = $('meetingExternalLinks');
-  if (!holder) return;
   holder.innerHTML = '';
   const external = Array.isArray(links)
     ? links.filter((l) => l.link_type === 'external_url' && l.url)
     : [];
   if (external.length) {
-    for (const link of external) addMeetingExternalLinkRow(link.title || '', link.url || '');
+    for (const link of external) addMeetingExternalLinkRow(link.title, link.url);
   } else {
     addMeetingExternalLinkRow();
   }
@@ -902,32 +857,31 @@ function selectedMeetingLinks() {
 function accessPayloadFromForm() {
   return {
     task_action: $('accessTaskAction').value,
-    service_asset_id: $('accessService').value || null,
+    service_asset_id: $('accessService').value,
     role_org_node_ids: selectedValues($('accessRole')),
     notes: $('accessNotes').value,
   };
 }
 function populateEditForm(kind, item) {
-  if (!item) return;
   hideAllIsmsForms(kind);
   setFormCardVisible(kind, true);
   setFormMode(kind, item);
   if (kind === 'objective') {
-    $('objRequirement').value = item.requirement || '';
-    $('objGoal').value = item.goal || '';
+    $('objRequirement').value = item.requirement;
+    $('objGoal').value = item.goal;
     $('objMetric').value = item.metric || '';
     $('objOwner').value = item.owner_user_id || '';
     $('objTarget').value = item.completion_target_date || '';
     $('objStart').value = item.start_date || '';
-    $('objStatus').value = item.status === 'not_started' ? 'defined' : item.status || 'defined';
+    $('objStatus').value = item.status === 'not_started' ? 'defined' : item.status;
     $('objCompletion').value = item.completion_method || '';
     $('objEvaluation').value = item.evaluation_method || '';
     $('objResourceText').value = item.resource_requirements_text || '';
-    setSelectValues($('objResources'), item.resource_user_ids || []);
+    setSelectValues($('objResources'), item.resource_user_ids);
     setSelectValues($('objControls'), itemControls(item));
     setSelectValues($('objClauses'), itemClauses(item));
   } else if (kind === 'document') {
-    $('docTitle').value = item.title || '';
+    $('docTitle').value = item.title;
     $('docType').value = item.document_type || 'policy';
     $('docUrl').value = item.external_url || '';
     $('docDescription').value = item.description || '';
@@ -942,7 +896,7 @@ function populateEditForm(kind, item) {
           toast(status, `Could not load document folder: ${errorText(err)}`, 'warning'),
         );
     }
-    documentTags = [...(item.tags || [])];
+    documentTags = [...item.tags];
     renderDocumentTags();
     initRichTextEditors($('documentForm'));
     setRichTextEditorValue('docContent', item.content_html || '');
@@ -964,19 +918,17 @@ function populateEditForm(kind, item) {
     setSelectValues($('docClauses'), itemClauses(item));
   } else if (kind === 'org') {
     $('orgParent').value = item.parent_id || '';
-    $('orgName').value = item.name || '';
-    $('orgType').value = item.node_type || 'role';
+    $('orgName').value = item.name;
+    $('orgType').value = item.node_type;
     $('orgDescription').value = item.description || '';
-    setSelectValues($('orgUsers'), (item.people || []).map((x) => x?.user?.id).filter(Boolean));
+    setSelectValues($('orgUsers'), item.people.map((x) => x?.user?.id).filter(Boolean));
     setSelectValues($('orgControls'), itemControls(item));
     setSelectValues($('orgClauses'), itemClauses(item));
   } else if (kind === 'asset') {
-    $('assetName').value = item.asset || item.name || '';
-    populateAssetCategoryControls(
-      item.category_id || item.category?.id || '',
-      item.subcategory_id || item.subcategory?.id || '',
-    );
-    renderLicenseOptions(item.license_id || '');
+    $('assetName').value = item.asset;
+    populateAssetCategoryControls(item.category_id, item.subcategory_id);
+    renderLicenseOptions();
+    $('assetLicense').value = item.license_id || '';
     $('assetOwner').value = item.owner_org_node_id || '';
     $('assetRegister').value = item.register_held_by_org_node_id || '';
     $('assetDescription').value = item.description || '';
@@ -984,43 +936,42 @@ function populateEditForm(kind, item) {
     setSelectValues($('assetClauses'), itemClauses(item));
   } else if (kind === 'access') {
     renderAccessFormOptions();
-    $('accessTaskAction').value = item.task_action || '';
-    $('accessService').value = item.service_asset_id || item.service?.id || '';
-    setSelectValues($('accessRole'), item.role_org_node_ids || []);
+    $('accessTaskAction').value = item.task_action;
+    $('accessService').value = item.service_asset_id;
+    setSelectValues($('accessRole'), item.role_org_node_ids);
     $('accessNotes').value = item.notes || '';
   } else if (kind === 'effectiveness') {
-    $('effSummary').value = item.summary || '';
+    $('effSummary').value = item.summary;
     $('effDescription').value = item.description || '';
     $('effMetricKey').value = item.metric_key || '';
     renderEffectivenessFormOptions();
-    $('effSourceType').value = item.source_type || 'other';
-    if ($('effSourceType').value !== (item.source_type || 'other'))
-      $('effSourceType').value = 'other';
+    $('effSourceType').value = item.source_type;
+    if ($('effSourceType').value !== item.source_type) $('effSourceType').value = 'other';
     $('effThresholdOperator').value = item.threshold_operator || '';
     $('effTargetValue').value = item.target_value ?? '';
-    $('effTargetUnit').value = item.target_unit || '';
+    $('effTargetUnit').value = item.target_unit;
     measureExampleUpdate();
     $('effOwner').value = item.owner_user_id || '';
     $('effFrequency').value = item.frequency || '';
     $('effNotes').value = item.notes || '';
     setSelectValues($('effControls'), itemControls(item));
   } else if (kind === 'meeting') {
-    $('meetingTitle').value = item.title || 'ISMS meeting';
-    $('meetingDate').value = item.date || '';
+    $('meetingTitle').value = item.title;
+    $('meetingDate').value = item.date;
     $('meetingStart').value = timeForInput(item.start_time);
     $('meetingEnd').value = timeForInput(item.end_time);
-    setSelectValues($('meetingAttendees'), item.attendee_user_ids || []);
-    setSelectValues($('meetingApologies'), item.apology_user_ids || []);
-    setSelectValues($('meetingPersonAttendees'), item.attendee_person_ids || []);
-    setSelectValues($('meetingPersonApologies'), item.apology_person_ids || []);
+    setSelectValues($('meetingAttendees'), item.attendee_user_ids);
+    setSelectValues($('meetingApologies'), item.apology_user_ids);
+    setSelectValues($('meetingPersonAttendees'), item.attendee_person_ids);
+    setSelectValues($('meetingPersonApologies'), item.apology_person_ids);
     setSelectValues(
       $('meetingDocuments'),
-      (item.links || [])
+      item.links
         .filter((l) => l.link_type === 'isms_document' && l.document_id)
         .map((l) => l.document_id),
     );
-    resetMeetingExternalLinks(item.links || []);
-    setMeetingNotesValue(item.agenda_minutes_notes || '');
+    resetMeetingExternalLinks(item.links);
+    setMeetingNotesValue(item.agenda_minutes_notes);
     setSelectValues($('meetingControls'), itemControls(item));
     setSelectValues($('meetingClauses'), itemClauses(item));
   }
@@ -1036,7 +987,6 @@ function populateEditForm(kind, item) {
 }
 async function saveIsms(kind, createPayload, editingId = null) {
   const ep = endpoints[kind];
-  if (!ep) throw new Error(`Unknown ISMS entity type: ${kind}`);
   const base = `/api/v1/isms/${ep}`;
   if (editingId)
     return apiPatch(
@@ -1047,10 +997,8 @@ async function saveIsms(kind, createPayload, editingId = null) {
 }
 async function deleteIsms(kind, id) {
   const ep = endpoints[kind];
-  if (!ep || !id) return;
   const item = findItem(kind, id);
-  const label =
-    item?.display || item?.title || item?.name || item?.asset || item?.goal || 'this ISMS item';
+  const label = item?.display || item?.title || item?.name || item?.asset || item?.goal;
   if (
     !(await confirmAction({
       title: `Delete ${label}`,
@@ -1069,7 +1017,6 @@ async function deleteIsms(kind, id) {
 
 function renderOverview() {
   const root = $('overviewCards');
-  if (!root) return;
 
   const link = (href) => esc(withFramework(href, framework));
   const button = ({ label, href, x, y, w, h, lines = null }) => {
@@ -1174,7 +1121,7 @@ function renderObjectivePlanning() {
       .filter((row) => row.style.display !== 'none')
       .map((row) => row.dataset.ismsId),
   );
-  const items = (data.objectives || [])
+  const items = data.objectives
     .filter((row) => visible.has(String(row.id)))
     .map((row) => normalise(row, true));
   if (view === 'timeline') renderTimeline($('objectivesPlanningView'), items, framework);
@@ -1224,7 +1171,7 @@ $('objectivesView').addEventListener('change', () => {
   history.replaceState(null, '', url.pathname + url.search + url.hash);
 });
 function renderObjectives() {
-  const items = data.objectives || [];
+  const items = data.objectives;
   setCount('objectivesCount', items.length);
   rows.objectives.innerHTML =
     items
@@ -1232,7 +1179,7 @@ function renderObjectives() {
         (
           o,
         ) => `<tr data-isms-row="objective" data-isms-id="${esc(o.id)}" data-objective-status="${esc(normalise(o, true).status)}">
-    <td class="wrap"><div class="fw-semibold"><a href="${esc(objectiveHref(o))}">${esc(shorten(o.goal || o.requirement || 'Objective', 150))}</a></div><div class="small-muted">${esc(shorten(o.requirement || '', 160))}</div></td>
+    <td class="wrap"><div class="fw-semibold"><a href="${esc(objectiveHref(o))}">${esc(shorten(o.goal, 150))}</a></div><div class="small-muted">${esc(shorten(o.requirement || '', 160))}</div></td>
     <td class="wrap">${esc(shorten(o.metric || '-', 180))}</td>
     <td class="isms-objectives-owner-cell">${objectiveUserPill(o.owner)}</td>
     <td class="wrap">${esc(isoDateToDisplay(o.completion_target_date) || '-')}</td>
@@ -1245,18 +1192,18 @@ function renderObjectives() {
 }
 
 function renderDocuments() {
-  const items = data.documents || [];
+  const items = data.documents;
   setCount('documentsCount', items.length);
-  const tags = [...new Set(items.flatMap((item) => item.tags || []))].sort();
+  const tags = [...new Set(items.flatMap((item) => item.tags))].sort();
   $('docTagCloud').innerHTML = tags.length
     ? `<button type="button" class="btn btn-sm ${documentTagFilter ? 'btn-outline-secondary' : 'btn-secondary'} rounded-pill me-1 mb-1" data-filter-doc-tag="">All</button>${tags.map((tag) => tagChip(tag)).join('')}`
     : '';
   rows.documents.innerHTML =
     items
-      .filter((item) => !documentTagFilter || (item.tags || []).includes(documentTagFilter))
+      .filter((item) => !documentTagFilter || item.tags.includes(documentTagFilter))
       .map(
         (d) => `<tr data-isms-row="document">
-    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title || 'Document')}</a><div class="small">${(d.tags || []).map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${docLink(d)}</td>
+    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title)}</a><div class="small">${d.tags.map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${docLink(d)}</td>
     <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${controlBadges(d.controls, framework, { tab: '' })}</td><td>${clauseBadges(d.clauses, framework)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
   </tr>`,
       )
@@ -1264,13 +1211,13 @@ function renderDocuments() {
 }
 
 function renderOrg() {
-  const items = data.org_nodes || [];
+  const items = data.org_nodes;
   setCount('orgCount', items.length);
   rows.org.innerHTML =
     items
       .map(
         (n) => `<tr data-isms-row="org">
-    <td class="fw-semibold">${esc(n.name || 'Org node')}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${esc(n.node_type || '-')}</td><td>${userBadges(n.people)}</td><td class="wrap small-muted">${esc(shorten(n.description || '', 160) || '-')}</td><td>${controlBadges(n.controls, framework)}</td><td>${clauseBadges(n.clauses, framework)}</td>${actionsHtml('org', n.id)}
+    <td class="fw-semibold">${esc(n.name)}</td><td>${esc(n.parent?.name || 'Root')}</td><td>${esc(n.node_type)}</td><td>${userBadges(n.people)}</td><td class="wrap small-muted">${esc(shorten(n.description || '', 160) || '-')}</td><td>${controlBadges(n.controls, framework)}</td><td>${clauseBadges(n.clauses, framework)}</td>${actionsHtml('org', n.id)}
   </tr>`,
       )
       .join('') || emptyRow(8, 'No organisation chart nodes yet.');
@@ -1278,22 +1225,22 @@ function renderOrg() {
 
 function orgDisplayName(node) {
   const people = names(node.people);
-  return `${node.name || 'Org node'}${people && people !== '-' ? ` (${people})` : ''}`;
+  return `${node.name}${people && people !== '-' ? ` (${people})` : ''}`;
 }
 
 function buildOrgHierarchy(items) {
   const nodes = new Map();
   const root = { id: 'root', name: 'ISMS organisation', node_type: 'root', children: [] };
-  for (const item of items || []) nodes.set(String(item.id), { ...item, children: [] });
+  for (const item of items) nodes.set(String(item.id), { ...item, children: [] });
   for (const node of nodes.values()) {
-    const parentId = node.parent_id || node.parent?.id;
+    const parentId = node.parent_id;
     const parent = parentId ? nodes.get(String(parentId)) : null;
     if (parent && parent.id !== node.id) parent.children.push(node);
     else root.children.push(node);
   }
   const sortTree = (node) => {
-    node.children = (node.children || []).sort((a, b) =>
-      String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true }),
+    node.children = node.children.sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), undefined, { numeric: true }),
     );
     node.children.forEach(sortTree);
   };
@@ -1302,8 +1249,7 @@ function buildOrgHierarchy(items) {
 }
 
 function wrapSvgLabel(text, maxChars = 26, maxLines = 2) {
-  const raw = String(text || '').trim();
-  if (!raw) return [''];
+  const raw = String(text).trim();
   const words = raw.split(/\s+/);
   const lines = [];
   let line = '';
@@ -1321,11 +1267,11 @@ function wrapSvgLabel(text, maxChars = 26, maxLines = 2) {
   const joined = lines.join(' ');
   if (joined !== raw && lines.length) {
     const lastIdx = Math.min(lines.length, maxLines) - 1;
-    let last = lines[lastIdx] || '';
+    let last = lines[lastIdx];
     while (last.length > Math.max(1, maxChars - 1)) last = last.slice(0, -1);
     lines[lastIdx] = `${last.replace(/[.…]+$/, '')}…`;
   }
-  return lines.length ? lines : [''];
+  return lines;
 }
 
 function orgNodeSubtitle(node) {
@@ -1335,8 +1281,7 @@ function orgNodeSubtitle(node) {
 
 function renderOrgChart() {
   const el = $('orgChartViz');
-  if (!el) return;
-  const items = data.org_nodes || [];
+  const items = data.org_nodes;
   el.innerHTML = '';
   if (!items.length) {
     el.innerHTML = '<div class="p-4 small-muted">No organisation chart nodes yet.</div>';
@@ -1360,7 +1305,7 @@ function renderOrgChart() {
   const minX = d3.min(nodes, (d) => d.x) || 0;
   const maxX = d3.max(nodes, (d) => d.x) || 0;
   const minY = d3.min(nodes, (d) => d.y) || 0;
-  const maxY = d3.max(nodes, (d) => d.y) || 0;
+  const maxY = d3.max(nodes, (d) => d.y);
   const viewW = Math.max(width, maxX - minX + margin.left + margin.right + nodeBox.width);
   const viewH = Math.max(420, maxY - minY + margin.top + margin.bottom + nodeBox.height);
   const initialTranslateX = margin.left + nodeBox.width / 2 - minX;
@@ -1405,7 +1350,7 @@ function renderOrgChart() {
     .attr('class', (d) => (d.depth === 0 ? 'isms-org-node isms-org-node-root' : 'isms-org-node'));
   node.each(function drawNodeLabel(d) {
     const nodeGroup = d3.select(this);
-    const titleLines = wrapSvgLabel(d.data.name || 'Org node', 28, 2);
+    const titleLines = wrapSvgLabel(d.data.name, 28, 2);
     const subtitleLines = wrapSvgLabel(orgNodeSubtitle(d.data), 34, 1).filter((line) => line);
     const titleStart = titleLines.length > 1 ? -18 : -12;
     titleLines.forEach((line, idx) => {
@@ -1448,15 +1393,15 @@ function renderOrgChart() {
 }
 
 function renderAssets() {
-  const items = data.assets || [];
+  const items = data.assets;
   setCount('assetsCount', items.length);
   rows.assets.innerHTML =
     items
       .map(
         (a) => `<tr data-isms-row="asset">
-    <td class="fw-semibold"><a href="${esc(assetHref(a))}">${esc(a.asset || a.name || 'Asset')}</a></td>
-    <td>${esc(a.category?.name || a.category_name || '-')}</td>
-    <td>${esc(a.subcategory?.name || a.subcategory_name || '-')}</td>
+    <td class="fw-semibold"><a href="${esc(assetHref(a))}">${esc(a.asset)}</a></td>
+    <td>${esc(a.category_name || '-')}</td>
+    <td>${esc(a.subcategory_name || '-')}</td>
     <td>${esc(licenseLabel(a.license_name || a.license))}</td>
     <td>${esc(a.owner_org_node?.name || '-')}</td>
     <td>${esc(a.register_held_by_org_node?.name || '-')}</td>
@@ -1469,27 +1414,27 @@ function renderAssets() {
 }
 
 function accessServiceLabel(item) {
-  return item?.service?.asset || item?.service?.name || item?.service?.display || 'Service';
+  return item.service?.asset || 'Service';
 }
 
 function accessRoles(item) {
-  return Array.isArray(item?.roles) ? item.roles : [];
+  return item.roles;
 }
 
 function accessRoleColumns(items = []) {
   const out = [];
   const seen = new Set();
   const add = (role) => {
-    const id = role?.id || role?.org_node_id;
+    const id = role.id;
     if (!id || seen.has(String(id))) return;
     seen.add(String(id));
     out.push(role);
   };
-  for (const node of meta.org_nodes || []) {
-    const type = String(node?.node_type || '').toLowerCase();
+  for (const node of meta.org_nodes) {
+    const type = node.node_type.toLowerCase();
     if (!type || type === 'role') add(node);
   }
-  for (const entry of items || []) {
+  for (const entry of items) {
     for (const role of accessRoles(entry)) add(role);
   }
   return out.sort((a, b) =>
@@ -1499,10 +1444,10 @@ function accessRoleColumns(items = []) {
 
 function accessKeyLabel(item) {
   const roles = accessRoles(item)
-    .map((role) => role?.name || '')
+    .map((role) => role.name)
     .filter(Boolean)
     .join(', ');
-  return [item?.task_action || 'Task/action', accessServiceLabel(item), roles, item?.notes || '']
+  return [item.task_action, accessServiceLabel(item), roles, item?.notes || '']
     .filter(Boolean)
     .join(' · ');
 }
@@ -1516,30 +1461,26 @@ function noteTooltipHtml(notes, label = 'Notes') {
 function initIsmsTooltips(root = document) {
   if (!window.bootstrap?.Tooltip || !root) return;
   root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
-    const existing = window.bootstrap.Tooltip.getInstance(el);
-    if (existing) existing.dispose();
     new window.bootstrap.Tooltip(el, { container: 'body', trigger: 'hover focus' });
   });
 }
 
 function accessRoleCellHtml(entry, roleId) {
   const roles = accessRoles(entry);
-  const matched = roles.find(
-    (role) => String(role?.id || role?.org_node_id || '') === String(roleId),
-  );
+  const matched = roles.find((role) => String(role.id) === String(roleId));
   if (!matched)
     return '<td class="isms-app-cell isms-app-cell-empty isms-access-role-cell" data-sort=""></td>';
-  const name = matched.name || 'Role';
+  const name = matched.name;
   return `<td class="isms-app-cell isms-access-cell-linked isms-access-role-cell text-center" data-sort="1" title="${esc(name)}"><span aria-label="${esc(name)} included">✓</span><span class="visually-hidden"> ${esc(name)}</span></td>`;
 }
 
 function renderAccessControlMatrix() {
-  const items = data.access_control_matrix || [];
+  const items = data.access_control_matrix;
   const roleColumns = accessRoleColumns(items);
   const head = $('accessMatrixHead');
   setCount('accessControlCount', items.length);
   if (head) {
-    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/action</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name || 'Role')}">${esc(role.name || 'Role')}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
+    head.innerHTML = `<tr><th class="text-center isms-app-head-group">Service</th><th class="text-center isms-app-head-linkage">Task/action</th>${roleColumns.map((role) => `<th class="text-center isms-access-role-heading" title="${esc(role.name)}">${esc(role.name)}</th>`).join('')}<th class="text-center isms-access-notes-head" title="Notes">Notes</th><th class="text-center no-print isms-access-actions-head">Actions</th></tr>`;
   }
   if (!items.length) {
     rows.access.innerHTML = emptyRow(roleColumns.length + 4, 'No access control matrix rows yet.');
@@ -1547,7 +1488,7 @@ function renderAccessControlMatrix() {
   }
   const grouped = [];
   for (const entry of items) {
-    const serviceId = entry.service_asset_id || entry.service?.id || 'unknown';
+    const serviceId = entry.service_asset_id;
     let group = grouped.find((g) => String(g.id) === String(serviceId));
     if (!group) {
       group = { id: serviceId, name: accessServiceLabel(entry), rows: [] };
@@ -1569,7 +1510,7 @@ function renderAccessControlMatrix() {
               : '';
           return `<tr data-isms-row="access" data-isms-filter-text="${esc(accessKeyLabel(entry))}">
       ${serviceCell}
-      <td class="wrap isms-app-key-linkage" data-sort="${esc(entry.task_action || '')}"><div class="fw-semibold"><a href="${esc(accessControlHref(entry))}">${esc(entry.task_action || 'Task/action')}</a></div></td>
+      <td class="wrap isms-app-key-linkage" data-sort="${esc(entry.task_action)}"><div class="fw-semibold"><a href="${esc(accessControlHref(entry))}">${esc(entry.task_action)}</a></div></td>
       ${roleColumns.map((role) => accessRoleCellHtml(entry, role.id)).join('')}
       <td class="text-center small-muted isms-access-notes" data-sort="${esc(entry.notes || '')}">${noteTooltipHtml(entry.notes, 'Access row notes')}</td>
       ${actionsHtml('access', entry.id, 'isms-access-actions')}
@@ -1587,14 +1528,14 @@ function measureTitle(item) {
 
 function effectivenessMeasureHref(item) {
   return withFramework(
-    `/isms-effectiveness-measure.html?id=${encodeURIComponent(item?.id || '')}`,
+    `/isms-effectiveness-measure.html?id=${encodeURIComponent(item.id)}`,
     framework,
   );
 }
 
 function effectivenessMetricHref(entry) {
   return withFramework(
-    `/isms-effectiveness-metric.html?id=${encodeURIComponent(entry?.id || '')}`,
+    `/isms-effectiveness-metric.html?id=${encodeURIComponent(entry.id)}`,
     framework,
   );
 }
@@ -1604,13 +1545,13 @@ function metricValueHtml(entry, measure) {
   const period =
     entry.period || [entry.period_start || '', entry.period_end || ''].filter(Boolean).join(' → ');
   const source = entry.source_url
-    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>`
-    : esc(entry.source_title || entry.source_type || 'other');
+    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type)}</a>`
+    : esc(entry.source_title || entry.source_type);
   const eventLink = entry.source_event_id
     ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open Keen event">${esc(entry.source_event_id)}</a>`
     : '';
   const valueHtml = effectivenessMetricValueHtml(entry, measure, {
-    href: entry.id ? effectivenessMetricHref(entry) : '',
+    href: effectivenessMetricHref(entry),
     fallback: 'Metric entry',
   });
   const thresholdHtml = effectivenessMetricThresholdBadgeHtml(measure, entry);
@@ -1645,7 +1586,7 @@ function effectivenessActionsHtml(item) {
 }
 
 function effectivenessFilterText(item) {
-  const entryBits = (item.metric_entries || []).flatMap((entry) => [
+  const entryBits = item.metric_entries.flatMap((entry) => [
     entry?.value_display,
     entry?.source_type,
     entry?.source_title,
@@ -1664,16 +1605,15 @@ function effectivenessFilterText(item) {
     item.latest_entry?.source_type,
     item.latest_entry?.source_title,
     ...entryBits,
-    ...(item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`),
+    ...item.controls.map((c) => `${c.ref || ''} ${c.title || ''}`),
   ]
     .filter(Boolean)
     .join(' · ');
 }
 
 function renderEffectivenessMeasures() {
-  const items = data.effectiveness_measures || [];
+  const items = data.effectiveness_measures;
   setCount('effectivenessCount', items.length);
-  if (!rows.effectiveness) return;
   rows.effectiveness.innerHTML =
     items
       .map(
@@ -1694,7 +1634,7 @@ function renderEffectivenessMeasures() {
 }
 
 function measureSourceHtml(item) {
-  const source = String(item?.source_type || 'other').trim() || 'other';
+  const source = String(item?.source_type || 'other').trim();
   if (source === 'other') return '<span class="small-muted">Other</span>';
   const option = effectivenessMetricSourceOptions().find((src) => src.id === source);
   return `<a class="badge badge-soft text-decoration-none" href="${esc(withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework))}">${esc(option?.label || source)}</a>`;
@@ -1704,7 +1644,7 @@ function effectivenessMetricSourceOptions() {
   const sources =
     Array.isArray(meta.effectiveness_metric_sources) && meta.effectiveness_metric_sources.length
       ? meta.effectiveness_metric_sources
-      : (meta.effectiveness_metric_source_types || ['other']).map((x) => ({
+      : meta.effectiveness_metric_source_types.map((x) => ({
           id: x,
           source: x,
           label: x === 'other' ? 'Other' : x,
@@ -1712,13 +1652,13 @@ function effectivenessMetricSourceOptions() {
   const seen = new Set();
   const out = [];
   for (const src of sources) {
-    const id = String(src?.id || src?.source || '').trim();
+    const id = String(src?.id || src?.source).trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
     out.push({
       id,
-      label: id === 'other' ? 'Other' : src?.label || src?.name || src?.source || id,
-      source: src?.source || id,
+      label: id === 'other' ? 'Other' : src.label,
+      source: src.source,
     });
   }
   if (!seen.has('other')) out.push({ id: 'other', label: 'Other', source: 'other' });
@@ -1728,18 +1668,16 @@ function effectivenessMetricSourceOptions() {
 function renderEffectivenessFormOptions() {
   const measureSelect = $('metricMeasureId');
   if (measureSelect)
-    measureSelect.innerHTML = optionList(data.effectiveness_measures || [], {
+    measureSelect.innerHTML = optionList(data.effectiveness_measures, {
       label: (m) => `${measureTitle(m)}${m.metric_key ? ` (${m.metric_key})` : ''}`,
     });
   const owner = $('effOwner');
-  if (owner)
-    owner.innerHTML = optionList(meta.users || [], { label: 'username', includeBlank: true });
+  if (owner) owner.innerHTML = optionList(meta.users, { label: 'username', includeBlank: true });
   const sourceOptions = optionList(effectivenessMetricSourceOptions(), {
     label: (src) => (src.source === 'other' ? 'Other' : `${src.label} (${src.source})`),
   });
   for (const id of ['metricSourceType', 'effSourceType']) {
     const select = $(id);
-    if (!select) continue;
     const current = select.value;
     select.innerHTML = sourceOptions;
     select.value = current;
@@ -1761,21 +1699,16 @@ function applyMeasureDefaultsToMetricEntry(measure) {
 }
 
 function resetMetricEntryForm(measureId = '') {
-  const form = $('metricEntryForm');
-  if (!form) return;
-  form.reset();
+  $('metricEntryForm').reset();
   renderEffectivenessFormOptions();
   if (measureId) $('metricMeasureId').value = measureId;
-  applyMeasureDefaultsToMetricEntry(
-    findItem('effectiveness', measureId || $('metricMeasureId')?.value),
-  );
+  applyMeasureDefaultsToMetricEntry(findItem('effectiveness', measureId));
 }
 
 function showMetricEntryForm(measureId = '') {
   if (!canManage) return;
   hideAllIsmsForms('metricEntry');
   const card = $('metricEntryFormCard');
-  if (!card) return;
   resetMetricEntryForm(measureId);
   card.style.display = '';
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1787,9 +1720,9 @@ function metricEntryPayloadFromForm() {
     period_start: $('metricPeriodStart')?.value || null,
     period_end: $('metricPeriodEnd')?.value || null,
     metric_value: $('metricValue')?.value === '' ? null : Number($('metricValue')?.value),
-    metric_unit: $('metricUnit')?.value || '',
+    metric_unit: $('metricUnit').value,
     qualitative_value: $('metricQualitative')?.value || '',
-    source_type: $('metricSourceType')?.value || 'other',
+    source_type: $('metricSourceType').value,
     source_title: $('metricSourceTitle')?.value || '',
     source_url: $('metricSourceUrl')?.value || null,
     source_reference: $('metricSourceReference')?.value || '',
@@ -1803,16 +1736,16 @@ function metricEntryPayloadFromForm() {
 }
 
 function renderMeetings() {
-  const items = data.meetings || [];
+  const items = data.meetings;
   setCount('meetingsCount', items.length);
   rows.meetings.innerHTML =
     items
       .map((m) => {
         const links =
-          (m.links || [])
+          m.links
             .map((l) =>
               l.link_type === 'isms_document' && l.document
-                ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(documentHref(l.document))}">${esc(l.document.title || 'ISMS document')}</a>`
+                ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(documentHref(l.document))}">${esc(l.document.title)}</a>`
                 : l.url
                   ? `<a href="${esc(safeExternalHref(l.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>`
                   : '',
@@ -1820,7 +1753,7 @@ function renderMeetings() {
             .filter(Boolean)
             .join('<br>') || '<span class="small-muted">-</span>';
         const href = meetingHref(m);
-        return `<tr data-isms-row="meeting"><td>${esc(isoDateToDisplay(m.date) || '-')}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title || 'Meeting')}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls, framework)}</td><td>${clauseBadges(m.clauses, framework)}</td>${actionsHtml('meeting', m.id)}</tr>`;
+        return `<tr data-isms-row="meeting"><td>${esc(isoDateToDisplay(m.date))}</td><td class="fw-semibold wrap"><a href="${esc(href)}">${esc(m.title)}</a><div class="small-muted">${esc(shorten(plainTextFromRichText(m.agenda_minutes_notes || ''), 140))}</div></td><td>${esc([m.start_time, m.end_time].filter(Boolean).join('-') || '-')}</td><td>${userBadges(m.attendees)}</td><td>${userBadges(m.apologies)}</td><td>${links}</td><td>${controlBadges(m.controls, framework)}</td><td>${clauseBadges(m.clauses, framework)}</td>${actionsHtml('meeting', m.id)}</tr>`;
       })
       .join('') || emptyRow(9, 'No meeting minutes yet.');
 }
@@ -1844,35 +1777,35 @@ function populateForms() {
     if (el) el.style.display = 'none';
   }
   for (const kind of Object.keys(formIds)) ensureCancelButton(kind);
-  const userOpts = optionList(meta.users || [], { label: 'username' });
+  const userOpts = optionList(meta.users, { label: 'username' });
   for (const id of ['objResources', 'orgUsers', 'meetingAttendees', 'meetingApologies']) {
     const el = $(id);
     if (el) el.innerHTML = userOpts;
   }
   populateMeetingPeople();
   const owner = $('objOwner');
-  if (owner)
-    owner.innerHTML = optionList(meta.users || [], { label: 'username', includeBlank: true });
+  if (owner) owner.innerHTML = optionList(meta.users, { label: 'username', includeBlank: true });
   const docType = $('docType');
   if (docType)
     docType.innerHTML = optionList(
       (meta.document_types || []).map((x) => ({ id: x, name: x })),
       { label: 'name' },
     );
-  const orgOpts = optionList(meta.org_nodes || [], {
-    label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`,
-    includeBlank: true,
-    blankLabel: 'Root',
+  // A node without a parent sits at the root; an asset without an owner or
+  // register holder has none.
+  const orgOpts = (blankLabel) =>
+    optionList(meta.org_nodes, {
+      label: (n) => `${n.name} (${n.node_type})`,
+      includeBlank: true,
+      blankLabel,
+    });
+  $('orgParent').innerHTML = orgOpts('Root');
+  for (const id of ['assetOwner', 'assetRegister']) $(id).innerHTML = orgOpts('-');
+  const controlOpts = optionList(meta.controls, {
+    label: (c) => `${c.ref} ${c.title || ''}`.trim(),
   });
-  for (const id of ['orgParent', 'assetOwner', 'assetRegister']) {
-    const el = $(id);
-    if (el) el.innerHTML = orgOpts;
-  }
-  const controlOpts = optionList(meta.controls || [], {
-    label: (c) => `${c.ref || ''} ${c.title || ''}`.trim(),
-  });
-  const clauseOpts = optionList(meta.clauses || [], {
-    label: (c) => `${c.ref || ''} ${c.title || ''}`.trim(),
+  const clauseOpts = optionList(meta.clauses, {
+    label: (c) => `${c.ref} ${c.title || ''}`.trim(),
   });
   for (const id of [
     'objControls',
@@ -1890,9 +1823,7 @@ function populateForms() {
     if (el) el.innerHTML = clauseOpts;
   }
   const meetingDocs = $('meetingDocuments');
-  if (meetingDocs) meetingDocs.innerHTML = optionList(meta.documents || [], { label: 'title' });
-  const bp = $('appBusinessProcess');
-  if (bp) bp.innerHTML = optionList(meta.business_processes || [], { label: 'name' });
+  if (meetingDocs) meetingDocs.innerHTML = optionList(meta.documents, { label: 'title' });
   renderAccessFormOptions();
   renderEffectivenessFormOptions();
   renderLicenseOptions();
@@ -1903,7 +1834,7 @@ function populateForms() {
 // appear together under Cloud services.
 function renderServiceOptions(select) {
   const groups = new Map();
-  for (const asset of meta.assets || []) {
+  for (const asset of meta.assets) {
     const category = asset.category_name || 'Uncategorised';
     if (!groups.has(category)) groups.set(category, []);
     groups.get(category).push(asset);
@@ -1915,8 +1846,8 @@ function renderServiceOptions(select) {
       group.label = category;
       for (const asset of groups.get(category)) {
         const option = document.createElement('option');
-        option.value = asset.id || '';
-        option.textContent = asset.asset || asset.name || 'Asset';
+        option.value = asset.id;
+        option.textContent = asset.asset;
         group.append(option);
       }
       return group;
@@ -1928,8 +1859,8 @@ function renderAccessFormOptions() {
   if (service) renderServiceOptions(service);
   const role = $('accessRole');
   if (role)
-    role.innerHTML = optionList(meta.org_nodes || [], {
-      label: (n) => `${n.name || 'Node'} (${n.node_type || 'role'})`,
+    role.innerHTML = optionList(meta.org_nodes, {
+      label: (n) => `${n.name} (${n.node_type})`,
     });
 }
 
@@ -1960,7 +1891,7 @@ function onIsmsClick(id, handler) {
 $('assetCategory')?.addEventListener('change', () => renderAssetSubcategoryOptions());
 onIsmsClick('addAssetCategory', async () => {
   const input = $('assetCategoryName');
-  const name = String(input?.value || '').trim();
+  const name = input.value.trim();
   if (!name) return;
   await apiPost('/api/v1/isms/asset-categories', { name });
   if (input) input.value = '';
@@ -1968,8 +1899,8 @@ onIsmsClick('addAssetCategory', async () => {
 });
 onIsmsClick('addAssetSubcategory', async () => {
   const input = $('assetSubcategoryName');
-  const name = String(input?.value || '').trim();
-  const categoryId = $('assetSubcategoryCategory')?.value || $('assetCategory')?.value || '';
+  const name = input.value.trim();
+  const categoryId = $('assetSubcategoryCategory').value;
   if (!name || !categoryId) return;
   await apiPost('/api/v1/isms/asset-subcategories', { name, category_id: categoryId });
   if (input) input.value = '';
@@ -1979,7 +1910,7 @@ onIsmsClick('addAssetSubcategory', async () => {
 onIsmsSubmit('licenseForm', async (ev) => {
   const licenseId = $('licenseId')?.value || '';
   const payload = {
-    name: $('licenseName')?.value || '',
+    name: $('licenseName').value,
     description: $('licenseDescription')?.value || '',
   };
   if (licenseId) {
@@ -2017,30 +1948,25 @@ function normaliseIsmsSection(value) {
     : section;
 }
 
+// Every tab in #ismsTabs is listed in tabIdBySection.
 function sectionFromTabId(id) {
-  if (!id) return 'overview';
-  for (const [section, tabId] of Object.entries(tabIdBySection)) {
-    if (tabId === id) return section;
-  }
-  return normaliseIsmsSection(String(id || '').replace(/Tab$/, '')) || 'overview';
+  return Object.keys(tabIdBySection).find((section) => tabIdBySection[section] === id);
 }
 
 function currentIsmsSection() {
   const active = document.querySelector('#ismsTabs [data-bs-toggle="tab"].active');
-  return sectionFromTabId(active?.id) || 'overview';
+  return sectionFromTabId(active.id);
 }
 
 function mergePayload(target, payload) {
-  if (!payload || typeof payload !== 'object') return;
   for (const [key, value] of Object.entries(payload)) {
-    if (key === 'counts') target.counts = { ...(target.counts || {}), ...(value || {}) };
+    if (key === 'counts') target.counts = { ...target.counts, ...value };
     else target[key] = value;
   }
 }
 
 function renderMetaSummary() {
-  const c = data.counts || {};
-  if (!metaEl) return;
+  const c = data.counts;
   const counts = [
     ['objectives', 'objectives', 'objectives'],
     ['documents', 'documents', 'documents'],
@@ -2066,7 +1992,6 @@ function setSectionLoading(section) {
   if (section === 'access' && rows.access) rows.access.innerHTML = emptyRow(3, loading);
   if (section === 'effectiveness' && rows.effectiveness)
     rows.effectiveness.innerHTML = emptyRow(8, loading);
-  if (section === 'app' && rows.app) rows.app.innerHTML = emptyRow(3, loading);
   if (section === 'meetings' && rows.meetings) rows.meetings.innerHTML = emptyRow(9, loading);
 }
 
@@ -2108,7 +2033,6 @@ function renderSection(section) {
 }
 
 async function loadMetaSection(section, { force = false } = {}) {
-  if (section === 'soa') return false;
   if (!force && loadedMetaSections.has(section)) return false;
   const payload = await apiGet(
     `/api/v1/isms/meta?framework=${encodeURIComponent(framework)}&section=${encodeURIComponent(section)}`,
@@ -2118,9 +2042,9 @@ async function loadMetaSection(section, { force = false } = {}) {
   return true;
 }
 
-async function loadSummarySection(section, { force = false } = {}) {
-  if (section === 'soa') return false;
-  if (!force && loadedSummarySections.has(section)) return false;
+// Records are always fetched: a section's records can arrive after a refresh
+// cleared the register, while its meta is fetched again.
+async function loadSummarySection(section) {
   const payload = await apiGet(
     `/api/v1/isms/summary?framework=${encodeURIComponent(framework)}&section=${encodeURIComponent(section)}`,
   );
@@ -2167,7 +2091,7 @@ $('swotNext').addEventListener('click', () => {
   }
 });
 async function ensureSection(section, { force = false } = {}) {
-  const target = normaliseIsmsSection(section) || 'overview';
+  const target = normaliseIsmsSection(section);
   if (target === 'swot') return loadSwotOverview();
   if (target === 'soa') {
     renderMetaSummary();
@@ -2183,8 +2107,8 @@ async function ensureSection(section, { force = false } = {}) {
     if (status) status.style.display = 'none';
     setSectionLoading(target);
     const metaChanged = await loadMetaSection(target, { force });
-    await loadSummarySection(target, { force });
-    if (target === 'meetings' && (metaChanged || force)) await loadMeetingPeople();
+    await loadSummarySection(target);
+    if (target === 'meetings' && metaChanged) await loadMeetingPeople();
     renderMetaSummary();
     if (metaChanged) populateForms();
     renderSection(target);
@@ -2370,8 +2294,8 @@ onIsmsSubmit('assetForm', async (ev) => {
     'asset',
     {
       asset: $('assetName').value,
-      category_id: $('assetCategory').value || null,
-      subcategory_id: $('assetSubcategory').value || null,
+      category_id: $('assetCategory').value,
+      subcategory_id: $('assetSubcategory').value,
       license_id: $('assetLicense').value || null,
       owner_org_node_id: $('assetOwner').value || null,
       register_held_by_org_node_id: $('assetRegister').value || null,
@@ -2393,10 +2317,10 @@ onIsmsSubmit('effectivenessForm', async (ev) => {
       summary: $('effSummary').value,
       description: $('effDescription').value,
       metric_key: $('effMetricKey').value || null,
-      source_type: $('effSourceType')?.value || 'other',
-      threshold_operator: $('effThresholdOperator').value || '',
+      source_type: $('effSourceType').value,
+      threshold_operator: $('effThresholdOperator').value,
       target_value: targetRaw === '' ? null : Number(targetRaw),
-      target_unit: $('effTargetUnit').value || '',
+      target_unit: $('effTargetUnit').value,
       owner_user_id: $('effOwner').value || null,
       frequency: $('effFrequency').value || '',
       notes: $('effNotes').value || '',
@@ -2409,8 +2333,7 @@ onIsmsSubmit('effectivenessForm', async (ev) => {
 });
 
 onIsmsSubmit('metricEntryForm', async (ev) => {
-  const measureId = $('metricMeasureId')?.value || '';
-  if (!measureId) throw new Error('Select an effectiveness measure.');
+  const measureId = $('metricMeasureId').value;
   await apiPost(
     `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}/metrics?framework=${encodeURIComponent(framework)}`,
     metricEntryPayloadFromForm(),
@@ -2505,7 +2428,7 @@ document.addEventListener('click', async (ev) => {
   try {
     if (addBtn) {
       const kind = addBtn.getAttribute('data-isms-add');
-      await ensureSection(sectionForKind(kind) || currentIsmsSection());
+      await ensureSection(sectionForKind(kind));
       showNewIsmsForm(kind);
       return;
     }
@@ -2550,7 +2473,7 @@ document.addEventListener('click', async (ev) => {
     if (licenseDeleteBtn) {
       const id = licenseDeleteBtn.getAttribute('data-license-delete');
       const item = licenses().find((l) => String(l.id) === String(id));
-      const label = item?.name || 'this license';
+      const label = item.name;
       if (
         !(await confirmAction({
           title: `Delete ${label}`,
@@ -2589,7 +2512,7 @@ document.addEventListener('click', async (ev) => {
 });
 
 async function activateInitialTab() {
-  const params = new URLSearchParams(window.location.search || '');
+  const params = new URLSearchParams(window.location.search);
   const edit = params.get('edit');
   if (['table', 'kanban', 'timeline'].includes(params.get('view')))
     $('objectivesView').value = params.get('view');

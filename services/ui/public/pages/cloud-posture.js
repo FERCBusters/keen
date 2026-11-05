@@ -18,7 +18,7 @@ import {
   savedNotice,
 } from './posture-risk-form.js';
 
-const KINDS = { user: 'User', service: 'Service', root: 'Root', guest: 'Guest' };
+const KINDS = { user: 'User', service: 'Service', root: 'Root', guest: 'Guest', group: 'Group' };
 const OUTCOMES = { success: 'Succeeded', failure: 'Failed', info: 'Recorded' };
 
 function hours(seconds) {
@@ -74,7 +74,7 @@ export function cloudPosture(host, allowed) {
     generation = 0,
     owners = null;
   const ownerOptions = () => {
-    owners ??= apiGet('/api/v1/risks/users').then((d) => d?.items || []);
+    owners ??= apiGet('/api/v1/risks/users').then((d) => d.items);
     return owners;
   };
   const base = () => `/api/v1/isms/vendors/${encodeURIComponent(vendor.id)}/cloud-posture`;
@@ -157,7 +157,7 @@ export function cloudPosture(host, allowed) {
           : '';
         const email =
           i.email && i.email !== i.name ? `<div class="small-muted">${esc(i.email)}</div>` : '';
-        return `<tr><th scope="row" class="text-break">${esc(i.name)}${email}${person}</th><td>${esc(KINDS[i.kind] || 'User')}</td><td>${i.admin ? 'Yes' : 'No'}</td><td>${mfa(i.mfa)}</td><td class="text-nowrap">${esc(i.last_used ? fmtTs(i.last_used) : 'Never')}</td><td>${esc(i.detail || '')}</td></tr>`;
+        return `<tr><th scope="row" class="text-break">${esc(i.name)}${email}${person}</th><td>${esc(KINDS[i.kind] || 'Other')}</td><td>${i.admin ? 'Yes' : 'No'}</td><td>${mfa(i.mfa)}</td><td class="text-nowrap">${esc(i.last_used ? fmtTs(i.last_used) : 'Never')}</td><td>${esc(i.detail || '')}</td></tr>`;
       })
       .join('');
     return `<details class="mt-2" data-cloud-identities><summary>${Number(scope.identities.length)} identities listed by the vendor</summary><div class="table-responsive mt-2"><table class="table table-sm"><thead><tr><th>Identity</th><th>Kind</th><th>Administrator</th><th>MFA</th><th>Last used</th><th>Access</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
@@ -228,7 +228,7 @@ export function cloudPosture(host, allowed) {
         'Refresh queued. The results update when the read finishes; reload this tab in a few minutes.';
     } catch (error) {
       box.className = 'alert alert-warning';
-      box.textContent = errorText(error) || 'The refresh could not be queued.';
+      box.textContent = errorText(error);
     }
     box.hidden = false;
     button.disabled = false;
@@ -251,7 +251,7 @@ export function cloudPosture(host, allowed) {
     }
     if (request !== generation) return;
     const framework = getCurrentFramework();
-    const providers = data.providers || [];
+    const providers = data.providers;
     const scopes = providers.flatMap((p) => p.scopes);
     const button = data.can_refresh
       ? '<button type="button" class="btn btn-sm btn-outline-primary" data-cloud-refresh>Refresh now</button>'

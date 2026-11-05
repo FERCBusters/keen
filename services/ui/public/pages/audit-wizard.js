@@ -25,8 +25,9 @@ const unsaved = unsavedGuard({ root: $('wizardForm'), hint: $('unsaved') });
 // The details step works while the navigation is still loading: nothing
 // submits the form early, and the highlighted card follows the chosen type.
 $('wizardForm').addEventListener('submit', (ev) => ev.preventDefault());
+// One type is always chosen: the page starts with Internal checked.
 function auditType() {
-  return document.querySelector('input[name="auditType"]:checked')?.value || 'internal';
+  return document.querySelector('input[name="auditType"]:checked').value;
 }
 function showAuditType() {
   for (const card of document.querySelectorAll('[data-audit-type]'))
@@ -133,9 +134,7 @@ function showStep(step) {
 }
 
 function goTo(step) {
-  const index = STEPS.findIndex(([name]) => name === step);
-  if (index < 0) return;
-  stepIndex = index;
+  stepIndex = STEPS.findIndex(([name]) => name === step);
   showStep(step);
 }
 
@@ -173,7 +172,7 @@ function rawId(value) {
   return at >= 0 ? text.slice(at + 1) : text;
 }
 
-async function fetchList(key, url, pick = (data) => data?.items || []) {
+async function fetchList(key, url, pick = (data) => data.items) {
   try {
     catalogue[key] = pick(await apiGet(url));
   } catch (error) {
@@ -188,13 +187,13 @@ function loadScope() {
     const keys = new Set(scopeLists.map((list) => list.key));
     await Promise.all([
       fetchList('controls', `/api/v1/controls?framework=${fw}&limit=5000`, (data) =>
-        (data?.items || []).filter((c) => String(c.type || '') !== 'clause'),
+        data.items.filter((c) => String(c.type || '') !== 'clause'),
       ),
       fetchList('clauses', `/api/v1/clauses?framework=${fw}`),
       apiGet(`/api/v1/graph/clause_control?framework=${fw}`)
         .then((graph) => {
           clauseControls = new Map();
-          for (const link of graph?.links || []) {
+          for (const link of graph.links) {
             const clause = rawId(link.source);
             const control = rawId(link.target);
             if (!clause || !control) continue;
@@ -230,26 +229,25 @@ function renderScopeTabs() {
 
 function itemLabel(key, item) {
   if (key === 'documents')
-    return `<span class="fw-semibold">${esc(item.title || 'Document')}</span> <span class="badge text-bg-light">${esc(item.document_type || 'document')}</span><span class="small-muted d-block">${(item.clauses || []).length} clauses, ${(item.controls || []).length} controls</span>`;
+    return `<span class="fw-semibold">${esc(item.title)}</span> <span class="badge text-bg-light">${esc(item.document_type || 'document')}</span><span class="small-muted d-block">${(item.clauses || []).length} clauses, ${(item.controls || []).length} controls</span>`;
   if (key === 'swot')
-    return `<span class="fw-semibold">${esc(item.title || 'SWOT item')}</span> <span class="small-muted">${esc(item.kind || '')}</span>`;
-  return `<span class="fw-semibold">${esc(item.ref || '')}</span> <span class="small-muted">${esc(item.title || '')}</span>`;
+    return `<span class="fw-semibold">${esc(item.title)}</span> <span class="small-muted">${esc(item.kind)}</span>`;
+  return `<span class="fw-semibold">${esc(item.ref)}</span> <span class="small-muted">${esc(item.title)}</span>`;
 }
 
 function matches(key, item, filter) {
   if (!filter) return true;
   const text =
     key === 'documents'
-      ? `${item.title || ''} ${item.document_type || ''}`
+      ? `${item.title} ${item.document_type}`
       : key === 'swot'
-        ? `${item.title || ''} ${item.kind || ''}`
-        : `${item.ref || ''} ${item.title || ''}`;
+        ? `${item.title} ${item.kind}`
+        : `${item.ref} ${item.title || ''}`;
   return text.toLowerCase().includes(filter);
 }
 
 function renderScopeList(key) {
   const host = document.querySelector(`[data-scope-items="${key}"]`);
-  if (!host) return;
   if (failures[key]) {
     host.innerHTML = `<div class="text-danger small p-1">Could not load this list: ${esc(failures[key])}</div>`;
     return;
@@ -264,7 +262,7 @@ function renderScopeList(key) {
         const id = String(item.id);
         const indent =
           key === 'clauses'
-            ? ` style="margin-left:${Math.min(String(item.ref || '').split('.').length - 1, 3)}rem"`
+            ? ` style="margin-left:${Math.min(String(item.ref).split('.').length - 1, 3)}rem"`
             : '';
         return `<label class="d-flex gap-2 align-items-start border-bottom py-2"${indent}><input class="form-check-input mt-1" type="checkbox" data-scope-key="${esc(key)}" value="${esc(id)}" ${chosen[key].has(id) ? 'checked' : ''}><span>${itemLabel(key, item)}</span></label>`;
       })
@@ -290,8 +288,8 @@ function renderScopePanes() {
 function addLinked(key, id) {
   let added = 0;
   const add = (target, value) => {
-    const text = String(value || '');
-    if (text && !chosen[target].has(text)) {
+    const text = String(value);
+    if (!chosen[target].has(text)) {
       chosen[target].add(text);
       added += 1;
     }
@@ -354,8 +352,8 @@ function loadPeople() {
         return { items: [] };
       }),
     ]);
-    people = peopleData?.items || [];
-    users = userData?.items || [];
+    people = peopleData.items;
+    users = userData.items;
     // A person attends through the Keen account linked to their record, so
     // the choice names that account.
     const group = (label, kind, rows, name) =>
@@ -384,8 +382,8 @@ function chosenRecord() {
 
 $('attendeeWho').addEventListener('change', () => {
   const record = chosenRecord();
-  $('attendeeName').value = record ? record.row?.name || record.row?.username || '' : '';
-  $('attendeeEmail').value = record ? record.row?.email || '' : '';
+  $('attendeeName').value = record ? record.row?.name || record.row?.username : '';
+  $('attendeeEmail').value = record ? record.row?.email : '';
 });
 
 function renderAttendees() {
@@ -423,10 +421,10 @@ $('addAttendee').addEventListener('click', () => {
   attendees.push({
     kind: record?.kind || 'guest',
     id: record?.id || '',
-    name: name || record.row?.name || record.row?.username || '',
+    name: name || record.row?.name || record.row?.username,
     email,
     role: $('attendeeRole').value.trim(),
-    account: record?.kind === 'person' ? record.row?.username || '' : '',
+    account: record?.kind === 'person' ? record.row?.username : '',
   });
   for (const id of ['attendeeWho', 'attendeeName', 'attendeeEmail', 'attendeeRole'])
     $(id).value = '';
@@ -496,7 +494,7 @@ function payload() {
     attendees: attendees.map((a) => ({
       user_id: a.kind === 'user' ? a.id : null,
       person_id: a.kind === 'person' ? a.id : null,
-      name: a.name || null,
+      name: a.name,
       email: a.email || null,
       role: a.role || null,
     })),
@@ -525,7 +523,7 @@ async function create() {
 }
 
 function renderDone() {
-  const fw = created.framework_slug || framework;
+  const fw = created.framework_slug;
   const audit = (extra = '') =>
     withFramework(`/audit.html?id=${encodeURIComponent(created.id)}${extra}`, fw);
   $('doneTitle').textContent = `${created.title} is ready`;

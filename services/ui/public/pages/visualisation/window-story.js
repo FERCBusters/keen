@@ -41,14 +41,15 @@ export function createWindowStory({ me, framework, button, panel, statusEl, appl
     }
   }
 
+  // The panel opens from the story button, shown only with a window to take,
+  // or from a bar the page picks once stories are enabled; its Create button
+  // is hidden with it whenever the window is cleared.
   function open() {
-    if (!enabled || !current || !panel) return;
     panel.hidden = false;
     note?.focus();
   }
 
   async function create() {
-    if (!enabled || !current) return;
     const url = new URL('/api/v1/events', 'https://keen.invalid');
     url.searchParams.set('framework', framework);
     url.searchParams.set('start_ts', current.start_ts);
@@ -59,7 +60,7 @@ export function createWindowStory({ me, framework, button, panel, statusEl, appl
     if (current.source) url.searchParams.set('source', current.source);
     try {
       const data = await apiGet(url.pathname + url.search);
-      const events = (data.items || []).slice(0, WINDOW_STORY_LIMIT);
+      const events = data.items.slice(0, WINDOW_STORY_LIMIT);
       const items = events.map((event) => ({ kind: 'event', entity_id: event.id }));
       const annotation = String(note?.value || '').trim();
       if (annotation) {
@@ -83,7 +84,7 @@ export function createWindowStory({ me, framework, button, panel, statusEl, appl
           String(title?.value || '').trim() || windowStoryTitle(current.start_ts, current.end_ts),
         items,
       });
-      if (Number(data.total || 0) > events.length) {
+      if (data.total > events.length) {
         toast(
           statusEl,
           `The window holds ${data.total} events; the newest ${events.length} were added to the story.`,
@@ -102,13 +103,5 @@ export function createWindowStory({ me, framework, button, panel, statusEl, appl
     panel.hidden = true;
   });
   if (button) button.classList.add('d-none');
-  return {
-    enabled,
-    update,
-    open,
-    create,
-    get window() {
-      return current;
-    },
-  };
+  return { enabled, update, open, create };
 }

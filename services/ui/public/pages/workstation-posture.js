@@ -14,16 +14,13 @@ function targets(value) {
   if (!entries.length)
     return 'No organisation targets are set, so configured protections count as met.';
   return `Organisation targets: ${entries
-    .map(
-      ([check, t]) =>
-        `${targetLabels[check] || check} ${OPERATORS[t.operator] || t.operator} ${t.value} ${t.unit}`,
-    )
+    .map(([check, t]) => `${targetLabels[check]} ${OPERATORS[t.operator]} ${t.value} ${t.unit}`)
     .join('; ')}.`;
 }
 function evidence(check) {
   const rows = check.observations.map(
     (o) =>
-      `<div class="mb-1"><a href="/event.html?id=${encodeURIComponent(o.event_id)}">${esc(o.provider)} · ${esc(o.scope)}</a> · ${esc(fmtTs(o.observed_at))} · ${esc(labels[o.status] || 'Not established')}<div class="small-muted">${esc(o.reason.replaceAll('_', ' '))}${o.detail ? ` · ${esc(o.detail)}` : ''}</div></div>`,
+      `<div class="mb-1"><a href="/event.html?id=${encodeURIComponent(o.event_id)}">${esc(o.provider)} · ${esc(o.scope)}</a> · ${esc(fmtTs(o.observed_at))} · ${esc(labels[o.status])}<div class="small-muted">${esc(o.reason.replaceAll('_', ' '))}${o.detail ? ` · ${esc(o.detail)}` : ''}</div></div>`,
   );
   if (!rows.length) return 'No current evidence';
   if (rows.length === 1) return rows[0];
@@ -39,7 +36,7 @@ export function workstationPosture(host, allowed) {
     showRevoked = false,
     toggled = false;
   async function ownerOptions() {
-    owners ??= apiGet('/api/v1/risks/users').then((d) => d?.items || []);
+    owners ??= apiGet('/api/v1/risks/users').then((d) => d.items);
     return owners;
   }
   // An inline editor below the device's checks, as other Person tabs use.
@@ -51,7 +48,7 @@ export function workstationPosture(host, allowed) {
       title: `${device.hostname}: ${check.label} needs attention`,
       summary: [
         `The ${check.label} check needs attention on ${device.hostname}.`,
-        ...(check.observations || [])
+        ...check.observations
           .filter((o) => o.status === 'attention')
           .map((o) =>
             [o.provider, o.scope, String(o.reason || '').replaceAll('_', ' '), o.detail]
@@ -83,7 +80,7 @@ export function workstationPosture(host, allowed) {
         `/api/v1/isms/people/${encodeURIComponent(person.id)}/workstation-posture?offset=${offset}&include_revoked=${showRevoked}`,
       );
       if (request !== generation) return;
-      const devices = data.devices || [];
+      const devices = data.devices;
       const met = devices.reduce((n, d) => n + d.met, 0),
         target = devices.reduce((n, d) => n + d.target, 0);
       const revoked = Number(data.revoked_total) || 0,

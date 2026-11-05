@@ -32,11 +32,7 @@ export function downloadBlob(blob, filename) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => {
-    try {
-      URL.revokeObjectURL(obj);
-    } catch {}
-  }, 15_000);
+  setTimeout(() => URL.revokeObjectURL(obj), 15_000);
 }
 
 // Bound actual downloaded bytes, including responses without trustworthy metadata.
@@ -196,8 +192,8 @@ export function buildZipStore(files) {
   let cdSize = 0;
 
   for (const f of files) {
-    const nameBytes = _utf8.encode(String(f.name || 'file'));
-    const data = f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data || []);
+    const nameBytes = _utf8.encode(String(f.name));
+    const data = f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data);
     const crc = _crc32(data);
     const { time, date } = _dosTimeDate(f.mtime);
 

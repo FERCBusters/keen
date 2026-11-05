@@ -200,7 +200,7 @@
       "count": 1
     },
     "no-unsanitized/property": {
-      "count": 42
+      "count": 41
     }
   },
   "services/ui/public/pages/mitigator.js": {

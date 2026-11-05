@@ -25,13 +25,11 @@ export function createEvidenceSelection({ container, bar, selectAllWrap, statusE
   }
 
   function render() {
-    if (!bar) return;
     bar.hidden = selected.size === 0;
     if (count) count.textContent = `${selected.size} selected`;
   }
 
   function setBox(box, on) {
-    if (!box.value) return;
     if (on) {
       if (selected.size >= MAX_SELECTED_EVIDENCE && !selected.has(box.value)) {
         toast(
@@ -57,7 +55,6 @@ export function createEvidenceSelection({ container, bar, selectAllWrap, statusE
 
   function toggle(box, { shiftKey } = {}) {
     const index = boxes().indexOf(box);
-    if (index < 0) return;
     if (shiftKey && lastIndex >= 0) {
       applyRange(lastIndex, index, box.checked);
     } else {
@@ -77,10 +74,6 @@ export function createEvidenceSelection({ container, bar, selectAllWrap, statusE
     lastIndex = -1;
     render();
     syncRows();
-  }
-
-  if (!bar || !selectAllWrap) {
-    return { enabled: false, rendered() {}, clear() {}, ids: () => [] };
   }
 
   container.addEventListener('click', (ev) => {
@@ -115,7 +108,6 @@ export function createEvidenceSelection({ container, bar, selectAllWrap, statusE
       syncRows();
       render();
     },
-    count: () => selected.size,
     ids: () => [...selected],
     clear,
   };

@@ -65,17 +65,14 @@ const exporter = createEvidenceExporter({
 // ------------------------------------------------------------------
 // Evidence file naming (PDF/ZIP)
 // ------------------------------------------------------------------
+// API payloads are parsed JSON, which always serialises again.
 function pretty(obj) {
-  try {
-    return JSON.stringify(obj, null, 2);
-  } catch {
-    return String(obj);
-  }
+  return JSON.stringify(obj, null, 2);
 }
 
 function setText(id, val) {
   const el = document.getElementById(id);
-  el.textContent = val ?? '-';
+  el.textContent = val;
 }
 
 let currentEvent = null;
@@ -114,14 +111,14 @@ function ruleSettingsHref(ruleId) {
 // another framework that cross-references this one. That control, and the rule
 // that mapped the event to it, explain why the event counts here.
 function inheritedRationaleHtml(c) {
-  const from = c.inherited_from || {};
+  const from = c.inherited_from;
   const label = [from.framework, from.ref].filter(Boolean).join(' ');
   const links = !PRINT_MODE;
   let source = "Another framework's control";
   if (links && from.control_id) {
     const href = withFramework(
       `/control.html?id=${encodeURIComponent(from.control_id)}`,
-      from.framework || pageFramework,
+      from.framework,
     );
     source = `<a href="${esc(href)}" title="${esc(label)}">${source}</a>`;
   } else if (label) {
@@ -160,7 +157,6 @@ for (const [name, tabId] of Object.entries(EVENT_TABS)) {
 
 function renderDiaryEvidence(e) {
   const block = document.getElementById('diaryBlock');
-  if (!block) return;
 
   if ((e?.source || '') !== 'diary') {
     block.style.display = 'none';
@@ -168,8 +164,9 @@ function renderDiaryEvidence(e) {
     return;
   }
 
-  const np = e?.normalized_payload || {};
-  const details = np && typeof np === 'object' ? np.details || {} : {};
+  // The diary service stores an object payload, with any details as an object.
+  const np = e.normalized_payload;
+  const details = np.details || {};
   const notes =
     details && typeof details === 'object' && typeof details.notes === 'string'
       ? details.notes
@@ -184,16 +181,9 @@ function renderDiaryEvidence(e) {
           <div class="mb-3">${esc(notes).replaceAll('\n', '<br>')}</div>
         `;
   } else if (details && typeof details === 'object' && Object.keys(details).length) {
-    const pretty = (() => {
-      try {
-        return JSON.stringify(details, null, 2);
-      } catch {
-        return String(details);
-      }
-    })();
     html += `
           <div class="fw-bold mb-2">Diary details</div>
-          <pre class="pretty mono mb-3">${esc(pretty)}</pre>
+          <pre class="pretty mono mb-3">${esc(pretty(details))}</pre>
         `;
   }
 
@@ -240,7 +230,7 @@ let editAllControlsFramework = null;
 let editSelected = [];
 
 function editControlLabel(item) {
-  return `${item?.type === 'clause' ? 'Clause ' : ''}${item?.ref || ''}`;
+  return `${item?.type === 'clause' ? 'Clause ' : ''}${item?.ref}`;
 }
 
 function editSortSelected() {
@@ -250,13 +240,11 @@ function editSortSelected() {
 }
 
 async function loadAllControlsOnce(frameworkSlug = null) {
-  const fw =
-    String(frameworkSlug || pageFramework || getCurrentFramework() || '').trim() ||
-    'iso_27001_2022';
+  const fw = String(frameworkSlug || getCurrentFramework()).trim() || 'iso_27001_2022';
   if (editAllControls && editAllControlsFramework === fw) return editAllControls;
   try {
     const res = await apiGet(`/api/v1/controls?framework=${encodeURIComponent(fw)}&limit=5000`);
-    editAllControls = (res.items || []).filter((it) => it.id && it.ref);
+    editAllControls = res.items.filter((it) => it.id && it.ref);
     editAllControlsFramework = fw;
   } catch {
     editAllControls = [];
@@ -268,7 +256,6 @@ async function loadAllControlsOnce(frameworkSlug = null) {
 const editLinksWrap = document.getElementById('editDiaryLinks');
 
 function editAddLinkRow(url = '', text = '') {
-  if (!editLinksWrap) return;
   const row = document.createElement('div');
   row.className = 'row g-2 align-items-end';
   row.setAttribute('data-link-row', '1');
@@ -290,7 +277,6 @@ function editAddLinkRow(url = '', text = '') {
 }
 
 function editReadLinks() {
-  if (!editLinksWrap) return [];
   const links = [];
   editLinksWrap.querySelectorAll('[data-link-row]').forEach((row) => {
     const url = (row.querySelector('[data-link-url]')?.value || '').trim();
@@ -302,7 +288,6 @@ function editReadLinks() {
 
 function editRenderSelected() {
   const wrap = document.getElementById('editControlSelected');
-  if (!wrap) return;
   wrap.innerHTML = editSelected
     .map(
       (item) => `
@@ -325,7 +310,6 @@ function editRenderSelected() {
 
 function editRenderResults(items) {
   const resEl = document.getElementById('editControlResults');
-  if (!resEl) return;
   if (!items.length) {
     resEl.innerHTML = '';
     return;
@@ -344,8 +328,8 @@ function editRenderResults(items) {
   resEl.querySelectorAll('[data-add]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-add');
-      const chosen = (editAllControls || []).find((item) => item.id === id);
-      if (!chosen) return;
+      // Results come from the loaded catalogue.
+      const chosen = editAllControls.find((item) => item.id === id);
       if (!editSelected.some((item) => item.id === id)) editSelected.push(chosen);
       editSortSelected();
       editRenderSelected();
@@ -355,22 +339,21 @@ function editRenderResults(items) {
 
 async function openEditDiaryModal() {
   const e = currentEvent;
-  if (!e || (e.source || '') !== 'diary') return;
+  if (!e || e.source !== 'diary') return;
   if (!me?.is_admin) return;
 
   const modalEl = document.getElementById('editDiaryModal');
-  if (!modalEl) return;
 
   // Prefill fields
-  const np = e.normalized_payload || {};
+  const np = e.normalized_payload;
   const sum =
     (np.summary || '').trim() ||
-    String(e.summary || '')
+    String(e.summary)
       .replace(/^diary:\s*/i, '')
       .trim();
   document.getElementById('editDiarySummary').value = sum;
 
-  const details = np.details || {};
+  const details = np.details;
   const notes =
     details && typeof details === 'object' && typeof details.notes === 'string'
       ? details.notes
@@ -379,11 +362,7 @@ async function openEditDiaryModal() {
   if (detailsEl) {
     if (notes) detailsEl.value = notes;
     else if (details && typeof details === 'object' && Object.keys(details).length) {
-      try {
-        detailsEl.value = JSON.stringify(details, null, 2);
-      } catch {
-        detailsEl.value = String(details);
-      }
+      detailsEl.value = pretty(details);
     } else {
       detailsEl.value = '';
     }
@@ -409,7 +388,7 @@ async function openEditDiaryModal() {
   // Controls selection
   editSelected = [
     ...new Map(
-      (e.controls || [])
+      e.controls
         .filter((c) => c.id && c.ref)
         .map((c) => [c.id, { id: c.id, ref: c.ref, type: c.type }]),
     ).values(),
@@ -461,7 +440,7 @@ async function openEditDiaryModal() {
         const summary = document.getElementById('editDiarySummary').value.trim();
         if (!summary) throw new Error('Missing summary');
 
-        const detailsText = (document.getElementById('editDiaryDetails').value || '').trim();
+        const detailsText = document.getElementById('editDiaryDetails').value.trim();
         let detailsPayload = detailsText;
         if (detailsText && (detailsText.startsWith('{') || detailsText.startsWith('['))) {
           try {
@@ -488,40 +467,26 @@ async function openEditDiaryModal() {
         const res = await apiPatch(`/api/v1/admin/diary/${encodeURIComponent(e.id)}`, payload);
 
         // Close modal + refresh
-        try {
-          const inst = window.bootstrap?.Modal?.getOrCreateInstance(modalEl);
-          inst?.hide();
-        } catch {}
+        window.bootstrap?.Modal?.getOrCreateInstance(modalEl)?.hide();
 
         toast(status, 'Diary entry updated', 'success');
         await load();
       } catch (err) {
-        const msg = errorText(err);
-        if (modalStatus) {
-          modalStatus.className = 'alert alert-danger';
-          modalStatus.textContent = msg;
-          modalStatus.style.display = '';
-        } else {
-          toast(status, msg, 'danger');
-        }
+        modalStatus.className = 'alert alert-danger';
+        modalStatus.textContent = errorText(err);
+        modalStatus.style.display = '';
       }
     });
   }
 
   // Show modal
-  try {
-    const inst = window.bootstrap?.Modal?.getOrCreateInstance(modalEl);
-    inst?.show();
-  } catch {
-    modalEl.style.display = '';
-  }
+  window.bootstrap?.Modal?.getOrCreateInstance(modalEl)?.show();
 }
 
 function renderIncidents(items) {
   const card = document.getElementById('incidentsCard');
   const body = document.getElementById('incidents');
-  if (!card || !body) return;
-  const arr = Array.isArray(items) ? items : [];
+  const arr = items;
   setEventTab('incidents', arr.length > 0, arr.length);
   if (!arr.length) {
     card.style.display = 'none';
@@ -538,7 +503,7 @@ function renderIncidents(items) {
       const shortText = text.length > 350 ? `${text.slice(0, 350)}…` : text;
       const deleteBtn = canDelete
         ? `
-          <button class="btn btn-sm btn-outline-danger" type="button" data-incident-delete="${esc(i.id || '')}" title="Delete incident">
+          <button class="btn btn-sm btn-outline-danger" type="button" data-incident-delete="${esc(i.id)}" title="Delete incident">
             <i class="bi bi-trash" aria-hidden="true"></i> Delete
           </button>`
         : '';
@@ -558,12 +523,8 @@ function renderIncidents(items) {
     .join('');
 }
 
+// Delete buttons are drawn, with incident ids, only for accounts that may delete.
 async function deleteIncident(incidentId) {
-  if (!currentEvent || !incidentId) return;
-  if (!(me?.is_admin || me?.can_delete_incidents)) {
-    toast(status, 'incident.delete permission required.', 'danger');
-    return;
-  }
   const ok = await confirmAction({
     title: 'Delete incident reference',
     message: 'Delete this incident reference from Keen?',
@@ -574,8 +535,8 @@ async function deleteIncident(incidentId) {
     await apiDelete(
       `/api/v1/events/${encodeURIComponent(currentEvent.id)}/incidents/${encodeURIComponent(incidentId)}`,
     );
-    currentEvent.incidents = (currentEvent.incidents || []).filter(
-      (item) => String(item.id || '') !== String(incidentId),
+    currentEvent.incidents = currentEvent.incidents.filter(
+      (item) => String(item.id) !== String(incidentId),
     );
     renderIncidents(currentEvent.incidents);
     toast(status, 'Incident deleted.', 'success');
@@ -587,7 +548,7 @@ async function deleteIncident(incidentId) {
 document.getElementById('incidents')?.addEventListener('click', (ev) => {
   const btn = ev.target?.closest?.('[data-incident-delete]');
   if (!btn) return;
-  deleteIncident(btn.getAttribute('data-incident-delete') || '');
+  deleteIncident(btn.getAttribute('data-incident-delete'));
 });
 
 const SUGGESTED_PRESELECT = 3;
@@ -605,14 +566,13 @@ function renderSuggestedControls(e, data) {
   const meta = document.getElementById('suggestedControlsMeta');
   const actions = document.getElementById('suggestedControlsActions');
   const propose = document.getElementById('suggestedControlsPropose');
-  const items = Array.isArray(data?.items) ? data.items : [];
+  const items = data.items;
   const canPropose = !!me?.is_admin && !PRINT_MODE;
   if (meta) {
     meta.textContent = items.length
-      ? `Catalogue matches in ${data?.framework || pageFramework} for this event's wording. Review each one; nothing is mapped until a rule is saved.`
-      : `No clear catalogue matches in ${data?.framework || pageFramework} for this event's wording. Search the controls list or describe the evidence in the mapping editor.`;
+      ? `Catalogue matches in ${data.framework} for this event's wording. Review each one; nothing is mapped until a rule is saved.`
+      : `No clear catalogue matches in ${data.framework} for this event's wording. Search the controls list or describe the evidence in the mapping editor.`;
   }
-  if (!list) return;
   list.replaceChildren();
   items.forEach((item, index) => {
     const row = document.createElement('label');
@@ -621,9 +581,9 @@ function renderSuggestedControls(e, data) {
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.className = 'form-check-input mt-1 flex-shrink-0';
-      box.value = String(item.ref || '');
+      box.value = String(item.ref);
       box.checked = index < SUGGESTED_PRESELECT;
-      box.setAttribute('aria-label', `Include ${item.ref || 'control'} in the proposed rule`);
+      box.setAttribute('aria-label', `Include ${item.ref} in the proposed rule`);
       row.append(box);
     }
     const body = document.createElement('div');
@@ -631,23 +591,22 @@ function renderSuggestedControls(e, data) {
     const link = document.createElement('a');
     link.className = 'badge badge-soft me-2';
     link.href = withFramework(
-      `/control.html?id=${encodeURIComponent(item.id || '')}`,
+      `/control.html?id=${encodeURIComponent(item.id)}`,
       item.framework || pageFramework,
     );
-    link.textContent = String(item.ref || 'Control');
+    link.textContent = String(item.ref);
     const name = document.createElement('span');
     name.textContent = String(item.title || '');
     title.append(link, name);
     const reason = document.createElement('div');
     reason.className = 'small-muted';
-    reason.textContent = String(item.reason || '');
+    reason.textContent = String(item.reason);
     body.append(title, reason);
     row.append(body);
     list.append(row);
   });
   if (actions) actions.hidden = !(canPropose && items.length);
   const sync = () => {
-    if (!propose) return;
     const refs = [...list.querySelectorAll('input[type="checkbox"]:checked')].map((b) => b.value);
     propose.href = proposeRuleHref(e.id, refs);
     propose.textContent = refs.length
@@ -681,7 +640,7 @@ function setupSuggestedControls(e, controls) {
   const meta = document.getElementById('suggestedControlsMeta');
   if (!wrap || PRINT_MODE || !e?.id) return;
   wrap.hidden = false;
-  if (!(controls || []).length) {
+  if (!controls.length) {
     loadSuggestedControls(e);
     return;
   }
@@ -719,7 +678,7 @@ async function load() {
     currentEvent = e;
 
     document.getElementById('summary').textContent = e.summary || '(no summary)';
-    const srcLabel = e.source ? sourceLabel(e.source, sourceMeta) || e.source : 'unknown';
+    const srcLabel = e.source ? sourceLabel(e.source, sourceMeta) : 'unknown';
     document.getElementById('meta').textContent = `${srcLabel} · ${fmtTs(e.timestamp)}`;
 
     setText('ts', fmtTs(e.timestamp));
@@ -767,7 +726,7 @@ async function load() {
     const controlsEl = document.getElementById('controls');
     const rationaleEl = document.getElementById('rationale');
 
-    const controls = e.controls || [];
+    const controls = e.controls;
     if (!qs('framework')) {
       const inferred = String(controls?.[0]?.framework || '').trim();
       if (inferred) pageFramework = inferred;
@@ -865,7 +824,7 @@ async function load() {
     showStories(e.id);
 
     // Artifacts list
-    const arts = e.artifacts || [];
+    const arts = e.artifacts;
     const artsEl = document.getElementById('artifacts');
 
     // Show/hide the ZIP evidence button depending on whether we have artifacts.
@@ -874,10 +833,8 @@ async function load() {
 
     // Inline previews for attached images + PDFs (useful for diary evidence)
     const previewsEl = document.getElementById('imagePreviews');
-    const imgArts = arts.filter((a) => (a.content_type || '').toLowerCase().startsWith('image/'));
-    const pdfArts = arts.filter((a) =>
-      (a.content_type || '').toLowerCase().includes('application/pdf'),
-    );
+    const imgArts = arts.filter((a) => a.content_type.toLowerCase().startsWith('image/'));
+    const pdfArts = arts.filter((a) => a.content_type.toLowerCase().includes('application/pdf'));
 
     if (imgArts.length || pdfArts.length) {
       previewsEl.style.display = '';
@@ -952,8 +909,8 @@ async function load() {
                       (a) => `
                     <tr>
                       <td class="small-muted">${esc(fmtTs(a.captured_at))}</td>
-                      <td><span class="badge badge-chip">${esc(a.kind || 'artifact')}</span></td>
-                      <td class="small-muted">${esc(a.content_type || 'application/octet-stream')}</td>
+                      <td><span class="badge badge-chip">${esc(a.kind)}</span></td>
+                      <td class="small-muted">${esc(a.content_type)}</td>
                       <td class="small-muted">${esc(a.size_bytes ?? '-')}</td>
                       <td class="no-print"><a class="btn btn-sm btn-outline-primary" href="/api/v1/artifacts/${encodeURIComponent(a.id)}/download">Download</a></td>
                     </tr>
@@ -970,7 +927,7 @@ async function load() {
     await questionThreads.refresh();
 
     // JSON panes
-    renderJson(document.getElementById('normalized'), pretty(e.normalized_payload ?? {}));
+    renderJson(document.getElementById('normalized'), pretty(e.normalized_payload));
     renderJson(document.getElementById('raw'), pretty(e.raw_pointer ?? {}));
 
     // A deep link opens its tab once the tabs know what they hold; a linked
@@ -1014,7 +971,7 @@ const auditSampleCreate = document.getElementById('auditSampleCreate');
 
 function _currentEventRelativeUrl() {
   const fw = pageFramework || getCurrentFramework();
-  return withFramework(`/event.html?id=${encodeURIComponent(currentEvent?.id || id)}`, fw);
+  return withFramework(`/event.html?id=${encodeURIComponent(currentEvent.id)}`, fw);
 }
 
 function canViewAuditEngagements() {
@@ -1024,8 +981,7 @@ function canViewAuditEngagements() {
 function renderAuditSamples(items) {
   const card = document.getElementById('auditSamplesCard');
   const body = document.getElementById('auditSamples');
-  const arr = Array.isArray(items) ? items : [];
-  if (!card || !body) return;
+  const arr = items;
   setEventTab('audits', arr.length > 0, arr.length);
   if (!arr.length) {
     card.style.display = 'none';
@@ -1036,11 +992,11 @@ function renderAuditSamples(items) {
   card.style.display = '';
   body.innerHTML = `<div class="list-group">${arr
     .map((x) => {
-      const a = x.audit || {};
-      const ev = x.evidence || {};
+      const a = x.audit;
+      const ev = x.evidence;
       const url = withFramework(
         `/audit.html?id=${encodeURIComponent(a.id || '')}`,
-        a.framework_slug || pageFramework || getCurrentFramework(),
+        a.framework_slug || pageFramework,
       );
       const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ');
       const meta = [
@@ -1097,7 +1053,7 @@ async function refreshAuditSamples(eventId) {
   }
   try {
     const data = await apiGet(`/api/v1/audits/by-event/${encodeURIComponent(eventId)}`);
-    renderAuditSamples(data?.items || []);
+    renderAuditSamples(data.items);
   } catch (e) {
     // Do not block the evidence view if audit visibility is unavailable.
     if (card) card.style.display = 'none';
@@ -1133,17 +1089,14 @@ async function openAuditSampleModal() {
     try {
       const fw = pageFramework || getCurrentFramework();
       const data = await apiGet(`/api/v1/audits?framework=${encodeURIComponent(fw)}&limit=500`);
-      const items = (data?.items || []).filter(
-        (a) => isAuditActive(a) && canEditAuditForUser(me, a),
-      );
+      const items = data.items.filter((a) => isAuditActive(a) && canEditAuditForUser(me, a));
       auditSampleSelect.innerHTML =
         items
           .map((a) => {
             const dates = [a.start_date, a.end_date].filter(Boolean).join(' → ');
             const suffix = dates ? ` · ${dates}` : '';
-            const statusSuffix =
-              (a.status || 'open') === 'in_progress' ? ' · In progress' : ' · Open';
-            return `<option value="${esc(a.id)}">${esc(a.title || 'Audit')}${esc(suffix)}${esc(statusSuffix)}</option>`;
+            const statusSuffix = a.status === 'in_progress' ? ' · In progress' : ' · Open';
+            return `<option value="${esc(a.id)}">${esc(a.title)}${esc(suffix)}${esc(statusSuffix)}</option>`;
           })
           .join('') || '<option value="">No open or in-progress audits - start one first</option>';
       preselectSamplingAudit(auditSampleSelect);
@@ -1152,7 +1105,7 @@ async function openAuditSampleModal() {
       if (auditSampleUseCurrentUrl) auditSampleUseCurrentUrl.disabled = !items.length;
       if (!items.length) {
         toast(
-          auditSampleStatus || status,
+          auditSampleStatus,
           'No open or in-progress audits are available. Start an Audit first, then sample this event into it.',
           'warning',
         );
@@ -1162,7 +1115,7 @@ async function openAuditSampleModal() {
       if (auditSampleSubmit) auditSampleSubmit.disabled = true;
       if (auditSampleNotes) auditSampleNotes.disabled = true;
       if (auditSampleUseCurrentUrl) auditSampleUseCurrentUrl.disabled = true;
-      toast(auditSampleStatus || status, `Failed to load audits: ${errorText(e)}`, 'danger');
+      toast(auditSampleStatus, `Failed to load audits: ${errorText(e)}`, 'danger');
     }
   }
 
@@ -1174,15 +1127,11 @@ async function openAuditSampleModal() {
 async function submitAuditSample() {
   const auditId = (auditSampleSelect?.value || '').trim();
   if (!auditId) {
-    toast(
-      auditSampleStatus || status,
-      'Start an Audit first, then sample this event into it.',
-      'warning',
-    );
+    toast(auditSampleStatus, 'Start an Audit first, then sample this event into it.', 'warning');
     return;
   }
   const btn = auditSampleSubmit;
-  const prev = btn?.textContent || '';
+  const prev = btn.textContent;
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Sampling';
@@ -1203,11 +1152,11 @@ async function submitAuditSample() {
       window.bootstrap.Modal.getOrCreateInstance(auditSampleModalEl).hide();
     }
   } catch (e) {
-    toast(auditSampleStatus || status, `Failed: ${errorText(e)}`, 'danger');
+    toast(auditSampleStatus, `Failed: ${errorText(e)}`, 'danger');
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = prev || 'Sample into audit';
+      btn.textContent = prev;
     }
   }
 }
@@ -1226,7 +1175,6 @@ const incidentStatusEl = document.getElementById('incidentStatus');
 const incidentSubmitBtn = document.getElementById('incidentSubmit');
 
 function updateIncidentTextCount() {
-  if (!incidentTextEl || !incidentTextCountEl) return;
   incidentTextCountEl.textContent = String(incidentTextEl.value.length || 0);
 }
 
@@ -1259,24 +1207,24 @@ function sanitizePlainText(value, maxChars) {
   txt = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   txt = txt.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
   txt = txt.trim();
-  const max = Number(maxChars || 0);
+  const max = Number(maxChars);
   if (max > 0 && txt.length > max) txt = txt.slice(0, max);
   return txt;
 }
 
 async function submitIncident() {
   if (!currentEvent) {
-    toast(incidentStatusEl || status, 'Event not loaded yet.', 'warning');
+    toast(incidentStatusEl, 'Event not loaded yet.', 'warning');
     return;
   }
-  const title = sanitizePlainText(incidentTitleEl?.value || '', 256);
-  const text = sanitizePlainText(incidentTextEl?.value || '', 5000);
+  const title = sanitizePlainText(incidentTitleEl.value, 256);
+  const text = sanitizePlainText(incidentTextEl.value, 5000);
   if (!title) {
-    toast(incidentStatusEl || status, 'Title is required.', 'warning');
+    toast(incidentStatusEl, 'Title is required.', 'warning');
     return;
   }
   const btn = incidentSubmitBtn;
-  const prev = btn?.textContent || '';
+  const prev = btn.textContent;
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Creating';
@@ -1288,7 +1236,7 @@ async function submitIncident() {
     });
     const incident = res?.incident;
     if (incident) {
-      currentEvent.incidents = [incident, ...(currentEvent.incidents || [])];
+      currentEvent.incidents = [incident, ...currentEvent.incidents];
       renderIncidents(currentEvent.incidents);
     }
     toast(status, 'Incident created from event.', 'success');
@@ -1296,11 +1244,11 @@ async function submitIncident() {
       window.bootstrap.Modal.getOrCreateInstance(incidentModalEl).hide();
     }
   } catch (e) {
-    toast(incidentStatusEl || status, `Failed to create incident: ${errorText(e)}`, 'danger');
+    toast(incidentStatusEl, `Failed to create incident: ${errorText(e)}`, 'danger');
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = prev || 'Create incident';
+      btn.textContent = prev;
     }
   }
 }
@@ -1321,8 +1269,8 @@ const questionThreads = mountQuestionThreads({
   status,
   attachments: true,
   placeholder: 'e.g. What was this about?',
-  base: () =>
-    currentEvent?.id ? `/api/v1/events/${encodeURIComponent(currentEvent.id)}/questions` : null,
+  // The panel asks for its address once the event has loaded.
+  base: () => `/api/v1/events/${encodeURIComponent(currentEvent.id)}/questions`,
   // The print window leaves unread replies for the author to read on screen.
   markSeen: !PRINT_MODE,
   onCount: (count) => setEventTab('questions', featureEnabled(me, 'questions'), count),

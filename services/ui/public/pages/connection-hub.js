@@ -30,11 +30,7 @@ function showError(e) {
   const el = byId('status');
   el.hidden = false;
   el.className = 'alert alert-danger';
-  let text = errorText(e);
-  try {
-    text = JSON.parse(text).detail || text;
-  } catch {}
-  el.textContent = text;
+  el.textContent = errorText(e);
 }
 function go(source, create = false, connection = null, input = null) {
   showSurface('mapping');
@@ -64,11 +60,6 @@ async function load() {
     source: c.name,
     type: 'Environment default',
     collectors: definitions.collectors.filter((x) => x.adapter === c.name && !x.connection_id),
-    rules: definitions.rules.filter(
-      (x) =>
-        x.when?.source === c.name ||
-        (c.name === 'webhooks' && x.when?.source?.startsWith('webhook:')),
-    ),
     demo: integrations.demo_mode,
   }));
   for (const c of named.connections)
@@ -81,7 +72,6 @@ async function load() {
         ' · ' +
         (c.configuration.base_url || 'Account connection'),
       collectors: definitions.collectors.filter((x) => x.connection_id === c.id),
-      rules: definitions.rules.filter((x) => x.when?.connection_id === c.id),
       connection: c,
       demo: integrations.demo_mode,
     });
@@ -94,7 +84,6 @@ async function load() {
       source: 'API integrations',
       type: c.base_url,
       collectors,
-      rules: definitions.rules.filter((x) => sources.includes(x.when?.source)),
       sources,
       demo: integrations.demo_mode,
     });
@@ -241,7 +230,6 @@ byId('source').onclick = () => {
 };
 byId('search').oninput = render;
 byId('refresh').onclick = () => load().catch(showError);
-byId('cancel').onclick = () => byId('confirm').close();
 window.addEventListener('keen-connections-changed', () => load().catch(showError));
 // Admin page already enforces authentication; load once and offer explicit refresh.
 load().catch(showError);
@@ -432,7 +420,6 @@ window.addEventListener('keen-manage-source', (event) => {
   byId('search').value = event.detail?.source || '';
   showSurface('source');
   render();
-  for (const section of byId('list').querySelectorAll('details')) section.open = true;
   byId('search').focus();
 });
 

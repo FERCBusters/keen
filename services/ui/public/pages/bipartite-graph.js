@@ -6,10 +6,7 @@ import { esc } from '/app.js';
 // Wraps a label onto at most `maxLines` lines of about `maxChars`, ending with
 // an ellipsis when words are dropped.
 export function splitLabel(value, maxChars = 34, maxLines = 2) {
-  const text =
-    String(value || '-')
-      .replace(/\s+/g, ' ')
-      .trim() || '-';
+  const text = String(value).replace(/\s+/g, ' ').trim() || '-';
   if (text.length <= maxChars) return [text];
   const words = text.split(' ');
   const lines = [];
@@ -25,7 +22,6 @@ export function splitLabel(value, maxChars = 34, maxLines = 2) {
     }
   }
   if (lines.length < maxLines && current) lines.push(current);
-  if (!lines.length) lines.push(text.slice(0, maxChars));
   if (lines.join(' ').length < text.length) {
     // Words were dropped: always mark the cut, even when the last line is short.
     const last = lines.length - 1;
@@ -60,7 +56,7 @@ export function addSvgText(
     .attr('fill', 'currentColor')
     .attr('opacity', opacity);
   if (underline) text.style('text-decoration', 'underline');
-  (lines || ['-']).forEach((line, idx) => {
+  lines.forEach((line, idx) => {
     text
       .append('tspan')
       .attr('x', x)

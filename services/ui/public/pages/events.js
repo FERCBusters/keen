@@ -56,17 +56,13 @@ function coerceLimit(requested) {
 
 // Admin-only shortcut: jump straight to the Diary section.
 // Kept out of the HTML so non-admin users never see it.
-try {
-  const actions = document.getElementById('eventsActions');
-  if (actions && me?.is_admin) {
-    const a = document.createElement('a');
-    a.className = 'btn btn-outline-primary';
-    a.href = withFramework('/admin.html#diary', framework);
-    a.textContent = 'Add diary entry';
-    actions.prepend(a);
-  }
-} catch {
-  // non-fatal
+const actions = document.getElementById('eventsActions');
+if (actions && me?.is_admin) {
+  const a = document.createElement('a');
+  a.className = 'btn btn-outline-primary';
+  a.href = withFramework('/admin.html#diary', framework);
+  a.textContent = 'Add diary entry';
+  actions.prepend(a);
 }
 
 const autoApplyFilters = !!me?.preferences?.auto_apply_filters;
@@ -75,11 +71,11 @@ const status = document.getElementById('status');
 const tbody = document.getElementById('rows');
 const meta = document.getElementById('resultMeta');
 
-const pageTitleEl = document.getElementById('pageTitle') || document.querySelector('main h1');
+const pageTitleEl = document.getElementById('pageTitle');
 
+// A reference from a filter list: never blank.
 function controlHeading(ref) {
-  const r = String(ref || '').trim();
-  if (!r) return '';
+  const r = String(ref).trim();
   const title = String(controlsIndex?.[r]?.title || '').trim();
   // Include BOTH reference + title when we have it.
   return title ? `${r} - ${title}` : r;
@@ -97,19 +93,17 @@ function describeList(values, one, many) {
   return `${values.length} ${many}`;
 }
 
-function updatePageTitle({ source, control, clause } = {}) {
+function updatePageTitle({ source, control } = {}) {
   const sources = splitList(source !== undefined ? source : state.source);
   const controls = splitList(control !== undefined ? control : state.control);
-  const clauses = splitList(clause !== undefined ? clause : state.clause);
+  const clauses = splitList(state.clause);
   const rules = splitList(state.rule);
 
   let heading = 'Events';
   if (sources.length || controls.length || clauses.length || rules.length) {
     const parts = [];
     if (sources.length)
-      parts.push(
-        describeList(sources, (src) => String(sourceLabel(src, sourceMeta) || src), 'sources'),
-      );
+      parts.push(describeList(sources, (src) => String(sourceLabel(src, sourceMeta)), 'sources'));
     if (controls.length)
       parts.push(describeList(controls, (ref) => `control ${controlHeading(ref)}`, 'controls'));
     if (clauses.length) parts.push(describeList(clauses, (ref) => `clause ${ref}`, 'clauses'));
@@ -282,14 +276,13 @@ function setPickerOptions(el, options, selected, describe) {
 }
 
 function isIsoDateStr(v) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim());
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(v).trim());
 }
 
-// Parse a date entered as YYYY-MM-DD.
+// Parse a date field's non-empty value as YYYY-MM-DD.
 // Returns YYYY-MM-DD or "" if invalid.
 function parseIsoDate(v) {
-  const raw = String(v || '').trim();
-  if (!raw) return '';
+  const raw = String(v).trim();
   return isIsoDateStr(raw) ? raw : '';
 }
 
@@ -336,16 +329,16 @@ function syncInputs() {
 async function loadSources() {
   try {
     const data = await apiGet('/api/v1/sources/meta');
-    const items = (data.items || []).filter((x) => x.source);
+    const items = data.items.filter((x) => x.source);
 
     // Build a lightweight source metadata map without triggering source aggregates.
+    // The API labels every source, by default from its name.
     sourceMeta = {};
     for (const x of items) {
-      const src = String(x.source || '').trim();
-      if (!src) continue;
+      const src = String(x.source).trim();
       sourceMeta[src] = {
         source: src,
-        label: String(x.label || src).trim() || src,
+        label: String(x.label).trim(),
         color: String(x.color || '').trim(),
       };
     }
@@ -353,7 +346,7 @@ async function loadSources() {
       selSource,
       items.map((x) => {
         const src = x.source;
-        const label = String(x.label || sourceLabel(src, sourceMeta) || src);
+        const label = String(x.label);
         return { value: src, label: label && label !== src ? `${label} (${src})` : src };
       }),
       splitList(state.source),
@@ -370,13 +363,12 @@ async function loadControls() {
     const data = await apiGet(
       `/api/v1/controls?limit=5000&framework=${encodeURIComponent(framework)}`,
     );
-    const items = (data.items || []).filter((c) => c.ref);
+    const items = data.items.filter((c) => c.ref);
 
     controlsIndex = {};
     for (const c of items) {
-      const ref = String(c.ref || '').trim();
-      if (!ref) continue;
-      controlsIndex[ref] = { ref, title: String(c.title || '').trim(), type: c.type || 'control' };
+      const ref = String(c.ref).trim();
+      controlsIndex[ref] = { ref, title: String(c.title || '').trim(), type: c.type };
     }
 
     setPickerOptions(
@@ -384,7 +376,7 @@ async function loadControls() {
       items.map((c) => ({
         value: c.ref,
         label: c.title ? `${c.ref} - ${c.title}` : c.ref,
-        title: `${c.type || 'control'}: ${c.title ? `${c.ref} - ${c.title}` : c.ref}`,
+        title: `${c.type}: ${c.title ? `${c.ref} - ${c.title}` : c.ref}`,
       })),
       splitList(state.control),
       (value) => ({ value, label: `Current filter: ${value}` }),
@@ -399,27 +391,23 @@ async function loadControls() {
 }
 
 function renderSourceOptions(facets) {
-  const rows = (Array.isArray(facets) ? facets : []).filter(
-    (r) => r && r.source && Number(r.count || 0) > 0,
-  );
+  const rows = facets.filter((r) => r && r.source && Number(r.count) > 0);
   setPickerOptions(
     selSource,
     rows.map((r) => {
       const src = String(r.source);
-      const label = String(sourceLabel(src, sourceMeta) || src);
+      const label = String(sourceLabel(src, sourceMeta));
       const text = label && label !== src ? `${label} (${src})` : src;
-      return { value: src, label: `${text} (${Number(r.count || 0)})` };
+      return { value: src, label: `${text} (${Number(r.count)})` };
     }),
     splitList(state.source),
     // Preserve current selection even if it yields zero results under other filters.
-    (value) => ({ value, label: `${sourceLabel(value, sourceMeta) || value} (0)` }),
+    (value) => ({ value, label: `${sourceLabel(value, sourceMeta)} (0)` }),
   );
 }
 
 function renderControlOptions(facets) {
-  const rows = (Array.isArray(facets) ? facets : []).filter(
-    (r) => r && String(r.ref || '').trim() && Number(r.count || 0) > 0,
-  );
+  const rows = facets.filter((r) => r && String(r.ref).trim() && Number(r.count) > 0);
   setPickerOptions(
     selControl,
     rows.map((r) => {
@@ -431,7 +419,7 @@ function renderControlOptions(facets) {
       const label = title ? `${ref} - ${title}` : ref;
       return {
         value: ref,
-        label: `${label} (${Number(r.count || 0)})`,
+        label: `${label} (${Number(r.count)})`,
         title: `${type}: ${label}`,
       };
     }),
@@ -441,18 +429,16 @@ function renderControlOptions(facets) {
 }
 
 function renderRuleOptions(facets) {
-  const rows = (Array.isArray(facets) ? facets : []).filter(
-    (r) => r && String(r.rule_id || '').trim() && Number(r.count || 0) > 0,
-  );
+  const rows = facets.filter((r) => r && String(r.rule_id).trim() && Number(r.count) > 0);
   setPickerOptions(
     selRule,
     rows.map((r) => {
       const id = String(r.rule_id).trim();
       const description = String(r.description || '').trim();
-      const targets = (r.targets || []).join(', ');
+      const targets = r.targets.join(', ');
       return {
         value: id,
-        label: `${description ? `${id} - ${description}` : id} (${Number(r.count || 0)})`,
+        label: `${description ? `${id} - ${description}` : id} (${Number(r.count)})`,
         title: targets ? `${id} maps to ${targets}` : id,
       };
     }),
@@ -492,7 +478,7 @@ function reloadWithFacets(resetOffset = true) {
 function renderRows(items) {
   tbody.innerHTML = '';
   for (const e of items) {
-    const controls = e.controls || [];
+    const controls = e.controls;
     const max = 4;
     const shown = controls.slice(0, max);
     const more = controls.length > max ? controls.length - max : 0;
@@ -504,13 +490,14 @@ function renderRows(items) {
             `<a class="badge badge-soft me-1 mb-1" href="${withFramework(
               `/control.html?id=${encodeURIComponent(c.id)}`,
               framework,
-            )}" title="${esc(c.title || '')}">${esc(c.ref)}</a>`,
+            )}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
         )
         .join('') + (more ? `<span class="badge text-bg-light">+${more}</span>` : '');
 
-    const sourceHref = e.source
-      ? withFramework(`/source.html?source=${encodeURIComponent(e.source)}`, framework)
-      : '';
+    const sourceHref = withFramework(
+      `/source.html?source=${encodeURIComponent(e.source)}`,
+      framework,
+    );
     const sourceHtml =
       (e.source ? sourceBadgeHtml(e.source, sourceMeta, sourceHref) : '') +
       (e.connection_id
@@ -534,7 +521,7 @@ function renderRows(items) {
 
     tr.innerHTML = `${selection.cellHtml(e)}
       <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp))}</td>
-      <td data-sort="${esc(e.source || '')}">${sourceHtml}</td>
+      <td data-sort="${esc(e.source)}">${sourceHtml}</td>
       <td class="small-muted" data-sort="${esc(context)}">${context ? esc(context) : ''}</td>
       <td class="wrap"><a href="${withFramework(`/event.html?id=${encodeURIComponent(e.id)}`, framework)}" class="fw-semibold" data-event-summary title="${esc(
         e.summary || '(no summary)',
@@ -547,7 +534,7 @@ function renderRows(items) {
   }
   selection.rendered();
 
-  if ((items || []).length === 0) {
+  if (items.length === 0) {
     const tr = document.createElement('tr');
     tr.id = 'emptyState';
     tr.innerHTML = `<td colspan="${columnCount}" class="small-muted p-4">No events match the current filters.<div>Older records may have been removed by the evidence retention policy.</div></td>`;
@@ -588,7 +575,7 @@ async function loadEvents() {
     const limitNote = state.limitCapped ? ` · page size capped at ${state.limit}` : '';
     meta.textContent = `${page.start}-${page.end} of ${page.total}${timeNote}${limitNote}`;
 
-    renderRows(data.items || []);
+    renderRows(data.items);
 
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
@@ -812,7 +799,8 @@ document.getElementById('saveSearch').addEventListener('click', async () => {
   if (state.start_ts) p.set('start_ts', state.start_ts);
   if (state.end_ts) p.set('end_ts', state.end_ts);
   if (state.limit) p.set('limit', String(state.limit));
-  const url = '/events.html' + (p.toString() ? `?${p.toString()}` : '');
+  // The page size is always set, so the address always has a query.
+  const url = `/events.html?${p.toString()}`;
 
   const parts = [];
   if (state.source) parts.push(`source=${state.source}`);

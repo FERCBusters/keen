@@ -79,6 +79,7 @@ async function controlPage(t, options = {}) {
     me: options.me || { is_admin: true },
     globals: options.globals,
     confirm: options.confirm,
+    vendor: options.vendor,
     frameworks: [
       { slug: 'A', name: 'Framework A' },
       { slug: 'B', name: 'Framework <b>B</b>' },
@@ -141,6 +142,7 @@ async function controlPage(t, options = {}) {
       if (p === '/api/v1/controls/c1/interested-parties') {
         if (fail.parties) throw new Error('IP offline');
         if (empty.parties) return { items: [] };
+        if (options.parties) return { items: options.parties };
         return {
           items: [
             {
@@ -159,6 +161,7 @@ async function controlPage(t, options = {}) {
       if (p === '/api/v1/controls/c1/isms') {
         if (fail.isms) throw new Error('ISMS offline');
         // Policies and measures appear under Requirements, not the ISMS tab.
+        if (options.isms) return options.isms;
         if (empty.ismsRecords)
           return {
             documents: [{ id: 'd1', title: 'Access policy' }],
@@ -267,11 +270,13 @@ async function controlPage(t, options = {}) {
       }
       if (p === '/api/v1/clauses') {
         if (fail.clauses) throw new Error('Clauses offline');
+        await options.clauseGate;
         if (empty.clauseTree) return { items: [], tree: [] };
         return clauseTree;
       }
       if (p === '/api/v1/events/facets') {
         if (fail.facets) throw new Error('Facets offline');
+        if (options.facets) return { sources: options.facets };
         return {
           sources: [
             { source: 'github', count: 2 },
@@ -283,6 +288,7 @@ async function controlPage(t, options = {}) {
       if (p === '/api/v1/events') {
         if (fail.events) throw new Error('Events offline');
         if (empty.events) return { total: 0, items: [] };
+        if (options.events) return { total: options.events.length, items: options.events };
         return {
           total: 120,
           items: [
@@ -844,7 +850,6 @@ test('failed or forbidden link lookups are contained in their own panels', async
 test('refused saves and link changes are reported and leave the controls usable', async (t) => {
   const { ui, state } = await controlPage(t, {
     fail: { patch: true, post: true, remove: true, sourceControls: true },
-    globals: { confirm: () => true },
   });
   ui.el('saveControlJustification').click();
   await settle(() => ui.el('status').textContent === 'Failed to save justification: Patch refused');
@@ -1175,7 +1180,6 @@ test('a tab chosen while the control loads fills once the control arrives', asyn
 test('linking or unlinking a control reloads Requirements and evidence when next shown', async (t) => {
   const { ui } = await controlPage(t, {
     query: '&id=c1',
-    globals: { confirm: () => true },
   });
   const count = (part) => ui.calls.filter((c) => c.url.includes(part)).length;
   ui.el('controlEvidenceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
@@ -1309,4 +1313,392 @@ test('owners are read-only for readers, and failed loads and saves are reported'
   assert.equal(refused.ui.el('ownersEditor').hidden, false);
   assert.equal(refused.ui.el('ownersSave').disabled, false);
   assert.deepEqual(refused.state.put[0].body, { user_ids: [] });
+});
+
+// A control link badge as the design system draws it: a link to the source
+// page the control page asks for.
+const linkedSourceBadge = (source, meta, href) =>
+  source ? `<a class="badge" href="${href}">${meta?.[source]?.label || source}</a>` : '';
+
+test('opening Requirements before the control arrives waits for the control', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const { ui } = await controlPage(t, { query: '&id=c1', gate });
+  ui.el('controlRequirementsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.equal(
+    ui.calls.some((c) => c.url.includes('/evidence/summary')),
+    false,
+  );
+  assert.equal(ui.el('controlRequirements').querySelector('.kpi'), null);
+  release();
+  await settle(() => tileTexts(ui).length === 3);
+  assert.equal(ui.calls.filter((c) => c.url.includes('/evidence/summary')).length, 1);
+});
+
+test('searching evidence while the control loads uses the framework in the address', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let named = '';
+  const { ui, state } = await controlPage(t, {
+    control: baseControl({ framework: 'B' }),
+    gate,
+    globals: { prompt: (_, def) => ((named = def), 'Early search') },
+    vendor: { sourceBadgeHtml: linkedSourceBadge },
+  });
+  ui.el('localQ').value = ' deploy ';
+  ui.el('localQ').dispatchEvent(new ui.window.Event('input'));
+  await settle(() => /pushed/.test(ui.el('rows').textContent));
+  assert.equal(lastEventsUrl(ui).searchParams.get('framework'), 'A');
+  assert.equal(lastEventsUrl(ui).searchParams.get('q'), 'deploy');
+  await settle(() => ui.calls.some((c) => c.url.startsWith('/api/v1/events/facets?')));
+  const facets = new URL(
+    ui.calls.find((c) => c.url.startsWith('/api/v1/events/facets?')).url,
+    'https://keen.example',
+  );
+  assert.equal(facets.searchParams.get('framework'), 'A');
+  assert.equal(new URLSearchParams(ui.window.location.search).get('framework'), 'A');
+  const [badge, event] = ui.el('rows').querySelectorAll('a');
+  assert.equal(badge.getAttribute('href'), '/source.html?framework=A&source=github');
+  assert.equal(event.getAttribute('href'), '/event.html?id=e1&framework=A');
+
+  // A search saved before the control arrives keeps the same framework and
+  // the page's own heading.
+  ui.el('saveSearch').click();
+  await settle(() => state.posted.length === 1);
+  assert.equal(named, 'Control (q=deploy)');
+  assert.deepEqual(state.posted[0].body, {
+    name: 'Early search',
+    url: '/control.html?id=c1&framework=A&tab=evidence&q=deploy&limit=50',
+  });
+
+  // Once the control is known, the evidence follows its framework.
+  release();
+  await settle(() => lastEventsUrl(ui).searchParams.get('framework') === 'B');
+  await settle(() => ui.el('rows').querySelector('a[href*="framework=B"]'));
+  assert.equal(
+    ui.el('rows').querySelector('a').getAttribute('href'),
+    '/source.html?framework=B&source=github',
+  );
+});
+
+test('dismissing the saved-search prompt sends nothing', async (t) => {
+  const { ui, state } = await controlPage(t, { globals: { prompt: () => null } });
+  ui.el('saveSearch').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(state.posted.length, 0);
+  assert.equal(ui.el('status').textContent, '');
+});
+
+test('an untitled control out of scope shows its reference and scope', async (t) => {
+  const { ui } = await controlPage(t, {
+    control: baseControl({ title: null, in_scope: false }),
+  });
+  assert.equal(ui.el('ctrlTitle').textContent, 'A.5.1');
+  assert.equal(
+    ui.el('ctrlMeta').textContent,
+    'A · control · out of scope · Justification: Best Practice',
+  );
+});
+
+test('a control page without an id opens Governance without requests', async (t) => {
+  const ui = await page(t, 'control', {
+    get: async (u) => {
+      throw new Error('Unexpected GET ' + u);
+    },
+  });
+  await settle(() => ui.el('status').textContent === 'Missing control id.');
+  const before = {
+    isms: ui.el('controlIsmsView').textContent,
+    changelog: ui.el('controlChangelog').textContent,
+  };
+  for (const id of [
+    'controlGovernanceTab',
+    'controlRequirementsTab',
+    'controlEvidenceTab',
+    'controlRelatedTab',
+  ])
+    ui.el(id).dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await new Promise((r) => setTimeout(r, 20));
+  // The navigation's framework list is the page shell's only request.
+  assert.deepEqual(
+    ui.calls.map((c) => c.url),
+    ['/api/v1/frameworks'],
+  );
+  assert.deepEqual(
+    {
+      isms: ui.el('controlIsmsView').textContent,
+      changelog: ui.el('controlChangelog').textContent,
+    },
+    before,
+  );
+  assert.equal(ui.el('interestedPartiesView').textContent.includes('Failed'), false);
+  assert.equal(ui.el('status').textContent, 'Missing control id.');
+});
+
+test('switched-off risks, interested parties and ISMS leave Governance without those requests', async (t) => {
+  const { ui } = await controlPage(t, {
+    me: {
+      is_admin: true,
+      features: { enabled: { risk_cia: false, interested_parties: false, isms: false } },
+    },
+  });
+  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /Justification changed/.test(ui.el('controlChangelog').textContent));
+  assert.equal(
+    ui.calls.some((c) => /\/controls\/c1\/(risks|interested-parties|isms)\?/.test(c.url)),
+    false,
+  );
+  // Their panels keep the page's own placeholders.
+  assert.equal(ui.el('risksCard').style.display, 'none');
+  assert.equal(ui.el('interestedPartiesCard').style.display, 'none');
+  assert.equal(ui.el('interestedPartiesView').textContent, 'No interested parties linked.');
+  assert.equal(ui.el('controlIsmsView').textContent, 'Loading ISMS references');
+});
+
+test('ISMS records without names are listed by their kind', async (t) => {
+  const { ui } = await controlPage(t, {
+    query: '&id=c1&tab=governance',
+    isms: {
+      swot: [],
+      objectives: [{ id: 'o1', goal: '', requirement: '' }],
+      documents: [],
+      org_nodes: [],
+      assets: [{ id: 'a1', asset: '' }],
+      effectiveness_measures: [],
+      meetings: [{ id: 'mt9', title: '' }],
+    },
+  });
+  await settle(() => ui.el('controlIsmsView').querySelector('table'));
+  assert.deepEqual(
+    [...ui.el('controlIsmsView').querySelectorAll('tbody tr')].map((r) => [
+      r.cells[0].textContent,
+      r.cells[1].textContent,
+    ]),
+    [
+      ['Objectives', 'Objective'],
+      ['Assets', 'Asset'],
+      ['Meetings', 'Meeting'],
+    ],
+  );
+});
+
+test('an interested party without communications or a note shows dashes', async (t) => {
+  const { ui } = await controlPage(t, {
+    parties: [
+      {
+        id: 'ip2',
+        name: { name: 'Auditor' },
+        nature: { name: 'External' },
+        note: '   ',
+        communications: [],
+      },
+    ],
+  });
+  await settle(() => ui.el('interestedPartiesView').querySelector('tbody tr'));
+  const cells = [...ui.el('interestedPartiesView').querySelector('tbody tr').cells];
+  assert.deepEqual(
+    cells.map((c) => c.textContent.trim()),
+    ['Auditor', 'External', '-', '-', '-'],
+  );
+});
+
+test('reopening clause editing reuses the clause catalogue already loaded', async (t) => {
+  const { ui } = await controlPage(t);
+  const clauseCalls = () => ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses?')).length;
+  ui.el('editClauseApplicability').click();
+  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  ui.el('editClauseApplicability').click();
+  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  ui.el('editClauseApplicability').click();
+  await settle(() => ui.el('adminClausesCard').style.display === '');
+  assert.ok(ui.el('adminClausesList').querySelector('[data-clause-id="k10"]'));
+  assert.equal(clauseCalls(), 1);
+});
+
+test('clearing the guidance URL saves no URL', async (t) => {
+  const { ui, state } = await controlPage(t);
+  ui.el('editClauseApplicability').click();
+  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  ui.el('controlUpstreamUrl').value = '   ';
+  ui.el('saveControlUpstreamUrl').click();
+  await settle(() => state.patched.length === 1);
+  assert.deepEqual(state.patched[0], {
+    path: '/api/v1/admin/controls/c1/upstream-url',
+    body: { upstream_url: null },
+  });
+  await settle(() => ui.el('status').textContent === 'Control upstream URL saved');
+  assert.equal(ui.el('ctrlLinks').textContent, '');
+});
+
+test('evidence without a source name has no source badge', async (t) => {
+  const { ui } = await controlPage(t, {
+    events: [{ id: 'e2', timestamp: '2026-02-02T00:00:00Z', source: '', summary: 'Manual note' }],
+    vendor: { sourceBadgeHtml: linkedSourceBadge },
+  });
+  const row = ui.el('rows').querySelector('tr');
+  assert.equal(row.cells[1].innerHTML, '');
+  assert.equal(row.cells[1].dataset.sort, '');
+  assert.equal(row.cells[2].textContent.trim(), 'Manual note');
+});
+
+test('source choices use display names, ordered by count and then by name', async (t) => {
+  const { ui } = await controlPage(t, {
+    query: '&id=c1&tab=evidence&source=jira',
+    facets: [
+      { source: 'okta', count: 3 },
+      { source: 'github', count: 3 },
+      { source: 'aws', count: 7 },
+    ],
+    vendor: {
+      getSourceMeta: async () => ({
+        github: { label: 'GitHub' },
+        jira: { label: 'Jira <Cloud>' },
+      }),
+    },
+  });
+  assert.deepEqual(
+    [...ui.el('sourceFilter').options].map((o) => [o.value, o.textContent]),
+    [
+      ['', 'All sources'],
+      ['jira', 'Jira <Cloud> (jira) (0)'],
+      ['aws', 'aws (7)'],
+      ['github', 'GitHub (github) (3)'],
+      ['okta', 'okta (3)'],
+    ],
+  );
+  assert.equal(ui.el('sourceFilter').value, 'jira');
+});
+
+test('related controls stay browsable by framework slug when the catalogue cannot load', async (t) => {
+  const requested = [];
+  const ui = await page(t, 'control', {
+    query: '&id=c1&tab=related',
+    vendor: {
+      apiGet: async (url) => {
+        requested.push(url);
+        const path = new URL(url, 'https://keen.example').pathname;
+        if (path === '/api/v1/frameworks') throw new Error('Catalogue offline');
+        if (path === '/api/v1/controls/c1') return baseControl();
+        if (path === '/api/v1/controls/c1/risks') return { items: [] };
+        if (path === '/api/v1/controls/c1/interested-parties') return { items: [] };
+        if (path === '/api/v1/controls/c1/cross-framework')
+          return {
+            items: [
+              {
+                id: 'x1',
+                source_control_id: 'b7',
+                source_framework: 'B',
+                source_ref: 'B7',
+                source_title: 'Linked',
+                rationale: 'Overlap',
+              },
+            ],
+          };
+        throw new Error('Unexpected GET ' + url);
+      },
+    },
+  });
+  await settle(() => ui.el('crossFrameworkView').options.length === 2);
+  assert.deepEqual(
+    [...ui.el('crossFrameworkView').options].map((o) => o.textContent),
+    ['Choose framework', 'B (1)'],
+  );
+  assert.equal(ui.el('crossFrameworkBrowser').hidden, false);
+  assert.match(ui.el('crossFrameworkSummary').textContent, /1 related control across 1 framework/);
+  // Without the catalogue an administrator has no framework to link from yet.
+  assert.equal(ui.el('crossFrameworkForm').style.display, '');
+  assert.deepEqual(
+    [...ui.el('crossFrameworkSource').options].map((o) => o.value),
+    [''],
+  );
+  assert.equal(ui.el('status').textContent, '');
+  assert.ok(requested.includes('/api/v1/frameworks'));
+});
+
+test('choosing no source framework empties the control choices without a request', async (t) => {
+  const { ui } = await controlPage(t);
+  await openRelated(ui);
+  const catalogueCalls = () =>
+    ui.calls.filter((c) => c.url.startsWith('/api/v1/controls?framework=')).length;
+  ui.el('crossFrameworkSource').value = 'B';
+  ui.el('crossFrameworkSource').dispatchEvent(new ui.window.Event('change'));
+  await settle(() => ui.el('crossFrameworkControl').options.length === 3);
+  ui.el('crossFrameworkSource').value = '';
+  ui.el('crossFrameworkSource').dispatchEvent(new ui.window.Event('change'));
+  assert.deepEqual(
+    [...ui.el('crossFrameworkControl').options].map((o) => [o.value, o.textContent]),
+    [['', 'Choose control']],
+  );
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(catalogueCalls(), 1);
+});
+
+test('clicks beside Remove and a declined removal leave the control link in place', async (t) => {
+  const { ui, state, confirmations } = await (async () => {
+    const answers = [];
+    const loaded = await controlPage(t, { confirm: (options) => (answers.push(options), false) });
+    return { ...loaded, confirmations: answers };
+  })();
+  await openRelated(ui);
+  ui.el('crossFrameworkView').value = 'B';
+  ui.el('crossFrameworkView').dispatchEvent(new ui.window.Event('change'));
+  ui.el('crossFrameworkLinks').querySelector('summary').click();
+  ui.el('crossFrameworkLinks').firstElementChild.click();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(confirmations.length, 0);
+  ui.el('crossFrameworkLinks').querySelector('[data-remove-cross-link]').click();
+  await settle(() => confirmations.length === 1);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(state.removed, []);
+  assert.equal(ui.el('status').textContent, '');
+  assert.ok(ui.el('crossFrameworkLinks').querySelector('[data-remove-cross-link="x1"]'));
+});
+
+test('an uploaded policy without a file name and an unnamed measure are still listed', async (t) => {
+  const { ui } = await controlPage(t, {
+    query: '&id=c1',
+    isms: {
+      swot: [],
+      objectives: [],
+      documents: [
+        {
+          id: 'd5',
+          title: 'Scanned policy',
+          document_type: 'policy',
+          has_file: true,
+          filename: null,
+        },
+      ],
+      org_nodes: [],
+      assets: [],
+      effectiveness_measures: [],
+      meetings: [],
+    },
+    measures: [{ id: 'm6', summary: '', latest_entry: null }],
+  });
+  const root = ui.el('controlRequirements');
+  const policy = root.querySelector('#requirementsPolicies tbody tr');
+  assert.deepEqual(
+    [...policy.cells].map((cell) => cell.textContent.trim()),
+    ['Scanned policy', 'Policy', 'File', '-', '-'],
+  );
+  const measure = root.querySelector('#requirementsMeasures tbody tr');
+  assert.equal(measure.cells[0].textContent.trim(), 'Effectiveness measure');
+  assert.equal(
+    measure.querySelector('a').getAttribute('href'),
+    '/isms-effectiveness-measure.html?id=m6&framework=A',
+  );
+});
+
+test('saving the justification while the clause catalogue loads reports the save', async (t) => {
+  let release;
+  const clauseGate = new Promise((r) => (release = r));
+  const { ui, state } = await controlPage(t, { clauseGate });
+  ui.el('editClauseApplicability').click();
+  ui.el('saveControlJustification').click();
+  await settle(() => state.patched.length === 1);
+  await settle(() => ui.el('saveControlJustification').disabled === false);
+  assert.equal(ui.el('status').textContent, 'Control justification saved');
+  release();
+  await settle(() => ui.el('adminClausesList').querySelector('select'));
 });

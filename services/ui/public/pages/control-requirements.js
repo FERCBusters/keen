@@ -84,7 +84,7 @@ export function createControlRequirements({ root, me, isms, sourceName, onOpenEv
       return { body: muted('You do not have permission to view policies and processes.') };
     if (result.status === 'rejected')
       return { body: failed('Failed to load linked policies and processes.') };
-    const documents = Array.isArray(result.value?.documents) ? result.value.documents : [];
+    const documents = result.value.documents;
     const rows = documents.map((d) => {
       const kept = d.content_html
         ? 'Written in Keen'
@@ -95,7 +95,7 @@ export function createControlRequirements({ root, me, isms, sourceName, onOpenEv
             : '-';
       const version = Number(d.content_version) > 0 ? `v${d.content_version}` : '-';
       return `<tr>
-          <td class="wrap"><a class="fw-semibold" href="${esc(link(`/isms-document.html?id=${encodeURIComponent(d.id || '')}`))}">${esc(d.title || 'Document')}</a></td>
+          <td class="wrap"><a class="fw-semibold" href="${esc(link(`/isms-document.html?id=${encodeURIComponent(d.id)}`))}">${esc(d.title || 'Document')}</a></td>
           <td>${esc(capitalise(String(d.document_type || 'document')))}</td>
           <td class="small-muted">${esc(kept)}</td>
           <td class="small-muted">${esc(version)}</td>
@@ -128,8 +128,8 @@ export function createControlRequirements({ root, me, isms, sourceName, onOpenEv
     if (!canEvidence) return { body: muted('You do not have permission to view evidence.') };
     if (result.status === 'rejected')
       return { body: failed('Failed to load the evidence summary.') };
-    const data = result.value || {};
-    const sources = Array.isArray(data.sources) ? data.sources : [];
+    const data = result.value;
+    const sources = data.sources;
     return {
       total: Number(data.total) || 0,
       sources: sources.length,
@@ -142,12 +142,12 @@ export function createControlRequirements({ root, me, isms, sourceName, onOpenEv
 
   function measureRow(m) {
     const entry = m.latest_entry || null;
-    const href = link(`/isms-effectiveness-measure.html?id=${encodeURIComponent(m.id || '')}`);
+    const href = link(`/isms-effectiveness-measure.html?id=${encodeURIComponent(m.id)}`);
     const value = entry
       ? `${effectivenessMetricValueHtml(entry, m)}${effectivenessMetricThresholdBadgeHtml(m, entry)}`
       : '<span class="badge text-bg-warning">No result yet</span>';
     const record = canManageIsms
-      ? `<a class="small" href="${esc(link(`/isms.html?tab=effectiveness&record=${encodeURIComponent(m.id || '')}`))}">Record a result</a>`
+      ? `<a class="small" href="${esc(link(`/isms.html?tab=effectiveness&record=${encodeURIComponent(m.id)}`))}">Record a result</a>`
       : '';
     return `<tr>
         <td class="wrap"><a class="fw-semibold" href="${esc(href)}">${esc(m.summary || 'Effectiveness measure')}</a>${m.frequency ? `<div class="small-muted">${esc(capitalise(String(m.frequency)))}</div>` : ''}</td>
@@ -163,7 +163,7 @@ export function createControlRequirements({ root, me, isms, sourceName, onOpenEv
       return { body: muted('You do not have permission to view effectiveness measures.') };
     if (result.status === 'rejected')
       return { body: failed('Failed to load linked effectiveness measures.') };
-    const items = Array.isArray(result.value?.items) ? result.value.items : [];
+    const items = result.value.items;
     const judged = items.filter((m) => effectivenessMetricThresholdState(m, m.latest_entry));
     return {
       count: items.length,
@@ -200,7 +200,7 @@ export function createControlRequirements({ root, me, isms, sourceName, onOpenEv
     if (found.evidence) {
       const e = found.evidence;
       const detail = e.total
-        ? `${plural(e.sources, 'source')}${e.latest ? `, latest ${fmtTs(e.latest)}` : ''}`
+        ? `${plural(e.sources, 'source')}, latest ${fmtTs(e.latest)}`
         : 'None mapped yet';
       out.push(
         e.total === undefined

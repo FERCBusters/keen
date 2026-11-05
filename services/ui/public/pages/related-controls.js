@@ -42,10 +42,10 @@ export function createRelatedControlsBrowser(root, { isAdmin = false } = {}) {
         (link) => `
       <div class="border-bottom py-2">
         <div class="d-flex gap-2 align-items-start">
-          <a class="flex-grow-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(link.source_control_id)}`, link.source_framework))}">${esc(link.source_ref)} ${esc(link.source_title || '')}</a>
+          <a class="flex-grow-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(link.source_control_id)}`, link.source_framework))}">${esc(link.source_ref)} ${esc(link.source_title)}</a>
           ${isAdmin && !link.derived ? `<button class="btn btn-sm btn-outline-danger" type="button" data-remove-cross-link="${esc(link.id)}" aria-label="${esc(`Remove link to ${link.source_ref}`)}">Remove</button>` : ''}
         </div>
-        ${link.rationale ? `<details class="small-muted mt-1"><summary>Why related?</summary><div class="mt-1">${esc(link.rationale)}</div></details>` : ''}
+        <details class="small-muted mt-1"><summary>Why related?</summary><div class="mt-1">${esc(link.rationale)}</div></details>
       </div>`,
       )
       .join('');
@@ -75,7 +75,7 @@ export function createRelatedControlsBrowser(root, { isAdmin = false } = {}) {
     update(links, frameworks = []) {
       items = links;
       const selected = select.value;
-      const names = new Map(frameworks.map((f) => [f.slug, f.name || f.slug]));
+      const names = new Map(frameworks.map((f) => [f.slug, f.name]));
       const counts = new Map();
       items.forEach((link) =>
         counts.set(link.source_framework, (counts.get(link.source_framework) || 0) + 1),

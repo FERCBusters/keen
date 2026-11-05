@@ -28,15 +28,18 @@
     update();
     const timer = setInterval(update, 30000);
     content.append(notice);
-    if (demo.consultation_url) {
-      const target = new URL(demo.consultation_url);
-      if (target.protocol === 'https:') {
-        const link = document.createElement('a');
-        link.href = target.href;
-        link.textContent = 'Discuss a Keen installation.';
-        link.style.color = '#332701';
-        content.append(link);
-      }
+    // The link is optional: one that is missing, unreadable or not HTTPS is left
+    // out, and the notice still shows.
+    let target = null;
+    try {
+      target = new URL(demo.consultation_url);
+    } catch {}
+    if (target?.protocol === 'https:') {
+      const link = document.createElement('a');
+      link.href = target.href;
+      link.textContent = 'Discuss a Keen installation.';
+      link.style.color = '#332701';
+      content.append(link);
     }
     const close = document.createElement('button');
     close.type = 'button';

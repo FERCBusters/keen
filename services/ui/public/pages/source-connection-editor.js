@@ -1,4 +1,4 @@
-import { apiPost, apiPut } from '/app.js';
+import { apiPost, apiPut, errorText } from '/app.js';
 import { sourceFieldGroups, sourceFieldLabel } from './source-connection-fields.js';
 import { sourceSetupProfile } from './source-setup-profile.js';
 
@@ -45,6 +45,7 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
   source.disabled = !!connection;
   const name = field(form, 'Source name', 'text', connection?.name || '');
   name.required = true;
+  name.maxLength = 128;
   const enabled = field(form, 'Enable ingestion', 'checkbox');
   enabled.checked = connection?.enabled ?? true;
   const fields = document.createElement('div');
@@ -190,7 +191,7 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
       dialog.close();
       await onSaved(result);
     } catch (failure) {
-      error.textContent = failure.message || String(failure);
+      error.textContent = errorText(failure);
     } finally {
       save.disabled = false;
     }

@@ -38,7 +38,7 @@ function splitList(value) {
 
 // Filters arrive from badges and links as ?source= or ?type=, one or several.
 function readFilters() {
-  const params = new URLSearchParams(location.search || '');
+  const params = new URLSearchParams(location.search);
   const coverage = String(params.get('coverage') || '');
   return {
     types: splitList(params.get('source') || params.get('type') || ''),
@@ -72,7 +72,6 @@ function sourceHref(src, overrides = {}) {
   const p = new URLSearchParams();
   if (framework) p.set('framework', framework);
   if (src) p.set('source', src);
-  if (overrides.tab) p.set('tab', overrides.tab);
   if (overrides.unmapped) p.set('unmapped', 'true');
   return `/source.html?${p.toString()}`;
 }
@@ -105,10 +104,10 @@ function renderFilterSummary() {
 }
 
 function matches(s) {
-  const src = String(s.source || '').toLowerCase();
+  const src = s.source.toLowerCase();
   if (filters.types.length && !filters.types.some((t) => t.toLowerCase() === src)) return false;
   if (filters.q) {
-    const label = String(sourceMeta[s.source]?.label || '').toLowerCase();
+    const label = sourceMeta[s.source].label.toLowerCase();
     const needle = filters.q.toLowerCase();
     if (!src.includes(needle) && !label.includes(needle)) return false;
   }
@@ -121,7 +120,7 @@ function matches(s) {
 function render(items) {
   tbody.innerHTML = '';
   for (const s of items) {
-    const src = s.source || 'unknown';
+    const src = s.source;
     const openHref = sourceHref(src);
     const unmappedHref = sourceHref(src, { unmapped: true });
     const tr = document.createElement('tr');
@@ -181,16 +180,15 @@ async function load() {
   try {
     const data = await apiGet(`/api/v1/sources?framework=${encodeURIComponent(framework)}`);
     sourceMeta = {};
-    for (const x of data.items || []) {
-      const src = String(x.source || '').trim();
-      if (!src) continue;
+    for (const x of data.items) {
+      const src = x.source;
       sourceMeta[src] = {
         source: src,
-        label: String(x.label || src).trim() || src,
+        label: String(x.label || src).trim(),
         color: String(x.color || '').trim(),
       };
     }
-    allItems = data.items || [];
+    allItems = data.items;
     // A type chosen from a link stays chosen even when it has no events yet.
     const known = new Set(Object.keys(sourceMeta));
     setFilterPillOptions(
@@ -214,7 +212,7 @@ async function load() {
 }
 
 function activateInitialTab() {
-  const tab = String(new URLSearchParams(location.search || '').get('tab') || '').toLowerCase();
+  const tab = String(new URLSearchParams(location.search).get('tab') || '').toLowerCase();
   const target =
     tab === 'visualisations' || tab === 'visualizations'
       ? document.getElementById('sourcesVisualisationsTab')
@@ -224,7 +222,7 @@ function activateInitialTab() {
 
 for (const btn of Array.from(document.querySelectorAll('#sourcesTabs [data-bs-toggle="tab"]'))) {
   btn.addEventListener('shown.bs.tab', () => {
-    const name = String(btn.id || '')
+    const name = btn.id
       .replace(/^sources/, '')
       .replace(/Tab$/, '')
       .toLowerCase();

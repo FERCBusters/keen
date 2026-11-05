@@ -40,7 +40,7 @@ function storyHref(story, framework, tab = '') {
 
 export function relatedListHtml(stories, kind, framework) {
   if (!stories.length)
-    return `<p class="small-muted mb-0">This ${esc(KIND_NAMES[kind] || 'record')} is not in a story yet.</p>`;
+    return `<p class="small-muted mb-0">This ${esc(KIND_NAMES[kind])} is not in a story yet.</p>`;
   const rows = stories
     .map(
       (
@@ -59,7 +59,7 @@ export function relatedListHtml(stories, kind, framework) {
 }
 
 function formHtml(kind) {
-  const name = esc(KIND_NAMES[kind] || 'record');
+  const name = esc(KIND_NAMES[kind]);
   return `<form class="row g-2 align-items-end mt-3" data-story-add>
       <div class="col-12 col-md-8"><label class="form-label" for="storyRelatedChoice">Add this ${name} to a story</label><select class="form-select" id="storyRelatedChoice" required><option value="">Loading your open stories</option></select></div>
       <div class="col-12 col-md-4"><button class="btn btn-outline-primary w-100" type="submit">Add to story</button></div>
@@ -140,7 +140,7 @@ export function mountStoryRelated({
     if (!select) return;
     try {
       const data = await apiGet('/api/v1/stories?status=open&limit=200');
-      const options = (data.items || []).filter((s) => s.can_edit && !included.has(s.id));
+      const options = data.items.filter((s) => s.can_edit && !included.has(s.id));
       select.innerHTML = options.length
         ? `<option value="">Choose one of your open stories</option>${options
             .map(
@@ -158,7 +158,7 @@ export function mountStoryRelated({
   async function refresh() {
     try {
       const data = await apiGet(recordUrl);
-      const stories = data.items || [];
+      const stories = data.items;
       included = new Set(stories.map((s) => s.id));
       list.innerHTML = relatedListHtml(stories, kind, framework);
       if (tab) tab.textContent = stories.length ? `Stories (${stories.length})` : 'Stories';

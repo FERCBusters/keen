@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadUi } from './support/load-ui.mjs';
+import { firstPartyScripts } from './support/first-party-scripts.mjs';
 
 // The shared rich-text editor integration: one Wysi editor per marked
 // textarea, content conversion in both directions and read-only states.
@@ -463,20 +464,11 @@ test('pasted HTML is sanitised before Wysi can re-parse it', async (t) => {
 
 test('Wysi is started only by the shared rich-text helper', async () => {
   // Any other caller would hand Wysi content without the protections above.
-  const { readdir, readFile } = await import('node:fs/promises');
-  const root = new URL('../public/', import.meta.url);
-  const offenders = [];
-  const walk = async (dir) => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const url = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
-      if (entry.isDirectory()) {
-        if (entry.name !== 'vendor') await walk(url);
-      } else if (entry.name.endsWith('.js') && url.href !== new URL('app.js', root).href) {
-        if (/\bWysi\b/.test(await readFile(url, 'utf8'))) offenders.push(url.pathname);
-      }
-    }
-  };
-  await walk(root);
+  const scripts = await firstPartyScripts();
+  assert.ok(scripts.some((script) => script.path === 'app.js'));
+  const offenders = scripts
+    .filter((script) => script.path !== 'app.js' && /\bWysi\b/.test(script.source))
+    .map((script) => script.path);
   assert.deepEqual(offenders, []);
   // The check would find a page that starts Wysi itself.
   assert.match('window.Wysi({ el })', /\bWysi\b/);

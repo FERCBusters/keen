@@ -85,7 +85,7 @@ function activateClauseTab(tabName) {
 
 function pestleHref(itemId) {
   return withFramework(
-    `/pestle_item.html?id=${encodeURIComponent(itemId || '')}`,
+    `/pestle_item.html?id=${encodeURIComponent(itemId)}`,
     clause?.framework || framework,
   );
 }
@@ -101,12 +101,12 @@ function pestleRelevanceBadge(rel) {
 
 async function loadClausePestle() {
   if (!featureEnabled(me, 'pestle')) return;
-  if (!clausePestleRows || !id) return;
+  if (!id) return;
   clausePestleRows.innerHTML =
     '<tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance</td></tr>';
   try {
     const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/pestle`);
-    const items = data?.items || [];
+    const items = data.items;
     if (openPestleFromClause)
       openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
     if (!items.length) {
@@ -116,11 +116,11 @@ async function loadClausePestle() {
     }
     clausePestleRows.innerHTML = items
       .map((row) => {
-        const it = row.pestle_item || {};
+        const it = row.pestle_item;
         return `<tr>
         <td>${esc(it.type || '')}</td>
         <td>${esc(it.lens || '')}</td>
-        <td><a class="fw-semibold" href="${esc(pestleHref(it.id))}">${esc(it.item || '')}</a></td>
+        <td><a class="fw-semibold" href="${esc(pestleHref(it.id))}">${esc(it.item)}</a></td>
         <td>${pestleRelevanceBadge(row.relevance)}</td>
         <td>${pestleRelevanceBadge(it.overall_relevance)}</td>
         <td class="wrap small-muted">${esc(it.rationale || '-')}</td>
@@ -134,7 +134,7 @@ async function loadClausePestle() {
 }
 
 async function loadClauseChangelog() {
-  if (!clauseChangelogEl || !id) return;
+  if (!id) return;
   await loadEntityChangelog(
     clauseChangelogEl,
     `/api/v1/clauses/${encodeURIComponent(id)}/changelog?limit=100`,
@@ -158,9 +158,9 @@ function _ismsEntityRows(data) {
   ];
   const rows = [];
   for (const [label, items, titleFn, href] of groups) {
-    for (const item of items || [])
+    for (const item of items)
       rows.push(
-        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(label === 'SWOT' ? `/swot.html?id=${encodeURIComponent(item.id)}` : href, clause?.framework || framework))}">${esc(titleFn(item))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at) || '')}</td></tr>`,
+        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(label === 'SWOT' ? `/swot.html?id=${encodeURIComponent(item.id)}` : href, clause?.framework || framework))}">${esc(titleFn(item))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at))}</td></tr>`,
       );
   }
   if (!rows.length)
@@ -170,7 +170,7 @@ function _ismsEntityRows(data) {
 
 async function loadClauseIsms({ force = false } = {}) {
   if (!featureEnabled(me, 'isms')) return;
-  if (!clauseIsmsView || !id) return;
+  if (!id) return;
   if (!canViewIsms) {
     clauseIsmsView.innerHTML =
       '<span class="small-muted">You do not have permission to view ISMS references.</span>';
@@ -183,7 +183,7 @@ async function loadClauseIsms({ force = false } = {}) {
       `/api/v1/clauses/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(clause?.framework || framework)}`,
     );
     ismsLoaded = true;
-    clauseIsmsView.innerHTML = _ismsEntityRows(data || {});
+    clauseIsmsView.innerHTML = _ismsEntityRows(data);
   } catch (e) {
     ismsLoaded = false;
     clauseIsmsView.innerHTML = '<span class="text-danger">Failed to load ISMS references.</span>';
@@ -230,28 +230,28 @@ function applicabilityBadge(v) {
 
 function linkedMap() {
   const m = new Map();
-  for (const c of linkedControls || []) {
-    if (c?.id) m.set(String(c.id), c.applicability || 'applicable');
+  for (const c of linkedControls) {
+    if (c?.id) m.set(String(c.id), c.applicability);
   }
   return m;
 }
 
 function isIntermediateParentClause() {
-  return Boolean(clause?.parent_id && Number(clause?.child_count || 0) > 0);
+  return Boolean(clause?.parent_id && Number(clause?.child_count) > 0);
 }
 
 function clauseEvidenceMappings() {
-  return (Array.isArray(clause?.evidence_mappings) ? clause.evidence_mappings : [])
+  return clause.evidence_mappings
     .map((item) => ({
       title: String(item?.title || '').trim(),
-      url: String(item?.url || '').trim(),
+      url: String(item?.url).trim(),
     }))
     .filter((item) => item.url);
 }
 
 function evidenceMappingRow(item = {}) {
-  const title = typeof item === 'string' ? '' : String(item?.title || '');
-  const url = typeof item === 'string' ? item : String(item?.url || '');
+  const title = String(item?.title || '');
+  const url = String(item?.url || '');
   return `<div class="clause-evidence-mapping-row border rounded p-2">
     <div class="row g-2 align-items-end">
       <div class="col-12 col-lg-4">
@@ -270,7 +270,6 @@ function evidenceMappingRow(item = {}) {
 }
 
 function wireEvidenceUrlRemoveButtons() {
-  if (!clauseEvidenceUrlInputs) return;
   for (const btn of clauseEvidenceUrlInputs.querySelectorAll('.remove-clause-evidence-url')) {
     btn.onclick = () => {
       const row = btn.closest('.clause-evidence-mapping-row');
@@ -284,7 +283,6 @@ function wireEvidenceUrlRemoveButtons() {
 }
 
 function renderEvidenceEditor() {
-  if (!clauseEvidenceUrlInputs) return;
   const mappings = clauseEvidenceMappings();
   const rows = mappings.length ? mappings : [{}];
   clauseEvidenceUrlInputs.innerHTML = rows.map((item) => evidenceMappingRow(item)).join('');
@@ -325,14 +323,13 @@ const owners = mountOwners({
 });
 
 function renderClauseHeader() {
-  clauseTitle.textContent = `${clause?.ref || ''}  ${clause?.title || ''}`.trim() || 'Clause';
-  const parts = [clause?.framework || framework];
+  clauseTitle.textContent = `${clause.ref}  ${clause.title}`.trim();
+  const parts = [clause.framework];
   if (clause?.parent_ref) parts.push(`parent ${clause.parent_ref}`);
   if (clause?.owners?.length) parts.push(`Owners: ${ownerNames(clause.owners)}`);
-  clauseMeta.textContent = parts.filter(Boolean).join(' · ') || '-';
+  clauseMeta.textContent = parts.filter(Boolean).join(' · ');
   owners.show(clause?.owners || []);
-  if (clausesBreadcrumb)
-    clausesBreadcrumb.href = withFramework('/clauses.html', clause?.framework || framework);
+  if (clausesBreadcrumb) clausesBreadcrumb.href = withFramework('/clauses.html', clause.framework);
 
   const url = safeExternalHref(clause?.upstream_url);
   clauseLinks.innerHTML = url
@@ -352,11 +349,10 @@ function renderClauseHeader() {
   }
   renderEvidenceMapping();
   if (openPestleFromClause)
-    openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
+    openPestleFromClause.href = withFramework('/pestle.html', clause.framework);
 }
 
-function renderControls(items) {
-  const rows = Array.isArray(items) ? items : [];
+function renderControls(rows) {
   if (controlsMeta)
     controlsMeta.textContent = `${rows.length} linked control${rows.length === 1 ? '' : 's'}`;
   if (!rows.length) {
@@ -372,7 +368,7 @@ function renderControls(items) {
         c.framework || framework,
       );
       return `<tr>
-      <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref || '')}</a></td>
+      <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref)}</a></td>
       <td class="wrap">${esc(c.title || '')}</td>
       <td data-sort="${esc(applicabilityLabel(c.applicability))}">${applicabilityBadge(c.applicability)}</td>
       <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out</span>'}</td>
@@ -397,8 +393,8 @@ function renderAdminControls() {
   if (saveClauseControls) saveClauseControls.disabled = false;
   const selected = linkedMap();
   const q = (controlSearch?.value || '').trim().toLowerCase();
-  const rows = (allControls || []).filter(
-    (c) => !q || `${c.ref || ''} ${c.title || ''}`.toLowerCase().includes(q),
+  const rows = allControls.filter(
+    (c) => !q || `${c.ref} ${c.title || ''}`.toLowerCase().includes(q),
   );
   if (!rows.length) {
     adminControlsList.innerHTML = '<span class="small-muted">No controls match.</span>';
@@ -417,15 +413,15 @@ function renderAdminControls() {
         <tbody>
           ${rows
             .map((c) => {
-              const cid = String(c.id || '');
+              const cid = String(c.id);
               const cur = selected.get(cid) || '';
               const href = withFramework(
                 `/control.html?id=${encodeURIComponent(cid)}`,
                 c.framework || framework,
               );
               return `<tr>
-              <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref || '')}</a></td>
-              <td class="wrap small-muted">${esc(c.title || '')}</td>
+              <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref)}</a></td>
+              <td class="wrap small-muted">${esc(c.title)}</td>
               <td>
                 <select class="form-select form-select-sm control-applicability" data-control-id="${esc(cid)}">
                   <option value="" ${cur ? '' : 'selected'}>Not applicable</option>
@@ -444,16 +440,16 @@ function renderAdminControls() {
 async function loadAdminControls() {
   if (!me?.is_admin || !clause) return;
   const data = await apiGet(
-    `/api/v1/controls?framework=${encodeURIComponent(clause.framework || framework)}&limit=5000`,
+    `/api/v1/controls?framework=${encodeURIComponent(clause.framework)}&limit=5000`,
   );
-  allControls = (data?.items || []).filter((c) => c.type !== 'clause');
+  allControls = data.items.filter((c) => c.type !== 'clause');
   renderAdminControls();
 }
 
 async function reloadLinkedControls() {
   const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/controls`);
-  clause = data?.clause || null;
-  linkedControls = data?.items || [];
+  clause = data.clause;
+  linkedControls = data.items;
   renderClauseHeader();
   renderControls(linkedControls);
   renderAdminControls();
@@ -479,7 +475,6 @@ async function load() {
 }
 
 editClauseEvidence?.addEventListener('click', () => {
-  if (!me?.is_admin) return;
   evidenceEditMode = !evidenceEditMode;
   renderEvidenceMapping();
   if (evidenceEditMode) {
@@ -488,7 +483,6 @@ editClauseEvidence?.addEventListener('click', () => {
 });
 
 addClauseEvidenceUrl?.addEventListener('click', () => {
-  if (!me?.is_admin || !clauseEvidenceUrlInputs) return;
   clauseEvidenceUrlInputs.insertAdjacentHTML('beforeend', evidenceMappingRow({}));
   wireEvidenceUrlRemoveButtons();
   const inputs = clauseEvidenceUrlInputs.querySelectorAll('.clause-evidence-title');
@@ -496,9 +490,8 @@ addClauseEvidenceUrl?.addEventListener('click', () => {
 });
 
 saveClauseEvidenceUrls?.addEventListener('click', async () => {
-  if (!me?.is_admin || !clause?.id) return;
   const evidenceMappings = Array.from(
-    clauseEvidenceUrlInputs?.querySelectorAll('.clause-evidence-mapping-row') || [],
+    clauseEvidenceUrlInputs.querySelectorAll('.clause-evidence-mapping-row'),
   )
     .map((row) => ({
       title: String(row.querySelector('.clause-evidence-title')?.value || '').trim(),
@@ -513,7 +506,7 @@ saveClauseEvidenceUrls?.addEventListener('click', async () => {
         evidence_mappings: evidenceMappings,
       },
     );
-    clause = { ...clause, evidence_mappings: data?.evidence_mappings || [] };
+    clause = { ...clause, evidence_mappings: data.evidence_mappings };
     evidenceEditMode = false;
     renderEvidenceMapping();
     await loadClauseChangelog();
@@ -526,7 +519,6 @@ saveClauseEvidenceUrls?.addEventListener('click', async () => {
 });
 
 editLinkedControls?.addEventListener('click', async () => {
-  if (!me?.is_admin) return;
   linkedControlsEditMode = !linkedControlsEditMode;
   renderClauseHeader();
   if (linkedControlsEditMode && allControls.length === 0) {
@@ -544,7 +536,6 @@ editLinkedControls?.addEventListener('click', async () => {
 });
 
 saveClauseUpstreamUrl?.addEventListener('click', async () => {
-  if (!me?.is_admin || !clause?.id) return;
   saveClauseUpstreamUrl.disabled = true;
   try {
     const data = await apiPatch(
@@ -565,9 +556,8 @@ saveClauseUpstreamUrl?.addEventListener('click', async () => {
 });
 
 saveClauseControls?.addEventListener('click', async () => {
-  if (!me?.is_admin || !clause?.id) return;
   const controls = [];
-  for (const sel of adminControlsList?.querySelectorAll('.control-applicability') || []) {
+  for (const sel of adminControlsList.querySelectorAll('.control-applicability')) {
     const applicability = (sel.value || '').trim();
     if (!applicability) continue;
     controls.push({ control_id: sel.dataset.controlId, applicability });
@@ -578,7 +568,7 @@ saveClauseControls?.addEventListener('click', async () => {
       controls,
     });
     if (data?.skipped_intermediate_parent) {
-      toast(status, data?.detail || 'This parent clause is inferred from child clauses.', 'info');
+      toast(status, data.detail, 'info');
     } else {
       toast(status, 'Linked controls saved', 'success');
     }

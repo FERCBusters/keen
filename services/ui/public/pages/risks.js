@@ -136,9 +136,7 @@ function setupFilterPickers() {
 }
 
 function setCsvParam(url, key, values) {
-  const cleaned = Array.from(
-    new Set((values || []).map((v) => String(v || '').trim()).filter(Boolean)),
-  );
+  const cleaned = Array.from(new Set(values.map((v) => String(v).trim()).filter(Boolean)));
   if (cleaned.length) url.searchParams.set(key, cleaned.join(','));
 }
 
@@ -155,9 +153,7 @@ function renderSubcategoryFilter() {
   const chosen = new Set(selectedFilterPillValues($('categoryFilter')));
   const options = categories
     .filter((c) => !chosen.size || chosen.has(String(c.id)))
-    .flatMap((c) =>
-      (c.subcategories || []).map((s) => ({ value: s.id, label: `${s.name} (${c.name})` })),
-    );
+    .flatMap((c) => c.subcategories.map((s) => ({ value: s.id, label: `${s.name} (${c.name})` })));
   setFilterPillOptions($('subcategoryFilter'), options, {
     dispatchChange: false,
     selectedValues: selectedFilterPillValues($('subcategoryFilter')).filter((v) =>
@@ -167,21 +163,19 @@ function renderSubcategoryFilter() {
 }
 
 function defaultRiskSort(a, b) {
-  const riskCmp = Number(b.risk_score || 0) - Number(a.risk_score || 0);
+  const riskCmp = b.risk_score - a.risk_score;
   if (riskCmp) return riskCmp;
   return riskDisplayTitle(a).localeCompare(riskDisplayTitle(b), undefined, { numeric: true });
 }
 
 function markDefaultRiskSort() {
   const table = $('riskTable');
-  if (!table) return;
   const headers = [...table.querySelectorAll('thead th')];
   headers.forEach((th) => {
     th.removeAttribute('data-sort-dir');
     th.classList.remove('sort-asc', 'sort-desc');
   });
   const riskHeader = headers[5];
-  if (!riskHeader) return;
   riskHeader.setAttribute('data-sort-dir', 'desc');
   riskHeader.classList.add('sort-desc');
 }
@@ -217,11 +211,11 @@ function renderRows(items) {
     .map(
       (r) => `<tr data-risk-row="${esc(r.id)}">
       <td>${riskCellHtml(r)}</td>
-      <td>${esc(r.asset || '')}<div class="small-muted">${esc([r.category?.name, r.subcategory?.name].filter(Boolean).join(' › '))}</div></td>
-      <td>${methodBadgeHtml(methodOf(r))}${(r.risk_types || []).length ? `<div class="mt-1">${riskTypeBadgesHtml(r.risk_types)}</div>` : ''}</td>
+      <td>${esc(r.asset)}<div class="small-muted">${esc([r.category?.name, r.subcategory?.name].filter(Boolean).join(' › '))}</div></td>
+      <td>${methodBadgeHtml(methodOf(r))}${r.risk_types.length ? `<div class="mt-1">${riskTypeBadgesHtml(r.risk_types)}</div>` : ''}</td>
       <td>${partyBadgesHtml(r.interested_parties, framework)}</td>
       <td>${userPillHtml(r.risk_owner)}</td>
-      <td class="text-end" data-sort="${esc(Number(r.risk_score || 0))}">${ratingBadge(r, 'inherent')}</td>
+      <td class="text-end" data-sort="${esc(r.risk_score)}">${ratingBadge(r, 'inherent')}</td>
       <td class="text-end" data-sort="${esc(Number(r.residual_risk_score || 0))}">${ratingBadge(r, 'residual')}</td>
       <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${r.treatment_due_at ? ` · due ${esc(isoDateToDisplay(r.treatment_due_at))}` : ''}</div></td>
       <td data-sort="${esc(Number(r.control_count || 0))}">${controlsCountHtml(r)}</td>
@@ -243,12 +237,11 @@ function wireSampleButtons(root, lookup) {
   root.querySelectorAll('[data-sample-risk]').forEach((el) =>
     el.addEventListener('click', (ev) => {
       ev.preventDefault();
-      const risk = lookup(el.dataset.sampleRisk || '');
       openAuditSampleModal({
         me,
         entityType: 'risk',
-        entityId: el.dataset.sampleRisk || '',
-        title: risk ? riskDisplayTitle(risk) : 'Risk',
+        entityId: el.dataset.sampleRisk,
+        title: riskDisplayTitle(lookup(el.dataset.sampleRisk)),
         framework,
         statusEl: status,
       });
@@ -268,9 +261,9 @@ async function loadRisks() {
     const data = await apiGet(u.pathname + u.search);
     const method = $('methodFilter').value;
     const treatment = $('treatmentFilter').value;
-    currentItems = [...(data?.items || [])]
+    currentItems = [...data.items]
       .filter((r) => !method || methodOf(r) === method)
-      .filter((r) => !treatment || String(r.treatment_status || 'open') === treatment)
+      .filter((r) => !treatment || r.treatment_status === treatment)
       .sort(defaultRiskSort);
     renderRows(currentItems);
     markDefaultRiskSort();
@@ -280,7 +273,7 @@ async function loadRisks() {
       if (fresh) selectRisk(fresh, { scroll: false });
     }
     $('resultMeta').textContent =
-      `${currentItems.length} of ${Number(data?.total || currentItems.length)} risks shown; control mappings for ${data?.framework || framework || 'the current framework'}.`;
+      `${currentItems.length} of ${data.total} risks shown; control mappings for ${data.framework}.`;
   } catch (e) {
     $('rows').innerHTML =
       '<tr><td colspan="10" class="p-4 text-center text-danger">Failed to load risks.</td></tr>';
@@ -299,20 +292,18 @@ async function loadCiaRisks() {
   setCsvParam(u, 'risk_type', chosen.length ? chosen : RISK_TYPES);
   try {
     const data = await apiGet(u.pathname + u.search);
-    const items = [...(data?.items || [])]
-      .filter((r) => (r.risk_types || []).length)
-      .sort(defaultRiskSort);
+    const items = [...data.items].filter((r) => r.risk_types.length).sort(defaultRiskSort);
     $('ciaRows').innerHTML = items.length
       ? items
           .map(
             (r) => `<tr>
         <td>${riskCellHtml(r)}</td>
-        <td>${esc(r.asset || '')}</td>
+        <td>${esc(r.asset)}</td>
         <td>${riskTypeBadgesHtml(r.risk_types)}</td>
         <td>${userPillHtml(r.risk_owner)}</td>
-        <td class="text-end" data-sort="${esc(Number(r.risk_score || 0))}">${scoreBadge(r.risk_score)}</td>
-        <td class="text-end" data-sort="${esc(Number(r.residual_risk_score || 0))}">${scoreBadge(r.residual_risk_score)}</td>
-        <td data-sort="${esc(Number(r.control_count || 0))}">${controlsCountHtml(r)}</td>
+        <td class="text-end" data-sort="${esc(r.risk_score)}">${scoreBadge(r.risk_score)}</td>
+        <td class="text-end" data-sort="${esc(r.residual_risk_score)}">${scoreBadge(r.residual_risk_score)}</td>
+        <td data-sort="${esc(r.control_count)}">${controlsCountHtml(r)}</td>
         <td class="no-print">${actionsHtml(r)}</td>
       </tr>`,
           )
@@ -338,9 +329,9 @@ function ratingOptions(id) {
 }
 
 function renderHeatmap() {
-  const mode = document.querySelector('input[name="scoreMode"]:checked')?.value || 'inherent';
+  const mode = document.querySelector('input[name="scoreMode"]:checked').value;
   const byCell = new Map();
-  for (const cell of heatmapCounts[mode] || [])
+  for (const cell of heatmapCounts[mode])
     byCell.set(`${cell.likelihood}:${cell.impact}`, cell.count);
   let html =
     '<thead><tr><th scope="col">Likelihood \\ Impact</th>' +
@@ -361,7 +352,7 @@ function renderHeatmap() {
 function severityBadgeColor(score) {
   const span = document.createElement('span');
   span.innerHTML = severityBadge(score, thresholds);
-  return span.firstElementChild?.style?.backgroundColor || '#eef0f4';
+  return span.firstElementChild.style.backgroundColor;
 }
 
 function showThresholds() {
@@ -400,7 +391,7 @@ function selectRisk(r, { scroll = true } = {}) {
   }))
     $(id).value = r[key] || '';
   $('treatmentStrategy').value = r.treatment_strategy || '';
-  $('treatmentStatus').value = r.treatment_status || 'open';
+  $('treatmentStatus').value = r.treatment_status;
   $('treatmentDue').value = r.treatment_due_at || '';
   $('treatmentPlan').value = r.treatment_plan || '';
   $('editScenario').href = riskWizardHref(framework, { id: r.id });
@@ -439,14 +430,10 @@ async function loadPestle() {
       pestleMeta = await apiGet('/api/v1/pestle/meta');
       $('pestleTypeFilter').innerHTML =
         '<option value="">All types</option>' +
-        (pestleMeta.types || [])
-          .map((t) => `<option value="${esc(t)}">${esc(t)}</option>`)
-          .join('');
+        pestleMeta.types.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
       $('pestleLensFilter').innerHTML =
         '<option value="">All lenses</option>' +
-        (pestleMeta.lenses || [])
-          .map((l) => `<option value="${esc(l)}">${esc(l)}</option>`)
-          .join('');
+        pestleMeta.lenses.map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
     }
     const u = new URL('/api/v1/pestle/items', location.origin);
     if (framework) u.searchParams.set('framework', framework);
@@ -455,24 +442,24 @@ async function loadPestle() {
     if ($('pestleLensFilter').value) u.searchParams.set('lens', $('pestleLensFilter').value);
     u.searchParams.set('limit', '500');
     const data = await apiGet(u.pathname + u.search);
-    pestleItems = data?.items || [];
+    pestleItems = data.items;
     $('pestleRows').innerHTML = pestleItems.length
       ? pestleItems
           .map(
             (item) => `<tr>
-        <td><span class="badge text-bg-info">${esc(item.type || '')}</span></td>
-        <td>${esc(item.lens || '')}</td>
-        <td><a class="fw-semibold" href="${esc(pestleHref(item.id, framework))}">${esc(item.item || 'PESTLE(E) factor')}</a>${item.rationale ? `<div class="small-muted text-truncate" style="max-width:420px;">${esc(item.rationale)}</div>` : ''}</td>
+        <td><span class="badge text-bg-info">${esc(item.type)}</span></td>
+        <td>${esc(item.lens)}</td>
+        <td><a class="fw-semibold" href="${esc(pestleHref(item.id, framework))}">${esc(item.item)}</a>${item.rationale ? `<div class="small-muted text-truncate" style="max-width:420px;">${esc(item.rationale)}</div>` : ''}</td>
         <td>${pestleRelevanceBadge(item.overall_relevance)}</td>
-        <td>${esc(String(item.business_process_count ?? (item.business_processes || []).length ?? 0))}</td>
-        <td>${esc(String(item.clause_count ?? (item.clauses || []).length ?? 0))}</td>
+        <td>${esc(String(item.business_process_count))}</td>
+        <td>${esc(String(item.clause_count))}</td>
         <td class="no-print"><a class="btn btn-sm btn-outline-secondary" href="${esc(pestleHref(item.id, framework))}">Open</a></td>
       </tr>`,
           )
           .join('')
       : '<tr><td colspan="7" class="p-4 text-center small-muted">No PESTLE(E) factors yet. Use “Add a PESTLE(E) factor” to record one.</td></tr>';
     $('pestleMeta').textContent =
-      `${pestleItems.length} factor${pestleItems.length === 1 ? '' : 's'} for ${data?.framework || framework || 'the current framework'}. Open a factor to score its relevance to business processes and clauses.`;
+      `${pestleItems.length} factor${pestleItems.length === 1 ? '' : 's'} for ${data.framework}. Open a factor to score its relevance to business processes and clauses.`;
     loaded.pestle = true;
   } catch (e) {
     $('pestleRows').innerHTML =
@@ -488,23 +475,23 @@ function renderLibrary() {
   const q = $('librarySearch').value.trim().toLowerCase();
   const items = library.filter(
     (item) =>
-      (!method || (item.method || 'risk') === method) &&
+      (!method || item.method === method) &&
       (!q ||
         `${item.name} ${item.threat_summary} ${item.treatment_guidance}`.toLowerCase().includes(q)),
   );
   $('libraryList').innerHTML = items.length
     ? items
         .map((item) => {
-          const example = item.suggested_assessment || {};
+          const example = item.suggested_assessment;
           const kind =
             item.method === 'pestle'
-              ? `${methodBadgeHtml('pestle')} <span class="small-muted">${esc(item.pestle_type || '')} · ${esc(item.lens || '')}</span>`
-              : `${methodBadgeHtml((item.risk_types || []).length ? 'cia' : 'general')} ${riskTypeBadgesHtml(item.risk_types)}`;
+              ? `${methodBadgeHtml('pestle')} <span class="small-muted">${esc(item.pestle_type)} · ${esc(item.lens)}</span>`
+              : `${methodBadgeHtml(item.risk_types.length ? 'cia' : 'general')} ${riskTypeBadgesHtml(item.risk_types)}`;
           return `<div class="list-group-item d-flex flex-wrap justify-content-between gap-2">
         <div style="min-width:0">
           <div class="fw-semibold">${esc(item.name)}</div>
           <div class="mt-1">${kind}</div>
-          <div class="small-muted mt-1">${esc(item.threat_summary || '')}</div>
+          <div class="small-muted mt-1">${esc(item.threat_summary)}</div>
           ${item.treatment_guidance ? `<div class="small-muted">Guidance: ${esc(item.treatment_guidance)}</div>` : ''}
           ${example.inherent_impact ? `<div class="small-muted">Example rating: today ${esc(String(example.inherent_likelihood))} × ${esc(String(example.inherent_impact))}; after controls ${esc(String(example.residual_likelihood))} × ${esc(String(example.residual_impact))}. Review for your organisation.</div>` : ''}
           ${(example.keen_af_control_refs || []).length ? `<div class="small-muted">Links KEEN-AF controls ${esc(example.keen_af_control_refs.join(', '))}.</div>` : ''}
@@ -521,7 +508,7 @@ function renderLibrary() {
 
 async function loadLibrary() {
   try {
-    library = (await apiGet(`${base}/library`)).items || [];
+    library = (await apiGet(`${base}/library`)).items;
     renderLibrary();
     loaded.library = true;
   } catch (e) {
@@ -532,7 +519,6 @@ async function loadLibrary() {
 // --- Controls without risks -------------------------------------------------------------------
 
 async function loadControlsWithoutRisks() {
-  if (!canViewRisks) return;
   showTableLoading($('controlsWithoutRisksRows'), 4, 'Loading controls');
   const u = new URL(`${base}/controls-without-risks`, location.origin);
   if (framework) u.searchParams.set('framework', framework);
@@ -541,13 +527,13 @@ async function loadControlsWithoutRisks() {
   u.searchParams.set('limit', '5000');
   try {
     const data = await apiGet(u.pathname + u.search);
-    const items = data?.items || [];
+    const items = data.items;
     $('controlsWithoutRisksRows').innerHTML = items.length
       ? items
           .map(
             (c) => `<tr>
-      <td data-sort="${esc(c.ref || '')}"><a class="fw-semibold" href="${esc(controlHref(c.id, framework))}">${esc(c.ref || 'Control')}</a></td>
-      <td>${esc(c.title || '')}</td>
+      <td data-sort="${esc(c.ref)}"><a class="fw-semibold" href="${esc(controlHref(c.id, framework))}">${esc(c.ref)}</a></td>
+      <td>${esc(c.title)}</td>
       <td>${c.in_scope === false ? '<span class="badge text-bg-secondary">Out of scope</span>' : '<span class="badge text-bg-success">In scope</span>'}</td>
       <td class="no-print"><a class="btn btn-sm btn-outline-secondary" href="${esc(controlHref(c.id, framework))}">View</a></td>
     </tr>`,
@@ -557,7 +543,7 @@ async function loadControlsWithoutRisks() {
     loaded.controlsWithout = true;
     const total = Number(data?.total || items.length);
     $('controlsWithoutRisksMeta').textContent =
-      `${total} control${total === 1 ? '' : 's'} without associated risks for ${data?.framework || framework || 'the current framework'}.`;
+      `${total} control${total === 1 ? '' : 's'} without associated risks for ${data.framework}.`;
   } catch (e) {
     $('controlsWithoutRisksRows').innerHTML =
       '<tr><td colspan="4" class="p-4 text-center text-danger">Failed to load controls without risks.</td></tr>';
@@ -568,7 +554,6 @@ async function loadControlsWithoutRisks() {
 // --- Tabs -------------------------------------------------------------------------------------
 
 function showTab(tabButton) {
-  if (!tabButton) return;
   try {
     window.bootstrap?.Tab?.getOrCreateInstance(tabButton)?.show();
   } catch {}
@@ -705,7 +690,7 @@ $('addToLibrary').addEventListener('click', async () => {
       name,
       method: 'risk',
       threat_summary: r.threat_summary,
-      risk_types: r.risk_types || [],
+      risk_types: r.risk_types,
       treatment_guidance: r.treatment_plan || '',
       source_risk_id: r.id,
       suggested_assessment: {
@@ -782,7 +767,6 @@ $('importForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!canManageRisks) return;
   const file = $('importFile').files[0];
-  if (!file) return;
   const body = new FormData();
   body.append('file', file);
   try {
@@ -806,7 +790,7 @@ initRiskVisualisations({
   heatmap: $('riskControlsHeatmap'),
   graphMeta: $('riskControlsGraphMeta'),
   heatmapMeta: $('riskControlsHeatmapMeta'),
-  scoreMode: document.querySelector('input[name="riskVizScoreMode"]:checked')?.value || 'residual',
+  scoreMode: document.querySelector('input[name="riskVizScoreMode"]:checked').value,
 });
 $('reloadRiskVisualisations').addEventListener('click', () =>
   loadRiskVisualisations({ force: true }).catch((e) => notify(errorText(e))),
@@ -845,7 +829,7 @@ if (!canViewRisks) {
   // Without the register feature the list takes the heatmap's room.
   if (!registerEnabled) $('riskRegisterLayout').classList.add('no-sidebar');
   try {
-    categories = (await apiGet(`${base}/categories`))?.items || [];
+    categories = (await apiGet(`${base}/categories`)).items;
     renderCategoryFilters();
   } catch (e) {
     notify(`Could not load asset categories: ${errorText(e)}`);

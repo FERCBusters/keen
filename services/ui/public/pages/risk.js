@@ -110,23 +110,20 @@ function wireRiskTabs() {
 
 wireRiskTabs();
 
-const canViewRisks = !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
 const canManageRisks = !!(me?.is_admin || me?.can_manage_risks);
 
-function scoreBadge(score, title = '') {
+function scoreBadge(score, title) {
   const n = Number(score || 0);
-  return `<span class="badge ${scoreClass(n)}"${title ? ` title="${esc(title)}"` : ''}>${esc(String(n))}</span>`;
+  return `<span class="badge ${scoreClass(n)}" title="${esc(title)}">${esc(String(n))}</span>`;
 }
 
 function setText(el, value, fallback = '-') {
-  if (!el) return;
   const txt = String(value || '').trim();
   el.textContent = txt || fallback;
 }
 
 function renderTypes(risk) {
   const types = Array.isArray(risk?.risk_types) ? risk.risk_types : [];
-  if (!riskTypes) return;
   riskTypes.innerHTML =
     methodBadgeHtml(methodOf(risk)) +
     types.map((t) => ` <span class="badge badge-soft">${esc(t)}</span>`).join('');
@@ -135,7 +132,6 @@ function renderTypes(risk) {
 function renderMitigatorContext(risk) {
   const ctx = risk?.mitigator_context || {};
   const isMitigator = ctx && ctx.source === 'keen_mitigator';
-  if (!riskMitigatorContextWrap || !riskMitigatorContext) return;
   if (!isMitigator) {
     riskMitigatorContextWrap.style.display = 'none';
     return;
@@ -157,7 +153,7 @@ function renderMitigatorContext(risk) {
             .slice(0, 12)
             .map(
               (c) =>
-                `<span class="badge text-bg-light border">${esc(c.ref || '')} ${esc(c.confidence || '')}</span>`,
+                `<span class="badge text-bg-light border">${esc(c.ref)} ${esc(c.confidence)}</span>`,
             )
             .join('')}</div>`
         : ''
@@ -165,9 +161,8 @@ function renderMitigatorContext(risk) {
 }
 
 function renderControls(risk) {
-  const items = Array.isArray(risk?.controls) ? risk.controls : [];
+  const items = risk.controls;
   if (controlsCount) controlsCount.textContent = String(items.length);
-  if (!linkedControls) return;
   if (!items.length) {
     linkedControls.className = 'p-3 small-muted';
     linkedControls.innerHTML = 'No controls are mapped to this risk for the selected framework.';
@@ -187,12 +182,12 @@ function renderControls(risk) {
         ${items
           .map((c) => {
             const href = withFramework(
-              `/control.html?id=${encodeURIComponent(c.id || '')}`,
-              risk?.framework || framework,
+              `/control.html?id=${encodeURIComponent(c.id)}`,
+              risk.framework,
             );
             return `<tr>
-            <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref || '')}</a></td>
-            <td class="wrap">${esc(c.title || '')}</td>
+            <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref)}</a></td>
+            <td class="wrap">${esc(c.title)}</td>
             <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>
           </tr>`;
           })
@@ -203,14 +198,13 @@ function renderControls(risk) {
 
 function renderRisk(risk) {
   currentRisk = risk;
-  const asset = risk?.asset || risk?.asset_entity?.name || 'Risk';
+  const asset = risk?.asset || risk?.asset_entity?.name;
   const threat = String(risk?.threat_summary || '').trim();
   if (riskTitle) riskTitle.textContent = riskDisplayTitle(risk);
   if (riskMeta) {
-    const bits = [
-      risk?.framework || framework,
-      `updated ${fmtTs(risk?.updated_at) || 'unknown'}`,
-    ].filter(Boolean);
+    const bits = [risk?.framework || framework, `updated ${fmtTs(risk?.updated_at)}`].filter(
+      Boolean,
+    );
     riskMeta.textContent = bits.join(' · ');
   }
   if (risksBreadcrumb)
@@ -222,7 +216,7 @@ function renderRisk(risk) {
     );
   if (sampleRiskAudit) sampleRiskAudit.style.display = canSampleIntoAudit(me, 'risk') ? '' : 'none';
   if (editRisk) {
-    editRisk.href = riskWizardHref(risk?.framework || framework, { id: risk?.id || id });
+    editRisk.href = riskWizardHref(risk?.framework || framework, { id: risk.id });
     editRisk.style.display = canManageRisks ? '' : 'none';
   }
   if (deleteRisk) deleteRisk.style.display = canManageRisks ? '' : 'none';
@@ -259,16 +253,15 @@ sampleRiskAudit?.addEventListener('click', () => {
   openAuditSampleModal({
     me,
     entityType: 'risk',
-    entityId: risk?.id || id,
-    title: risk ? riskDisplayTitle(risk) : 'Risk',
-    framework: risk?.framework || framework,
+    entityId: risk.id,
+    title: riskDisplayTitle(risk),
+    framework: risk.framework,
     statusEl: status,
   });
 });
 
 deleteRisk?.addEventListener('click', async () => {
   const risk = currentRisk;
-  if (!risk || !canManageRisks || deleteRisk.disabled) return;
   if (
     !(await confirmAction({
       title: 'Delete risk',
@@ -280,8 +273,8 @@ deleteRisk?.addEventListener('click', async () => {
     return;
   deleteRisk.disabled = true;
   try {
-    await apiDelete(`/api/v1/risks/${encodeURIComponent(risk.id || id)}`);
-    location.assign(withFramework('/risks.html', risk.framework || framework));
+    await apiDelete(`/api/v1/risks/${encodeURIComponent(risk.id)}`);
+    location.assign(withFramework('/risks.html', risk.framework));
   } catch (e) {
     toast(status, `Could not delete the risk: ${errorText(e)}`, 'danger');
     deleteRisk.disabled = false;

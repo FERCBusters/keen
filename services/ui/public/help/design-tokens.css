@@ -64,22 +64,22 @@
 }
 
 :root[data-theme='forest'] {
-  --keen-accent: #16a34a;
-  --keen-accent-700: #15803d;
+  --keen-accent: #15803d;
+  --keen-accent-700: #166534;
   --keen-accent-100: #eaf7ef;
-  --keen-accent-rgb: 22, 163, 74;
+  --keen-accent-rgb: 21, 128, 61;
   --keen-accent-contrast: #fff;
-  --keen-link-hover: #166534;
+  --keen-link-hover: #14532d;
   --bs-body-bg: #f3fbf6;
 }
 
 :root[data-theme='sunset'] {
-  --keen-accent: #f97316;
-  --keen-accent-700: #ea580c;
+  --keen-accent: #c2410c;
+  --keen-accent-700: #9a3412;
   --keen-accent-100: #fff1e6;
-  --keen-accent-rgb: 249, 115, 22;
-  --keen-accent-contrast: #111827;
-  --keen-link-hover: #c2410c;
+  --keen-accent-rgb: 194, 65, 12;
+  --keen-accent-contrast: #fff;
+  --keen-link-hover: #7c2d12;
   --bs-body-bg: #fff7f2;
 }
 

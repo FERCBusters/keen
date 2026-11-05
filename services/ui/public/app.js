@@ -28,7 +28,7 @@ import * as mosp from '/vendor/mosp-design-system/app.js';
 // request leaves, so an identifier of ".." would send the page's session and
 // CSRF token to another route. Every API helper refuses such a path.
 export function apiPath(path) {
-  const route = String(path ?? '').split(/[?#]/, 1)[0];
+  const route = String(path).split(/[?#]/, 1)[0];
   const dotted = route.split('/').some((segment) => {
     let decoded = segment;
     try {
@@ -63,24 +63,16 @@ export async function apiRequest(path, ...rest) {
 }
 
 function _frameworkForHref() {
-  try {
-    const p = new URLSearchParams(window.location.search || '');
-    return p.get('framework') || '';
-  } catch {
-    return '';
-  }
+  const p = new URLSearchParams(window.location.search || '');
+  return p.get('framework') || '';
 }
 
 function _withCurrentFramework(path) {
   const fw = _frameworkForHref();
   if (!fw) return path;
-  try {
-    const url = new URL(path, window.location.origin);
-    url.searchParams.set('framework', fw);
-    return url.pathname + url.search;
-  } catch {
-    return path;
-  }
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set('framework', fw);
+  return url.pathname + url.search;
 }
 
 export function sourceBadgeHtml(source, metaMap, href = null) {
@@ -90,22 +82,18 @@ export function sourceBadgeHtml(source, metaMap, href = null) {
 }
 
 function _patchRiskNavDropdown() {
-  if (typeof document === 'undefined') return;
   const navRoot = document.getElementById('navbar');
   if (!navRoot || navRoot.dataset.pestleRiskDropdownPatched === '1') return;
 
   const links = Array.from(navRoot.querySelectorAll('a[href]'));
   const riskLink = links.find((a) => {
-    const href = String(a.getAttribute('href') || '');
-    const txt = String(a.textContent || '')
-      .trim()
-      .toLowerCase();
+    const href = String(a.getAttribute('href'));
+    const txt = String(a.textContent).trim().toLowerCase();
     return href.includes('/risks.html') || txt === 'risks';
   });
   if (!riskLink) return;
 
   const li = riskLink.closest('li') || riskLink.parentElement;
-  if (!li) return;
   li.classList.add('nav-item', 'dropdown');
   li.innerHTML = `
     <a class="nav-link dropdown-toggle" href="#" id="riskAssessmentsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -122,15 +110,12 @@ function _patchRiskNavDropdown() {
 }
 
 function _patchIsmsNavDropdown() {
-  if (typeof document === 'undefined') return;
   const navRoot = document.getElementById('navbar');
   if (!navRoot || navRoot.dataset.ismsDropdownPatched === '1') return;
 
   const existing = Array.from(navRoot.querySelectorAll('a[href]')).find((a) => {
-    const href = String(a.getAttribute('href') || '');
-    const txt = String(a.textContent || '')
-      .trim()
-      .toLowerCase();
+    const href = String(a.getAttribute('href'));
+    const txt = String(a.textContent).trim().toLowerCase();
     return href.includes('/isms.html') || txt === 'isms';
   });
   if (existing) {
@@ -141,10 +126,8 @@ function _patchIsmsNavDropdown() {
   const list = navRoot.querySelector('ul.navbar-nav') || navRoot.querySelector('ul') || navRoot;
   const links = Array.from(navRoot.querySelectorAll('a[href]'));
   const riskLink = links.find((a) => {
-    const href = String(a.getAttribute('href') || '');
-    const txt = String(a.textContent || '')
-      .trim()
-      .toLowerCase();
+    const href = String(a.getAttribute('href'));
+    const txt = String(a.textContent).trim().toLowerCase();
     return href.includes('/risks.html') || txt === 'risks';
   });
   const riskLi = riskLink?.closest?.('li');
@@ -180,23 +163,17 @@ function _patchIsmsNavDropdown() {
 }
 
 function _removeHomeNavItem() {
-  if (typeof document === 'undefined') return;
   const navRoot = document.getElementById('navbar');
   if (!navRoot || navRoot.dataset.homeRemoved === '1') return;
   const links = Array.from(navRoot.querySelectorAll('a[href]'));
   for (const a of links) {
-    const label = String(a.textContent || '')
-      .trim()
-      .toLowerCase();
-    const href = String(a.getAttribute('href') || '').trim();
+    const label = String(a.textContent).trim().toLowerCase();
+    const href = String(a.getAttribute('href')).trim();
     if (label !== 'home') continue;
     let isHome = href === '/' || href === 'index.html' || href.endsWith('/index.html');
-    try {
-      const url = new URL(href || '/', window.location.origin);
-      isHome = isHome || url.pathname === '/' || url.pathname.endsWith('/index.html');
-    } catch {
-      // Fall back to the simple string checks above.
-    }
+    // initNavbar has parsed every navbar link before this runs.
+    const url = new URL(href, window.location.origin);
+    isHome = isHome || url.pathname === '/' || url.pathname.endsWith('/index.html');
     if (!isHome) continue;
     const item = a.closest('li') || a;
     item.remove();
@@ -218,7 +195,7 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
   );
   for (const link of clauseLinks) (link.closest('li') || link).hidden = true;
   const data = savedCatalog || (await getFrameworkCatalog(cfgOverrides));
-  const catalog = { ...data, items: (data.items || []).filter((item) => item.enabled !== false) };
+  const catalog = { ...data, items: data.items.filter((item) => item.enabled !== false) };
   const allowed = new Set(catalog.items.map((item) => item.slug));
   let selected = getCurrentFramework();
   window.mospFrameworkDefault = catalog.default || '';
@@ -249,7 +226,7 @@ export async function refreshFrameworkNavigation(savedCatalog = null, cfgOverrid
   if (picker) {
     picker.replaceChildren(
       ...catalog.items.map((item) => {
-        const option = new Option(item.name || item.slug, item.slug);
+        const option = new Option(item.name, item.slug);
         option.title = `${item.name} (${item.slug})`;
         return option;
       }),
@@ -419,11 +396,8 @@ async function initialiseNavbar(...args) {
   try {
     await refreshFrameworkNavigation(getLoadedFrameworkCatalog(), cfg);
   } catch {
-    // Keep optional navigation hidden when the catalogue cannot be checked.
-    for (const link of navRoot?.querySelectorAll('a[href]') || []) {
-      if (new URL(link.href, location.origin).pathname === '/clauses.html')
-        (link.closest('li') || link).hidden = true;
-    }
+    // Optional navigation stays hidden when the catalogue cannot be checked:
+    // refreshFrameworkNavigation hides the Clauses links before it reads it.
   }
   _removeHomeNavItem();
   _patchRiskNavDropdown();
@@ -464,7 +438,7 @@ const _pendingRichText = new Map();
 
 export function isRichTextHtmlLike(value) {
   return /<\/?(?:p|br|hr|h[1-6]|ul|ol|li|strong|em|u|s|strike|a|blockquote|pre|code|div)\b/i.test(
-    String(value || ''),
+    String(value),
   );
 }
 
@@ -485,7 +459,7 @@ export function sanitizeRichTextHtml(source) {
   template.innerHTML = String(source || '');
 
   const cleanNode = (node) => {
-    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || '');
+    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent);
     if (node.nodeType !== Node.ELEMENT_NODE) return document.createTextNode('');
     const tag = node.tagName.toLowerCase();
     const fragment = document.createDocumentFragment();
@@ -577,7 +551,7 @@ export function syncRichTextEditor(textarea) {
   if (!textarea) return '';
   if (_pendingRichText.has(textarea)) return _pendingRichText.get(textarea);
   const editable = _richTextEditable(textarea);
-  if (editable) textarea.value = editable.innerHTML || '';
+  if (editable) textarea.value = editable.innerHTML;
   return textarea.value || '';
 }
 
@@ -637,7 +611,7 @@ function _pasteIntoRichText(event) {
   event.stopPropagation();
   const html = sanitizeRichTextHtml(data.getData('text/html'));
   if (html) document.execCommand('insertHTML', false, html);
-  else document.execCommand('insertText', false, data.getData('text/plain') || '');
+  else document.execCommand('insertText', false, data.getData('text/plain'));
 }
 
 // Top-level elements Wysi leaves in place, with the other containers a
@@ -684,7 +658,7 @@ function _wrapTopLevelText(root) {
   let moved = false;
   for (const nodes of runs) {
     const visible = nodes.some(
-      (node) => node.nodeType === Node.ELEMENT_NODE || (node.textContent || '').trim(),
+      (node) => node.nodeType === Node.ELEMENT_NODE || node.textContent.trim(),
     );
     if (!visible) continue;
     const paragraph = root.ownerDocument.createElement('p');
@@ -815,10 +789,7 @@ export function setRichTextEditorValue(textareaOrId, value) {
 }
 
 function _hexToRgb(hex) {
-  const raw = String(hex || '')
-    .trim()
-    .replace(/^#/, '');
-  if (!raw) return null;
+  const raw = String(hex).trim().replace(/^#/, '');
   const h =
     raw.length === 3
       ? raw
@@ -886,7 +857,7 @@ export function userPillHtml(
   const label = userDisplayName(userOrName);
   if (!label) return `<span class="small-muted">${esc(empty || '-')}</span>`;
   const user = userOrName && typeof userOrName === 'object' ? userOrName.user || userOrName : null;
-  const tip = String(title || user?.email || label || '').trim();
+  const tip = String(title || user?.email || label).trim();
   const cls = ['badge', 'badge-soft', 'user-pill', className].filter(Boolean).join(' ');
   return `<span class="${esc(cls)}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(prefix || '')}${esc(label)}</span>`;
 }
@@ -959,7 +930,7 @@ export function rememberSamplingAudit(auditId) {
 export function preselectSamplingAudit(select) {
   let remembered = '';
   try {
-    remembered = sessionStorage.getItem(SAMPLING_AUDIT_KEY) || '';
+    remembered = sessionStorage.getItem(SAMPLING_AUDIT_KEY);
   } catch {
     return;
   }
@@ -971,14 +942,12 @@ export function canEditAuditForUser(me = null, audit = null) {
   if (!audit) return false;
   if (me?.is_admin || me?.can_admin_audits) return true;
   return Boolean(
-    me?.can_manage_audits &&
-    me?.user_id &&
-    String(me.user_id) === String(audit.created_by_user_id || ''),
+    me?.can_manage_audits && me?.user_id && String(me.user_id) === String(audit.created_by_user_id),
   );
 }
 
 function _sampleCurrentRelativeUrl() {
-  return `${window.location.pathname || '/'}${window.location.search || ''}`;
+  return `${window.location.pathname}${window.location.search}`;
 }
 
 function _ensureEntityAuditSampleModal() {
@@ -1036,11 +1005,7 @@ function _entityAuditSampleEls() {
 
 function _sampleFramework(framework = '') {
   if (framework) return framework;
-  try {
-    return new URLSearchParams(window.location.search || '').get('framework') || '';
-  } catch {
-    return '';
-  }
+  return new URLSearchParams(window.location.search).get('framework');
 }
 
 function _sampleAuditsUrl(framework = '') {
@@ -1100,9 +1065,7 @@ export async function openAuditSampleModal({
     els.select.innerHTML = '<option value="">Loading audits</option>';
     try {
       const data = await apiGet(_sampleAuditsUrl(framework));
-      const items = (data?.items || []).filter(
-        (a) => isAuditActive(a) && canEditAuditForUser(me, a),
-      );
+      const items = data.items.filter((a) => isAuditActive(a) && canEditAuditForUser(me, a));
       els.select.innerHTML =
         items
           .map((a) => {
@@ -1120,7 +1083,7 @@ export async function openAuditSampleModal({
       if (els.useUrl) els.useUrl.disabled = disabled;
       if (disabled)
         toast(
-          els.status || statusEl,
+          els.status,
           'No open or in-progress audits are available. Start an Audit first, then sample this item into it.',
           'warning',
         );
@@ -1129,22 +1092,18 @@ export async function openAuditSampleModal({
       if (els.submit) els.submit.disabled = true;
       if (els.notes) els.notes.disabled = true;
       if (els.useUrl) els.useUrl.disabled = true;
-      toast(els.status || statusEl, `Failed to load audits: ${errorText(e)}`, 'danger');
+      toast(els.status, `Failed to load audits: ${errorText(e)}`, 'danger');
     }
   }
 
   const submitHandler = async () => {
     const auditId = (els.select?.value || '').trim();
     if (!auditId) {
-      toast(
-        els.status || statusEl,
-        'Start an Audit first, then sample this item into it.',
-        'warning',
-      );
+      toast(els.status, 'Start an Audit first, then sample this item into it.', 'warning');
       return;
     }
     const btn = document.getElementById('entityAuditSampleSubmit');
-    const prev = btn?.textContent || '';
+    const prev = btn.textContent;
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Sampling';
@@ -1165,11 +1124,11 @@ export async function openAuditSampleModal({
       }
       if (typeof onSampled === 'function') await onSampled(auditId);
     } catch (e) {
-      toast(els.status || statusEl, `Failed: ${errorText(e)}`, 'danger');
+      toast(els.status, `Failed: ${errorText(e)}`, 'danger');
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = prev || 'Sample into audit';
+        btn.textContent = prev;
       }
     }
   };
@@ -1267,19 +1226,15 @@ export function titledLinksHtml(
   const rows = Array.isArray(items) ? items : items ? [items] : [];
   const links = rows
     .map((item, idx) => {
-      const url = typeof item === 'string' ? item : item?.url || item?.href || item?.link || '';
+      const url = typeof item === 'string' ? item : item?.url || item?.href || item?.link;
       const safe = safeExternalHref(url);
       if (!safe) return '';
-      const label = String(
-        (typeof item === 'object' && item ? item.title || item.label || item.name : '') ||
-          url ||
-          `Evidence ${idx + 1}`,
-      ).trim();
+      const label = String(item.title || item.label || item.name || url).trim();
       const linkTitle = rows.length > 1 ? `${title} ${idx + 1}` : title;
       return `<span class="${esc(itemClass)}"><a class="${esc(className)} text-break" href="${esc(safe)}" target="_blank" rel="noopener noreferrer" title="${esc(linkTitle)}">${esc(label)}</a></span>`;
     })
     .filter(Boolean);
-  if (!links.length) return empty || '';
+  if (!links.length) return empty;
   return `<div class="d-flex flex-wrap align-items-center gap-1">${links.join('')}</div>`;
 }
 
@@ -1399,7 +1354,7 @@ export function effectivenessMetricThresholdState(measure, entry) {
   if (op === 'eq') ok = Math.abs(value - target) < 1e-9;
   if (op === 'gte') ok = value >= target;
   if (op === 'gt') ok = value > target;
-  const symbol = { lt: '<', lte: '≤', eq: '=', gte: '≥', gt: '>' }[op] || op;
+  const symbol = { lt: '<', lte: '≤', eq: '=', gte: '≥', gt: '>' }[op];
   const unit = String(measure.target_unit || entry.metric_unit || '').trim();
   const targetText = `${symbol} ${target}${unit ? ` ${unit}` : ''}`;
   return {
@@ -1429,7 +1384,7 @@ export function effectivenessMetricValueHtml(
       ? `<a class="${esc(baseClass)}" href="${esc(href)}">${esc(value)}</a>`
       : `<span class="${esc(baseClass)}">${esc(value)}</span>`;
   }
-  const cls = `eff-metric-value eff-metric-value-${state.state}${baseClass ? ` ${baseClass}` : ''}`;
+  const cls = `eff-metric-value eff-metric-value-${state.state} ${baseClass}`;
   return href
     ? `<a class="${esc(cls)}" href="${esc(href)}" title="${esc(state.title)}">${esc(value)}</a>`
     : `<span class="${esc(cls)}" title="${esc(state.title)}">${esc(value)}</span>`;
@@ -1470,13 +1425,13 @@ export function entityChangelogHtml(items = [], { empty = 'No changelog entries 
         const actor = entry?.changed_by_username || 'system';
         const action = String(entry?.action || '').replaceAll('_', ' ') || 'updated';
         const details = changes.length
-          ? `<div class="table-responsive mt-2"><table class="table table-sm align-middle mb-0 changelog-diff-table"><thead><tr><th style="width:180px;">Field</th><th>Before</th><th>After</th></tr></thead><tbody>${changes.map((c) => `<tr><td class="fw-semibold">${esc(c?.label || c?.field || '')}</td><td>${_changelogValueHtml(c?.before)}</td><td>${_changelogValueHtml(c?.after)}</td></tr>`).join('')}</tbody></table></div>`
+          ? `<div class="table-responsive mt-2"><table class="table table-sm align-middle mb-0 changelog-diff-table"><thead><tr><th style="width:180px;">Field</th><th>Before</th><th>After</th></tr></thead><tbody>${changes.map((c) => `<tr><td class="fw-semibold">${esc(c?.label || c?.field)}</td><td>${_changelogValueHtml(c?.before)}</td><td>${_changelogValueHtml(c?.after)}</td></tr>`).join('')}</tbody></table></div>`
           : '<div class="small-muted mt-2">No field-level changes recorded.</div>';
         return `<div class="list-group-item">
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start">
           <div>
             <div class="fw-semibold">${esc(entry?.summary || 'Entity changed')}</div>
-            <div class="small-muted">${esc(fmtTs(entry?.changed_at) || entry?.changed_at || '')} · ${esc(actor)} · ${esc(action)}</div>
+            <div class="small-muted">${esc(fmtTs(entry?.changed_at))} · ${esc(actor)} · ${esc(action)}</div>
           </div>
           ${entry?.request_path ? `<span class="badge text-bg-light mono">${esc(entry.request_method || '')} ${esc(entry.request_path)}</span>` : ''}
         </div>
@@ -1497,7 +1452,7 @@ export async function loadEntityChangelog(
   container.innerHTML = loadingSpinnerHtml(loading, { small: true });
   try {
     const res = await apiGet(url);
-    container.innerHTML = entityChangelogHtml(res?.items || [], { empty });
+    container.innerHTML = entityChangelogHtml(res?.items, { empty });
     return res;
   } catch {
     container.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';

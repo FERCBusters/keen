@@ -815,7 +815,6 @@ test('a refused template deletion and a refused CSV import are reported', async 
     query: '&tab=library',
     removeFail: true,
     postFail: true,
-    globals: { confirm: () => true },
   });
   await settle(() => ui.el('libraryList').querySelector('[data-delete-library="tpl1"]'));
   ui.el('libraryList').querySelector('[data-delete-library="tpl1"]').click();

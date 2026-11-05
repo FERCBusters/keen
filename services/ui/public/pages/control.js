@@ -126,13 +126,13 @@ const requirements = createControlRequirements({
   root: document.getElementById('controlRequirements'),
   me,
   isms: loadIsmsReferences,
-  sourceName: (source) => String(sourceLabel(source, sourceMeta) || source),
+  sourceName: (source) => String(sourceLabel(source, sourceMeta)),
   onOpenEvidence: openEvidence,
 });
 
 function loadRequirements() {
   if (!ctrl) return null;
-  return requirements.load({ id: ctrl.id || id, framework: ctrl.framework || framework });
+  return requirements.load({ id: ctrl.id, framework: ctrl.framework });
 }
 
 // Evidence loads when its tab first opens.
@@ -164,26 +164,23 @@ let relatedLoaded = false;
 const relatedControls = createRelatedControlsBrowser(document, { isAdmin: !!me?.is_admin });
 
 async function loadCrossFrameworkLinks() {
-  if (!id) return;
   try {
     const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/cross-framework`);
     if (!crossFrameworks.length) {
       try {
         const frameworks = await apiGet('/api/v1/frameworks');
-        crossFrameworks = (frameworks.items || []).filter((f) => f.slug !== ctrl?.framework);
+        crossFrameworks = frameworks.items.filter((f) => f.slug !== ctrl?.framework);
       } catch {
         // Links remain browsable by framework slug when the catalogue is unavailable.
       }
     }
-    relatedControls.update(data.items || [], crossFrameworks);
+    relatedControls.update(data.items, crossFrameworks);
     if (!me?.is_admin || !ctrl) return;
     crossForm.style.display = '';
     const previous = crossFrameworkSource.value;
     crossFrameworkSource.innerHTML =
       '<option value="">Choose framework</option>' +
-      crossFrameworks
-        .map((f) => `<option value="${esc(f.slug)}">${esc(f.name || f.slug)}</option>`)
-        .join('');
+      crossFrameworks.map((f) => `<option value="${esc(f.slug)}">${esc(f.name)}</option>`).join('');
     if (crossFrameworks.some((f) => f.slug === previous)) crossFrameworkSource.value = previous;
     if (crossFrameworkSource.value) await loadCrossSourceControls();
   } catch (e) {
@@ -199,7 +196,7 @@ async function loadCrossSourceControls() {
     const data = await apiGet(
       `/api/v1/controls?framework=${encodeURIComponent(source)}&limit=5000`,
     );
-    crossFrameworkControl.innerHTML += (data.items || [])
+    crossFrameworkControl.innerHTML += data.items
       .map((c) => `<option value="${esc(c.id)}">${esc(c.ref)} · ${esc(c.title || c.type)}</option>`)
       .join('');
   } catch (e) {
@@ -253,7 +250,7 @@ crossList?.addEventListener('click', async (event) => {
     toast(status, `Could not remove control link: ${errorText(e)}`, 'danger');
   }
 });
-let clauseCatalog = [];
+let clauseCatalog = { items: [], tree: [] };
 let clauseApplicabilityEditMode = false;
 // Declared before the tabs are wired: a deep-linked tab loads as the page starts.
 let risksLoaded = false;
@@ -273,7 +270,6 @@ if (![25, 50, 100, 200].includes(state.limit)) state.limit = 50;
 if (state.offset < 0) state.offset = 0;
 
 function renderControlChrome() {
-  if (!ctrl) return;
   const titleEl = document.getElementById('ctrlTitle');
   const metaEl = document.getElementById('ctrlMeta');
   if (titleEl) titleEl.textContent = `${ctrl.ref}  ${ctrl.title || ''}`.trim();
@@ -328,7 +324,6 @@ const owners = mountOwners({
 });
 
 function renderControlJustificationCard() {
-  if (!controlJustificationCard) return;
   const canEditJustification = !!me?.is_admin;
   controlJustificationCard.style.display = canEditJustification ? '' : 'none';
   if (!canEditJustification) return;
@@ -337,17 +332,16 @@ function renderControlJustificationCard() {
 
 // Records the tab showing and keeps it in the address.
 function setControlTabQuery(tabName) {
-  activeTab = tabName || 'requirements';
+  activeTab = tabName;
   const p = new URLSearchParams(location.search);
-  if (!tabName || tabName === 'requirements') p.delete('tab');
+  if (tabName === 'requirements') p.delete('tab');
   else p.set('tab', tabName);
   history.replaceState({}, '', `${location.pathname}?${p.toString()}`);
 }
 
 // Shows a tab and returns its name. Unknown names and inherited names such as
 // `constructor` open Requirements.
-function activateControlTab(tabName) {
-  const name = tabName || 'requirements';
+function activateControlTab(name) {
   const tabs = {
     requirements: controlRequirementsTab,
     evidence: controlEvidenceTab,
@@ -390,7 +384,7 @@ function wireControlTabs() {
 wireControlTabs();
 
 async function loadControlChangelog() {
-  if (!controlChangelogEl || !id) return;
+  if (!id) return;
   await loadEntityChangelog(
     controlChangelogEl,
     `/api/v1/controls/${encodeURIComponent(id)}/changelog?limit=100`,
@@ -420,9 +414,9 @@ function _ismsEntityRows(data) {
   const rows = [];
   for (const [label, items, titleFn, hrefFn] of groups) {
     for (const item of items || []) {
-      const href = typeof hrefFn === 'function' ? hrefFn(item) : hrefFn;
+      const href = hrefFn(item);
       rows.push(
-        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, ctrl?.framework || framework))}">${esc(shorten(titleFn(item), 180))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at) || '')}</td></tr>`,
+        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, ctrl?.framework || framework))}">${esc(shorten(titleFn(item), 180))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at))}</td></tr>`,
       );
     }
   }
@@ -433,7 +427,7 @@ function _ismsEntityRows(data) {
 
 async function loadControlIsms({ force = false } = {}) {
   if (!featureEnabled(me, 'isms')) return;
-  if (!controlIsmsView || !id) return;
+  if (!id) return;
   if (!canViewIsms) {
     controlIsmsView.innerHTML =
       '<span class="small-muted">You do not have permission to view ISMS references.</span>';
@@ -444,7 +438,7 @@ async function loadControlIsms({ force = false } = {}) {
   try {
     const data = await loadIsmsReferences();
     ismsLoaded = true;
-    controlIsmsView.innerHTML = _ismsEntityRows(data || {});
+    controlIsmsView.innerHTML = _ismsEntityRows(data);
   } catch (e) {
     ismsLoaded = false;
     controlIsmsView.innerHTML = '<span class="text-danger">Failed to load ISMS references.</span>';
@@ -472,8 +466,7 @@ function applicabilityBadge(v) {
 }
 
 function renderLinkedClauses() {
-  const links = Array.isArray(ctrl?.clauses) ? ctrl.clauses : [];
-  if (!clausesCard || !clausesView) return;
+  const links = ctrl.clauses;
   clausesCard.style.display = '';
   if (clausesCount) clausesCount.textContent = String(links.length);
   if (editClauseApplicabilityBtn) {
@@ -485,9 +478,7 @@ function renderLinkedClauses() {
     return;
   }
 
-  const rows = [...links].sort((a, b) =>
-    String(a.ref || '').localeCompare(String(b.ref || ''), undefined, { numeric: true }),
-  );
+  const rows = [...links].sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true }));
   clausesView.innerHTML = `
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
@@ -504,15 +495,15 @@ function renderLinkedClauses() {
               const clauseHref = c.clause_id
                 ? withFramework(
                     `/clause.html?id=${encodeURIComponent(c.clause_id)}`,
-                    ctrl?.framework || framework,
+                    ctrl.framework,
                   )
                 : '';
               const refHtml = clauseHref
-                ? `<a href="${esc(clauseHref)}">${esc(c.ref || '')}</a>`
-                : esc(c.ref || '');
+                ? `<a href="${esc(clauseHref)}">${esc(c.ref)}</a>`
+                : esc(c.ref);
               return `<tr>
               <td class="fw-semibold">${refHtml}</td>
-              <td class="wrap">${esc(c.title || '')}</td>
+              <td class="wrap">${esc(c.title)}</td>
               <td>${applicabilityBadge(c.applicability)}</td>
             </tr>`;
             })
@@ -524,7 +515,7 @@ function renderLinkedClauses() {
 
 async function loadLinkedRisks({ force = false } = {}) {
   if (!featureEnabled(me, 'risk_cia')) return;
-  if (!risksCard || !risksView) return;
+  if (!id) return;
   if (!canViewRisks) {
     risksCard.style.display = 'none';
     return;
@@ -534,7 +525,7 @@ async function loadLinkedRisks({ force = false } = {}) {
     const data = await apiGet(
       `/api/v1/controls/${encodeURIComponent(id)}/risks?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
     );
-    const items = data?.items || [];
+    const items = data.items;
     risksLoaded = true;
     risksCard.style.display = '';
     if (risksCount) risksCount.textContent = String(items.length);
@@ -561,14 +552,14 @@ async function loadLinkedRisks({ force = false } = {}) {
             ${items
               .map((r) => {
                 const href = withFramework(
-                  `/risk.html?id=${encodeURIComponent(r.id || '')}`,
+                  `/risk.html?id=${encodeURIComponent(r.id)}`,
                   ctrl?.framework || framework,
                 );
                 const types = (r.risk_types || [])
                   .map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`)
                   .join('');
                 return `<tr>
-                <td><a class="fw-semibold" href="${esc(href)}">${esc(r.asset || '')}</a><div class="small-muted text-truncate" style="max-width:360px;">${esc(r.threat_summary || '')}</div></td>
+                <td><a class="fw-semibold" href="${esc(href)}">${esc(r.asset)}</a><div class="small-muted text-truncate" style="max-width:360px;">${esc(r.threat_summary || '')}</div></td>
                 <td>${esc(r.category?.name || '')}</td>
                 <td>${esc(r.subcategory?.name || '')}</td>
                 <td>${types || '<span class="small-muted">-</span>'}</td>
@@ -589,7 +580,7 @@ async function loadLinkedRisks({ force = false } = {}) {
 }
 async function loadLinkedInterestedParties({ force = false } = {}) {
   if (!featureEnabled(me, 'interested_parties')) return;
-  if (!interestedPartiesCard || !interestedPartiesView) return;
+  if (!id) return;
   if (!canViewInterestedParties) {
     interestedPartiesCard.style.display = 'none';
     return;
@@ -601,7 +592,7 @@ async function loadLinkedInterestedParties({ force = false } = {}) {
     const data = await apiGet(
       `/api/v1/controls/${encodeURIComponent(id)}/interested-parties?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
     );
-    const items = data?.items || [];
+    const items = data.items;
     interestedPartiesLoaded = true;
     if (interestedPartiesCount) interestedPartiesCount.textContent = String(items.length);
     if (!items.length) {
@@ -617,21 +608,21 @@ async function loadLinkedInterestedParties({ force = false } = {}) {
             ${items
               .map((it) => {
                 const href = withFramework(
-                  `/interested_party.html?id=${encodeURIComponent(it.id || '')}`,
+                  `/interested_party.html?id=${encodeURIComponent(it.id)}`,
                   ctrl?.framework || framework,
                 );
                 const comms =
-                  (it.communications || [])
-                    .map((c) => `${esc(c.event || '')} / ${esc(c.with_whom || '')}`)
+                  it.communications
+                    .map((c) => `${esc(c.event)} / ${esc(c.with_whom)}`)
                     .join('<br>') || '<span class="small-muted">-</span>';
                 const methods =
-                  Array.from(new Set((it.communications || []).flatMap((c) => c.methods || [])))
+                  Array.from(new Set(it.communications.flatMap((c) => c.methods)))
                     .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
                     .join('') || '<span class="small-muted">-</span>';
-                const note = (it.note || '').trim()
+                const note = it.note.trim()
                   ? esc(shorten(it.note, 140))
                   : '<span class="small-muted">-</span>';
-                return `<tr><td><a class="fw-semibold" href="${esc(href)}">${esc(it.name?.name || '')}</a></td><td>${esc(it.nature?.name || '')}</td><td class="small text-wrap" style="min-width:220px;">${note}</td><td class="small">${comms}</td><td>${methods}</td></tr>`;
+                return `<tr><td><a class="fw-semibold" href="${esc(href)}">${esc(it.name.name)}</a></td><td>${esc(it.nature.name)}</td><td class="small text-wrap" style="min-width:220px;">${note}</td><td class="small">${comms}</td><td>${methods}</td></tr>`;
               })
               .join('')}
           </tbody>
@@ -646,44 +637,42 @@ async function loadLinkedInterestedParties({ force = false } = {}) {
 }
 
 function flattenClauseTree(nodes, depth = 0, out = []) {
-  for (const n of nodes || []) {
+  for (const n of nodes) {
     out.push({ ...n, depth });
-    flattenClauseTree(n.children || [], depth + 1, out);
+    flattenClauseTree(n.children, depth + 1, out);
   }
   return out;
 }
 
 function selectedClauseMap() {
   const m = new Map();
-  for (const c of ctrl?.clauses || []) {
-    if (c.clause_id) m.set(String(c.clause_id), c.applicability || 'applicable');
+  for (const c of ctrl.clauses) {
+    if (c.clause_id) m.set(String(c.clause_id), c.applicability);
   }
   return m;
 }
 
 function clauseSelect(id) {
-  if (!adminClausesList || !id || !window.CSS?.escape) return null;
   return adminClausesList.querySelector(
     `.clause-applicability[data-clause-id="${CSS.escape(String(id))}"]`,
   );
 }
 
 function applyInferredParentClauseApplicability() {
-  if (!adminClausesList) return;
-  const flat = flattenClauseTree(clauseCatalog?.tree || []);
+  const flat = flattenClauseTree(clauseCatalog.tree);
   const childrenByParent = new Map();
   for (const c of flat) {
     if (!c.parent_id) continue;
     const key = String(c.parent_id);
     if (!childrenByParent.has(key)) childrenByParent.set(key, []);
-    childrenByParent.get(key).push(String(c.id || ''));
+    childrenByParent.get(key).push(String(c.id));
   }
 
-  const byId = new Map(flat.map((c) => [String(c.id || ''), c]));
+  const byId = new Map(flat.map((c) => [String(c.id), c]));
 
   const memo = new Map();
   function inferValue(clauseId) {
-    const key = String(clauseId || '');
+    const key = String(clauseId);
     if (memo.has(key)) return memo.get(key);
 
     const kids = childrenByParent.get(key) || [];
@@ -720,7 +709,6 @@ function applyInferredParentClauseApplicability() {
 }
 
 function renderAdminClauses() {
-  if (!adminClausesCard || !adminClausesList) return;
   if (!me?.is_admin || !clauseApplicabilityEditMode) {
     adminClausesCard.style.display = 'none';
     return;
@@ -728,7 +716,7 @@ function renderAdminClauses() {
   adminClausesCard.style.display = '';
   if (controlUpstreamUrl) controlUpstreamUrl.value = ctrl?.upstream_url || '';
 
-  const flat = flattenClauseTree(clauseCatalog?.tree || []);
+  const flat = flattenClauseTree(clauseCatalog.tree);
   const selected = selectedClauseMap();
   if (!flat.length) {
     adminClausesList.innerHTML =
@@ -748,19 +736,19 @@ function renderAdminClauses() {
         <tbody>
           ${flat
             .map((c) => {
-              const cid = String(c.id || '');
+              const cid = String(c.id);
               const cur = selected.get(cid) || '';
               const depth = Math.max(0, Number(c.depth || 0));
               const indent = depth ? `style="padding-left:${Math.min(depth * 1.25, 4)}rem"` : '';
               const parentClass = depth === 0 ? 'fw-bold' : '';
               const clauseHref = withFramework(
                 `/clause.html?id=${encodeURIComponent(cid)}`,
-                ctrl?.framework || framework,
+                ctrl.framework,
               );
               return `<tr>
               <td class="wrap ${parentClass}" ${indent}>
-                <a class="me-2" href="${esc(clauseHref)}">${esc(c.ref || '')}</a>
-                <span class="small-muted">${esc(c.title || '')}</span>
+                <a class="me-2" href="${esc(clauseHref)}">${esc(c.ref)}</a>
+                <span class="small-muted">${esc(c.title)}</span>
               </td>
               <td>
                 <select class="form-select form-select-sm clause-applicability" data-clause-id="${esc(cid)}">
@@ -783,14 +771,11 @@ function renderAdminClauses() {
 }
 
 async function loadClauseCatalog() {
-  const data = await apiGet(
-    `/api/v1/clauses?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
-  );
-  clauseCatalog = data || { items: [], tree: [] };
+  const data = await apiGet(`/api/v1/clauses?framework=${encodeURIComponent(ctrl.framework)}`);
+  clauseCatalog = data;
 }
 
 async function ensureClauseCatalogLoaded() {
-  if (!me?.is_admin) return;
   const hasItems = Array.isArray(clauseCatalog?.items) && clauseCatalog.items.length > 0;
   const hasTree = Array.isArray(clauseCatalog?.tree) && clauseCatalog.tree.length > 0;
   if (hasItems || hasTree) return;
@@ -814,26 +799,24 @@ async function reloadControlOnly() {
 function renderRows(items) {
   tbody.innerHTML = '';
 
-  for (const e of items || []) {
-    const srcChip = e.source
-      ? sourceBadgeHtml(e.source, sourceMeta, controlScopedSourceHref(e.source))
-      : '';
+  for (const e of items) {
+    const srcChip = sourceBadgeHtml(e.source, sourceMeta, controlScopedSourceHref(e.source));
 
     const ext = upstreamLinkHtml(e.source_url, { title: 'Open source event' });
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp))}</td>
-      <td data-sort="${esc(e.source || '')}">${srcChip}</td>
-      <td class="wrap"><a href="${withFramework(`/event.html?id=${encodeURIComponent(e.event_id || e.id)}`, ctrl?.framework || framework)}" title="${esc(e.summary || '')}">${esc(
-        shorten(e.summary || '', 160),
+      <td data-sort="${esc(e.source)}">${srcChip}</td>
+      <td class="wrap"><a href="${withFramework(`/event.html?id=${encodeURIComponent(e.event_id || e.id)}`, ctrl?.framework || framework)}" title="${esc(e.summary)}">${esc(
+        shorten(e.summary, 160),
       )}</a></td>
       <td>${ext}</td>
     `;
     tbody.appendChild(tr);
   }
 
-  if ((items || []).length === 0) {
+  if (items.length === 0) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td colspan="4" class="small-muted p-4">No evidence matches your filters.</td>`;
     tbody.appendChild(tr);
@@ -843,13 +826,12 @@ function renderRows(items) {
 function applyFromInputs(resetOffset = true) {
   state.q = (localQ?.value || '').trim();
   state.source = sourceFilter?.value || '';
-  state.limit = parseInt(selLimit?.value || '50', 10);
-  if (!Number.isFinite(state.limit)) state.limit = 50;
+  state.limit = parseInt(selLimit.value, 10);
   if (resetOffset) state.offset = 0;
 
   setQuery({
     id,
-    framework: ctrl?.framework || framework || null,
+    framework: ctrl?.framework || framework,
     q: state.q || null,
     source: state.source || null,
     limit: state.limit,
@@ -867,7 +849,7 @@ async function loadFacets() {
     p.set('max_controls', '0');
 
     const data = await apiGet(`/api/v1/events/facets?${p.toString()}`);
-    renderSourceOptions(data?.sources || []);
+    renderSourceOptions(data.sources);
   } catch {
     // Non-fatal; keep existing options.
   }
@@ -875,14 +857,14 @@ async function loadFacets() {
 
 function renderSourceOptions(facets) {
   const current = state.source || '';
-  const rows = Array.isArray(facets) ? facets : [];
+  const rows = facets;
   const counts = new Map(rows.map((r) => [String(r.source), Number(r.count || 0)]));
 
   const items = rows
     .filter((r) => r && r.source && Number(r.count || 0) > 0)
     .map((r) => ({
       source: String(r.source),
-      count: Number(r.count || 0),
+      count: Number(r.count),
     }))
     .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source));
 
@@ -890,14 +872,14 @@ function renderSourceOptions(facets) {
 
   // Preserve current selection even if it yields zero results.
   if (current && !counts.has(current)) {
-    const label = String(sourceLabel(current, sourceMeta) || current);
+    const label = String(sourceLabel(current, sourceMeta));
     const text = label && label !== current ? `${label} (${current})` : current;
     html += `<option value="${esc(current)}">${esc(text)} (0)</option>`;
   }
 
   for (const it of items) {
     const src = it.source;
-    const label = String(sourceLabel(src, sourceMeta) || src);
+    const label = String(sourceLabel(src, sourceMeta));
     const text = label && label !== src ? `${label} (${src})` : src;
     html += `<option value="${esc(src)}">${esc(text)} (${it.count})</option>`;
   }
@@ -926,7 +908,7 @@ async function loadEvents() {
     const page = offsetPagerState(state);
     if (meta) meta.textContent = `${page.start}-${page.end} of ${page.total}`;
 
-    renderRows(data.items || []);
+    renderRows(data.items);
 
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
@@ -958,7 +940,7 @@ async function load() {
     renderControlChrome();
     renderControlJustificationCard();
     if (controlsBreadcrumb)
-      controlsBreadcrumb.href = withFramework('/controls.html', ctrl.framework || framework);
+      controlsBreadcrumb.href = withFramework('/controls.html', ctrl.framework);
 
     if (linksEl) {
       const guidanceHref = safeAbsoluteHttpHref(ctrl.upstream_url);
@@ -1023,7 +1005,6 @@ wireOffsetPagerButtons(pagerButtons, (direction) => {
 
 // Toggle editing of the control's clause applicability.
 editClauseApplicabilityBtn?.addEventListener('click', async () => {
-  if (!me?.is_admin) return;
   clauseApplicabilityEditMode = !clauseApplicabilityEditMode;
   renderLinkedClauses();
   if (clauseApplicabilityEditMode) {
@@ -1046,7 +1027,7 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
   // Sync current inputs to state + URL
   applyFromInputs(false);
 
-  const title = (document.getElementById('ctrlTitle')?.textContent || 'Control').trim();
+  const title = document.getElementById('ctrlTitle').textContent.trim();
   const parts = [];
   if (state.q) parts.push(`q=${state.q}`);
   if (state.source) parts.push(`source=${state.source}`);
@@ -1075,10 +1056,9 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
 });
 
 saveClauseLinksBtn?.addEventListener('click', async () => {
-  if (!me?.is_admin) return;
   applyInferredParentClauseApplicability();
   const clauses = [];
-  for (const sel of adminClausesList?.querySelectorAll('.clause-applicability') || []) {
+  for (const sel of adminClausesList.querySelectorAll('.clause-applicability')) {
     const applicability = (sel.value || '').trim();
     if (!applicability) continue;
     clauses.push({ clause_id: sel.dataset.clauseId, applicability });
@@ -1097,7 +1077,6 @@ saveClauseLinksBtn?.addEventListener('click', async () => {
 });
 
 saveControlJustificationBtn?.addEventListener('click', async () => {
-  if (!me?.is_admin) return;
   saveControlJustificationBtn.disabled = true;
   try {
     await apiPatch(`/api/v1/admin/controls/${encodeURIComponent(id)}/justification`, {
@@ -1114,11 +1093,10 @@ saveControlJustificationBtn?.addEventListener('click', async () => {
 });
 
 saveControlUpstreamUrlBtn?.addEventListener('click', async () => {
-  if (!me?.is_admin) return;
   saveControlUpstreamUrlBtn.disabled = true;
   try {
     await apiPatch(`/api/v1/admin/controls/${encodeURIComponent(id)}/upstream-url`, {
-      upstream_url: (controlUpstreamUrl?.value || '').trim() || null,
+      upstream_url: controlUpstreamUrl.value.trim() || null,
     });
     toast(status, 'Control upstream URL saved', 'success');
     await reloadControlOnly();

@@ -29,14 +29,13 @@ let state = { q: qs('q', '') };
 if (qEl) qEl.value = state.q;
 
 function hasChildClauses(c) {
-  const id = String(c?.id || '');
-  if (!id) return false;
+  const id = String(c.id);
   if (Number(c?.child_count || 0) > 0) return true;
   return clauses.some((candidate) => String(candidate?.parent_id || '') === id);
 }
 
 function flatten(nodes, depth = 0, out = []) {
-  for (const n of nodes || []) {
+  for (const n of nodes) {
     out.push({ ...n, depth });
     flatten(n.children || [], depth + 1, out);
   }
@@ -47,7 +46,7 @@ function render() {
   const q = (state.q || '').trim().toLowerCase();
   const view = clauses.filter((c) => {
     if (!q) return true;
-    return `${c.ref || ''} ${c.title || ''}`.toLowerCase().includes(q);
+    return `${c.ref} ${c.title}`.toLowerCase().includes(q);
   });
   if (metaEl)
     metaEl.textContent = `${view.length} of ${clauses.length} clause${clauses.length === 1 ? '' : 's'}`;
@@ -74,11 +73,11 @@ function render() {
       const parentClause = hasChildClauses(c);
       const linkedControlsHtml = parentClause
         ? '<span class="small-muted" title="Parent clause; controls are linked to child clauses">-</span>'
-        : esc(String(c.control_link_count || 0));
-      const linkedControlsSort = parentClause ? -1 : Number(c.control_link_count || 0);
+        : esc(String(c.control_link_count));
+      const linkedControlsSort = parentClause ? -1 : Number(c.control_link_count);
       return `<tr>
-      <td class="${cls}" ${indent}><a href="${esc(href)}">${esc(c.ref || '')}</a></td>
-      <td class="wrap ${cls}">${esc(c.title || '')}</td>
+      <td class="${cls}" ${indent}><a href="${esc(href)}">${esc(c.ref)}</a></td>
+      <td class="wrap ${cls}">${esc(c.title)}</td>
       <td data-sort="${linkedControlsSort}">${linkedControlsHtml}</td>
       <td data-sort="${Number(evidenceMappings.length || 0)}">${evidenceHtml}</td>
       <td>${upstreamHtml}</td>
@@ -91,7 +90,7 @@ async function load() {
   showTableLoading(rowsEl, 5, 'Loading clauses');
   try {
     const data = await apiGet(`/api/v1/clauses?framework=${encodeURIComponent(framework)}`);
-    clauses = flatten(data?.tree || []);
+    clauses = flatten(data.tree);
     render();
   } catch (e) {
     toast(status, `Failed to load clauses: ${errorText(e)}`, 'danger');
@@ -101,7 +100,7 @@ async function load() {
 }
 
 const debRender = debounce(() => {
-  state.q = (qEl?.value || '').trim();
+  state.q = qEl.value.trim();
   setQuery({ framework: framework || null, q: state.q || null });
   render();
 }, 200);

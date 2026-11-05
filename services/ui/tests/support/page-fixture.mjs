@@ -37,6 +37,11 @@ export async function page(
     modules = {},
   } = {},
 ) {
+  // Pages ask through the shared confirm dialog and never call the browser's
+  // confirm(), so a stub of it would answer nothing and the declined path
+  // would go untested.
+  if ('confirm' in globals)
+    throw new Error('Pages ask through confirmAction: pass `confirm`, not `globals.confirm`');
   const calls = [],
     unexpected = [],
     confirmations = [];

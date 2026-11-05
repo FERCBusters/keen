@@ -5,7 +5,6 @@ export function mountFeatures(me) {
   const root = document.getElementById('feature-settings');
   const status = document.getElementById('feature-status');
   const tab = document.getElementById('tab-features');
-  if (!root || !tab) return;
   if (!me?.is_admin) {
     tab.closest('li').hidden = true;
     return;
@@ -48,7 +47,6 @@ export function mountFeatures(me) {
         row.append(help);
       }
       input.addEventListener('change', async () => {
-        if (busy) return;
         busy = true;
         const checked = input.checked;
         pending = { key: item.key, checked };

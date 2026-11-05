@@ -514,3 +514,107 @@ test('the tab query parameter opens the matching tab and tab changes are recorde
   assert.equal(new URL(ui.window.location.href).searchParams.get('tab'), 'pestle');
   assert.equal(new URL(ui.window.location.href).searchParams.get('framework'), 'A');
 });
+
+const sparse = () => ({
+  framework: 'A',
+  can_view_risks: true,
+  can_view_pestle: true,
+  can_view_interested_parties: true,
+  can_view_isms: true,
+  can_view_swot: true,
+  counts: {},
+  controls: [{ id: 'c9', ref: 'A.9', title: null, in_scope: true, justification: '', clauses: {} }],
+  clauses: [{ id: 'k1', ref: '4.1', title: 'Context', controls: {}, evidence_mappings: [] }],
+  risks: [
+    {
+      id: 'r3',
+      asset: 'Mail',
+      threat_summary: 'Spoofing',
+      category: { name: 'Information' },
+      subcategory: { name: 'Mail' },
+      risk_types: [],
+      risk_score: 4,
+      residual_risk_score: 2,
+      risk_owner: null,
+      controls: [{ id: 'c9', ref: 'A.9', title: null }],
+    },
+  ],
+  pestle_items: [],
+  interested_parties: [
+    {
+      id: 'ip3',
+      name: { name: 'Staff' },
+      nature: { name: 'Internal' },
+      note: '',
+      controls: [{ id: 'c9', ref: 'A.9', title: null }],
+      communications: [],
+    },
+  ],
+  isms_objectives: [
+    {
+      id: 'o1',
+      goal: '',
+      requirement: '',
+      metric: '',
+      owner: null,
+      resource_users: [],
+      resource_requirements_text: '',
+      controls: [],
+      clauses: [],
+    },
+  ],
+  isms_documents: [
+    {
+      id: 'd9',
+      title: 'Scanned record',
+      document_type: 'record',
+      has_file: true,
+      filename: null,
+      external_url: null,
+      description: '',
+      controls: [],
+      clauses: [],
+    },
+  ],
+  isms_effectiveness_measures: [],
+  isms_org_nodes: [],
+  isms_assets: [],
+  swot_items: [
+    {
+      id: 's1',
+      title: 'Strong onboarding',
+      kind: 'strength',
+      significance: 3,
+      status: 'open',
+      controls: [],
+      clauses: [{ id: 'k1', ref: '4.1', framework: 'A' }],
+    },
+  ],
+});
+
+test('untitled controls and unnamed records show no placeholder text and match no search for it', async (t) => {
+  const ui = await soaPage(t, { data: sparse() });
+  assert.equal(ui.el('controlsRows').querySelector('tr').cells[1].textContent, '');
+  // The clause matrix names the untitled control by its reference alone.
+  assert.equal(ui.el('clausesHead').querySelectorAll('th')[3].getAttribute('title'), 'A.9');
+  for (const [id, rows, empty] of [
+    ['controlsFilter', 'controlsRows', 'No controls match.'],
+    ['risksFilter', 'risksRows', 'No risks match.'],
+    ['interestedPartiesFilter', 'interestedPartiesRows', 'No interested parties match.'],
+  ]) {
+    filter(ui, id, 'a.9');
+    assert.notEqual(ui.el(rows).textContent.trim(), empty, id);
+    filter(ui, id, 'null');
+    assert.equal(ui.el(rows).textContent.trim(), empty, id);
+  }
+  // An objective without a goal or requirement is still listed.
+  assert.equal(ui.el('ismsObjectivesRows').querySelector('td').firstChild.textContent, 'Objective');
+  // An uploaded file whose name is not recorded links as an uploaded file.
+  const file = ui.el('ismsDocumentsRows').querySelector('a');
+  assert.equal(file.textContent, 'Uploaded file');
+  assert.equal(file.getAttribute('href'), '/api/v1/isms/documents/d9/file');
+  // A SWOT item mapped only to clauses shows a dash for controls.
+  const swot = ui.el('swotRows').querySelector('tr').cells;
+  assert.equal(swot[4].textContent, '-');
+  assert.equal(swot[5].textContent, '4.1');
+});

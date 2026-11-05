@@ -45,7 +45,7 @@ function optionsHtml(choices) {
 
 // Unknown rules read as the first weekday.
 function fuzzyRule(rule) {
-  return FUZZY_RULES.find(([value]) => value === String(rule || '')) || FUZZY_RULES[0];
+  return FUZZY_RULES.find(([value]) => value === rule) || FUZZY_RULES[0];
 }
 
 export function isFuzzyDateRule(rule) {
@@ -67,7 +67,7 @@ export function recurrenceName(value) {
 // How often a schedule runs, from its schedule_* fields, such as
 // "Monthly × 2 · first Monday of Jan".
 export function scheduleSummary(schedule) {
-  const recur = String(schedule?.schedule_recurrence || 'once');
+  const recur = String(schedule?.schedule_recurrence);
   const interval = Number(schedule?.schedule_interval || 1);
   const base = recurrenceName(recur);
   const recurText = interval > 1 && recur !== 'once' ? `${base} × ${interval}` : base;
@@ -127,7 +127,7 @@ export function scheduleDateFields(fields, { lead, yearlyWhenFuzzy = false }) {
     const fallback = isoYearMonth(start.value);
     const iso = firstRuleDateIso(
       Number(year.value) || fallback.year,
-      Number(month.value) || fallback.month,
+      Number(month.value),
       rule.value,
     );
     const label = fuzzyRuleLabel(rule.value);
@@ -151,6 +151,6 @@ export function scheduleDateFields(fields, { lead, yearlyWhenFuzzy = false }) {
       return start.value || '';
     },
     // The month a fuzzy rule recurs in; exact dates have none.
-    anchorMonth: () => (fuzzy() ? Number(month.value || 1) : null),
+    anchorMonth: () => (fuzzy() ? Number(month.value) : null),
   };
 }

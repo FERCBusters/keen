@@ -75,13 +75,12 @@ export const IMPACT_SCALE = [
 ];
 
 export function methodOf(risk) {
-  if (!risk) return 'general';
   if (risk.method) return risk.method;
   return (risk.risk_types || []).length ? 'cia' : 'general';
 }
 
 export function methodBadgeHtml(method) {
-  const meta = RISK_METHODS[method] || RISK_METHODS.general;
+  const meta = RISK_METHODS[method];
   const cls =
     method === 'cia'
       ? 'text-bg-primary'
@@ -92,7 +91,7 @@ export function methodBadgeHtml(method) {
 }
 
 export function riskTypeBadgesHtml(types) {
-  return (types || []).map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`).join('');
+  return types.map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`).join('');
 }
 
 export function partyBadgesHtml(parties, framework) {
@@ -102,7 +101,7 @@ export function partyBadgesHtml(parties, framework) {
     .map((p) => {
       const icon =
         p.kind === 'person' ? 'bi-person' : p.kind === 'vendor' ? 'bi-building' : 'bi-people';
-      const label = `<i class="bi ${icon} me-1" aria-hidden="true"></i>${esc(p.label || 'Party')}`;
+      const label = `<i class="bi ${icon} me-1" aria-hidden="true"></i>${esc(p.label)}`;
       const title = p.detail ? ` title="${esc(p.detail)}"` : '';
       const href = localPath(p.href) && localPath(withFramework(p.href, framework));
       return href
@@ -125,26 +124,22 @@ export function scoreBadge(score) {
 }
 
 export function scorePreviewClass(score) {
-  const n = Number(score || 0);
+  const n = Number(score);
   if (n < 5) return 'score-pill score-low';
   if (n <= 12) return 'score-pill score-medium';
   return 'score-pill score-high';
 }
 
 export function clampScore(value) {
-  const raw = value === null || value === undefined || value === '' ? 1 : value;
-  const n = Math.floor(Number(raw));
-  if (!Number.isFinite(n)) return 1;
-  return Math.max(1, Math.min(5, n));
+  return Math.max(1, Math.min(5, Math.floor(Number(value))));
 }
 
 // Register thresholds turn a 1-25 score into a severity word and colour.
 export function severityFor(score, thresholds) {
-  const t = thresholds || { low_max: 4, moderate_max: 9, high_max: 16 };
   if (score == null) return { text: 'Needs rating', color: '#eef0f4' };
-  if (score <= t.low_max) return { text: 'Low', color: '#d9efde' };
-  if (score <= t.moderate_max) return { text: 'Moderate', color: '#fff2bf' };
-  if (score <= t.high_max) return { text: 'High', color: '#ffd5a7' };
+  if (score <= thresholds.low_max) return { text: 'Low', color: '#d9efde' };
+  if (score <= thresholds.moderate_max) return { text: 'Moderate', color: '#fff2bf' };
+  if (score <= thresholds.high_max) return { text: 'High', color: '#ffd5a7' };
   return { text: 'Critical', color: '#f9b9ba' };
 }
 
@@ -154,17 +149,15 @@ export function severityBadge(score, thresholds) {
 }
 
 export function treatmentLabel(strategy) {
-  const found = TREATMENT_STRATEGIES.find(([value]) => value === String(strategy || ''));
-  return found ? found[1].split(' - ')[0] : 'Not decided yet';
+  const [, label] = TREATMENT_STRATEGIES.find(([value]) => value === String(strategy || ''));
+  return label.split(' - ')[0];
 }
 
 export function treatmentStatusLabel(status) {
-  const found = TREATMENT_STATUSES.find(([value]) => value === String(status || 'open'));
-  return found ? found[1] : 'Open';
+  return TREATMENT_STATUSES.find(([value]) => value === String(status || 'open'))[1];
 }
 
 export function riskDisplayTitle(risk) {
-  if (!risk) return 'Risk';
   if (risk.display) return risk.display;
   const title = String(risk.title || '').trim();
   if (title) return title;
@@ -175,22 +168,22 @@ export function riskDisplayTitle(risk) {
 }
 
 export function riskHref(id, framework) {
-  return withFramework(`/risk.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(`/risk.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 export function controlHref(id, framework) {
-  return withFramework(`/control.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(`/control.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 export function pestleHref(id, framework, tab = 'details') {
   return withFramework(
-    `/pestle_item.html?id=${encodeURIComponent(id || '')}${tab ? `&tab=${encodeURIComponent(tab)}` : ''}`,
+    `/pestle_item.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(tab)}`,
     framework,
   );
 }
 
 export function interestedPartyHref(id, framework) {
-  return withFramework(`/interested_party.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(`/interested_party.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 export function riskDashboardHref(framework, tab = '') {
@@ -214,7 +207,7 @@ const DRAFT_KEY = 'keen.riskWizardDraft';
 // the wizard; storage can be unavailable, so both directions fail quietly.
 export function storeWizardDraft(draft) {
   try {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft || {}));
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     return true;
   } catch {
     return false;

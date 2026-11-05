@@ -30,7 +30,7 @@ const me = await initNavbar();
 enableTableSorting();
 
 const framework = getCurrentFramework();
-const params = new URLSearchParams(window.location.search || '');
+const params = new URLSearchParams(window.location.search);
 const sourceName = String(params.get('source') || params.get('type') || '').trim();
 if (me?.is_admin && sourceName) {
   const link = document.createElement('a');
@@ -94,24 +94,16 @@ let state = {
 };
 if (![25, 50, 100, 200].includes(state.limit)) state.limit = 50;
 
-function sourcePageHref(src = sourceName, overrides = {}) {
+// This source's events from the first page, filtered by dates and mapping,
+// with the current page size.
+function sourcePageHref(src, { start_date, end_date, unmapped }) {
   const p = new URLSearchParams();
   if (framework) p.set('framework', framework);
   if (src) p.set('source', src);
-  const tab = overrides.tab || params.get('tab') || '';
-  if (tab && tab !== 'events') p.set('tab', tab);
-  const q = overrides.q !== undefined ? overrides.q : state.q;
-  const start = overrides.start_date !== undefined ? overrides.start_date : state.start_date;
-  const end = overrides.end_date !== undefined ? overrides.end_date : state.end_date;
-  const unmapped = overrides.unmapped !== undefined ? overrides.unmapped : state.unmapped;
-  const limit = overrides.limit !== undefined ? overrides.limit : state.limit;
-  const offset = overrides.offset !== undefined ? overrides.offset : state.offset;
-  if (q) p.set('q', q);
-  if (start) p.set('start_date', start);
-  if (end) p.set('end_date', end);
+  if (start_date) p.set('start_date', start_date);
+  if (end_date) p.set('end_date', end_date);
   if (unmapped) p.set('unmapped', 'true');
-  if (limit) p.set('limit', String(limit));
-  if (offset) p.set('offset', String(offset));
+  if (state.limit) p.set('limit', String(state.limit));
   return `/source.html?${p.toString()}`;
 }
 
@@ -155,11 +147,11 @@ function renderSourceChrome(row = null) {
     sourceMetaEl.textContent = 'Add ?source=<name> to open a source page.';
     return;
   }
-  const label = sourceLabel(sourceName, sourceMeta) || sourceName;
-  sourceTitle.innerHTML = `${sourceBadgeHtml(sourceName, sourceMeta, sourcePageHref(sourceName, { tab: 'events', q: '', start_date: '', end_date: '', unmapped: false, offset: 0 }))} <span class="ms-2 align-middle">${esc(label)}</span>`;
+  const label = sourceLabel(sourceName, sourceMeta);
+  sourceTitle.innerHTML = `${sourceBadgeHtml(sourceName, sourceMeta, sourcePageHref(sourceName, { start_date: '', end_date: '', unmapped: false }))} <span class="ms-2 align-middle">${esc(label)}</span>`;
   document.title = `Keen - ${label}`;
   if (row) {
-    sourceMetaEl.textContent = `${Number(row.total_events || 0).toLocaleString()} events · ${Number(row.mapped_events || 0).toLocaleString()} mapped · ${Number(row.unmapped_events || 0).toLocaleString()} unmapped · last seen ${fmtTs(row.last_seen) || '-'}`;
+    sourceMetaEl.textContent = `${Number(row.total_events).toLocaleString()} events · ${Number(row.mapped_events).toLocaleString()} mapped · ${Number(row.unmapped_events).toLocaleString()} unmapped · last seen ${fmtTs(row.last_seen)}`;
   } else {
     sourceMetaEl.textContent = 'Source summary unavailable.';
   }
@@ -172,12 +164,12 @@ async function loadSourceMeta() {
     const data = await apiGet(`/api/v1/sources?framework=${encodeURIComponent(framework)}`);
     sourceMeta = {};
     let current = null;
-    for (const x of data.items || []) {
+    for (const x of data.items) {
       const src = String(x.source || '').trim();
       if (!src) continue;
       sourceMeta[src] = {
         source: src,
-        label: String(x.label || src).trim() || src,
+        label: String(x.label || src).trim(),
         color: String(x.color || '').trim(),
       };
       if (src === sourceName) current = x;
@@ -189,8 +181,7 @@ async function loadSourceMeta() {
   }
 }
 
-function controlBadges(controls) {
-  const arr = Array.isArray(controls) ? controls : [];
+function controlBadges(arr) {
   if (!arr.length) return '<span class="small-muted">-</span>';
   const shown = arr.slice(0, 5);
   const more =
@@ -201,32 +192,31 @@ function controlBadges(controls) {
     shown
       .map(
         (c) =>
-          `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
+          `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`,
       )
       .join('') + more
   );
 }
 
 function eventUuidLink(e) {
-  const id = String(e?.id || e?.event_id || '').trim();
-  if (!id) return '<span class="small-muted">-</span>';
+  const id = e.id;
   const href = withFramework(`/event.html?id=${encodeURIComponent(id)}`, framework);
   return `<a class="font-monospace small" href="${esc(href)}" title="${esc(id)}">${esc(id)}</a>`;
 }
 
 function renderEvents(items) {
   eventRows.innerHTML =
-    (items || [])
+    items
       .map((e) => {
         const eventHref = withFramework(`/event.html?id=${encodeURIComponent(e.id)}`, framework);
         const linksHtml = upstreamLinkHtml(e.source_url, { title: 'Open source event' });
         const artifacts = e.artifact_count
           ? `<span class="badge badge-soft">${esc(e.artifact_count)}</span>`
           : '<span class="badge text-bg-light">0</span>';
-        const context = e.identifier ?? e.system ?? '';
+        const context = e.identifier ?? e.system;
         return `<tr data-event-id="${esc(e.id)}">${selection.cellHtml(e)}
-      <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp) || '-')}</td>
-      <td data-sort="${esc(e.id || '')}">${eventUuidLink(e)}</td>
+      <td class="small-muted" data-sort="${esc(tsSortKey(e.timestamp))}">${esc(fmtTs(e.timestamp))}</td>
+      <td data-sort="${esc(e.id)}">${eventUuidLink(e)}</td>
       <td class="small-muted" data-sort="${esc(context)}">${context ? esc(shorten(context, 90)) : '-'}</td>
       <td class="wrap"><a class="fw-semibold" data-event-summary href="${esc(eventHref)}">${esc(shorten(e.summary || '(no summary)', 180))}</a></td>
       <td class="wrap">${controlBadges(e.controls)}</td>
@@ -254,10 +244,10 @@ async function loadEvents() {
     p.set('limit', String(state.limit));
     p.set('offset', String(state.offset));
     const data = await apiGet(`/api/v1/events?${p.toString()}`);
-    state.total = Number(data.total || 0);
+    state.total = Number(data.total);
     const page = offsetPagerState(state);
     eventResultMeta.textContent = `${page.start}-${page.end} of ${page.total}`;
-    renderEvents(data.items || []);
+    renderEvents(data.items);
     setOffsetPagerDisabled(pagerButtons, state);
   } catch (e) {
     toast(status, `Failed to load source events: ${errorText(e)}`, 'danger');
@@ -267,17 +257,16 @@ async function loadEvents() {
 }
 
 function applyEventFilters(resetOffset = true) {
-  state.q = String(eventQ?.value || '').trim();
-  state.start_date = String(eventStartDate?.value || '').trim();
-  state.end_date = String(eventEndDate?.value || '').trim();
+  state.q = eventQ.value.trim();
+  state.start_date = eventStartDate.value.trim();
+  state.end_date = eventEndDate.value.trim();
   if (state.start_date && state.end_date && state.start_date > state.end_date) {
     const tmp = state.start_date;
     state.start_date = state.end_date;
     state.end_date = tmp;
   }
   state.unmapped = !!eventUnmapped?.checked;
-  state.limit = Math.max(1, Math.min(200, Number(eventLimit?.value || 50) || 50));
-  if (![25, 50, 100, 200].includes(state.limit)) state.limit = 50;
+  state.limit = Number(eventLimit.value);
   if (resetOffset) state.offset = 0;
   syncInputs();
   updateQuery();
@@ -286,7 +275,7 @@ function applyEventFilters(resetOffset = true) {
 
 function measureHref(item) {
   return withFramework(
-    `/isms-effectiveness-measure.html?id=${encodeURIComponent(item?.id || '')}`,
+    `/isms-effectiveness-measure.html?id=${encodeURIComponent(item.id)}`,
     framework,
   );
 }
@@ -297,26 +286,24 @@ function controlsHtml(items) {
   return arr
     .map(
       (c) =>
-        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
+        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`,
     )
     .join('');
 }
 
 function latestEntryForSource(item) {
-  const entries = Array.isArray(item?.metric_entries) ? item.metric_entries : [];
   return (
-    entries
-      .filter((entry) => String(entry?.source_type || '') === sourceName)
-      .sort((a, b) => String(b.recorded_at || '').localeCompare(String(a.recorded_at || '')))[0] ||
-    null
+    item.metric_entries
+      .filter((entry) => entry.source_type === sourceName)
+      .sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0] || null
   );
 }
 
 function entryValueHtml(entry, measure) {
   if (!entry) return '<span class="small-muted">-</span>';
   const source = entry.source_url
-    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type || 'source')}</a>`
-    : esc(entry.source_title || entry.source_type || 'source');
+    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type)}</a>`
+    : esc(entry.source_title || entry.source_type);
   const eventLink = entry.source_event_id
     ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open Keen event">${esc(entry.source_event_id)}</a>`
     : '';
@@ -326,9 +313,8 @@ function entryValueHtml(entry, measure) {
 }
 
 function renderEffectiveness(items) {
-  if (!effectivenessRows || !canViewIsms) return;
   const rows = [];
-  for (const item of items || []) {
+  for (const item of items) {
     const entry = latestEntryForSource(item);
     rows.push(`<tr>
       <td class="wrap"><a class="fw-semibold" href="${esc(measureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 180))}</a>${item.metric_key ? `<div class="small-muted"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
@@ -352,7 +338,7 @@ async function loadEffectiveness({ force = false } = {}) {
     const data = await apiGet(
       `/api/v1/sources/${encodeURIComponent(sourceName)}/effectiveness-measures?framework=${encodeURIComponent(framework)}`,
     );
-    renderEffectiveness(data.items || []);
+    renderEffectiveness(data.items);
     effectivenessLoaded = true;
   } catch (e) {
     effectivenessLoaded = false;
@@ -388,34 +374,32 @@ function fmtDuration(seconds) {
 }
 
 function eventFilterHref(overrides) {
-  return sourcePageHref(sourceName, { tab: 'events', offset: 0, ...overrides });
+  return sourcePageHref(sourceName, overrides);
 }
 
-function dailyBarsHtml(daily) {
-  const series = Array.isArray(daily) ? daily : [];
+function dailyBarsHtml(series) {
   const max = Math.max(1, ...series.map((d) => Number(d.count) || 0));
   if (!series.length) return '';
   return `<div class="source-insight-bars" role="img" aria-label="Events per day over the window, ${esc(series.length)} days, busiest day ${esc(max)} events">${series
     .map((d) => {
       const count = Number(d.count) || 0;
       const height = count ? Math.max(6, Math.round((count / max) * 100)) : 2;
-      return `<a class="source-insight-bar${count ? '' : ' is-empty'}" style="height:${height}%" href="${esc(eventFilterHref({ start_date: d.date, end_date: d.date, q: '', unmapped: false }))}" title="${esc(isoDateToDisplay(d.date))}: ${esc(count)} event${count === 1 ? '' : 's'}"></a>`;
+      return `<a class="source-insight-bar${count ? '' : ' is-empty'}" style="height:${height}%" href="${esc(eventFilterHref({ start_date: d.date, end_date: d.date, unmapped: false }))}" title="${esc(isoDateToDisplay(d.date))}: ${esc(count)} event${count === 1 ? '' : 's'}"></a>`;
     })
     .join('')}</div>`;
 }
 
 function renderInsights(data) {
-  if (!insightsEl) return;
-  const status = String(data?.status || 'no_events');
-  const [badgeClass, badgeLabel] = INSIGHT_STATUS[status] || INSIGHT_STATUS.no_events;
+  const status = data.status;
+  const [badgeClass, badgeLabel] = INSIGHT_STATUS[status];
   if (insightsBadge) insightsBadge.hidden = status !== 'quiet';
   if (insightsMeta)
-    insightsMeta.textContent = `${Number(data?.window_events || 0).toLocaleString()} events in the last ${Number(data?.days || 0)} days${data?.sampled ? ` (gap and summary statistics use the most recent ${Number(data.sample_size || 0).toLocaleString()})` : ''}.`;
-  const trend = data?.trend || {};
+    insightsMeta.textContent = `${Number(data?.window_events || 0).toLocaleString()} events in the last ${Number(data?.days || 0)} days${data?.sampled ? ` (gap and summary statistics use the most recent ${Number(data.sample_size).toLocaleString()})` : ''}.`;
+  const trend = data.trend;
   const trendText =
     trend.change_pct === null || trend.change_pct === undefined
       ? `${Number(trend.recent_7_days || 0)} in the last 7 days`
-      : `${Number(trend.recent_7_days || 0)} in the last 7 days, ${trend.change_pct >= 0 ? 'up' : 'down'} ${Math.abs(trend.change_pct)}% on the 7 days before`;
+      : `${Number(trend.recent_7_days)} in the last 7 days, ${trend.change_pct >= 0 ? 'up' : 'down'} ${Math.abs(trend.change_pct)}% on the 7 days before`;
   const facts = [
     [
       'Last event',
@@ -443,7 +427,7 @@ function renderInsights(data) {
   insightsEl.innerHTML = `
     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
       <span class="badge ${badgeClass}" id="sourceInsightStatus">${esc(badgeLabel)}</span>
-      <span id="sourceInsightMessage">${esc(data?.message || '')}</span>
+      <span id="sourceInsightMessage">${esc(data.message)}</span>
     </div>
     <dl class="row mb-0 small">
       ${facts.map(([k, v]) => `<dt class="col-sm-3 col-lg-2 small-muted fw-normal">${esc(k)}</dt><dd class="col-sm-9 col-lg-10">${esc(v)}</dd>`).join('')}
@@ -456,7 +440,7 @@ function renderInsights(data) {
         ? `<table class="table table-sm mb-0"><thead><tr><th>From</th><th>To</th><th>Silence</th></tr></thead><tbody>${quiet
             .map(
               (p) =>
-                `<tr><td>${esc(fmtTs(p.start) || p.start)}</td><td>${esc(fmtTs(p.end) || p.end)}</td><td>${esc(p.label || fmtDuration(p.seconds))}</td></tr>`,
+                `<tr><td>${esc(fmtTs(p.start))}</td><td>${esc(fmtTs(p.end))}</td><td>${esc(p.label)}</td></tr>`,
             )
             .join('')}</tbody></table>`
         : '<div class="small-muted">No unusually long gaps between events in this window.</div>',
@@ -467,7 +451,7 @@ function renderInsights(data) {
         ? `<table class="table table-sm mb-0"><thead><tr><th>Day</th><th>Events</th><th>Typical active day</th></tr></thead><tbody>${spikes
             .map(
               (sp) =>
-                `<tr><td><a href="${esc(eventFilterHref({ start_date: sp.date, end_date: sp.date, q: '', unmapped: false }))}">${esc(isoDateToDisplay(sp.date))}</a></td><td>${esc(sp.count)}${sp.ratio ? ` <span class="small-muted">(×${esc(sp.ratio)})</span>` : ''}</td><td>${esc(sp.baseline)}</td></tr>`,
+                `<tr><td><a href="${esc(eventFilterHref({ start_date: sp.date, end_date: sp.date, unmapped: false }))}">${esc(isoDateToDisplay(sp.date))}</a></td><td>${esc(sp.count)} <span class="small-muted">(×${esc(sp.ratio)})</span></td><td>${esc(sp.baseline)}</td></tr>`,
             )
             .join('')}</tbody></table>`
         : `<div class="small-muted">No day stands out against this source's typical active day.</div>`,
@@ -478,7 +462,7 @@ function renderInsights(data) {
         ? `<table class="table table-sm mb-0"><thead><tr><th>Summary</th><th>Count</th><th>Unmapped</th><th>Last seen</th></tr></thead><tbody>${repeats
             .map(
               (r) =>
-                `<tr><td class="wrap"><a href="${esc(withFramework(`/event.html?id=${encodeURIComponent(r.example_event_id || '')}`, framework))}" title="Open an example event">${esc(shorten(r.example || r.pattern || '', 160))}</a></td><td>${esc(r.count)} <span class="small-muted">(${esc(r.share_pct)}%)</span></td><td>${Number(r.unmapped_count) ? `<a href="${esc(eventFilterHref({ unmapped: true, q: '', start_date: '', end_date: '' }))}">${esc(r.unmapped_count)}</a>` : '0'}</td><td class="small-muted">${esc(fmtTs(r.last_seen) || '-')}</td></tr>`,
+                `<tr><td class="wrap"><a href="${esc(withFramework(`/event.html?id=${encodeURIComponent(r.example_event_id)}`, framework))}" title="Open an example event">${esc(shorten(r.example, 160))}</a></td><td>${esc(r.count)} <span class="small-muted">(${esc(r.share_pct)}%)</span></td><td>${Number(r.unmapped_count) ? `<a href="${esc(eventFilterHref({ unmapped: true, start_date: '', end_date: '' }))}">${esc(r.unmapped_count)}</a>` : '0'}</td><td class="small-muted">${esc(fmtTs(r.last_seen))}</td></tr>`,
             )
             .join(
               '',
@@ -491,7 +475,7 @@ let insightsRequest = 0;
 
 async function loadInsights() {
   if (!insightsEl || !sourceName) return;
-  const days = Number(insightsDays?.value || 90) || 90;
+  const days = Number(insightsDays.value);
   const request = ++insightsRequest;
   insightsEl.innerHTML = '<div class="small-muted">Loading insights</div>';
   try {
@@ -506,7 +490,7 @@ async function loadInsights() {
       quietNotice.hidden = !quiet;
       const message = document.getElementById('sourceQuietMessage');
       if (quiet && message)
-        message.textContent = `${sourceLabel(sourceName, sourceMeta) || sourceName} has gone quiet. ${data.message || ''}`;
+        message.textContent = `${sourceLabel(sourceName, sourceMeta)} has gone quiet. ${data.message}`;
     }
   } catch (e) {
     if (request !== insightsRequest) return;
@@ -522,7 +506,7 @@ function setActiveTabQuery(name) {
 }
 
 function activateInitialTab() {
-  const tab = String(new URLSearchParams(location.search || '').get('tab') || '').toLowerCase();
+  const tab = String(new URLSearchParams(location.search).get('tab') || '').toLowerCase();
   const target =
     tab === 'effectiveness' || tab === 'effectiveness-measures'
       ? effectivenessTab
@@ -541,6 +525,7 @@ if (!canViewIsms) {
 
 syncInputs();
 if (!sourceName) {
+  renderSourceChrome();
   toast(status, 'Missing source name.', 'danger');
 } else {
   renderSourceChrome();
@@ -591,9 +576,7 @@ document
   .getElementById('sourceEventsTab')
   ?.addEventListener('shown.bs.tab', () => setActiveTabQuery('events'));
 
-const initialTabName = String(
-  new URLSearchParams(location.search || '').get('tab') || '',
-).toLowerCase();
+const initialTabName = String(new URLSearchParams(location.search).get('tab') || '').toLowerCase();
 if (
   sourceName &&
   canViewIsms &&

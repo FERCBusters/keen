@@ -26,7 +26,7 @@ const canManageIsms = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_r
 const canReadIsms = !!(me?.is_admin || me?.can_view_isms);
 
 const framework = getCurrentFramework();
-const params = new URLSearchParams(window.location.search || '');
+const params = new URLSearchParams(window.location.search);
 const meetingId = params.get('id') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
@@ -37,14 +37,11 @@ function personBadges(list) {
 
 function linkHtml(link) {
   if (link?.link_type === 'isms_document' && link.document && !canReadIsms)
-    return `<li>${esc(link.document.title || link.title || 'ISMS document')}<span class="small-muted ms-2">ISMS document</span></li>`;
+    return `<li>${esc(link.document.title || link.title)}<span class="small-muted ms-2">ISMS document</span></li>`;
   if (link?.link_type === 'isms_document' && link.document) {
     const doc = link.document;
-    const href = withFramework(
-      `/isms-document.html?id=${encodeURIComponent(doc.id || link.document_id || '')}`,
-      framework,
-    );
-    return `<li><a href="${esc(href)}">${esc(doc.title || link.title || 'ISMS document')}</a><span class="small-muted ms-2">ISMS document</span></li>`;
+    const href = withFramework(`/isms-document.html?id=${encodeURIComponent(doc.id)}`, framework);
+    return `<li><a href="${esc(href)}">${esc(doc.title)}</a><span class="small-muted ms-2">ISMS document</span></li>`;
   }
   if (link?.url) {
     return `<li><a href="${esc(safeExternalHref(link.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(link.title || link.url)}</a></li>`;
@@ -67,10 +64,10 @@ function renderMeeting(meeting) {
     [meeting.start_time, meeting.end_time].filter(Boolean).join('-') || '-';
   $('meetingAttendees').innerHTML = personBadges(meeting.attendees);
   $('meetingApologies').innerHTML = personBadges(meeting.apologies);
-  $('meetingUpdated').textContent = fmtTs(meeting.updated_at) || '-';
+  $('meetingUpdated').textContent = fmtTs(meeting.updated_at);
   $('meetingNotes').innerHTML = renderMeetingNotes(meeting.agenda_minutes_notes);
-  $('meetingLinks').innerHTML = (meeting.links || []).length
-    ? `<ul class="mb-0">${(meeting.links || []).map(linkHtml).filter(Boolean).join('')}</ul>`
+  $('meetingLinks').innerHTML = meeting.links.length
+    ? `<ul class="mb-0">${meeting.links.map(linkHtml).filter(Boolean).join('')}</ul>`
     : '<span class="small-muted">No supporting links recorded.</span>';
   $('meetingControls').innerHTML = controlBadges(meeting.controls, framework);
   $('meetingClauses').innerHTML = clauseBadges(meeting.clauses, framework);

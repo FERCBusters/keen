@@ -30,13 +30,12 @@ function controlHtml(control, framework) {
   return `
     <li class="mb-1" data-panel-control="${esc(control.ref)}">
       <a class="badge badge-soft me-1" href="${href}">${esc(control.ref)}</a>
-      <span>${esc(control.title || '')}</span>
+      <span>${esc(control.title)}</span>
     </li>`;
 }
 
-export function createEventPanel({ framework, getSourceMeta = () => ({}) }) {
+export function createEventPanel({ framework, getSourceMeta }) {
   const panel = document.getElementById('eventPanel');
-  if (!panel) return { open: () => {} };
   const body = panel.querySelector('[data-panel-body]');
   const title = panel.querySelector('[data-panel-title]');
   const fullLink = panel.querySelector('[data-panel-full]');
@@ -65,14 +64,15 @@ export function createEventPanel({ framework, getSourceMeta = () => ({}) }) {
   }
 
   function render(event) {
-    const np = event.normalized_payload;
-    const fields = observedPayloadFields(np && typeof np === 'object' ? np : {});
+    // Evidence decides the payload's shape; any value other than an object has no fields.
+    const fields = observedPayloadFields(event.normalized_payload);
     const shown = fields.slice(0, PANEL_FIELD_LIMIT);
     const more = fields.length - shown.length;
-    const controls = Array.isArray(event.controls) ? event.controls : [];
-    const sourceHref = event.source
-      ? withFramework(`/source.html?source=${encodeURIComponent(event.source)}`, framework)
-      : '';
+    const controls = event.controls;
+    const sourceHref = withFramework(
+      `/source.html?source=${encodeURIComponent(event.source)}`,
+      framework,
+    );
     title.textContent = event.summary || '(no summary)';
     body.innerHTML = `
       <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
@@ -87,7 +87,7 @@ export function createEventPanel({ framework, getSourceMeta = () => ({}) }) {
         ${detail('Outcome', event.outcome)}
         ${detail('Severity', event.severity)}
         ${detail('Connection', event.connection_name || event.connection_id)}
-        ${detail('Artifacts', (event.artifacts || []).length || '')}
+        ${detail('Artifacts', event.artifacts.length || '')}
       </dl>
       <h3 class="h6">Mapped controls</h3>
       ${

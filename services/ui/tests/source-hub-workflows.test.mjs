@@ -83,6 +83,15 @@ async function hub(t, data = {}) {
         w.addEventListener(name, (event) => events.push({ name, detail: copy(event.detail) }));
     },
     vendor: {
+      // The design system's errorText reads the public detail of a JSON error body.
+      errorText: (error) => {
+        const raw = String(error?.message ?? error);
+        try {
+          return JSON.parse(raw).detail || raw;
+        } catch {
+          return raw;
+        }
+      },
       apiGet: async (url) => {
         calls.push({ method: 'GET', url });
         if (url === ROOT + '/evidence-definitions') return structuredClone(state.definitions);

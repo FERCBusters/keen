@@ -271,7 +271,7 @@ async function checkNow() {
 // The bell and the home page link here, past the Sources view of this tab. The
 // panel opens at once and is scrolled to once the list has loaded.
 function reveal({ scroll = true } = {}) {
-  if ((location.hash || '').toLowerCase() !== '#rule-suggestions') return;
+  if (location.hash.toLowerCase() !== '#rule-suggestions') return;
   window.dispatchEvent(new Event('keen-show-evidence-mapping'));
   const panel = $('');
   panel.open = true;

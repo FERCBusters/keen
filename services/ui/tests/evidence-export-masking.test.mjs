@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { loadUi } from './support/load-ui.mjs';
+import { firstPartyScripts } from './support/first-party-scripts.mjs';
 
 const NodeFilter = { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 };
 
@@ -191,4 +192,28 @@ test('long runs of address characters are masked in bounded time', () => {
   });
   assert.equal(run.error, undefined);
   assert.equal(run.status, 0, run.stderr);
+});
+
+test('a sample export asks the API to mask, whether or not its address has a query', async (t) => {
+  const ui = await masking(t);
+  assert.equal(
+    ui.api.sampleExportUrl('/api/v1/artifacts/a1/download'),
+    '/api/v1/artifacts/a1/download?sample_export=1',
+  );
+  // An event read for an audit carries its framework: the flag stays a parameter.
+  const read = ui.api.sampleExportUrl('/api/v1/events/e1?framework=fw');
+  assert.equal(read, '/api/v1/events/e1?framework=fw&sample_export=1');
+  assert.equal(new URL(read, 'https://keen.example').searchParams.get('sample_export'), '1');
+});
+
+test('sample exports add the masking flag only through the shared helper', async () => {
+  // A copy that drifts sends the flag where the API cannot read it, and the
+  // export leaves unmasked.
+  const flag = /sample_export=1/;
+  const scripts = await firstPartyScripts();
+  assert.deepEqual(
+    scripts.filter(({ source }) => flag.test(source)).map((script) => script.path),
+    ['pages/evidence-export/masking.js'],
+  );
+  assert.match('return `${url}?sample_export=1`;', flag);
 });

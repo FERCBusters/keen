@@ -405,10 +405,14 @@ test('readers cannot edit, record, sample or delete metric entries', async (t) =
 });
 
 test('metric entries can be deleted after confirmation', async (t) => {
-  const cancelled = await measurePage(t, { globals: { confirm: () => false } });
+  const cancelled = await measurePage(t, { confirm: false });
   cancelled.ui.document.querySelector('[data-delete-metric="e1"]').click();
+  await settle(() => cancelled.ui.confirmations.length === 1);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(cancelled.ui.confirmations[0].title, 'Delete effectiveness metric entry');
   assert.deepEqual(cancelled.state.removed, []);
-  const { ui, state } = await measurePage(t, { globals: { confirm: () => true } });
+  assert.equal(cancelled.ui.el('metricsMeta').textContent, '3 / 3');
+  const { ui, state } = await measurePage(t);
   ui.document.querySelector('[data-delete-metric="e1"] i').click();
   await settle(() => ui.el('status').textContent === 'Effectiveness metric entry deleted.');
   assert.deepEqual(state.removed, ['/api/v1/isms/effectiveness-metrics/e1?framework=A']);
@@ -416,7 +420,7 @@ test('metric entries can be deleted after confirmation', async (t) => {
 });
 
 test('failed metric deletion is reported and leaves the entry', async (t) => {
-  const { ui } = await measurePage(t, { deleteFail: true, globals: { confirm: () => true } });
+  const { ui } = await measurePage(t, { deleteFail: true });
   ui.document.querySelector('[data-delete-metric="e2"]').click();
   await settle(() =>
     /Failed to delete metric entry: Delete refused/.test(ui.el('status').textContent),

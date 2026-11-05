@@ -61,6 +61,7 @@ async function pestleItem(t, options = {}) {
     query: options.query ?? '&id=p1',
     me: options.me || { is_admin: true, user: 'root' },
     globals: options.globals,
+    confirm: options.confirm,
     setup: options.setup,
     get: async (u) => {
       const p = u.pathname;
@@ -387,10 +388,14 @@ test('a metadata failure is reported as a load failure', async (t) => {
 });
 
 test('deleting a PESTLE item requires confirmation', async (t) => {
-  const cancelled = await pestleItem(t, { globals: { confirm: () => false } });
+  const cancelled = await pestleItem(t, { confirm: false });
   cancelled.ui.el('deletePestleItem').click();
+  await settle(() => cancelled.ui.confirmations.length === 1);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(cancelled.ui.confirmations[0].title, 'Delete PESTLE(E) item');
   assert.deepEqual(cancelled.state.removed, []);
-  const { ui, state } = await pestleItem(t, { globals: { confirm: () => true } });
+  assert.equal(cancelled.ui.el('deletePestleItem').disabled, false);
+  const { ui, state } = await pestleItem(t);
   ui.el('deletePestleItem').click();
   await settle(() => ui.el('status').textContent === 'PESTLE(E) item deleted');
   assert.deepEqual(state.removed, ['/api/v1/pestle/items/p1']);
@@ -485,7 +490,7 @@ test('a new item opens its deep-linked tab and every pane asks for a save first'
 });
 
 test('a refused deletion is reported and the button is usable again', async (t) => {
-  const { ui, state } = await pestleItem(t, { globals: { confirm: () => true }, removeFail: true });
+  const { ui, state } = await pestleItem(t, { removeFail: true });
   ui.el('deletePestleItem').click();
   await settle(() => /Failed to delete PESTLE\(E\) item/.test(ui.el('status').textContent));
   assert.equal(ui.el('status').textContent, 'Failed to delete PESTLE(E) item: Rejected');

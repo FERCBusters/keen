@@ -225,22 +225,23 @@ export function renderHierarchy(host, rows, framework) {
     if (!byParent.has(key)) byParent.set(key, []);
     byParent.get(key).push(row);
   }
-  function branch(parent, depth, seen) {
+  // A walk down from the roots meets each row once; depth bounds it.
+  function branch(parent, depth) {
     const ul = document.createElement('ul');
     ul.className = 'planning-tree';
     for (const row of byParent.get(parent) || []) {
-      if (seen.has(row.id) || depth > 12) continue;
+      if (depth > 12) continue;
       const li = document.createElement('li'),
         a = document.createElement('a');
       a.href = href(row, framework);
       a.textContent = `${row.title} · ${label(row.kind)} · ${row.significance}/5`;
       li.append(a);
-      if (byParent.has(row.id)) li.append(branch(row.id, depth + 1, new Set([...seen, row.id])));
+      if (byParent.has(row.id)) li.append(branch(row.id, depth + 1));
       ul.append(li);
     }
     return ul;
   }
-  host.append(branch('', 0, new Set()));
+  host.append(branch('', 0));
 }
 export function renderGraph(host, row, framework) {
   host.replaceChildren();
@@ -273,9 +274,7 @@ export function renderGraph(host, row, framework) {
   const wrap = (value, columns) => {
     const lines = [];
     let line = '';
-    for (const word of String(value || '')
-      .trim()
-      .split(/\s+/)) {
+    for (const word of String(value).trim().split(/\s+/)) {
       let remaining = word;
       if (line && line.length + remaining.length + 1 > columns) {
         lines.push(line);
@@ -288,7 +287,7 @@ export function renderGraph(host, row, framework) {
       line = line ? line + ' ' + remaining : remaining;
     }
     if (line) lines.push(line);
-    return lines.length ? lines : [''];
+    return lines;
   };
   const rootLines = wrap(row.title, 38);
   let nextY = 30;

@@ -16,7 +16,7 @@ function message(text, tone = 'info') {
   $('status').textContent = text;
 }
 function error(e) {
-  let text = String(e.message || e);
+  let text = e.message;
   try {
     const d = JSON.parse(text).detail;
     text = Array.isArray(d) ? d.map((x) => x.msg).join('; ') : d || text;
@@ -185,10 +185,6 @@ function render() {
   if (!data.runs.length) $('runs').textContent = 'No runs yet.';
 }
 async function removeItem(item) {
-  if (data.demo_mode) {
-    message(demoMessage);
-    return;
-  }
   await confirmEvidenceRemoval(item, {
     onError: error,
     onRemoved: async () => {
@@ -445,7 +441,7 @@ function open(c = null) {
   $('heading').textContent = c ? 'Edit ' + c.name : 'Build an integration';
   $('connection').replaceChildren(new Option('Select a connection', ''));
   for (const x of data.connections) $('connection').add(new Option(x.name, x.id));
-  $('connection').value = c?.connection_id || data.connections[0]?.id || '';
+  $('connection').value = c?.connection_id || data.connections[0]?.id;
   $('template').replaceChildren();
   for (const t of data.templates) $('template').add(new Option(t.name, t.id));
   $('measure').replaceChildren(new Option('Select a measure', ''));
@@ -493,8 +489,9 @@ async function historyRevisions() {
   }
 }
 function templateDescription() {
-  $('template-description').textContent =
-    data.templates.find((t) => t.id === $('template').value)?.description || '';
+  $('template-description').textContent = data.templates.find(
+    (t) => t.id === $('template').value,
+  )?.description;
 }
 async function save() {
   if (!$('name').value.trim() || !$('connection').value)
@@ -536,7 +533,6 @@ function previewResult(r) {
 }
 let watching = null;
 async function watch() {
-  if (!watching) return;
   try {
     const r = await apiGet(`${root}/runs/${watching}`);
     previewResult(r);

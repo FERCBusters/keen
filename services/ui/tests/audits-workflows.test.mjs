@@ -445,7 +445,6 @@ test('attendee and document lookups degrade with warnings', async (t) => {
 test('a refused audit or template deletion is reported and the row stays', async (t) => {
   const { ui, state } = await auditsPage(t, {
     removeFail: true,
-    globals: { confirm: () => true },
   });
   ui.document.querySelector('[data-delete-audit="a2"]').click();
   await settle(() => ui.el('status').textContent === 'Failed: Delete refused');

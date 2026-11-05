@@ -24,7 +24,7 @@ export function measurementExamples({
     framework,
     value: Number(value) || 0,
     unit,
-    source_type: String(sourceType || '').trim() || 'other',
+    source_type: String(sourceType).trim() || 'other',
     source_title: 'Scheduled measurement',
   };
   const json = JSON.stringify(payload, null, 2);
@@ -198,7 +198,7 @@ function secretPanel(details, { secretPath, issuedAt } = {}) {
     busy(true);
     try {
       const result = await apiPost(secretPath, {});
-      issued = result.measure?.submission_secret_issued_at || new Date().toISOString();
+      issued = result.measure.submission_secret_issued_at;
       value.textContent = result.secret;
       reveal.hidden = false;
       show();

@@ -37,7 +37,6 @@ export async function assuranceRecord(kind) {
   const canPosture = person && evidenceReader;
   const canQuizzes =
     person && featureEnabled(me, 'quizzes') && !!(me?.is_admin || me?.can_manage_quizzes);
-  const enabled = featureEnabled(me, feature);
   let record = null,
     metadata = null,
     editedAssurance = null,
@@ -58,7 +57,6 @@ export async function assuranceRecord(kind) {
   $('tab-assets').parentElement.hidden = !featureEnabled(me, 'assets');
   function activate(tab, update = true) {
     const button = $('tab-' + tab);
-    if (!button || button.parentElement.hidden) return;
     for (const item of tabButtons) {
       const on = item === button,
         name = item.dataset.recordTab;
@@ -117,11 +115,6 @@ export async function assuranceRecord(kind) {
     element.replaceChildren();
     if (!multiple) element.add(new Option('None', ''));
     for (const value of values) element.add(new Option(value.name, value.id));
-    for (const value of selected.filter(Boolean))
-      if (![...element.options].some((o) => o.value === value))
-        element.add(
-          new Option(record?.username || record?.org_node || 'Previously linked record', value),
-        );
     for (const option of element.options) option.selected = selected.includes(option.value);
   }
   function fill() {
@@ -132,7 +125,15 @@ export async function assuranceRecord(kind) {
       $(kind + suffix).value = record?.[key] || '';
     if (metadata) {
       if (person) {
-        options($('personUser'), metadata.users, [record?.user_id || '']);
+        // The account list holds active accounts only, so a person linked to
+        // a deactivated account keeps the link under its username. Every
+        // organisation node and asset is listed.
+        const linked = record?.user_id;
+        const users =
+          !linked || metadata.users.some((u) => u.id === linked)
+            ? metadata.users
+            : [...metadata.users, { id: linked, name: record.username }];
+        options($('personUser'), users, [linked || '']);
         options($('personOrg'), metadata.org_nodes, [record?.org_node_id || '']);
       }
       options($(kind + 'Assets'), metadata.assets, record?.asset_ids || [], true);
@@ -180,7 +181,7 @@ export async function assuranceRecord(kind) {
     }
   }
   async function edit() {
-    if (!manage || !enabled || saving) return;
+    if (!manage || saving) return;
     try {
       metadata = metadata || (await apiGet('/api/v1/isms/assurance/meta'));
       fill();
@@ -219,7 +220,7 @@ export async function assuranceRecord(kind) {
   }
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!manage || !enabled || saving) return;
+    if (!manage || saving) return;
     const payload = person
       ? {
           name: $('personName').value,
@@ -399,10 +400,6 @@ export async function assuranceRecord(kind) {
   }
   async function load() {
     $('retryRecord').hidden = true;
-    if (!enabled) {
-      $('recordSubtitle').textContent = 'This section is disabled.';
-      return;
-    }
     if (!id) {
       if (!manage) {
         $('recordSubtitle').textContent = 'You do not have permission to add records.';

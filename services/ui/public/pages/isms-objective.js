@@ -20,7 +20,7 @@ import {
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
-const params = new URLSearchParams(window.location.search || '');
+const params = new URLSearchParams(window.location.search);
 const objectiveId = params.get('id') || params.get('objective') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
@@ -29,7 +29,7 @@ const canSampleAudits = canSampleIntoAudit(me, 'isms');
 let objective = null;
 
 function objectiveHref(id = objectiveId) {
-  return withFramework(`/isms-objective.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(`/isms-objective.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function statusLabel(value) {
@@ -44,14 +44,14 @@ function userBadges(items) {
 }
 
 function renderObjective(row) {
-  objective = row || {};
+  objective = row;
   const title = objective.goal || objective.requirement || 'ISMS objective';
   document.title = `Keen - ${title}`;
   $('objectiveTitle').textContent = title;
   $('objectiveMeta').textContent = [
     objective.completion_target_date || '',
     statusLabel(objective.status),
-    `updated ${fmtTs(objective.updated_at) || '-'}`,
+    `updated ${fmtTs(objective.updated_at)}`,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -67,14 +67,14 @@ function renderObjective(row) {
   $('objectiveResourceText').textContent = objective.resource_requirements_text || '-';
   $('objectiveTarget').textContent = isoDateToDisplay(objective.completion_target_date) || '-';
   $('objectiveStatusValue').textContent = statusLabel(objective.status);
-  $('objectiveUpdated').textContent = fmtTs(objective.updated_at) || '-';
+  $('objectiveUpdated').textContent = fmtTs(objective.updated_at);
   $('objectiveControls').innerHTML = controlBadges(objective.controls, framework);
   $('objectiveClauses').innerHTML = clauseBadges(objective.clauses, framework);
 
   const edit = $('editObjectiveLink');
   if (edit) {
     edit.href = withFramework(
-      `/isms.html?tab=objectives&edit=objective:${encodeURIComponent(objective.id || '')}`,
+      `/isms.html?tab=objectives&edit=objective:${encodeURIComponent(objective.id)}`,
       framework,
     );
     edit.style.display = canManageIsms ? '' : 'none';
@@ -109,12 +109,11 @@ async function load() {
 }
 
 $('sampleObjectiveAudit')?.addEventListener('click', () => {
-  if (!objective) return;
   openAuditSampleModal({
     me,
     entityType: 'isms_objective',
     entityId: objective.id,
-    title: objective.goal || objective.requirement || 'ISMS objective',
+    title: objective.goal,
     evidenceUrl: objectiveHref(objective.id),
     framework,
     statusEl: status,

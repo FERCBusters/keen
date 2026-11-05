@@ -23,7 +23,6 @@ let folders = [],
   selected = null,
   activeFolder = '';
 const status = (message, kind = 'success') => toast($('status'), message, kind);
-const folderLabel = (folder) => (folder ? `${folder.name}` : 'Unfiled');
 
 function draw() {
   // Rebuilding the options resets both selects; keep the choices made in the
@@ -32,7 +31,7 @@ function draw() {
   const parentValue = $('folderParent').value;
   $('folderParent').innerHTML = $('folder').innerHTML =
     '<option value="">Top level / unfiled</option>' +
-    folders.map((f) => `<option value="${esc(f.id)}">${esc(folderLabel(f))}</option>`).join('');
+    folders.map((f) => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
   $('folder').value = folderValue;
   $('folderParent').value = parentValue;
   $('folderList').innerHTML =
@@ -47,13 +46,13 @@ function draw() {
   const found = documents.filter(
     (d) =>
       (!activeFolder || d.folder_id === activeFolder) &&
-      `${d.title} ${(d.tags || []).join(' ')} ${d.description || ''}`.toLowerCase().includes(q),
+      `${d.title} ${d.tags.join(' ')} ${d.description || ''}`.toLowerCase().includes(q),
   );
   $('documentList').innerHTML =
     found
       .map(
         (d) =>
-          `<button class="list-group-item list-group-item-action ${selected?.id === d.id ? 'active' : ''}" data-document="${esc(d.id)}"><strong>${esc(d.title)}</strong><br><small>${esc(d.document_type)} · ${esc((d.tags || []).join(', '))}</small></button>`,
+          `<button class="list-group-item list-group-item-action ${selected?.id === d.id ? 'active' : ''}" data-document="${esc(d.id)}"><strong>${esc(d.title)}</strong><br><small>${esc(d.document_type)} · ${esc(d.tags.join(', '))}</small></button>`,
       )
       .join('') || '<div class="small-muted">No documents found.</div>';
 }
@@ -63,7 +62,7 @@ async function reload() {
     apiGet(`${base}/documents?framework=${encodeURIComponent(getCurrentFramework())}&limit=1000`),
   ]);
   folders = f;
-  documents = d.items || [];
+  documents = d.items;
   if (selected) selected = documents.find((d) => d.id === selected.id) || null;
   draw();
 }
@@ -78,7 +77,7 @@ async function openDocument(id) {
     tags: 'tags',
     description: 'description',
   })) {
-    $(key).value = key === 'tags' ? (selected.tags || []).join(', ') : selected[field] || '';
+    $(key).value = key === 'tags' ? selected.tags.join(', ') : selected[field] || '';
   }
   setRichTextEditorValue('content', selected.content_html || '');
   $('historyCard').style.display = '';
@@ -87,7 +86,6 @@ async function openDocument(id) {
   draw();
 }
 async function loadHistory() {
-  if (!selected) return;
   const [revisions, comments] = await Promise.all([
     apiGet(`${base}/documents/${selected.id}/revisions`),
     apiGet(`${base}/documents/${selected.id}/comments`),

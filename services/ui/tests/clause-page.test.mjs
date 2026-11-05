@@ -47,6 +47,7 @@ async function clausePage(t, options = {}) {
       const p = u.pathname;
       if (p === '/api/v1/clauses/k1/controls') {
         if (fail.clause) throw new Error('Clause offline');
+        await options.gate;
         return { clause: structuredClone(state.clause), items: structuredClone(state.linked) };
       }
       if (p === '/api/v1/clauses/k1/changelog') {
@@ -55,6 +56,11 @@ async function clausePage(t, options = {}) {
       }
       if (p === '/api/v1/controls') {
         if (fail.controls) throw new Error('Catalogue offline');
+        if (options.catalogueFailures > 0) {
+          options.catalogueFailures -= 1;
+          throw new Error('Catalogue busy');
+        }
+        if (options.catalogue) return { items: options.catalogue };
         return {
           items: [
             { id: 'c1', ref: 'A1', title: 'Access' },
@@ -89,6 +95,7 @@ async function clausePage(t, options = {}) {
       if (p === '/api/v1/users') return [{ id: 'u1', username: 'dana', is_active: true }];
       if (p === '/api/v1/clauses/k1/isms') {
         if (fail.isms) throw new Error('ISMS offline');
+        if (options.isms) return options.isms;
         return {
           swot: [{ id: 's1', title: 'Weak <b>backups</b>' }],
           objectives: [{ goal: 'Zero breaches' }],
@@ -122,6 +129,8 @@ async function clausePage(t, options = {}) {
       return { owners: b.user_ids.map((id) => ({ id, username: 'dana' })) };
     },
   });
+  // A gated clause load is awaited by the test itself.
+  if (options.gate) return { ui, state };
   await settle(() => ui.el('controlsMeta').textContent || ui.el('status').textContent);
   await new Promise((r) => setTimeout(r, 10));
   return { ui, state };
@@ -414,4 +423,194 @@ test("a clause's owners show in its header, and administrators change them", asy
   const reader = await clausePage(t, { me: { can_view_controls: true } });
   assert.equal(reader.ui.el('ownersEdit').hidden, true);
   assert.equal(reader.ui.el('ownersList').textContent, 'No owners yet.');
+});
+
+const ismsCalls = (ui) =>
+  ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses/k1/isms')).length;
+
+test('a deep link to the ISMS tab is shown through the tab component', async (t) => {
+  const shown = [];
+  await clausePage(t, {
+    query: '&id=k1&tab=isms',
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+  });
+  assert.deepEqual(shown, ['clauseIsmsTab']);
+});
+
+test('PESTLE and ISMS opened while the clause loads use the framework in the address', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const { ui } = await clausePage(t, { gate, clause: clause({ framework: 'B' }) });
+  tab(ui, 'clausePestleTab');
+  await settle(() => ui.el('clausePestleRows').querySelectorAll('tr').length === 2);
+  assert.equal(
+    ui.el('clausePestleRows').querySelector('a').getAttribute('href'),
+    '/pestle_item.html?id=p1&framework=A',
+  );
+  assert.equal(ui.el('openPestleFromClause').getAttribute('href'), '/pestle.html?framework=A');
+  tab(ui, 'clauseIsmsTab');
+  await settle(() => ui.el('clauseIsmsView').querySelector('table'));
+  const isms = new URL(
+    ui.calls.find((c) => c.url.startsWith('/api/v1/clauses/k1/isms')).url,
+    'https://keen.example',
+  );
+  assert.equal(isms.searchParams.get('framework'), 'A');
+  assert.equal(
+    ui.el('clauseIsmsView').querySelector('a').getAttribute('href'),
+    '/swot.html?id=s1&framework=A',
+  );
+  release();
+  await settle(() => ui.el('controlsMeta').textContent === '2 linked controls');
+  assert.equal(ui.el('openPestleFromClause').getAttribute('href'), '/pestle.html?framework=B');
+  assert.equal(ui.el('clausesBreadcrumb').getAttribute('href'), '/clauses.html?framework=B');
+});
+
+test('switched-off PESTLE and ISMS load nothing, even after a save on their tab', async (t) => {
+  const me = { is_admin: true, features: { enabled: { pestle: false, isms: false } } };
+  const pestle = await clausePage(t, { me, query: '&id=k1&tab=pestle' });
+  assert.equal(
+    pestle.ui.calls.some((c) => c.url.includes('/pestle')),
+    false,
+  );
+  const { ui, state } = await clausePage(t, { me, query: '&id=k1&tab=isms' });
+  ui.el('editLinkedControls').click();
+  await settle(() => ui.el('adminControlsList').querySelector('select'));
+  ui.el('saveClauseControls').click();
+  await settle(() => ui.el('status').textContent === 'Linked controls saved');
+  await settle(() => ui.idle());
+  assert.equal(state.patched.length, 1);
+  assert.equal(ismsCalls(ui), 0);
+  assert.equal(ui.el('clauseIsmsView').querySelector('table'), null);
+});
+
+test('saving linked controls on the ISMS tab reloads the ISMS references', async (t) => {
+  const { ui } = await clausePage(t, { query: '&id=k1&tab=isms' });
+  assert.equal(ismsCalls(ui), 0);
+  ui.el('editLinkedControls').click();
+  await settle(() => ui.el('adminControlsList').querySelector('select'));
+  ui.el('saveClauseControls').click();
+  await settle(() => ui.el('clauseIsmsView').querySelector('table'));
+  assert.equal(ismsCalls(ui), 1);
+});
+
+test('the ISMS tab loads once, names unnamed records by kind and says when nothing is linked', async (t) => {
+  const { ui } = await clausePage(t, {
+    isms: {
+      swot: [],
+      objectives: [
+        { id: 'o1', goal: '', requirement: 'Annual review' },
+        { id: 'o2', goal: '', requirement: '' },
+      ],
+      documents: [],
+      org_nodes: [{ id: 'n1', name: '' }],
+      assets: [{ id: 'a1', asset: '' }],
+      effectiveness_measures: [],
+      meetings: [{ id: 'mt1', title: '' }],
+    },
+  });
+  tab(ui, 'clauseIsmsTab');
+  await settle(() => ui.el('clauseIsmsView').querySelector('table'));
+  assert.deepEqual(
+    [...ui.el('clauseIsmsView').querySelectorAll('tbody tr')].map((r) => [
+      r.cells[0].textContent,
+      r.cells[1].textContent,
+    ]),
+    [
+      ['Objectives', 'Annual review'],
+      ['Objectives', 'Objective'],
+      ['Organisation chart', 'Org node'],
+      ['Assets', 'Asset'],
+      ['Meetings', 'Meeting'],
+    ],
+  );
+  // Opening the tab again keeps what it loaded.
+  tab(ui, 'clauseIsmsTab');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(ismsCalls(ui), 1);
+
+  const empty = await clausePage(t, {
+    query: '&id=k1&tab=isms',
+    isms: {
+      swot: [],
+      objectives: [],
+      documents: [],
+      org_nodes: [],
+      assets: [],
+      effectiveness_measures: [],
+      meetings: [],
+    },
+  });
+  tab(empty.ui, 'clauseIsmsTab');
+  await settle(() => !/Loading/.test(empty.ui.el('clauseIsmsView').textContent));
+  assert.equal(
+    empty.ui.el('clauseIsmsView').textContent,
+    'No ISMS entities are currently linked to this clause.',
+  );
+});
+
+test('a clause page without an id opens its tabs without requests', async (t) => {
+  const ui = await page(t, 'clause', {
+    get: async (u) => {
+      throw new Error('Unexpected GET ' + u);
+    },
+  });
+  await settle(() => ui.el('status').textContent === 'Missing clause id.');
+  const before = [ui.el('clausePestleRows').textContent, ui.el('clauseIsmsView').textContent];
+  for (const id of ['clausePestleTab', 'clauseIsmsTab', 'clauseChangelogTab'])
+    ui.el(id).dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(
+    ui.calls.map((c) => c.url),
+    ['/api/v1/frameworks'],
+  );
+  assert.deepEqual(
+    [ui.el('clausePestleRows').textContent, ui.el('clauseIsmsView').textContent],
+    before,
+  );
+});
+
+test('editing the evidence of a clause without mappings starts from one blank row', async (t) => {
+  const { ui } = await clausePage(t, { clause: clause({ evidence_mappings: [] }) });
+  ui.el('editClauseEvidence').click();
+  const rows = [
+    ...ui.el('clauseEvidenceUrlInputs').querySelectorAll('.clause-evidence-mapping-row'),
+  ];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].querySelector('.clause-evidence-title').value, '');
+  assert.equal(rows[0].querySelector('.clause-evidence-url').value, '');
+});
+
+test('the control search leaves out untitled controls when looking for the word null', async (t) => {
+  const { ui } = await clausePage(t, {
+    catalogue: [
+      { id: 'c1', ref: 'A1', title: 'Null routing' },
+      { id: 'c4', ref: 'A4', title: null },
+    ],
+  });
+  ui.el('editLinkedControls').click();
+  await settle(() => ui.el('adminControlsList').querySelectorAll('tbody tr').length === 2);
+  const untitled = ui.el('adminControlsList').querySelectorAll('tbody tr')[1];
+  assert.equal(untitled.cells[1].textContent, '');
+  ui.el('controlSearch').value = 'null';
+  ui.el('controlSearch').dispatchEvent(new ui.window.Event('input'));
+  assert.deepEqual(
+    [...ui.el('adminControlsList').querySelectorAll('tbody tr')].map((r) => r.cells[0].textContent),
+    ['A1'],
+  );
+});
+
+test('a control catalogue that failed with the page is requested again when editing starts', async (t) => {
+  const { ui } = await clausePage(t, { catalogueFailures: 1 });
+  assert.match(ui.el('status').textContent, /Catalogue busy/);
+  ui.el('editLinkedControls').click();
+  await settle(() => ui.el('adminControlsList').querySelector('select'));
+  assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/controls?')).length, 2);
+  assert.deepEqual(
+    [...ui.el('adminControlsList').querySelectorAll('tbody tr')].map((r) => r.cells[0].textContent),
+    ['A1', 'A2', 'A3'],
+  );
 });

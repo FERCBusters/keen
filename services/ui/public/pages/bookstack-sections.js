@@ -36,9 +36,7 @@ export async function initBookstackDocuments(me, root) {
       if (!append) setOptions('pageSelect', [], 'Choose page');
       $('pageSelect').insertAdjacentHTML(
         'beforeend',
-        (data.items || [])
-          .map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`)
-          .join(''),
+        data.items.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join(''),
       );
       pageOffset = data.next_offset;
       $('morePages').style.display = pageOffset == null ? 'none' : '';
@@ -57,16 +55,16 @@ export async function initBookstackDocuments(me, root) {
       ]);
       $('targetRequirement').insertAdjacentHTML(
         'beforeend',
-        (controls.items || [])
+        controls.items
           .map(
             (c) =>
-              `<option value="control:${esc(c.id)}">Control ${esc(c.ref)} · ${esc(c.title || '')}</option>`,
+              `<option value="control:${esc(c.id)}">Control ${esc(c.ref)} · ${esc(c.title)}</option>`,
           )
           .join('') +
-          (clauses.items || [])
+          clauses.items
             .map(
               (c) =>
-                `<option value="clause:${esc(c.id)}">Clause ${esc(c.ref)} · ${esc(c.title || '')}</option>`,
+                `<option value="clause:${esc(c.id)}">Clause ${esc(c.ref)} · ${esc(c.title)}</option>`,
             )
             .join(''),
       );
@@ -77,14 +75,14 @@ export async function initBookstackDocuments(me, root) {
   async function loadSnapshots() {
     try {
       const data = await apiGet('/api/v1/isms/bookstack-sections');
-      capturedSections = data.items || [];
+      capturedSections = data.items;
       $('sectionRows').innerHTML =
-        (data.items || [])
+        data.items
           .map(
             (s) => `<tr class="${s.archived ? 'text-muted' : ''}">
       <td>${esc(s.document_title)}</td><td><a href="${esc(s.permalink)}" target="_blank" rel="noopener noreferrer">${esc(s.page_title)}${s.anchor ? ` #${esc(s.anchor)}` : ''}</a></td>
       <td>${esc(s.target_framework || 'Deleted framework')} · ${esc(s.target_ref || 'Deleted requirement')}</td><td>${esc(fmtTs(s.captured_at))}</td>
-      <td>${s.revision_count ?? '-'} <small>${esc(fmtTs(s.page_updated_at) || '')}</small></td>
+      <td>${s.revision_count ?? '-'} <small>${esc(fmtTs(s.page_updated_at))}</small></td>
       <td><a href="/api/v1/isms/bookstack-sections/${encodeURIComponent(s.id)}/snapshot">Download JSON</a><div class="small-muted" title="SHA-256 ${esc(s.sha256)}">SHA-256 ${esc(s.sha256.slice(0, 12))}…</div></td>
       <td>${canSampleIntoAudit(me, 'isms') ? `<button type="button" class="btn btn-sm btn-outline-primary" data-sample="${esc(s.id)}">Sample into audit</button>` : ''}
       ${manage ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-archive="${esc(s.id)}" data-archived="${s.archived}">${s.archived ? 'Restore' : 'Archive'}</button>` : ''}</td></tr>`,
@@ -100,7 +98,6 @@ export async function initBookstackDocuments(me, root) {
   $('targetFramework').addEventListener('change', loadTargets);
   $('sectionForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!manage) return;
     const [type, id] = $('targetRequirement').value.split(':');
     const body = {
       document_id: $('policyDocument').value,
@@ -158,13 +155,13 @@ export async function initBookstackDocuments(me, root) {
       ]);
       setOptions(
         'policyDocument',
-        (docs.items || []).map((d) => ({ id: d.id, name: d.title })),
+        docs.items.map((d) => ({ id: d.id, name: d.title })),
         'Choose policy or process',
       );
-      setOptions('bookSelect', books.items || [], 'Choose book');
+      setOptions('bookSelect', books.items, 'Choose book');
       setOptions(
         'targetFramework',
-        (frameworks.items || []).map((f) => ({ id: f.slug, name: f.name || f.slug })),
+        frameworks.items.map((f) => ({ id: f.slug, name: f.name || f.slug })),
         'Choose framework',
       );
       $('targetFramework').value = framework;

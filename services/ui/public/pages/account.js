@@ -60,25 +60,23 @@ const prefsSaveToast = document.getElementById('prefsSaveToast');
 let prefsSaveToastTimer = null;
 
 function showPrefsSaveToast(message, kind = 'success', ttlMs = 2400) {
-  if (!prefsSaveToast) return;
   if (prefsSaveToastTimer) {
     clearTimeout(prefsSaveToastTimer);
     prefsSaveToastTimer = null;
   }
 
-  const cls =
-    {
-      success: 'badge text-bg-success',
-      danger: 'badge text-bg-danger',
-      warning: 'badge text-bg-warning',
-      info: 'badge text-bg-secondary',
-    }[kind] || 'badge text-bg-secondary';
+  const cls = {
+    success: 'badge text-bg-success',
+    danger: 'badge text-bg-danger',
+    warning: 'badge text-bg-warning',
+    info: 'badge text-bg-secondary',
+  }[kind];
 
   prefsSaveToast.className = cls;
   prefsSaveToast.textContent = message;
   prefsSaveToast.style.display = '';
 
-  const ms = Number(ttlMs || 0);
+  const ms = Number(ttlMs);
   if (ms > 0) {
     prefsSaveToastTimer = setTimeout(() => {
       prefsSaveToast.style.display = 'none';
@@ -130,18 +128,16 @@ function renderThemeOptions(meObj) {
       ? meObj.available_themes
       : THEMES;
 
-  if (!prefTheme) return;
   prefTheme.innerHTML = avail
     .map((t) => `<option value="${esc(String(t.id))}">${esc(String(t.name))}</option>`)
     .join('');
 }
 
-let currentLandingPagePref = (me?.preferences?.landing_page || '/').trim() || '/';
+// The API returns landing pages normalised: a non-empty path starting with '/'.
+let currentLandingPagePref = (me?.preferences?.landing_page || '/').trim();
 let currentDefaultFrameworkPref = (me?.preferences?.default_framework || '').trim();
 
 function renderLandingPageOptions(meObj, savedSearches = []) {
-  if (!prefLandingPage) return;
-
   const fixed = [
     // The API stores Home as '/', which is also the default preference.
     { v: '/', label: 'Home' },
@@ -155,7 +151,7 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   ];
   if (meObj?.is_admin) fixed.push({ v: '/admin.html', label: 'Admin' });
 
-  const cur = (currentLandingPagePref || '/').trim() || '/';
+  const cur = currentLandingPagePref;
 
   const hasFixed = new Set(fixed.map((o) => o.v));
 
@@ -164,7 +160,7 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   const saved = [];
   for (const s of rawArr) {
     const name = String(s?.name || '').trim();
-    const url = String(s?.url || '').trim();
+    const url = String(s?.url).trim();
     if (!name || !url) continue;
     saved.push({ name, url });
   }
@@ -176,7 +172,7 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
     nameCounts.set(k, (nameCounts.get(k) || 0) + 1);
   }
   const savedLabels = saved.map((s) => {
-    const dup = (nameCounts.get(s.name.toLowerCase()) || 0) > 1;
+    const dup = nameCounts.get(s.name.toLowerCase()) > 1;
     // Plain text; escaped once when the <option> is rendered.
     const label = dup ? `${s.name} - ${shorten(s.url, 60)}` : s.name;
     return { v: s.url, label };
@@ -204,11 +200,7 @@ function renderLandingPageOptions(meObj, savedSearches = []) {
   prefLandingPage.innerHTML = html;
 
   // Re-select current value if present.
-  try {
-    prefLandingPage.value = cur;
-  } catch {
-    // ignore
-  }
+  prefLandingPage.value = cur;
 }
 
 function loadPrefs(meObj) {
@@ -225,18 +217,18 @@ function loadPrefs(meObj) {
   }
 
   renderThemeOptions(meObj);
-  currentLandingPagePref = (prefs.landing_page || '/').trim() || '/';
+  currentLandingPagePref = (prefs.landing_page || '/').trim();
   currentDefaultFrameworkPref = (prefs.default_framework || '').trim();
   renderLandingPageOptions(meObj, []);
 
   if (prefUseLocalTz) prefUseLocalTz.checked = !!prefs.use_local_timezone;
-  if (prefTimezone) prefTimezone.value = (prefs.timezone || browserTz || '').trim();
+  if (prefTimezone) prefTimezone.value = (prefs.timezone || browserTz).trim();
   if (prefTheme) {
-    const t = (prefs.theme || 'ink').trim() || 'ink';
+    const t = (prefs.theme || 'ink').trim();
     prefTheme.value = t;
     applyTheme(t);
   }
-  if (prefDateFormat) prefDateFormat.value = (prefs.date_format || 'default').trim() || 'default';
+  if (prefDateFormat) prefDateFormat.value = (prefs.date_format || 'default').trim();
   if (prefLandingPage) {
     prefLandingPage.value = currentLandingPagePref;
   }
@@ -250,27 +242,25 @@ function loadPrefs(meObj) {
   setTzEnabled();
 }
 
+// Catalogue entries always carry a name (the slug when none is set) and a count.
 function _frameworkOptionLabel(it) {
-  const name = String(it?.name || it?.slug || '').trim() || String(it?.slug || '').trim();
-  const count = Number(it?.control_count || 0);
-  const suffix = Number.isFinite(count) ? ` (${count})` : '';
-  return `${name}${suffix}`;
+  const name = String(it.name).trim();
+  const count = Number(it.control_count || 0);
+  return `${name} (${count})`;
 }
 
 async function loadDefaultFrameworkOptions(meObj) {
-  if (!prefDefaultFramework) return;
-
   try {
     const catalog = await getFrameworkCatalog();
-    const items = Array.isArray(catalog?.items) ? catalog.items.slice() : [];
-    const defaultSlug = String(catalog?.default || '').trim() || 'KEEN-AF:1.0';
+    const items = catalog.items.slice();
+    // With no framework enabled, the catalogue's default is empty.
+    const defaultSlug = String(catalog.default).trim() || 'KEEN-AF:1.0';
 
-    // Keep options unique by slug and stable for rendering.
+    // The catalogue lists each slug once.
     const seen = new Set();
     const uniq = [];
     for (const it of items) {
-      const slug = String(it?.slug || '').trim();
-      if (!slug || seen.has(slug)) continue;
+      const slug = String(it.slug).trim();
       seen.add(slug);
       uniq.push({ ...it, slug });
     }
@@ -336,20 +326,19 @@ function colorChipHtml(hex) {
   const c = normalizeHex(hex);
   if (!c) return '<span class="small-muted">-</span>';
   const fg = idealTextColor(c);
-  const border = fg === '#FFFFFF' ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)';
+  // idealTextColor gives dark ink (#111827) on light colours and light text on dark ones.
+  const border = fg === '#111827' ? 'rgba(0,0,0,0.14)' : 'rgba(255,255,255,0.28)';
   return `<span class="badge" style="background:${c}; border:1px solid ${border}; color:${fg}; font-weight:650;">${c}</span>`;
 }
 
 function renderSourceColors(items) {
-  if (!sourceColorsBody || !sourceColorsWrap || !sourceColorsLoading) return;
   sourceColorsBody.innerHTML = '';
-  const arr = Array.isArray(items) ? items : [];
 
-  for (const it of arr) {
+  for (const it of items) {
     const src = String(it.source || '').trim();
     if (!src) continue;
-    const label = String(it.label || src).trim() || src;
-    const defaultColor = normalizeHex(it.default_color || it.color || '');
+    const label = String(it.label || src).trim();
+    const defaultColor = normalizeHex(it.default_color || it.color);
     const overrideColor = normalizeHex(sourceColorOverrides[src] || '');
     const effective = overrideColor || defaultColor || '#000000';
 
@@ -373,7 +362,6 @@ function renderSourceColors(items) {
 }
 
 function updateSourceColorRow(src) {
-  if (!sourceColorsBody || !src) return;
   const picker = sourceColorsBody.querySelector(`[data-src-color="${CSS.escape(src)}"]`);
   const hexInp = sourceColorsBody.querySelector(`[data-src-hex="${CSS.escape(src)}"]`);
   const def = picker?.getAttribute('data-default') || '';
@@ -394,14 +382,12 @@ function bindSourceColorsEvents() {
   // if we mutate related DOM elements during the picker interaction.
   sourceColorsBody.addEventListener('change', (ev) => {
     const t = ev.target;
-    if (!(t instanceof HTMLElement)) return;
 
     if (t.matches('[data-src-color]')) {
+      // A colour input always holds a valid #rrggbb value.
       const src = t.getAttribute('data-src-color');
-      if (!src) return;
       const c = normalizeHex(t.value);
-      const def = normalizeHex(t.getAttribute('data-default') || '');
-      if (!c) return;
+      const def = normalizeHex(t.getAttribute('data-default'));
       // If user picks the default color, treat it as "no override".
       if (def && c === def) delete sourceColorOverrides[src];
       else sourceColorOverrides[src] = c;
@@ -413,11 +399,9 @@ function bindSourceColorsEvents() {
   // Hex text field: apply on change (avoid fighting while user types)
   sourceColorsBody.addEventListener('change', (ev) => {
     const t = ev.target;
-    if (!(t instanceof HTMLElement)) return;
 
     if (t.matches('[data-src-hex]')) {
       const src = t.getAttribute('data-src-hex');
-      if (!src) return;
       const c = normalizeHex(t.value);
       const picker = sourceColorsBody.querySelector(`[data-src-color="${CSS.escape(src)}"]`);
       const def = normalizeHex(picker?.getAttribute('data-default') || '');
@@ -434,12 +418,9 @@ function bindSourceColorsEvents() {
   });
 
   sourceColorsBody.addEventListener('click', (ev) => {
-    const t = ev.target;
-    if (!(t instanceof HTMLElement)) return;
-    const btn = t.closest('[data-src-reset]');
+    const btn = ev.target.closest('[data-src-reset]');
     if (!btn) return;
     const src = btn.getAttribute('data-src-reset');
-    if (!src) return;
     delete sourceColorOverrides[src];
     sourceColorsDirty = true;
     updateSourceColorRow(src);
@@ -447,13 +428,12 @@ function bindSourceColorsEvents() {
 }
 
 async function loadSourceColors() {
-  if (!sourceColorsLoading || !sourceColorsWrap || !sourceColorsBody) return;
   sourceColorsLoading.style.display = '';
   sourceColorsWrap.style.display = 'none';
 
   try {
     const data = await apiGet('/api/v1/sources/meta');
-    const items = data?.items || [];
+    const items = data.items;
     sourceColorsLoaded = true;
     sourceColorsLoading.style.display = 'none';
     sourceColorsWrap.style.display = '';
@@ -489,7 +469,6 @@ loadSourceColors();
 // ---------------------------------------------------------------------------
 
 function renderSavedSearches(items) {
-  if (!savedSearchesList) return;
   savedSearchesList.innerHTML = '';
   const arr = Array.isArray(items) ? items : [];
   if (savedSearchesEmpty) savedSearchesEmpty.style.display = arr.length ? 'none' : '';
@@ -511,7 +490,7 @@ function renderSavedSearches(items) {
 
     const meta = document.createElement('div');
     meta.className = 'small-muted';
-    meta.innerHTML = esc(s.url || '');
+    meta.innerHTML = esc(s.url);
 
     left.appendChild(a);
     left.appendChild(meta);
@@ -544,19 +523,13 @@ function renderSavedSearches(items) {
 }
 
 async function loadSavedSearches() {
-  if (!savedSearchesList) return;
   try {
     const items = await apiGet('/api/v1/me/saved-searches');
     renderSavedSearches(items);
 
     // Also surface saved searches as landing-page options.
-    // (Non-fatal if the server supports saved searches but we can't render.)
-    try {
-      renderLandingPageOptions(me, items);
-      if (prefLandingPage) prefLandingPage.value = (currentLandingPagePref || '/').trim() || '/';
-    } catch {
-      // ignore
-    }
+    renderLandingPageOptions(me, items);
+    prefLandingPage.value = currentLandingPagePref;
   } catch (e) {
     if (savedSearchesEmpty) {
       savedSearchesEmpty.className = 'alert alert-danger mb-0';
@@ -602,8 +575,8 @@ function bindAccountTabs() {
   const tabButtons = Array.from(document.querySelectorAll('#accountTabs [data-bs-toggle="tab"]'));
   for (const btn of tabButtons) {
     btn.addEventListener('shown.bs.tab', () => {
-      const target = btn.getAttribute('data-bs-target') || '';
-      const hash = btn.getAttribute('data-tab-hash') || '';
+      const target = btn.getAttribute('data-bs-target');
+      const hash = btn.getAttribute('data-tab-hash');
       if (hash && window.location.hash !== hash) {
         try {
           window.history.replaceState(
@@ -659,7 +632,7 @@ function accountList({
       const fw = framework ? getCurrentFramework() : '';
       if (fw) url.searchParams.set('framework', fw);
       const res = await apiGet(url.pathname + url.search);
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const items = res.items;
       empty.style.display = items.length ? 'none' : '';
       wrap.style.display = items.length ? '' : 'none';
       tbody.innerHTML = items.map(row).join('');
@@ -698,14 +671,14 @@ document.getElementById('myQuestionsTbody')?.addEventListener('click', async (ev
 function myControlRow(item) {
   const clause = item?.kind === 'clause';
   const href = withFramework(
-    `/${clause ? 'clause' : 'control'}.html?id=${encodeURIComponent(item?.id || '')}`,
-    item?.framework || getCurrentFramework(),
+    `/${clause ? 'clause' : 'control'}.html?id=${encodeURIComponent(item.id)}`,
+    item.framework,
   );
   const scope = clause ? '-' : item?.in_scope ? 'In scope' : 'Out of scope';
   return `<tr>
     <td><a class="fw-semibold" href="${esc(href)}">${esc(item?.ref || '-')}</a></td>
     <td class="wrap">${esc(item?.title || '-')}</td>
-    <td class="small-muted">${esc(item?.framework_name || item?.framework || '-')}</td>
+    <td class="small-muted">${esc(item?.framework_name || item?.framework)}</td>
     <td>${clause ? 'Clause' : 'Control'}</td>
     <td class="small-muted">${esc(scope)}</td>
   </tr>`;
@@ -746,10 +719,11 @@ function myAuditRow(a) {
 
 function myRiskRow(r) {
   const url = withFramework(
-    `/risk.html?id=${encodeURIComponent(r.id || '')}`,
+    `/risk.html?id=${encodeURIComponent(r.id)}`,
     r.framework || getCurrentFramework(),
   );
-  const asset = String(r.asset || r.asset_entity?.name || 'Risk').trim() || 'Risk';
+  // My risks are joined to their asset, so each one names it.
+  const asset = String(r.asset || r.asset_entity?.name).trim();
   const threat = String(r.threat_summary || '').trim();
   const categoryBits = [r.category?.name, r.subcategory?.name].filter(Boolean);
   const category = categoryBits.join(' / ') || '-';
@@ -757,8 +731,7 @@ function myRiskRow(r) {
   const typeHtml = types.length
     ? types.map((t) => `<span class="badge badge-soft me-1">${esc(t)}</span>`).join('')
     : '<span class="small-muted">-</span>';
-  const controlsText =
-    Number(r.control_count || 0) === 1 ? '1 control' : `${Number(r.control_count || 0)} controls`;
+  const controlsText = r.control_count === 1 ? '1 control' : `${r.control_count} controls`;
   const updated = r.updated_at ? fmtTs(r.updated_at) : '-';
 
   return `<tr>
@@ -793,9 +766,8 @@ function orgNodeLabel(node) {
   if (typeof node === 'string') return node.trim();
   if (Array.isArray(node)) return orgPathLabel(node);
   if (typeof node === 'object') {
-    return String(node.name || node.title || node.username || node.email || node.id || '').trim();
+    return String(node.name || node.title || node.username).trim();
   }
-  return String(node || '').trim();
 }
 
 function orgPathLabel(path) {
@@ -815,7 +787,7 @@ function meetingTimeLabel(item) {
 
 function myMeetingRow(item) {
   const href = withFramework(
-    `/isms-meeting.html?id=${encodeURIComponent(item?.id || '')}`,
+    `/isms-meeting.html?id=${encodeURIComponent(item.id)}`,
     getCurrentFramework(),
   );
   return `<tr>
@@ -843,10 +815,10 @@ function myIsmsObjectiveRow(item) {
 }
 
 function myIsmsRoleRow(item) {
-  const node = item?.org_node || item?.node || item || {};
-  const path = orgPathLabel(item?.path) || orgPathLabel(node?.path) || orgNodeLabel(node) || '-';
+  const node = item?.org_node || item?.node;
+  const path = orgPathLabel(item?.path) || orgPathLabel(node?.path) || orgNodeLabel(node);
   return `<tr>
-    <td class="wrap"><span class="fw-semibold">${esc(orgNodeLabel(node) || 'Role')}</span><div class="small-muted">${esc(node.description || '')}</div></td>
+    <td class="wrap"><span class="fw-semibold">${esc(orgNodeLabel(node))}</span><div class="small-muted">${esc(node.description || '')}</div></td>
     <td><span class="badge text-bg-light">${esc(node.node_type || 'role')}</span></td>
     <td>${esc(item?.relationship_type || 'member')}</td>
     <td class="small-muted wrap">${esc(path)}</td>
@@ -858,11 +830,12 @@ function assetRoleLabel(item) {
   const roles = [];
   if (item?.is_owner) roles.push('Owner');
   if (item?.is_register_holder) roles.push('Register holder');
-  return roles.join(', ') || item?.relationship || '-';
+  // Each listed asset is owned or held by one of the person's roles.
+  return roles.join(', ') || item?.relationship;
 }
 
 function myIsmsAssetRow(item) {
-  const asset = item?.asset && typeof item.asset === 'object' ? item.asset : item || {};
+  const asset = item?.asset && typeof item.asset === 'object' ? item.asset : item;
   const taxonomy = [
     asset.category?.name || asset.category_name,
     asset.subcategory?.name || asset.subcategory_name,
@@ -870,7 +843,7 @@ function myIsmsAssetRow(item) {
     .filter(Boolean)
     .join(' / ');
   return `<tr>
-    <td class="wrap"><span class="fw-semibold">${esc(asset.asset || asset.name || 'Asset')}</span><div class="small-muted">${esc(taxonomy || asset.description || '')}</div></td>
+    <td class="wrap"><span class="fw-semibold">${esc(asset.asset || asset.name)}</span><div class="small-muted">${esc(taxonomy || asset.description)}</div></td>
     <td>${esc(asset.license || '-')}</td>
     <td><span class="badge text-bg-light">${esc(assetRoleLabel(item))}</span></td>
     <td class="small-muted">${esc(orgNodeLabel(asset.owner_org_node) || '-')}</td>
@@ -990,20 +963,21 @@ if (prefsForm) {
 
     const payload = {
       use_local_timezone: !!prefUseLocalTz?.checked,
-      theme: (prefTheme?.value || 'ink').trim() || 'ink',
-      date_format: (prefDateFormat?.value || 'default').trim() || 'default',
+      // Each select holds one of its own options.
+      theme: prefTheme.value,
+      date_format: prefDateFormat.value,
       auto_apply_filters: !!prefAutoApplyFilters?.checked,
-      landing_page: (prefLandingPage?.value || '/').trim() || '/',
+      landing_page: prefLandingPage.value,
       default_framework: (prefDefaultFramework?.value || '').trim() || null,
-      notification_delivery: prefNotificationDelivery?.value || 'app',
+      notification_delivery: prefNotificationDelivery.value,
     };
 
     if (sourceColorsLoaded) {
-      payload.source_colors = sourceColorOverrides || {};
+      payload.source_colors = sourceColorOverrides;
     }
 
     if (payload.use_local_timezone) {
-      const tz = (prefTimezone?.value || '').trim() || browserTz;
+      const tz = prefTimezone.value.trim() || browserTz;
       payload.timezone = tz;
     }
 
@@ -1011,9 +985,9 @@ if (prefsForm) {
       const updated = await apiPatch('/api/v1/me/preferences', payload);
       // The design system's date and framework helpers read these globals on
       // every call, so the new preferences apply without a reload.
-      window.mospPreferences = updated || {};
+      window.mospPreferences = updated;
       if (updated?.landing_page) {
-        currentLandingPagePref = String(updated.landing_page).trim() || '/';
+        currentLandingPagePref = String(updated.landing_page).trim();
       }
       currentDefaultFrameworkPref = String(updated?.default_framework || '').trim();
       window.mospPreferredFramework = currentDefaultFrameworkPref;

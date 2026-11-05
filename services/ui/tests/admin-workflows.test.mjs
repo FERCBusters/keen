@@ -78,6 +78,7 @@ async function admin(t, options = {}) {
       },
     },
     setup(window) {
+      options.setup?.(window);
       window.bootstrap = {
         Modal: FakeModal,
         Tab: {
@@ -354,6 +355,31 @@ test('source catalogue failures are reported', async (t) => {
     () =>
       offline.el('source-catalogue').textContent ===
       'Could not load source catalogue: Catalogue offline',
+  );
+});
+
+test('a Compare button open beside the runners leaves the disabled runners hidden', async (t) => {
+  // The framework comparison's Compare button carries a bare data-run. Open
+  // before the ingest status arrives, it is no runner of its own.
+  const { el, ui, calls } = await admin(t, {
+    setup(window) {
+      const compare = window.document.createElement('button');
+      compare.setAttribute('data-run', '');
+      compare.id = 'compareFrameworks';
+      window.document.body.prepend(compare);
+    },
+  });
+  assert.equal(
+    ui.document.querySelector('[data-run="/api/v1/admin/ingest/loki/run"]').style.display,
+    'none',
+  );
+  assert.equal(el('resetLokiCursors').style.display, 'none');
+  assert.equal(el('compareFrameworks').style.display, '');
+  el('compareFrameworks').click();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(
+    calls('POST', '').map((c) => c.url),
+    [],
   );
 });
 

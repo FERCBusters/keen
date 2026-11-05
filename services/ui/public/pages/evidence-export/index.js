@@ -1,5 +1,5 @@
 import { errorText, fmtTsFilename, sourceLabel, toast } from '/app.js';
-import { maskDomText } from './masking.js';
+import { maskDomText, sampleExportUrl } from './masking.js';
 import {
   parseContentDispositionFilename,
   extFromContentType,
@@ -29,9 +29,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     if (_maskSampleExportsEnabled()) maskDomText(root);
   }
   function _sampleExportUrl(url) {
-    if (!_maskSampleExportsEnabled()) return url;
-    const sep = String(url).includes('?') ? '&' : '?';
-    return `${url}${sep}sample_export=1`;
+    return _maskSampleExportsEnabled() ? sampleExportUrl(url) : url;
   }
 
   // Printable header/footer (shown only in @media print when enabled).
@@ -41,23 +39,19 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
   function _disablePrintableChrome() {
     if (footerEl) {
       footerEl.innerHTML = '';
-      try {
-        delete footerEl.dataset.enabled;
-      } catch {}
+      delete footerEl.dataset.enabled;
       footerEl.style.display = 'none';
     }
     if (headerEl) {
       headerEl.textContent = '';
-      try {
-        delete headerEl.dataset.enabled;
-      } catch {}
+      delete headerEl.dataset.enabled;
       headerEl.style.display = 'none';
     }
   }
 
   function _enablePrintableChrome(headerText, footerText) {
     if (headerEl) {
-      headerEl.textContent = headerText || '';
+      headerEl.textContent = headerText;
       headerEl.dataset.enabled = '1';
       headerEl.style.display = '';
     }
@@ -87,7 +81,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
   function _sanitizeFilename(s) {
     // Make a filename component safe across Windows/macOS/Linux.
-    const str = String(s || '');
+    const str = String(s);
     return str
       .replace(/[\\/]+/g, ' ')
       .replace(/[<>"\?\*\|]+/g, ' ')
@@ -96,7 +90,6 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
   }
 
   function evidenceFileStem(e) {
-    if (!e) return 'Keen Event';
     const src = e.source ? sourceLabel(e.source, getSourceMeta()) || e.source : 'unknown';
     const ts = e.timestamp ? fmtTsFilename(e.timestamp) : '';
     const parts = [];
@@ -104,18 +97,17 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     if (e.id) parts.push(String(e.id));
     if (src) parts.push(String(src));
     if (ts) parts.push(String(ts));
-    const tail = parts.filter(Boolean).join(' ');
-    const stem = tail ? 'Keen Event - ' + tail : 'Keen Event';
+    const stem = 'Keen Event - ' + parts.filter(Boolean).join(' ');
 
     let out = _sanitizeFilename(stem);
     // Avoid extremely long default names in some browsers/filesystems.
     if (out.length > 180) out = out.slice(0, 180).trim();
-    return out || 'Keen Event';
+    return out;
   }
 
   function _evidenceHeaderText(eventId, exportedIso) {
     const base = (me?.sample_pdf_header || '').trim() || 'Evidence export';
-    const stamp = fmtTsFilename(exportedIso || new Date().toISOString());
+    const stamp = fmtTsFilename(exportedIso);
     return `${base} ${stamp} - ${eventId}`;
   }
 
@@ -125,11 +117,10 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     wrap.style.position = 'fixed';
     wrap.style.left = '-100000px';
     wrap.style.top = '0';
-    wrap.style.width = `${Math.round(widthPx || 900)}px`;
+    wrap.style.width = `${Math.round(widthPx)}px`;
     wrap.style.background = '#fff';
 
     for (const n of nodes) {
-      if (!n) continue;
       const clone = n.cloneNode(true);
       // Remove UI-only elements (buttons, nav links, etc.)
       clone.querySelectorAll('.no-print').forEach((el) => el.remove());
@@ -147,11 +138,10 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
   async function buildEvidencePdfBlob(e, orientation = 'portrait') {
     const main = document.querySelector('main');
-    if (!main) throw new Error('Page layout missing');
     const w = main.getBoundingClientRect().width || 900;
 
     const exportedIso = new Date().toISOString();
-    const header = _evidenceHeaderText(e?.id || '', exportedIso);
+    const header = _evidenceHeaderText(e.id, exportedIso);
     const footer = (me?.sample_pdf_footer || '').trim();
 
     const topRow = main.querySelector(
@@ -165,7 +155,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
     // Capture everything as one continuous flow to avoid forcing a page break after Artifacts.
     const nodes = [topRow, evidenceCard, questionsCard, normalizedCard, rawCard].filter(Boolean);
-    const segments = nodes.length ? [nodes] : [];
+    const segments = [nodes];
 
     const allPages = [];
 
@@ -191,9 +181,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         );
         allPages.push(...pages);
       } finally {
-        try {
-          wrap.remove();
-        } catch {}
+        wrap.remove();
       }
     }
 
@@ -215,23 +203,13 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
   const _pdfPreviewCache = new Map();
 
   function _previewKey(e, orientation) {
-    const id = e?.id || '';
-    const ts = e?.timestamp || '';
-    const n = Array.isArray(e?.artifacts) ? e.artifacts.length : 0;
-    return `${id}|${ts}|${n}|${String(orientation || 'portrait')}`;
-  }
-
-  function _revokeObjectUrl(url) {
-    if (!url) return;
-    try {
-      URL.revokeObjectURL(url);
-    } catch {}
+    return `${e.id}|${e.timestamp}|${e.artifacts.length}|${orientation}`;
   }
 
   function _setPreviewSelected(modalEl, orientation) {
-    const o = String(orientation || 'portrait').toLowerCase();
+    const o = String(orientation).toLowerCase();
     modalEl.querySelectorAll('.pdf-preview-option').forEach((opt) => {
-      opt.classList.toggle('selected', String(opt.dataset.orientation || '').toLowerCase() === o);
+      opt.classList.toggle('selected', String(opt.dataset.orientation).toLowerCase() === o);
     });
   }
 
@@ -241,13 +219,11 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
     const addRangeForEl = (el, pad = 8) => {
       if (!el) return;
-      try {
-        const r = el.getBoundingClientRect();
-        if (!r || r.height < 8) return;
-        const top = Math.max(0, Math.round((r.top - wr.top - pad) * scale));
-        const bottom = Math.max(0, Math.round((r.bottom - wr.top + pad) * scale));
-        if (bottom > top + 20) avoidRanges.push({ top, bottom });
-      } catch {}
+      const r = el.getBoundingClientRect();
+      if (!r || r.height < 8) return;
+      const top = Math.max(0, Math.round((r.top - wr.top - pad) * scale));
+      const bottom = Math.max(0, Math.round((r.bottom - wr.top + pad) * scale));
+      if (bottom > top + 20) avoidRanges.push({ top, bottom });
     };
 
     // Keep these cards together when possible.
@@ -259,26 +235,22 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const firstPreviewImg = previewsWrap?.querySelector('img.evidence-img');
 
     for (const img of Array.from(wrap.querySelectorAll('img.evidence-img'))) {
-      try {
-        const r = img.getBoundingClientRect();
-        if (!r || r.height < 10) continue;
-        const pad = 6;
-        let top = Math.max(0, Math.round((r.top - wr.top - pad) * scale));
-        const bottom = Math.max(0, Math.round((r.bottom - wr.top + pad) * scale));
+      const r = img.getBoundingClientRect();
+      if (!r || r.height < 10) continue;
+      const pad = 6;
+      let top = Math.max(0, Math.round((r.top - wr.top - pad) * scale));
+      const bottom = Math.max(0, Math.round((r.bottom - wr.top + pad) * scale));
 
-        if (attachedHeading && firstPreviewImg === img) {
-          try {
-            const hr = attachedHeading.getBoundingClientRect();
-            const hTop = Math.max(0, Math.round((hr.top - wr.top - pad) * scale));
-            if (Number.isFinite(hTop)) top = Math.min(top, hTop);
-          } catch {}
-        }
+      if (attachedHeading && firstPreviewImg === img) {
+        const hr = attachedHeading.getBoundingClientRect();
+        const hTop = Math.max(0, Math.round((hr.top - wr.top - pad) * scale));
+        if (Number.isFinite(hTop)) top = Math.min(top, hTop);
+      }
 
-        if (bottom > top + 20) avoidRanges.push({ top, bottom });
-      } catch {}
+      if (bottom > top + 20) avoidRanges.push({ top, bottom });
     }
 
-    avoidRanges.sort((a, b) => (a.top ?? 0) - (b.top ?? 0));
+    avoidRanges.sort((a, b) => a.top - b.top);
     return avoidRanges;
   }
 
@@ -287,14 +259,11 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const cached = _pdfPreviewCache.get(key);
     if (cached?.url) return cached.url;
 
-    if (signal?.aborted) throw new Error('Preview cancelled');
-
     const main = document.querySelector('main');
-    if (!main) throw new Error('Page layout missing');
     const w = main.getBoundingClientRect().width || 900;
 
     const exportedIso = new Date().toISOString();
-    const header = _evidenceHeaderText(e?.id || '', exportedIso);
+    const header = _evidenceHeaderText(e.id, exportedIso);
     const footer = (me?.sample_pdf_footer || '').trim();
 
     const topRow = main.querySelector(
@@ -307,10 +276,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const nodes = [topRow, evidenceCard, normalizedCard, rawCard].filter(Boolean);
 
     const wrap = _makeExportContainer(nodes, w);
-    let url = '';
     try {
-      if (signal?.aborted) throw new Error('Preview cancelled');
-
       // Shorter timeout for previews.
       await waitForImages(wrap, 8000);
       if (signal?.aborted) throw new Error('Preview cancelled');
@@ -333,17 +299,12 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         orientation,
         avoidRanges,
       );
-      url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
 
       _pdfPreviewCache.set(key, { url, createdAt: Date.now() });
       return url;
-    } catch (err) {
-      if (url) _revokeObjectUrl(url);
-      throw err;
     } finally {
-      try {
-        wrap.remove();
-      } catch {}
+      wrap.remove();
     }
   }
 
@@ -351,7 +312,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const modalEl = document.getElementById('pdfOptionsModal');
     const bs = globalThis.bootstrap;
     if (!modalEl || !bs?.Modal) {
-      return _lastPdfOrientation || 'portrait';
+      return _lastPdfOrientation;
     }
 
     const portrait = modalEl.querySelector('#pdfOptPortrait');
@@ -365,13 +326,13 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     const landscapeFrame = landscapeImg?.closest('.pdf-preview-frame');
 
     if (portrait && landscape) {
-      const last = String(_lastPdfOrientation || 'portrait').toLowerCase();
+      const last = String(_lastPdfOrientation).toLowerCase();
       portrait.checked = last !== 'landscape';
       landscape.checked = last === 'landscape';
     }
 
     const setOrientation = (val) => {
-      const v = String(val || 'portrait').toLowerCase();
+      const v = String(val).toLowerCase();
       if (portrait && landscape) {
         portrait.checked = v !== 'landscape';
         landscape.checked = v === 'landscape';
@@ -394,7 +355,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     if (!modalEl.dataset.previewBound) {
       modalEl.dataset.previewBound = '1';
       modalEl.querySelectorAll('.pdf-preview-option').forEach((opt) => {
-        const orient = String(opt.dataset.orientation || 'portrait').toLowerCase();
+        const orient = String(opt.dataset.orientation).toLowerCase();
         const click = () => setOrientation(orient);
         opt.addEventListener('click', click);
         opt.addEventListener('keydown', (ev) => {
@@ -422,23 +383,18 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       const controller = new AbortController();
 
       const done = (val) => {
-        if (resolved) return;
         resolved = true;
-        try {
-          if (val) {
-            _lastPdfOrientation = val;
-            try {
-              localStorage.setItem('keen_pdf_orientation', val);
-            } catch {}
-          }
-        } catch {}
+        if (val) {
+          _lastPdfOrientation = val;
+          try {
+            localStorage.setItem('keen_pdf_orientation', val);
+          } catch {}
+        }
         resolve(val);
       };
 
       const onHidden = () => {
-        try {
-          controller.abort();
-        } catch {}
+        controller.abort();
         modalEl.removeEventListener('hidden.bs.modal', onHidden);
         modalEl.removeEventListener('shown.bs.modal', onShown);
         genBtn?.removeEventListener('click', onGenerate);
@@ -448,9 +404,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       const onGenerate = () => {
         const val = landscape && landscape.checked ? 'landscape' : 'portrait';
         done(val);
-        try {
-          inst.hide();
-        } catch {}
+        inst.hide();
       };
 
       const onShown = async () => {
@@ -463,16 +417,9 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
         if (landscapeImg) landscapeImg.removeAttribute('src');
 
         if (statusEl) statusEl.style.display = '';
-        try {
-          genBtn.disabled = false;
-        } catch {}
+        genBtn.disabled = false;
 
         const e = eventForPreview;
-        if (!e) {
-          if (statusEl) statusEl.style.display = 'none';
-          return;
-        }
-
         try {
           const [p, l] = await Promise.allSettled([
             buildEvidencePreviewUrl(e, 'portrait', controller.signal),
@@ -489,8 +436,6 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
             landscapeImg.src = l.value;
             revealPreviewImg(landscapeImg, landscapeFrame);
           }
-        } catch {
-          // Non-fatal: previews are best-effort.
         } finally {
           if (statusEl) statusEl.style.display = 'none';
         }
@@ -510,7 +455,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       toast(status, 'Event not loaded yet', 'warning');
       return;
     }
-    const arts = Array.isArray(e.artifacts) ? e.artifacts : [];
+    const arts = e.artifacts;
 
     // Use the same stem for the ZIP filename and every file inside the ZIP.
     // (This stem already includes the configured evidence prefix, event id,
@@ -530,18 +475,16 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       return;
     }
 
-    const prevLabel = btn ? btn.textContent : '';
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Preparing ZIP';
-    }
+    const prevLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing ZIP';
 
     try {
       const files = [];
 
       // Include a PDF evidence report alongside the raw artifacts.
       toast(status, 'Rendering evidence PDF', 'info');
-      const pdfBlob = await buildEvidencePdfBlob(e, _lastPdfOrientation || 'portrait');
+      const pdfBlob = await buildEvidencePdfBlob(e, _lastPdfOrientation);
       if (pdfBlob.size > MAX_ZIP_EXPORT_BYTES)
         throw new Error('Evidence PDF exceeds the 100 MiB ZIP export limit.');
       const pdfBytes = new Uint8Array(await pdfBlob.arrayBuffer());
@@ -587,7 +530,6 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
           .replace(/[\\/\0]+/g, '_')
           .replace(/\s+/g, ' ')
           .trim();
-        if (!name) name = `artifact-${a.id}${extFromContentType(a.content_type)}`;
 
         // Ensure uniqueness inside the zip
         const base = name;
@@ -617,26 +559,18 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => {
-        try {
-          URL.revokeObjectURL(obj);
-        } catch {}
-      }, 10_000);
+      setTimeout(() => URL.revokeObjectURL(obj), 10_000);
 
       toast(status, 'ZIP download started', 'success', 2500);
       // Ensure the banner disappears even if other async UI updates happen.
       setTimeout(() => {
-        try {
-          status.style.display = 'none';
-        } catch {}
+        status.style.display = 'none';
       }, 2800);
     } catch (err) {
       toast(status, errorText(err), 'danger');
     } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = prevLabel || 'Download all artifacts as evidence';
-      }
+      btn.disabled = false;
+      btn.textContent = prevLabel;
     }
   }
 
@@ -647,7 +581,7 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
     _autoPrinted = true;
 
     const exportedIso = new Date().toISOString();
-    const headerText = _evidenceHeaderText(e?.id || '', exportedIso);
+    const headerText = _evidenceHeaderText(e.id, exportedIso);
     const footerText = (me?.sample_pdf_footer || '').trim();
     _enablePrintableChrome(headerText, footerText);
 
@@ -658,29 +592,15 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
     // Ensure thumbnails load before the print dialog opens.
     document.querySelectorAll("img[loading='lazy']").forEach((img) => {
-      try {
-        img.loading = 'eager';
-      } catch {}
+      img.loading = 'eager';
     });
     await waitForImages(document.body, 20_000);
 
     // Give the browser a tick to lay out fixed headers/footers.
-    setTimeout(() => {
-      try {
-        window.print();
-      } catch {}
-    }, 150);
+    setTimeout(() => window.print(), 150);
 
     // Close the print window after printing/cancelling (best effort).
-    window.addEventListener(
-      'afterprint',
-      () => {
-        try {
-          window.close();
-        } catch {}
-      },
-      { once: true },
-    );
+    window.addEventListener('afterprint', () => window.close(), { once: true });
   }
 
   async function downloadPdf(e) {
@@ -690,11 +610,9 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
       return;
     }
 
-    const prevLabel = btn ? btn.textContent : '';
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Preparing PDF';
-    }
+    const prevLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing PDF';
 
     try {
       const orientation = await choosePdfOrientation(e);
@@ -709,17 +627,13 @@ export function createEvidenceExporter({ preferences: me, getSourceMeta, status 
 
       toast(status, 'PDF download started', 'success', 2500);
       setTimeout(() => {
-        try {
-          status.style.display = 'none';
-        } catch {}
+        status.style.display = 'none';
       }, 2800);
     } catch (err) {
       toast(status, errorText(err), 'danger');
     } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = prevLabel || 'Sample as PDF evidence';
-      }
+      btn.disabled = false;
+      btn.textContent = prevLabel;
     }
   }
 

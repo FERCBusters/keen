@@ -43,6 +43,11 @@ test('connection editor separates endpoint and secrets and preserves inputs on e
     onSaved: async () => {},
   });
   assert.equal(dialog.querySelector('[data-key="password"]').value, '');
+  // The API accepts a source name of up to 128 characters.
+  const name = [...dialog.querySelectorAll('label')]
+    .find((l) => l.textContent.startsWith('Source name'))
+    .querySelector('input');
+  assert.deepEqual([name.value, name.required, name.maxLength], ['Production', true, 128]);
   dialog.querySelector('[data-key="base_url"]').value = 'https://other.example';
   dialog.querySelector('[data-key="password"]').value = 'new-secret';
   await dialog.querySelector('form').onsubmit({ preventDefault() {} });

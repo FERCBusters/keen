@@ -59,8 +59,8 @@ function notify(message, kind = 'danger') {
 
 function syncWeightLabels() {
   document.querySelectorAll('.mitigator-weight').forEach((range) => {
-    const out = weightOutputs[range.dataset.riskType || ''];
-    if (out) out.textContent = String(range.value || 0);
+    const out = weightOutputs[range.dataset.riskType];
+    if (out) out.textContent = String(range.value);
   });
 }
 
@@ -93,8 +93,8 @@ function selectedRiskTypes() {
 function riskWeights() {
   const out = {};
   document.querySelectorAll('.mitigator-weight').forEach((range) => {
-    const rt = range.dataset.riskType || '';
-    if (rt) out[rt] = Math.max(0, Math.min(100, Math.floor(Number(range.value || 0))));
+    const rt = range.dataset.riskType;
+    if (rt) out[rt] = Math.max(0, Math.min(100, Math.floor(Number(range.value))));
   });
   return out;
 }
@@ -138,7 +138,7 @@ function reset() {
   });
   const defaults = { Confidentiality: 60, Integrity: 40, Availability: 40 };
   document.querySelectorAll('.mitigator-weight').forEach((range) => {
-    range.value = String(defaults[range.dataset.riskType] || 40);
+    range.value = String(defaults[range.dataset.riskType]);
   });
   document.querySelectorAll('.mitigator-impact').forEach((cb) => {
     cb.checked = false;
@@ -153,14 +153,14 @@ function reset() {
 // --- Results ------------------------------------------------------------------------------------
 
 function confidenceBadge(confidence) {
-  const c = String(confidence || '').toLowerCase();
+  const c = String(confidence).toLowerCase();
   const cls =
     c === 'strong' ? 'text-bg-success' : c === 'medium' ? 'text-bg-warning' : 'text-bg-secondary';
-  return `<span class="badge ${cls}">${esc(c ? c[0].toUpperCase() + c.slice(1) : 'Suggested')} match</span>`;
+  return `<span class="badge ${cls}">${esc(c[0].toUpperCase() + c.slice(1))} match</span>`;
 }
 
 function termBadges(terms) {
-  return (terms || [])
+  return terms
     .slice(0, 8)
     .map((t) => `<span class="badge text-bg-light mitigator-term-badge">${esc(t)}</span>`)
     .join('');
@@ -180,14 +180,14 @@ function sectionHtml(number, title, lead, body, { tone = '' } = {}) {
 }
 
 function renderSignals(data) {
-  const rows = data?.signals || [];
+  const rows = data.signals;
   signalsEl.innerHTML = rows.length
-    ? `<div class="small-muted mb-1">What I noticed in your description</div><div class="d-flex flex-wrap gap-2">${rows.map((sig) => `<span class="badge text-bg-light border" title="${esc(sig.reason || '')}">${esc(sig.label || sig.kind || 'Signal')}</span>`).join('')}</div>`
+    ? `<div class="small-muted mb-1">What I noticed in your description</div><div class="d-flex flex-wrap gap-2">${rows.map((sig) => `<span class="badge text-bg-light border" title="${esc(sig.reason)}">${esc(sig.label)}</span>`).join('')}</div>`
     : '<div class="small-muted">I found no particular signals in the description beyond your answers above.</div>';
 }
 
 function existingSection(data) {
-  const existing = data?.existing_matches || {};
+  const existing = data.existing_matches;
   const risks = existing.cia_risks || [];
   const pestle = existing.pestle_items || [];
   const parties = existing.interested_parties || [];
@@ -196,7 +196,7 @@ function existingSection(data) {
       (r) => `<div class="mitigator-suggestion-card d-flex flex-wrap justify-content-between gap-2">
       <div style="min-width:0">
         <div class="fw-semibold">${esc(riskDisplayTitle(r))}</div>
-        <div class="small-muted">${esc(r.asset_name || r.asset || '')}${(r.risk_types || []).length ? ` · ${esc(r.risk_types.join(', '))}` : ''}${r.residual_risk_score != null ? ` · after controls ${scoreBadge(r.residual_risk_score)}` : ''}</div>
+        <div class="small-muted">${esc(r.asset_name)}${r.risk_types.length ? ` · ${esc(r.risk_types.join(', '))}` : ''}${r.residual_risk_score != null ? ` · after controls ${scoreBadge(r.residual_risk_score)}` : ''}</div>
         ${r.threat_summary && r.threat_summary !== riskDisplayTitle(r) ? `<div class="small-muted">${esc(r.threat_summary)}</div>` : ''}
       </div>
       <a class="btn btn-sm btn-outline-primary align-self-start" href="${esc(riskHref(r.id, framework))}">Open this risk</a>
@@ -208,11 +208,11 @@ function existingSection(data) {
       (p) => `<div class="mitigator-suggestion-card d-flex flex-wrap justify-content-between gap-2">
       <div style="min-width:0">
         <div class="fw-semibold">${methodBadgeHtml('pestle')} ${esc(p.item || 'PESTLE(E) factor')}</div>
-        <div class="small-muted">${esc(p.type || '')} · ${esc(p.lens || '')}${
-          (p.clauses || []).length
+        <div class="small-muted">${esc(p.type)} · ${esc(p.lens)}${
+          p.clauses.length
             ? ` · clauses ${esc(
                 p.clauses
-                  .map((c) => c?.clause?.ref || '')
+                  .map((c) => c.clause.ref)
                   .filter(Boolean)
                   .join(', '),
               )}`
@@ -225,7 +225,7 @@ function existingSection(data) {
     )
     .join('');
   const partyHtml = parties.length
-    ? `<div class="small mt-2">Interested parties already recorded that match: ${parties.map((p) => `<a href="${esc(interestedPartyHref(p.id, framework))}">${esc(p.label || p.name || 'Interested party')}</a>`).join(', ')}.</div>`
+    ? `<div class="small mt-2">Interested parties already recorded that match: ${parties.map((p) => `<a href="${esc(interestedPartyHref(p.id, framework))}">${esc(p.label)}</a>`).join(', ')}.</div>`
     : '';
   const any = risks.length || pestle.length;
   return sectionHtml(
@@ -240,16 +240,16 @@ function existingSection(data) {
 }
 
 function templateSection(data) {
-  const items = data?.library_suggestions || [];
+  const items = data.library_suggestions;
   const body = items.length
     ? items
         .map((item) => {
-          const example = item.suggested_assessment || {};
+          const example = item.suggested_assessment;
           return `<div class="mitigator-suggestion-card d-flex flex-wrap justify-content-between gap-2">
         <div style="min-width:0">
           <div class="fw-semibold">${esc(item.name)} ${riskTypeBadgesHtml(item.risk_types)}</div>
-          <div class="small-muted">${esc(item.threat_summary || '')}</div>
-          <div class="small-muted">${esc(item.reason || '')}${(item.control_refs || []).length ? ` Suggested controls here: ${esc(item.control_refs.join(', '))}.` : ''}</div>
+          <div class="small-muted">${esc(item.threat_summary)}</div>
+          <div class="small-muted">${esc(item.reason)}${item.control_refs.length ? ` Suggested controls here: ${esc(item.control_refs.join(', '))}.` : ''}</div>
           ${example.inherent_likelihood && example.inherent_impact ? `<div class="small-muted">Example rating: ${esc(String(example.inherent_likelihood))} × ${esc(String(example.inherent_impact))}; review before saving.</div>` : ''}
         </div>
         ${canManageRisks ? `<button class="btn btn-sm btn-outline-primary align-self-start" type="button" data-use-template="${esc(item.id)}">Use this template</button>` : ''}
@@ -266,18 +266,18 @@ function templateSection(data) {
 }
 
 function newRiskSection(data) {
-  const controls = data?.control_suggestions || data?.suggestions || [];
+  const controls = data.control_suggestions || data.suggestions;
   const parties = data?.interested_party_suggestions || [];
   const draftPestle = data?.draft_pestle_item;
   const controlRows = controls
     .map((item, idx) => {
-      const c = item.control || {};
-      const reasons = (item.reasons || []).map((r) => `<li>${esc(r)}</li>`).join('');
+      const c = item.control;
+      const reasons = item.reasons.map((r) => `<li>${esc(r)}</li>`).join('');
       return `<div class="mitigator-suggestion-card">
       <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between">
         <div class="form-check">
-          <input class="form-check-input mitigator-suggestion-select" type="checkbox" value="${esc(c.id || '')}" id="mitigatorSuggestion${idx}" ${idx < 8 ? 'checked' : ''}>
-          <label class="form-check-label" for="mitigatorSuggestion${idx}"><span class="fw-semibold"><a href="${esc(controlHref(c.id || '', framework))}">${esc(c.ref || 'Control')}</a> - ${esc(c.title || '')}</span></label>
+          <input class="form-check-input mitigator-suggestion-select" type="checkbox" value="${esc(c.id)}" id="mitigatorSuggestion${idx}" ${idx < 8 ? 'checked' : ''}>
+          <label class="form-check-label" for="mitigatorSuggestion${idx}"><span class="fw-semibold"><a href="${esc(controlHref(c.id, framework))}">${esc(c.ref)}</a> - ${esc(c.title)}</span></label>
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-center">${c.in_scope === false ? '<span class="badge text-bg-warning">Out of scope - review applicability</span>' : ''}${confidenceBadge(item.confidence)}</div>
       </div>
@@ -290,13 +290,13 @@ function newRiskSection(data) {
     .map(
       (item, idx) => `<div class="form-check">
       <input class="form-check-input mitigator-interested-select" type="checkbox" value="${esc(String(idx))}" id="mitigatorParty${idx}" ${item.duplicate_exact ? 'disabled' : 'checked'}>
-      <label class="form-check-label" for="mitigatorParty${idx}"><span class="fw-semibold">${esc(item.name || 'Interested party')}</span> - ${esc(item.nature || '')}${item.duplicate_exact ? ' <span class="small-muted">(already recorded)</span>' : ''}</label>
-      <div class="small-muted">${esc(item.reason || '')}</div>
+      <label class="form-check-label" for="mitigatorParty${idx}"><span class="fw-semibold">${esc(item.name)}</span> - ${esc(item.nature)}${item.duplicate_exact ? ' <span class="small-muted">(already recorded)</span>' : ''}</label>
+      <div class="small-muted">${esc(item.reason)}</div>
     </div>`,
     )
     .join('');
   const pestleHits = (data?.pestle_hits || [])
-    .map((h) => `<span class="badge text-bg-info">${esc(h.type || 'PESTLE(E)')}</span>`)
+    .map((h) => `<span class="badge text-bg-info">${esc(h.type)}</span>`)
     .join(' ');
   const actions = canManageRisks
     ? `<div class="d-flex flex-wrap gap-2 mt-3">
@@ -323,12 +323,12 @@ function newRiskSection(data) {
 }
 
 function render(data) {
-  analysis = data || null;
+  analysis = data;
   resultsCard.style.display = '';
-  const controls = data?.control_suggestions || data?.suggestions || [];
-  const existing = data?.existing_matches || {};
+  const controls = data.control_suggestions || data.suggestions;
+  const existing = data.existing_matches;
   const existingCount = (existing.cia_risks || []).length + (existing.pestle_items || []).length;
-  resultsMeta.textContent = `${existingCount} existing match${existingCount === 1 ? '' : 'es'}, ${(data?.library_suggestions || []).length} template${(data?.library_suggestions || []).length === 1 ? '' : 's'} and ${controls.length} suggested control${controls.length === 1 ? '' : 's'} for ${data?.framework || framework || 'the current framework'}.`;
+  resultsMeta.textContent = `${existingCount} existing match${existingCount === 1 ? '' : 'es'}, ${data.library_suggestions.length} template${data.library_suggestions.length === 1 ? '' : 's'} and ${controls.length} suggested control${controls.length === 1 ? '' : 's'} for ${data.framework}.`;
   renderSignals(data);
   suggestionsEl.innerHTML = [
     existingSection(data),
@@ -356,7 +356,7 @@ function selectedPartyDrafts() {
 }
 
 function draftForWizard({ templateId = '' } = {}) {
-  const draft = analysis?.draft_risk || {};
+  const draft = analysis.draft_risk;
   const controls = selectedControls();
   const types = draft.risk_types || selectedRiskTypes();
   return {
@@ -386,12 +386,11 @@ function openWizard(draft, extra = {}) {
 
 form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  if (!canViewRisks) return;
   let body;
   try {
     body = payload();
   } catch (e) {
-    notify(String(e.message || e), 'warning');
+    notify(e.message, 'warning');
     return;
   }
   $('mitigatorAnalyse').disabled = true;
@@ -426,13 +425,13 @@ suggestionsEl.addEventListener('click', (ev) => {
     return;
   }
   if (ev.target.closest('#mitigatorToPestleWizard') && canManagePestle) {
-    const draft = analysis?.draft_pestle_item || {};
+    const draft = analysis.draft_pestle_item;
     openWizard(
       {
         method: 'pestle',
-        threat_summary: draft.item || issueInput.value.trim(),
-        pestle_type: draft.type || '',
-        lens: draft.lens || '',
+        threat_summary: draft.item,
+        pestle_type: draft.type,
+        lens: draft.lens,
       },
       { method: 'pestle' },
     );
@@ -448,7 +447,7 @@ if (!canViewRisks) {
   });
 } else {
   try {
-    categories = (await apiGet('/api/v1/risks/categories'))?.items || [];
+    categories = (await apiGet('/api/v1/risks/categories')).items;
   } catch (e) {
     notify(`Could not load asset categories: ${errorText(e)}`);
   }

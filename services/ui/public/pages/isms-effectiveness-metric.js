@@ -19,7 +19,7 @@ import { effectivenessControlBadges } from '/pages/isms-detail-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
-const params = new URLSearchParams(window.location.search || '');
+const params = new URLSearchParams(window.location.search);
 const metricId = params.get('id') || params.get('metric') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
@@ -35,29 +35,21 @@ function measureHref(id) {
 }
 
 function metricHref(id = metricId) {
-  return withFramework(
-    `/isms-effectiveness-metric.html?id=${encodeURIComponent(id || '')}`,
-    framework,
-  );
+  return withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function linkOrDash(url, label) {
   if (!url) return '-';
-  return `<a href="${esc(safeExternalHref(url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(label || url)}</a>`;
+  return `<a href="${esc(safeExternalHref(url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
 }
 
 async function loadSourceMeta() {
   try {
     const data = await apiGet('/api/v1/sources');
     sourceMeta = {};
-    for (const x of data.items || []) {
-      const src = String(x.source || '').trim();
-      if (!src) continue;
-      sourceMeta[src] = {
-        source: src,
-        label: String(x.label || src).trim() || src,
-        color: String(x.color || '').trim(),
-      };
+    for (const x of data.items) {
+      const src = String(x.source).trim();
+      sourceMeta[src] = { source: src, label: x.label, color: x.color };
     }
   } catch {
     sourceMeta = {};
@@ -65,8 +57,8 @@ async function loadSourceMeta() {
 }
 
 function renderMetric(row) {
-  entry = row || {};
-  const measure = entry.measure || {};
+  entry = row;
+  const measure = entry.measure;
   const title = entry.value_display || 'Metric entry';
   document.title = `Keen - ${title}`;
   $('metricTitle').textContent = title;
@@ -85,9 +77,7 @@ function renderMetric(row) {
   $('sourceType').innerHTML = sourceBadgeHtml(
     sourceType,
     sourceMeta,
-    sourceType
-      ? withFramework(`/source.html?source=${encodeURIComponent(sourceType)}`, framework)
-      : '',
+    withFramework(`/source.html?source=${encodeURIComponent(sourceType)}`, framework),
   );
   $('sourceTitle').textContent = entry.source_title || '-';
   $('sourceReference').textContent = entry.source_reference || '-';
@@ -97,9 +87,9 @@ function renderMetric(row) {
     : '-';
   $('metricNotes').textContent = entry.notes || 'No notes recorded.';
   $('rawPayload').textContent = JSON.stringify(entry.raw_payload || {}, null, 2);
-  $('metricRecorded').textContent = fmtTs(entry.recorded_at) || '-';
-  $('metricCreated').textContent = fmtTs(entry.created_at) || '-';
-  $('metricUpdated').textContent = fmtTs(entry.updated_at) || '-';
+  $('metricRecorded').textContent = fmtTs(entry.recorded_at);
+  $('metricCreated').textContent = fmtTs(entry.created_at);
+  $('metricUpdated').textContent = fmtTs(entry.updated_at);
   $('metricControls').innerHTML = effectivenessControlBadges(measure.controls, framework);
 
   const parentTitle = measure.summary || 'Effectiveness measure';
@@ -135,8 +125,8 @@ async function load() {
   }
 }
 
+// The button is shown once the entry has loaded.
 $('sampleMetricAudit')?.addEventListener('click', () => {
-  if (!entry) return;
   openAuditSampleModal({
     me,
     entityType: 'isms_effectiveness_metric',

@@ -42,9 +42,7 @@ export function initEvidenceRetention(isAdmin) {
       key.replaceChildren(
         new Option('Choose ' + (scope.value === 'rule' ? 'a rule' : 'a source type'), ''),
       );
-      const options = new Map(
-        (choices[scope.value] || []).map((option) => [option.key, option.label]),
-      );
+      const options = new Map(choices[scope.value].map((option) => [option.key, option.label]));
       for (const saved of savedOverrides)
         if (saved.scope === scope.value && !options.has(saved.key))
           options.set(saved.key, 'Unavailable - saved override');
@@ -106,7 +104,7 @@ export function initEvidenceRetention(isAdmin) {
         $('value').value = data.policy.value ?? '';
         explain();
         $('overrides').replaceChildren();
-        for (const item of data.overrides || []) addOverride(item);
+        for (const item of data.overrides) addOverride(item);
         const params = new URLSearchParams(location.search);
         const rule = params.get('retention_rule'),
           source = params.get('retention_source');
@@ -115,8 +113,8 @@ export function initEvidenceRetention(isAdmin) {
         if (
           !loaded &&
           key &&
-          (choices[scope] || []).some((item) => item.key === key) &&
-          !(data.overrides || []).some((item) => item.scope === scope && item.key === key)
+          choices[scope].some((item) => item.key === key) &&
+          !data.overrides.some((item) => item.scope === scope && item.key === key)
         )
           addOverride({ scope, key, mode: 'disabled', value: null });
         loaded = true;
@@ -196,7 +194,6 @@ export function initEvidenceRetention(isAdmin) {
   });
   $('purge').addEventListener('click', () =>
     act(async () => {
-      if ($('confirm').value !== 'PURGE EVIDENCE') return;
       const p = await apiPost(`${endpoint}/preview-all`, {});
       if (
         !(await confirmAction({

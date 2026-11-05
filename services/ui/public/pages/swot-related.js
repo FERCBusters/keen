@@ -4,13 +4,11 @@ export async function mountSwotRelated(type, id, container = null) {
   if (!id) return;
   const framework = getCurrentFramework();
   const host = container || document.querySelector('main .tab-content');
-  if (!host) return;
   const section = document.createElement('section');
   section.id = 'swotRelatedPane';
   // A host supplies its own frame; without one the list becomes a page tab.
   if (!container) {
     const tabs = document.querySelector('main .nav-tabs');
-    if (!tabs) return;
     section.className = 'tab-pane fade';
     section.setAttribute('role', 'tabpanel');
     const li = document.createElement('li');

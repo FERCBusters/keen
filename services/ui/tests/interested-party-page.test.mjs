@@ -32,6 +32,7 @@ async function partyPage(t, options = {}) {
     query: options.query ?? '&id=ip1',
     me: options.me || { is_admin: true },
     globals: options.globals,
+    confirm: options.confirm,
     setup: options.setup,
     get: async (u) => {
       const p = u.pathname;
@@ -254,10 +255,14 @@ test("the tab parameter selects only the page's own tabs", async (t) => {
 });
 
 test('deletion confirms first and save failures are reported', async (t) => {
-  const cancelled = await partyPage(t, { globals: { confirm: () => false } });
+  const cancelled = await partyPage(t, { confirm: false });
   cancelled.ui.el('deleteParty').click();
+  await settle(() => cancelled.ui.confirmations.length === 1);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(cancelled.ui.confirmations[0].title, 'Delete interested party');
   assert.deepEqual(cancelled.state.removed, []);
-  const { ui, state } = await partyPage(t, { globals: { confirm: () => true } });
+  assert.doesNotMatch(cancelled.ui.window.location.href, /interested_parties\.html/);
+  const { ui, state } = await partyPage(t);
   ui.el('deleteParty').click();
   await settle(() => state.removed.length === 1);
   assert.deepEqual(state.removed, ['/api/v1/interested-parties/ip1']);

@@ -31,14 +31,14 @@ function controlHref(id) {
 }
 
 export function initRiskVisualisations(options) {
-  framework = options.framework || '';
-  riskVizTopRisks = options.topRisks || null;
-  riskVizTopControls = options.topControls || null;
-  riskControlsGraph = options.graph || null;
-  riskControlsHeatmap = options.heatmap || null;
-  riskControlsGraphMeta = options.graphMeta || null;
-  riskControlsHeatmapMeta = options.heatmapMeta || null;
-  riskVizScoreMode = normaliseRiskVizScoreMode(options.scoreMode || 'residual');
+  framework = options.framework;
+  riskVizTopRisks = options.topRisks;
+  riskVizTopControls = options.topControls;
+  riskControlsGraph = options.graph;
+  riskControlsHeatmap = options.heatmap;
+  riskControlsGraphMeta = options.graphMeta;
+  riskControlsHeatmapMeta = options.heatmapMeta;
+  riskVizScoreMode = normaliseRiskVizScoreMode(options.scoreMode);
 }
 
 export function setRiskVizScoreMode(mode) {
@@ -51,8 +51,7 @@ export function riskVisualisationsAreLoaded() {
 }
 
 function clampRiskVizLimit(input, fallback) {
-  const n = Math.floor(Number(input?.value || fallback));
-  if (!Number.isFinite(n)) return fallback;
+  const n = Math.floor(Number(input.value || fallback));
   return Math.max(5, Math.min(200, n));
 }
 
@@ -71,37 +70,28 @@ function riskVizScoreShortLabel(mode = riskVizScoreMode) {
 }
 
 function riskVizScoreValue(item, mode = riskVizScoreMode) {
-  const scoreMode = normaliseRiskVizScoreMode(mode);
-  const field = scoreMode === 'inherent' ? 'risk_score' : 'residual_risk_score';
-  const fallback = scoreMode === 'inherent' ? item?.value : item?.risk_score;
-  const n = Number(item?.[field] ?? fallback ?? 0);
-  return Number.isFinite(n) ? n : 0;
+  return normaliseRiskVizScoreMode(mode) === 'inherent'
+    ? item.risk_score
+    : item.residual_risk_score;
 }
 
 function riskVizNodeHref(node) {
-  if (node?.node_kind === 'risk' && node.risk_id) return riskHref(node.risk_id);
-  if (node?.node_kind === 'control' && node.control_id) return controlHref(node.control_id);
-  return '';
+  return node.node_kind === 'risk' ? riskHref(node.risk_id) : controlHref(node.control_id);
 }
 
 function riskVizPrimaryLabel(node) {
-  if (!node) return '-';
-  if (node.node_kind === 'control') return node.ref || node.label || 'Control';
-  return node.label || node.asset || 'Risk';
+  return node.node_kind === 'control' ? node.ref : node.label;
 }
 
 function riskVizSecondaryLabel(node) {
-  if (!node) return '';
-  if (node.node_kind === 'control') return node.title || '';
+  if (node.node_kind === 'control') return node.title;
   const parts = [node.category, node.subcategory].filter(Boolean).join(' / ');
   const types = (node.risk_types || []).join(', ');
   return [parts, types].filter(Boolean).join(' · ');
 }
 
 function truncateRiskVizText(value, max = 72) {
-  const text = String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const text = String(value).replace(/\s+/g, ' ').trim();
   if (text.length <= max) return text;
   return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
@@ -109,43 +99,37 @@ function truncateRiskVizText(value, max = 72) {
 function riskControlDataset() {
   const scoreMode = normaliseRiskVizScoreMode(riskVizScoreMode);
   const data = riskControlGraphData || { nodes: [], links: [] };
-  const nodeById = new Map((data.nodes || []).map((node) => [node.id, node]));
+  const nodeById = new Map(data.nodes.map((node) => [node.id, node]));
   const linkedRiskIds = new Set();
   const linkedControlIds = new Set();
-  for (const link of data.links || []) {
+  for (const link of data.links) {
     if (nodeById.get(link.source)?.node_kind === 'risk') linkedRiskIds.add(link.source);
     if (nodeById.get(link.target)?.node_kind === 'control') linkedControlIds.add(link.target);
   }
-  const risks = (data.nodes || [])
+  const risks = data.nodes
     .filter((node) => node.node_kind === 'risk' && linkedRiskIds.has(node.id))
     .sort(
       (a, b) =>
-        Number(b.link_count || 0) - Number(a.link_count || 0) ||
+        b.link_count - a.link_count ||
         riskVizScoreValue(b, scoreMode) - riskVizScoreValue(a, scoreMode) ||
-        String(a.label || '').localeCompare(String(b.label || '')),
+        a.label.localeCompare(b.label),
     )
     .slice(0, clampRiskVizLimit(riskVizTopRisks, 30));
   const selectedRiskIds = new Set(risks.map((node) => node.id));
   const controlsForTopRisks = new Set(
-    (data.links || [])
-      .filter((link) => selectedRiskIds.has(link.source))
-      .map((link) => link.target),
+    data.links.filter((link) => selectedRiskIds.has(link.source)).map((link) => link.target),
   );
-  const controls = (data.nodes || [])
+  const controls = data.nodes
     .filter(
       (node) =>
         node.node_kind === 'control' &&
         linkedControlIds.has(node.id) &&
         controlsForTopRisks.has(node.id),
     )
-    .sort(
-      (a, b) =>
-        Number(b.link_count || 0) - Number(a.link_count || 0) ||
-        String(a.ref || a.label || '').localeCompare(String(b.ref || b.label || '')),
-    )
+    .sort((a, b) => b.link_count - a.link_count || a.ref.localeCompare(b.ref))
     .slice(0, clampRiskVizLimit(riskVizTopControls, 50));
   const controlIds = new Set(controls.map((node) => node.id));
-  const links = (data.links || []).filter(
+  const links = data.links.filter(
     (link) => selectedRiskIds.has(link.source) && controlIds.has(link.target),
   );
   return { risks, controls, links };
@@ -153,7 +137,6 @@ function riskControlDataset() {
 
 function renderRiskControlsGraph() {
   const el = riskControlsGraph;
-  if (!el) return;
   if (!window.d3) {
     el.textContent = 'D3 is not available.';
     return;
@@ -198,7 +181,7 @@ function renderRiskControlsGraph() {
     .domain(controlNodes.map((node) => node.id))
     .range([topPad + 32, contentHeight - bottomPad])
     .padding(0.6);
-  const maxScore = d3.max(links, (link) => riskVizScoreValue(link, scoreMode)) || 1;
+  const maxScore = d3.max(links, (link) => riskVizScoreValue(link, scoreMode));
   const strokeWidth = d3
     .scaleLinear()
     .domain([0, Math.max(1, maxScore)])
@@ -236,7 +219,7 @@ function renderRiskControlsGraph() {
       const risk = riskMap.get(link.source);
       const control = controlMap.get(link.target);
       const selectedScore = riskVizScoreValue(link, scoreMode);
-      return `${riskVizPrimaryLabel(risk)} × ${riskVizPrimaryLabel(control)}\n${riskVizScoreShortLabel(scoreMode)}: ${selectedScore}\nInherent risk score: ${link.risk_score ?? link.value ?? '-'}\nResidual risk score: ${link.residual_risk_score ?? '-'}`;
+      return `${riskVizPrimaryLabel(risk)} × ${riskVizPrimaryLabel(control)}\n${riskVizScoreShortLabel(scoreMode)}: ${selectedScore}\nInherent risk score: ${link.risk_score}\nResidual risk score: ${link.residual_risk_score}`;
     });
 
   const renderNode = (selection, side) => {
@@ -247,14 +230,14 @@ function renderRiskControlsGraph() {
     const maxSecondary = isRisk ? (compact ? 26 : 42) : compact ? 28 : 48;
     selection
       .attr('class', 'interested-party-bipartite-node')
-      .attr('transform', (node) => `translate(${x},${yScale(node.id) || topPad})`);
+      .attr('transform', (node) => `translate(${x},${yScale(node.id)})`);
     selection
       .append('circle')
       .attr('r', isRisk ? 7 : 6)
       .attr('fill', (node) => node.color || 'currentColor')
       .attr('opacity', isRisk ? 0.85 : 0.62);
     selection.each(function (node) {
-      const primary = `${riskVizPrimaryLabel(node)}${node.link_count ? ` (${node.link_count})` : ''}`;
+      const primary = `${riskVizPrimaryLabel(node)} (${node.link_count})`;
       const secondary = riskVizSecondaryLabel(node);
       addNodeLabel(d3.select(this), {
         left: isRisk,
@@ -277,7 +260,6 @@ function renderRiskControlsGraph() {
 
 function renderRiskControlsHeatmap() {
   const el = riskControlsHeatmap;
-  if (!el) return;
   const scoreMode = normaliseRiskVizScoreMode(riskVizScoreMode);
   const { risks, controls: controlNodes, links } = riskControlDataset();
   if (!risks.length || !controlNodes.length || !links.length) {
@@ -304,12 +286,12 @@ function renderRiskControlsHeatmap() {
     if (qText) {
       for (const risk of risks) {
         const haystack =
-          `${risk.label || ''} ${risk.asset || ''} ${risk.category || ''} ${risk.subcategory || ''} ${(risk.risk_types || []).join(' ')} ${risk.threat_summary || ''}`.toLowerCase();
+          `${risk.label} ${risk.asset || ''} ${risk.category || ''} ${risk.subcategory || ''} ${(risk.risk_types || []).join(' ')} ${risk.threat_summary || ''}`.toLowerCase();
         if (haystack.includes(qText)) rowMatches.add(risk.id);
       }
       for (const control of controlNodes) {
         const haystack =
-          `${control.ref || ''} ${control.label || ''} ${control.title || ''}`.toLowerCase();
+          `${control.ref} ${control.label || ''} ${control.title || ''}`.toLowerCase();
         if (haystack.includes(qText)) colMatches.add(control.id);
       }
     }
@@ -336,7 +318,7 @@ function renderRiskControlsHeatmap() {
           <thead>
             <tr>
               <th class="matrix-sticky-col matrix-corner">Risk scenario</th>
-              ${visibleCols.map((control) => `<th class="matrix-control-header" title="${esc(control.ref || control.label || 'Control')} - ${esc(control.title || '')}"><a href="${esc(controlHref(control.control_id || ''))}" class="matrix-control-link">${esc(control.ref || control.label || 'Control')}</a></th>`).join('')}
+              ${visibleCols.map((control) => `<th class="matrix-control-header" title="${esc(control.ref)} - ${esc(control.title)}"><a href="${esc(controlHref(control.control_id))}" class="matrix-control-link">${esc(control.ref)}</a></th>`).join('')}
             </tr>
           </thead>
           <tbody>
@@ -349,9 +331,9 @@ function renderRiskControlsHeatmap() {
                 const subtitle = riskVizSecondaryLabel(risk);
                 return `<tr>
                 <th class="matrix-sticky-col matrix-party-label">
-                  <a class="fw-semibold" href="${esc(riskHref(risk.risk_id || ''))}">${esc(truncateRiskVizText(riskVizPrimaryLabel(risk), 92))}</a>
+                  <a class="fw-semibold" href="${esc(riskHref(risk.risk_id))}">${esc(truncateRiskVizText(riskVizPrimaryLabel(risk), 92))}</a>
                   <div class="small-muted">${esc(subtitle)}${linkedCount ? ` · ${linkedCount} shown control(s)` : ''}</div>
-                  <div class="small-muted">Risk score: ${esc(String(risk.risk_score ?? '-'))} · Residual: ${esc(String(risk.residual_risk_score ?? '-'))}</div>
+                  <div class="small-muted">Risk score: ${esc(String(risk.risk_score))} · Residual: ${esc(String(risk.residual_risk_score))}</div>
                 </th>
                 ${visibleCols
                   .map((control) => {
@@ -360,8 +342,8 @@ function renderRiskControlsHeatmap() {
                       return '<td class="matrix-cell matrix-cell-empty" aria-label="Not linked"></td>';
                     const score = riskVizScoreValue(link, scoreMode);
                     const alpha = Math.max(0.18, Math.min(0.92, 0.16 + (score / maxScore) * 0.74));
-                    const title = `${riskVizPrimaryLabel(risk)} × ${riskVizPrimaryLabel(control)} - ${riskVizScoreShortLabel(scoreMode).toLowerCase()} ${score}, inherent ${link.risk_score ?? link.value ?? '-'}, residual ${link.residual_risk_score ?? '-'}`;
-                    return `<td class="matrix-cell risk-control-heatmap-cell" title="${esc(title)}" style="background:rgba(var(--bs-primary-rgb), ${alpha.toFixed(3)});"><a href="${esc(controlHref(control.control_id || ''))}" aria-label="${esc(title)}">${esc(String(score))}</a></td>`;
+                    const title = `${riskVizPrimaryLabel(risk)} × ${riskVizPrimaryLabel(control)} - ${riskVizScoreShortLabel(scoreMode).toLowerCase()} ${score}, inherent ${link.risk_score}, residual ${link.residual_risk_score}`;
+                    return `<td class="matrix-cell risk-control-heatmap-cell" title="${esc(title)}" style="background:rgba(var(--bs-primary-rgb), ${alpha.toFixed(3)});"><a href="${esc(controlHref(control.control_id))}" aria-label="${esc(title)}">${esc(String(score))}</a></td>`;
                   })
                   .join('')}
               </tr>`;
@@ -395,7 +377,6 @@ export function renderRiskVisualisations() {
 }
 
 export async function loadRiskVisualisations(opts = {}) {
-  if (!riskControlsGraph && !riskControlsHeatmap) return;
   if (!riskControlGraphData || opts.force) {
     if (riskControlsGraph)
       riskControlsGraph.innerHTML =

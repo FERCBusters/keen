@@ -8,14 +8,13 @@ const _A4_PORTRAIT = { w: 595.28, h: 841.89 };
 const _A4_LANDSCAPE = { w: 841.89, h: 595.28 };
 
 function _pageSize(orientation) {
-  const o = String(orientation || 'portrait').toLowerCase();
+  const o = String(orientation).toLowerCase();
   return o === 'landscape' ? _A4_LANDSCAPE : _A4_PORTRAIT;
 }
 
 // Waits until the images under root have loaded or failed, for at most timeoutMs,
 // so a capture does not miss them.
 export async function waitForImages(root, timeoutMs = 15_000) {
-  if (!root) return;
   const imgs = Array.from(root.querySelectorAll('img'));
   const pending = imgs
     .filter((img) => img && img.src)
@@ -180,7 +179,7 @@ export async function sliceCanvasToA4JpegPages(
   const ratio = pageW / w; // points per pixel
   const pageHeightPx = Math.max(1, Math.round(pageH / ratio));
 
-  const headerPt = header ? 24 : 0;
+  const headerPt = 24;
   const footerPt = 24; // always reserve space for page numbers
 
   const headerPx = Math.round(headerPt / ratio);
@@ -192,18 +191,14 @@ export async function sliceCanvasToA4JpegPages(
   const headerMaxWidth = fitText ? [w - 20] : [];
   const footerMaxWidth = fitText ? [Math.floor(w * 0.72)] : [];
   // Precompute slice offsets so we know total page count.
-  const ranges = Array.isArray(avoidRanges) ? avoidRanges.slice() : [];
-  ranges.sort((a, b) => (a?.top ?? 0) - (b?.top ?? 0));
+  const ranges = avoidRanges.slice();
+  ranges.sort((a, b) => a.top - b.top);
 
   const cuts = [];
   let y = 0;
 
   const findRange = (pos) => {
-    for (const r of ranges) {
-      if (!r) continue;
-      const top = Number(r.top);
-      const bottom = Number(r.bottom);
-      if (!Number.isFinite(top) || !Number.isFinite(bottom)) continue;
+    for (const { top, bottom } of ranges) {
       if (top < pos && pos < bottom) return { top, bottom };
     }
     return null;
@@ -223,15 +218,13 @@ export async function sliceCanvasToA4JpegPages(
     const r = findRange(desired);
     if (r && r.top > y + 10) desired = r.top;
 
-    let sliceH = Math.max(1, Math.min(contentHeightPx, desired - y));
-    // Guard against no progress.
-    if (sliceH <= 1) sliceH = Math.min(contentHeightPx, canvas.height - y);
+    const sliceH = Math.max(1, Math.min(contentHeightPx, desired - y));
 
     cuts.push({ y, h: sliceH });
     y += sliceH;
   }
 
-  const totalPages = cuts.length || 1;
+  const totalPages = cuts.length;
 
   for (let i = 0; i < cuts.length; i++) {
     const { y: y0, h: sliceH } = cuts[i];
@@ -375,7 +368,7 @@ export function buildPdfFromJpegPages(pages, orientation) {
   pushStr(`0 ${nextObj}\n`);
   pushStr('0000000000 65535 f \n');
   for (let i = 1; i < nextObj; i++) {
-    const off = offsets[i] || 0;
+    const off = offsets[i];
     pushStr(`${String(off).padStart(10, '0')} 00000 n \n`);
   }
   pushStr('trailer\n');
@@ -405,7 +398,7 @@ export async function sliceCanvasToFirstA4PreviewBlob(
   const ratio = pageW / w; // points per pixel
   const pageHeightPx = Math.max(1, Math.round(pageH / ratio));
 
-  const headerPt = header ? 24 : 0;
+  const headerPt = 24;
   const footerPt = 24;
 
   const headerPx = Math.round(headerPt / ratio);
@@ -413,13 +406,8 @@ export async function sliceCanvasToFirstA4PreviewBlob(
   const contentHeightPx = Math.max(1, pageHeightPx - headerPx - footerPx);
   const fontPx = Math.max(10, Math.round(10 / ratio));
 
-  const ranges = Array.isArray(avoidRanges) ? avoidRanges.slice() : [];
   const findRange = (pos) => {
-    for (const r of ranges) {
-      if (!r) continue;
-      const top = Number(r.top);
-      const bottom = Number(r.bottom);
-      if (!Number.isFinite(top) || !Number.isFinite(bottom)) continue;
+    for (const { top, bottom } of avoidRanges) {
       if (top < pos && pos < bottom) return { top, bottom };
     }
     return null;

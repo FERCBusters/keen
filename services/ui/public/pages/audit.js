@@ -1,5 +1,9 @@
 import { featureEnabled } from '/pages/feature-availability.js';
-import { maskDomText, maskEventDataString } from '/pages/evidence-export/masking.js';
+import {
+  maskDomText,
+  maskEventDataString,
+  sampleExportUrl,
+} from '/pages/evidence-export/masking.js';
 import {
   buildZipStore,
   downloadBlob,
@@ -37,7 +41,6 @@ import {
   fmtTsFilename,
   toast,
   qs,
-  getCurrentFramework,
   withFramework,
   isAuditLocked,
   auditStatusLabel,
@@ -67,9 +70,7 @@ function _maskExportDom(root) {
   if (_maskSampleExportsEnabled()) maskDomText(root);
 }
 function _sampleExportUrl(url) {
-  if (!_maskSampleExportsEnabled()) return url;
-  const sep = String(url).includes('?') ? '&' : '?';
-  return `${url}${sep}sample_export=1`;
+  return _maskSampleExportsEnabled() ? sampleExportUrl(url) : url;
 }
 function _sampleMaskedFilename(value) {
   return _maskSampleExportsEnabled() ? maskEventDataString(value) : value;
@@ -91,7 +92,6 @@ document
 async function removeSelectedEvidence() {
   const ids = evidenceSelection.ids();
   if (!ids.length) return;
-  if (!ensureAuditEditable()) return;
   if (
     !(await confirmAction({
       title: 'Remove sampled evidence',
@@ -192,11 +192,7 @@ function auditLocked() {
 }
 
 function auditTemplate() {
-  return (
-    String(audit?.status || '')
-      .trim()
-      .toLowerCase() === 'template'
-  );
+  return String(audit?.status).trim().toLowerCase() === 'template';
 }
 
 function canEditAudit() {
@@ -225,11 +221,12 @@ function _setDisabled(id, disabled) {
 }
 
 function _setFormControlsDisabled(formId, disabled) {
-  const form = document.getElementById(formId);
-  if (!form) return;
-  form.querySelectorAll('input, select, textarea, button').forEach((el) => {
-    el.disabled = Boolean(disabled);
-  });
+  document
+    .getElementById(formId)
+    .querySelectorAll('input, select, textarea, button')
+    .forEach((el) => {
+      el.disabled = Boolean(disabled);
+    });
 }
 
 function updateScopeActionButtons() {
@@ -298,43 +295,40 @@ function ensureAuditRead() {
 }
 
 function kindLabel(k) {
-  const v = String(k || '');
+  const v = String(k);
   if (v === 'major_nc') return 'Major non-conformity';
   if (v === 'minor_nc') return 'Minor non-conformity';
   if (v === 'ofi') return 'Opportunity for improvement';
   if (v === 'best_practice') return 'Best practice';
-  return v || 'Finding';
+  return v;
 }
 
 function findingStatusLabel(s) {
-  return String(s || 'open')
+  return String(s)
     .replaceAll('_', ' ')
     .replace(/^./, (c) => c.toUpperCase());
 }
 
 function auditTypeLabel(v) {
-  const raw = String(v || 'internal').toLowerCase();
+  const raw = String(v).toLowerCase();
   if (raw === 'external') return 'External';
   return 'Internal';
 }
 
 function selectedAttr(value, current) {
-  return String(value) === String(current || '') ? 'selected' : '';
+  return String(value) === String(current) ? 'selected' : '';
 }
 
 function showMeta(a) {
-  document.getElementById('title').textContent = a?.title || 'Audit';
+  document.getElementById('title').textContent = a.title;
   const dates =
     [a?.start_date, a?.end_date]
       .filter(Boolean)
       .map((d) => isoDateToDisplay(d))
       .join(' → ') || 'No dates set';
   document.getElementById('meta').innerHTML =
-    `${esc(a?.framework_slug || '')} · ${esc(auditTypeLabel(a?.audit_type))} · ${esc(auditStatusLabel(a?.status))} · ${esc(dates)} · Author: ${userPillHtml(a?.created_by_username)}`;
-  document.getElementById('sampleEventLink').href = withFramework(
-    '/events.html',
-    a?.framework_slug || getCurrentFramework(),
-  );
+    `${esc(a.framework_slug)} · ${esc(auditTypeLabel(a.audit_type))} · ${esc(auditStatusLabel(a?.status))} · ${esc(dates)} · Author: ${userPillHtml(a?.created_by_username)}`;
+  document.getElementById('sampleEventLink').href = withFramework('/events.html', a.framework_slug);
 }
 
 // Evidence found from here goes to this audit unless the auditor picks another.
@@ -343,7 +337,7 @@ document
   ?.addEventListener('click', () => rememberSamplingAudit(auditId));
 
 function setTemplateScheduleForm(a) {
-  const start = a?.schedule_next_run_date || a?.start_date || '';
+  const start = a.schedule_next_run_date || a.start_date;
   const dateRule = a?.schedule_date_rule || 'exact';
   setFieldValue('tmplDateRule', dateRule);
   setFieldValue('tmplScheduleStart', start);
@@ -369,34 +363,34 @@ function setTemplateScheduleForm(a) {
 }
 
 function setForm(a) {
-  document.getElementById('auditTitle').value = a?.title || '';
-  document.getElementById('auditFramework').value = a?.framework_slug || getCurrentFramework();
-  document.getElementById('auditStatus').value = a?.status || 'open';
-  document.getElementById('auditType').value = a?.audit_type || 'internal';
-  document.getElementById('auditStart').value = a?.start_date || '';
-  document.getElementById('auditEnd').value = a?.end_date || '';
+  document.getElementById('auditTitle').value = a.title;
+  document.getElementById('auditFramework').value = a.framework_slug;
+  document.getElementById('auditStatus').value = a.status;
+  document.getElementById('auditType').value = a.audit_type;
+  // An input's value treats null as empty.
+  document.getElementById('auditStart').value = a.start_date;
+  document.getElementById('auditEnd').value = a.end_date;
   auditStartWire?.syncTextFromHidden?.();
   auditEndWire?.syncTextFromHidden?.();
-  setRichTextEditorValue('auditExecutiveSummary', a?.executive_summary || '');
-  setRichTextEditorValue('auditNotes', a?.report_notes ?? a?.notes ?? '');
+  setRichTextEditorValue('auditExecutiveSummary', a.executive_summary);
+  setRichTextEditorValue('auditNotes', a.report_notes);
   setTemplateScheduleForm(a);
 }
 
 function fieldValue(id) {
   const el = document.getElementById(id);
-  if (!el) return '';
   if (el.matches?.('textarea[data-rich-text]')) return syncRichTextEditor(el);
   return el.value || '';
 }
 
+// An input treats a null value as empty.
 function setFieldValue(id, value) {
   const el = document.getElementById(id);
-  if (!el) return;
   if (el.matches?.('textarea[data-rich-text]')) {
-    setRichTextEditorValue(el, value ?? '');
+    setRichTextEditorValue(el, value);
     return;
   }
-  el.value = value ?? '';
+  el.value = value;
 }
 
 function captureUnsavedPageState() {
@@ -453,7 +447,7 @@ function captureUnsavedPageState() {
 function restoreUnsavedPageState(state) {
   if (!state) return;
 
-  for (const [id, value] of Object.entries(state.fields || {})) {
+  for (const [id, value] of Object.entries(state.fields)) {
     setFieldValue(id, value);
   }
   auditStartWire?.syncTextFromHidden?.();
@@ -462,16 +456,16 @@ function restoreUnsavedPageState(state) {
   tmplUntilWire?.syncTextFromHidden?.();
   templateDates.update();
 
-  selectedSwotIds = new Set(state.selectedSwotIds || []);
+  selectedSwotIds = new Set(state.selectedSwotIds);
   document.querySelectorAll('[data-swot-scope]').forEach((box) => {
     box.checked = selectedSwotIds.has(box.dataset.swotScope);
   });
-  selectedDocumentIds = new Set(state.selectedDocumentIds || []);
-  selectedControlIds = new Set(state.selectedControlIds || []);
-  selectedClauseIds = new Set(state.selectedClauseIds || []);
+  selectedDocumentIds = new Set(state.selectedDocumentIds);
+  selectedControlIds = new Set(state.selectedControlIds);
+  selectedClauseIds = new Set(state.selectedClauseIds);
   renderScopeLists();
 
-  for (const [id, value] of Object.entries(state.evidenceNotes || {})) {
+  for (const [id, value] of Object.entries(state.evidenceNotes)) {
     const el = document.querySelector(`[data-evidence-notes="${CSS.escape(id)}"]`);
     if (el) setRichTextEditorValue(el, value);
   }
@@ -486,25 +480,25 @@ function renderReport(a) {
   }
   el.innerHTML = `<div class="d-flex flex-wrap gap-2 align-items-center">
     <a class="btn btn-sm btn-outline-primary" href="${esc(r.download_url)}">Download final report</a>
-    <span class="small-muted">${esc(r.filename || 'audit-report')} · ${esc(r.content_type || '')} · ${esc(r.size_bytes ?? '')} bytes · uploaded ${esc(fmtTs(r.uploaded_at))}</span>
+    <span class="small-muted">${esc(r.filename)} · ${esc(r.content_type)} · ${esc(r.size_bytes)} bytes · uploaded ${esc(fmtTs(r.uploaded_at))}</span>
   </div>`;
 }
 
 function renderKpis(a) {
   document.getElementById('kpiEvidence').textContent = String(
-    a?.evidence_count ?? (a?.evidence || []).length ?? 0,
+    a?.evidence_count ?? a.evidence.length,
   );
-  const documentCount = Number(a?.document_scope_count ?? (a?.scoped_documents || []).length ?? 0);
-  const controlCount = Number(a?.control_scope_count ?? (a?.scoped_controls || []).length ?? 0);
-  const clauseCount = Number(a?.clause_scope_count ?? (a?.scoped_clauses || []).length ?? 0);
+  const documentCount = Number(a?.document_scope_count ?? a.scoped_documents.length);
+  const controlCount = Number(a?.control_scope_count ?? a.scoped_controls.length);
+  const clauseCount = Number(a?.clause_scope_count ?? a.scoped_clauses.length);
   const scopeEl = document.getElementById('kpiScope');
   scopeEl.textContent = String(a?.scope_count ?? documentCount + controlCount + clauseCount);
   scopeEl.title = `${documentCount} documents, ${clauseCount} clauses, ${controlCount} controls`;
   document.getElementById('kpiPeople').textContent = String(
-    a?.attendee_count ?? (a?.attendees || []).length ?? 0,
+    a?.attendee_count ?? a.attendees.length,
   );
   document.getElementById('kpiFindings').textContent = String(
-    a?.finding_count ?? (a?.findings || []).length ?? 0,
+    a?.finding_count ?? a.findings.length,
   );
 }
 
@@ -513,8 +507,7 @@ function renderKpis(a) {
 // ------------------------------------------------------------------
 
 function _sanitizeFilename(s) {
-  const str = String(s || '');
-  return str
+  return s
     .replace(/[\\/]+/g, ' ')
     .replace(/[<>"\?\*\|\0]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -523,39 +516,38 @@ function _sanitizeFilename(s) {
 
 function _safeZipPathSegment(s, fallback = 'file') {
   const v = _sanitizeFilename(s).replace(/[:]+/g, '-').trim();
-  return (v || fallback).slice(0, 180).trim() || fallback;
+  return (v || fallback).slice(0, 180).trim();
 }
 
 // Audit downloads can also be ZIP archives, which the evidence export does not name.
 function _extFromContentType(ct) {
   const ext = extFromContentType(ct);
   if (ext) return ext;
-  const type = String(ct || '').toLowerCase();
+  const type = String(ct).toLowerCase();
   return type.includes('application/zip') ? '.zip' : '';
 }
 
 function _uniqueZipName(name, seen) {
   // ZIP entry names are relative paths: drop empty segments (a leading "/")
   // and replace "." or ".." so no entry can address a parent directory.
-  const segments = String(name || 'file')
+  const segments = name
     .replace(/\\+/g, '/')
     .split('/')
     .filter((p) => p !== '');
-  let n = segments
+  const n = segments
     .map((p, idx) => {
       const fallback = idx === segments.length - 1 ? 'file' : 'folder';
       const safe = _safeZipPathSegment(p, fallback);
       return /^\.+$/.test(safe) ? fallback : safe;
     })
     .join('/');
-  if (!n) n = 'file';
   const key = n.toLowerCase();
   const count = seen.get(key) || 0;
   seen.set(key, count + 1);
   if (count === 0) return n;
   const slash = n.lastIndexOf('/');
-  const prefix = slash >= 0 ? n.slice(0, slash + 1) : '';
-  const file = slash >= 0 ? n.slice(slash + 1) : n;
+  const prefix = n.slice(0, slash + 1);
+  const file = n.slice(slash + 1);
   const dot = file.lastIndexOf('.');
   if (dot > 0) return `${prefix}${file.slice(0, dot)} (${count + 1})${file.slice(dot)}`;
   return `${prefix}${file} (${count + 1})`;
@@ -565,26 +557,24 @@ function auditFileStem(a) {
   const parts = ['Keen Audit'];
   if (a?.id) parts.push(String(a.id));
   if (a?.title) parts.push(String(a.title));
-  if (a?.updated_at || a?.created_at) parts.push(fmtTsFilename(a.updated_at || a.created_at));
+  if (a?.updated_at) parts.push(fmtTsFilename(a.updated_at));
   const stem = _sanitizeFilename(parts.filter(Boolean).join(' - '));
-  return stem.slice(0, 180).trim() || 'Keen Audit';
+  return stem.slice(0, 180).trim();
 }
 
 function _lookupOriginalControlValue(cloned) {
   const id = cloned.getAttribute('id');
   if (id) {
     const src = document.getElementById(id);
-    if (src)
-      return { value: src.value ?? '', checked: !!src.checked, selectedIndex: src.selectedIndex };
+    if (src) return { value: src.value, checked: !!src.checked, selectedIndex: src.selectedIndex };
   }
   const evidenceNotesId = cloned.getAttribute('data-evidence-notes');
   if (evidenceNotesId) {
     const src = document.querySelector(`[data-evidence-notes="${CSS.escape(evidenceNotesId)}"]`);
-    if (src)
-      return { value: src.value ?? '', checked: !!src.checked, selectedIndex: src.selectedIndex };
+    if (src) return { value: src.value, checked: !!src.checked, selectedIndex: src.selectedIndex };
   }
   return {
-    value: cloned.value ?? cloned.textContent ?? '',
+    value: cloned.value,
     checked: !!cloned.checked,
     selectedIndex: cloned.selectedIndex,
   };
@@ -606,19 +596,18 @@ function _formStaticBlock(text, extraClass = '', { richText = false } = {}) {
 }
 
 function _scopeExportList(items, emptyText) {
-  const arr = Array.isArray(items) ? items : [];
   const wrap = document.createElement('div');
   wrap.className = 'export-scope-list';
-  if (!arr.length) {
-    wrap.innerHTML = `<div class="small-muted border rounded p-2 bg-white">${esc(emptyText || 'No scoped items.')}</div>`;
+  if (!items.length) {
+    wrap.innerHTML = `<div class="small-muted border rounded p-2 bg-white">${esc(emptyText)}</div>`;
     return wrap;
   }
-  wrap.innerHTML = arr
+  wrap.innerHTML = items
     .map(
       (item) => `
     <div class="border rounded p-2 mb-2 bg-white">
-      <span class="fw-semibold">${esc(item.ref || '')}</span>
-      <span class="small-muted">${esc(item.title || '')}</span>
+      <span class="fw-semibold">${esc(item.ref)}</span>
+      <span class="small-muted">${esc(item.title)}</span>
     </div>`,
     )
     .join('');
@@ -628,7 +617,7 @@ function _scopeExportList(items, emptyText) {
 function _replaceAuditScopeListsForExport(clone) {
   const swotList = clone.querySelector('#swotScope');
   if (swotList)
-    swotList.replaceWith(_scopeExportList(audit?.scoped_swot || [], 'No SWOT items selected.'));
+    swotList.replaceWith(_scopeExportList(audit.scoped_swot, 'No SWOT items selected.'));
   const documentsList = clone.querySelector('#documentsList');
   const clausesList = clone.querySelector('#clausesList');
   const controlsList = clone.querySelector('#controlsList');
@@ -640,23 +629,22 @@ function _replaceAuditScopeListsForExport(clone) {
   if (controlFilter) controlFilter.remove();
   if (documentsList)
     documentsList.replaceWith(
-      _scopeExportList(audit?.scoped_documents || [], 'No ISMS documents selected for this audit.'),
+      _scopeExportList(audit.scoped_documents, 'No ISMS documents selected for this audit.'),
     );
   if (clausesList)
     clausesList.replaceWith(
-      _scopeExportList(audit?.scoped_clauses || [], 'No clauses selected for this audit.'),
+      _scopeExportList(audit.scoped_clauses, 'No clauses selected for this audit.'),
     );
   if (controlsList)
     controlsList.replaceWith(
-      _scopeExportList(audit?.scoped_controls || [], 'No controls selected for this audit.'),
+      _scopeExportList(audit.scoped_controls, 'No controls selected for this audit.'),
     );
   const documentCount = clone.querySelector('#documentScopeCount');
   const clauseCount = clone.querySelector('#clauseScopeCount');
   const controlCount = clone.querySelector('#controlScopeCount');
-  if (documentCount)
-    documentCount.textContent = `${(audit?.scoped_documents || []).length} in scope`;
-  if (clauseCount) clauseCount.textContent = `${(audit?.scoped_clauses || []).length} in scope`;
-  if (controlCount) controlCount.textContent = `${(audit?.scoped_controls || []).length} in scope`;
+  if (documentCount) documentCount.textContent = `${audit.scoped_documents.length} in scope`;
+  if (clauseCount) clauseCount.textContent = `${audit.scoped_clauses.length} in scope`;
+  if (controlCount) controlCount.textContent = `${audit.scoped_controls.length} in scope`;
 }
 
 function _prepareAuditCloneForPdf(clone) {
@@ -680,23 +668,17 @@ function _prepareAuditCloneForPdf(clone) {
     const block = _formStaticBlock(value, 'export-static-textarea', {
       richText: el.matches?.('textarea[data-rich-text]'),
     });
-    block.style.minHeight = `${Math.max(3, Number(el.getAttribute('rows') || 3)) * 1.55}rem`;
+    block.style.minHeight = `${Math.max(3, Number(el.getAttribute('rows'))) * 1.55}rem`;
     el.replaceWith(block);
   });
 
   clone.querySelectorAll('select').forEach((el) => {
     const { selectedIndex } = _lookupOriginalControlValue(el);
-    const options = Array.from(el.options || []);
-    const opt = options[selectedIndex >= 0 ? selectedIndex : el.selectedIndex];
-    el.replaceWith(_formStaticBlock(opt?.textContent || el.value || ''));
+    el.replaceWith(_formStaticBlock(el.options[selectedIndex].textContent));
   });
 
   clone.querySelectorAll('input').forEach((el) => {
     const type = String(el.getAttribute('type') || 'text').toLowerCase();
-    if (['button', 'submit', 'reset', 'file', 'hidden'].includes(type)) {
-      el.remove();
-      return;
-    }
     const { value, checked } = _lookupOriginalControlValue(el);
     if (type === 'checkbox' || type === 'radio') {
       const span = document.createElement('span');
@@ -719,9 +701,7 @@ function _prepareAuditCloneForPdf(clone) {
 
 function _makeAuditExportContainer(widthPx) {
   syncRichTextEditors(document);
-  const main = document.querySelector('main');
-  if (!main) throw new Error('Page layout missing');
-  const clone = main.cloneNode(true);
+  const clone = document.querySelector('main').cloneNode(true);
   _prepareAuditCloneForPdf(clone);
 
   const wrap = document.createElement('div');
@@ -729,7 +709,7 @@ function _makeAuditExportContainer(widthPx) {
   wrap.style.position = 'fixed';
   wrap.style.left = '-100000px';
   wrap.style.top = '0';
-  wrap.style.width = `${Math.round(widthPx || 1000)}px`;
+  wrap.style.width = `${Math.round(widthPx)}px`;
   wrap.style.background = '#fff';
   wrap.style.color = '#1f2937';
   // html2canvas measures and paints text itself. On macOS Chrome, the
@@ -756,8 +736,6 @@ function _makeAuditExportContainer(widthPx) {
 }
 
 async function buildAuditPagePdfBlob(a) {
-  const main = document.querySelector('main');
-  if (!main) throw new Error('Page layout missing');
   // Use a fixed export viewport instead of the current browser window size.
   // This keeps Bootstrap breakpoints and text wrapping consistent between
   // small MacBook windows, external displays, Linux desktops, and browser zooms.
@@ -765,7 +743,7 @@ async function buildAuditPagePdfBlob(a) {
   const width = 1180;
   const exportedIso = new Date().toISOString();
   const header = _sampleMaskedFilename(
-    `Keen audit export ${fmtTsFilename(exportedIso)} - ${a?.title || a?.id || ''}`,
+    `Keen audit export ${fmtTsFilename(exportedIso)} - ${a.title}`,
   );
   const footer = (me?.sample_pdf_footer || '').trim();
   const wrap = _makeAuditExportContainer(width);
@@ -783,9 +761,7 @@ async function buildAuditPagePdfBlob(a) {
     });
     return buildPdfFromJpegPages(pages, 'portrait');
   } finally {
-    try {
-      wrap.remove();
-    } catch {}
+    wrap.remove();
   }
 }
 
@@ -820,17 +796,16 @@ async function _sampledEvidence(evidenceItems, signal) {
   let attachments = 0;
   for (let i = 0; i < evidenceItems.length; i++) {
     const item = evidenceItems[i];
-    const eventId = item.event_id || item.event?.id;
+    const eventId = item.event_id;
     if (!eventId) continue;
     toast(status, `Collecting sampled evidence ${i + 1}/${evidenceItems.length}`, 'info');
     const eventData = await apiGet(
       _sampleExportUrl(
-        `/api/v1/events/${encodeURIComponent(eventId)}?framework=${encodeURIComponent(audit.framework_slug || getCurrentFramework())}`,
+        `/api/v1/events/${encodeURIComponent(eventId)}?framework=${encodeURIComponent(audit.framework_slug)}`,
       ),
     );
     _stopIfCancelled(signal);
-    const artifacts = Array.isArray(eventData?.artifacts) ? eventData.artifacts : [];
-    if (!artifacts.length) continue;
+    const artifacts = eventData.artifacts;
     attachments += artifacts.length;
     if (attachments > MAX_ZIP_EXPORT_ARTIFACTS)
       throw new Error(
@@ -846,12 +821,11 @@ async function exportAuditZip() {
     toast(status, 'Audit not loaded yet', 'warning');
     return;
   }
-  if (auditZipExport) return;
   const controller = new AbortController();
   const { signal } = controller;
   auditZipExport = controller;
   const btn = auditZipButton;
-  const prevLabel = btn ? btn.textContent : '';
+  const prevLabel = btn.textContent;
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Preparing ZIP';
@@ -866,8 +840,7 @@ async function exportAuditZip() {
     const stem = auditFileStem(audit);
     const files = [];
     const seenNames = new Map();
-    const evidenceItems = Array.isArray(audit.evidence) ? audit.evidence : [];
-    const sampled = await _sampledEvidence(evidenceItems, signal);
+    const sampled = await _sampledEvidence(audit.evidence, signal);
 
     toast(status, 'Rendering audit page PDF', 'info');
     const pdfBlob = await buildAuditPagePdfBlob(audit);
@@ -889,26 +862,19 @@ async function exportAuditZip() {
         remainingBytes: MAX_ZIP_EXPORT_BYTES - totalBytes,
       });
       totalBytes += finalReport.data.byteLength;
-      const reportName =
-        finalReport.filename ||
-        audit.final_report.filename ||
-        `final-report${_extFromContentType(finalReport.contentType || audit.final_report.content_type)}`;
+      const reportName = finalReport.filename || audit.final_report.filename;
       files.push({
         name: _uniqueZipName(`final-report/${reportName}`, seenNames),
         data: finalReport.data,
-        mtime: audit.final_report.uploaded_at
-          ? new Date(audit.final_report.uploaded_at)
-          : new Date(),
+        mtime: new Date(audit.final_report.uploaded_at),
       });
     }
 
     let artifactCount = 0;
     for (const { index: i, eventId, eventData, artifacts } of sampled) {
-      const eventStamp = eventData?.timestamp
-        ? fmtTsFilename(eventData.timestamp)
-        : String(i + 1).padStart(3, '0');
+      const eventStamp = fmtTsFilename(eventData.timestamp);
       const eventLabel = _safeZipPathSegment(
-        `${String(i + 1).padStart(3, '0')} ${eventStamp} ${eventData?.source || 'event'} ${String(eventId).slice(0, 8)}`,
+        `${String(i + 1).padStart(3, '0')} ${eventStamp} ${eventData.source} ${String(eventId).slice(0, 8)}`,
         `evidence-${i + 1}`,
       );
 
@@ -921,9 +887,7 @@ async function exportAuditZip() {
           { signal, remainingBytes: MAX_ZIP_EXPORT_BYTES - totalBytes },
         );
         totalBytes += downloaded.data.byteLength;
-        const ext = downloaded.filename
-          ? ''
-          : _extFromContentType(downloaded.contentType || art.content_type);
+        const ext = downloaded.filename ? '' : _extFromContentType(downloaded.contentType);
         const artifactName = _sampleMaskedFilename(
           downloaded.filename || `artifact-${art.id}${ext}`,
         );
@@ -951,9 +915,7 @@ async function exportAuditZip() {
       3000,
     );
     setTimeout(() => {
-      try {
-        status.style.display = 'none';
-      } catch {}
+      status.style.display = 'none';
     }, 3300);
   } catch (err) {
     if (signal.aborted) toast(status, 'Audit ZIP export cancelled.', 'info');
@@ -964,7 +926,7 @@ async function exportAuditZip() {
     if (auditZipCancel) auditZipCancel.hidden = true;
     if (btn) {
       btn.disabled = false;
-      btn.textContent = prevLabel || 'Export audit ZIP';
+      btn.textContent = prevLabel;
       if (cancelHadFocus) btn.focus();
     }
   }
@@ -1002,7 +964,7 @@ function _addControlsLinkedToClause(clauseId) {
 
 function _rebuildClauseHierarchy() {
   clauseChildrenByParentId = new Map();
-  for (const clause of allClauses || []) {
+  for (const clause of allClauses) {
     const parentId = clause?.parent_id ? String(clause.parent_id) : '';
     if (!parentId) continue;
     if (!clauseChildrenByParentId.has(parentId)) clauseChildrenByParentId.set(parentId, []);
@@ -1011,28 +973,25 @@ function _rebuildClauseHierarchy() {
 }
 
 function _clauseHasChildren(clauseOrId) {
-  const id =
-    typeof clauseOrId === 'object' ? String(clauseOrId?.id || '') : String(clauseOrId || '');
-  if (!id) return false;
+  const id = typeof clauseOrId === 'object' ? String(clauseOrId.id) : String(clauseOrId);
   if ((clauseChildrenByParentId.get(id) || []).length > 0) return true;
   if (typeof clauseOrId === 'object') return Number(clauseOrId?.child_count || 0) > 0;
   return false;
 }
 
 function _selectableDescendantClauseIds(clauseId) {
-  const id = String(clauseId || '');
+  const id = String(clauseId);
   const children = clauseChildrenByParentId.get(id) || [];
-  if (!children.length) return id ? [id] : [];
+  if (!children.length) return [id];
   const out = [];
   for (const child of children) out.push(..._selectableDescendantClauseIds(child.id));
   return out;
 }
 
+// Called for a clause with children, whose leaf descendants are its targets.
 function _selectClauseOrChildren(clauseId) {
-  const id = String(clauseId || '');
-  if (!id) return { clausesAdded: 0, controlsAdded: 0 };
-  const selectableIds = _selectableDescendantClauseIds(id).filter((x) => x && x !== id);
-  const targetIds = selectableIds.length ? selectableIds : [id];
+  const id = String(clauseId);
+  const targetIds = _selectableDescendantClauseIds(id).filter((x) => x !== id);
   let clausesAdded = 0;
   let controlsAdded = 0;
 
@@ -1067,9 +1026,10 @@ function _normaliseSelectedClausesToChildren() {
 function _addScopeLinkedToDocument(documentId) {
   const doc = allDocuments.find((d) => String(d.id) === String(documentId));
   let added = 0;
+  // Scoped documents stand in for the catalogue when documents are switched
+  // off, and those carry no links.
   for (const clause of doc?.clauses || []) {
-    const id = String(clause.id || '');
-    if (!id) continue;
+    const id = String(clause.id);
     if (!selectedClauseIds.has(id)) {
       selectedClauseIds.add(id);
       added += 1;
@@ -1077,8 +1037,8 @@ function _addScopeLinkedToDocument(documentId) {
     added += _addControlsLinkedToClause(id);
   }
   for (const control of doc?.controls || []) {
-    const id = String(control.id || '');
-    if (id && !selectedControlIds.has(id)) {
+    const id = String(control.id);
+    if (!selectedControlIds.has(id)) {
       selectedControlIds.add(id);
       added += 1;
     }
@@ -1105,7 +1065,7 @@ function renderDocuments() {
         return `<div class="col-12">
       <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
         <input class="form-check-input mt-1" type="checkbox" data-document-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(d.title || 'Document')}</span> <span class="badge text-bg-light ms-1">${esc(d.document_type || 'document')}</span><div class="small-muted">${esc(linked)}</div></span>
+        <span><span class="fw-semibold">${esc(d.title)}</span> <span class="badge text-bg-light ms-1">${esc(d.document_type)}</span><div class="small-muted">${esc(linked)}</div></span>
       </label>
     </div>`;
       })
@@ -1132,30 +1092,30 @@ function renderDocuments() {
 }
 
 async function loadScopeItems() {
-  const fw = audit?.framework_slug || getCurrentFramework();
+  const fw = audit.framework_slug;
   const [controlsData, clausesData, graphData, documentsData] = await Promise.all([
     featureEnabled(me, 'controls')
       ? apiGet(`/api/v1/controls?framework=${encodeURIComponent(fw)}&limit=5000`)
-      : { items: audit?.scoped_controls || [] },
+      : { items: audit.scoped_controls },
     featureEnabled(me, 'clauses')
       ? apiGet(`/api/v1/clauses?framework=${encodeURIComponent(fw)}`)
-      : { items: audit?.scoped_clauses || [] },
+      : { items: audit.scoped_clauses },
     featureEnabled(me, 'visualisations')
       ? apiGet(`/api/v1/graph/clause_control?framework=${encodeURIComponent(fw)}`)
       : {},
     featureEnabled(me, 'documents')
       ? apiGet(`/api/v1/isms/documents?framework=${encodeURIComponent(fw)}&limit=1000`)
-      : { items: audit?.scoped_documents || [] },
+      : { items: audit.scoped_documents },
   ]);
-  allDocuments = documentsData?.items || [];
-  allControls = (controlsData?.items || []).filter((c) => String(c.type || '') !== 'clause');
-  allClauses = clausesData?.items || [];
+  allDocuments = documentsData.items;
+  allControls = controlsData.items.filter((c) => String(c.type || '') !== 'clause');
+  allClauses = clausesData.items;
   _rebuildClauseHierarchy();
   clauseControlMap = _buildClauseControlMap(graphData);
   await loadSwotScope();
-  selectedDocumentIds = new Set((audit?.scoped_documents || []).map((d) => String(d.id)));
-  selectedControlIds = new Set((audit?.scoped_controls || []).map((c) => String(c.id)));
-  selectedClauseIds = new Set((audit?.scoped_clauses || []).map((c) => String(c.id)));
+  selectedDocumentIds = new Set(audit.scoped_documents.map((d) => String(d.id)));
+  selectedControlIds = new Set(audit.scoped_controls.map((c) => String(c.id)));
+  selectedClauseIds = new Set(audit.scoped_clauses.map((c) => String(c.id)));
   _normaliseSelectedClausesToChildren();
   renderScopeLists();
 }
@@ -1163,9 +1123,7 @@ async function loadScopeItems() {
 function matchesFilter(item, filter) {
   if (!filter) return true;
   return (
-    String(item.ref || '')
-      .toLowerCase()
-      .includes(filter) ||
+    String(item.ref).toLowerCase().includes(filter) ||
     String(item.title || '')
       .toLowerCase()
       .includes(filter)
@@ -1173,7 +1131,7 @@ function matchesFilter(item, filter) {
 }
 
 function clauseIndent(c) {
-  const ref = String(c.ref || '');
+  const ref = String(c.ref);
   return Math.min(Math.max(ref.split('.').length - 1, 0), 3);
 }
 
@@ -1209,7 +1167,7 @@ function renderClauses() {
         return `<div class="col-12">
       <label class="${rowClass}" style="margin-left:${pad}rem" title="${esc(title)}">
         <input class="form-check-input mt-1" type="checkbox" data-clause-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(c.ref || '')}</span> <span class="small-muted">${esc(c.title || '')}</span>${hint}</span>
+        <span><span class="fw-semibold">${esc(c.ref)}</span> <span class="small-muted">${esc(c.title)}</span>${hint}</span>
       </label>
     </div>`;
       })
@@ -1261,7 +1219,7 @@ function renderControls() {
         return `<div class="col-12 col-lg-6">
       <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
         <input class="form-check-input mt-1" type="checkbox" data-control-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(c.ref || '')}</span> <span class="small-muted">${esc(c.title || '')}</span></span>
+        <span><span class="fw-semibold">${esc(c.ref)}</span> <span class="small-muted">${esc(c.title)}</span></span>
       </label>
     </div>`;
       })
@@ -1286,28 +1244,26 @@ function renderScopeLists() {
 }
 
 function _scopeApplicabilityLabel(value) {
-  const v = String(value || '').trim();
-  if (!v) return 'No selected link';
-  return v.replaceAll('_', ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+  return String(value)
+    .trim()
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
 function _scopeApplicabilityColor(value) {
   const base =
     getComputedStyle(document.documentElement).getPropertyValue('--bs-primary').trim() || '#0d6efd';
-  if (String(value || '') === 'partially_applicable') {
-    try {
-      const c = d3.color(base);
-      if (c) {
-        c.opacity = 0.58;
-        return c.formatRgb();
-      }
-    } catch {}
+  if (String(value) === 'partially_applicable') {
+    const c = d3.color(base);
+    if (c) {
+      c.opacity = 0.58;
+      return c.formatRgb();
+    }
   }
   return base;
 }
 
 function _openScopeHref(href, ev) {
-  if (!href || href === '#') return;
   if (ev && (ev.metaKey || ev.ctrlKey)) {
     window.open(href, '_blank', 'noopener');
     return;
@@ -1316,26 +1272,17 @@ function _openScopeHref(href, ev) {
 }
 
 function _scopeClauseHref(clause) {
-  return withFramework(
-    `/clause.html?id=${encodeURIComponent(clause?.id || '')}`,
-    audit?.framework_slug,
-  );
+  return withFramework(`/clause.html?id=${encodeURIComponent(clause.id)}`, audit?.framework_slug);
 }
 
 function _scopeControlHref(control) {
-  return withFramework(
-    `/control.html?id=${encodeURIComponent(control?.id || '')}`,
-    audit?.framework_slug,
-  );
+  return withFramework(`/control.html?id=${encodeURIComponent(control.id)}`, audit?.framework_slug);
 }
 
 function renderScopeBipartiteGraph(data) {
   const wrap = document.getElementById('scopeHeatmap');
   const summary = document.getElementById('scopeHeatmapSummary');
-  if (!wrap) return;
-  const clauses = Array.isArray(data?.clauses) ? data.clauses : [];
-  const controls = Array.isArray(data?.controls) ? data.controls : [];
-  const links = Array.isArray(data?.links) ? data.links : [];
+  const { clauses, controls, links } = data;
   const stats = data?.summary || {};
   wrap.innerHTML = '';
 
@@ -1354,8 +1301,8 @@ function renderScopeBipartiteGraph(data) {
   const validLinks = links
     .map((l) => ({
       ...l,
-      clause_id: String(l.clause_id || ''),
-      control_id: String(l.control_id || ''),
+      clause_id: String(l.clause_id),
+      control_id: String(l.control_id),
       applicability: l.applicability || 'applicable',
     }))
     .filter((l) => clauseById.has(l.clause_id) && controlById.has(l.control_id));
@@ -1371,13 +1318,13 @@ function renderScopeBipartiteGraph(data) {
     const ac = linkedClauseCounts.get(String(a.id)) || 0;
     const bc = linkedClauseCounts.get(String(b.id)) || 0;
     if (bc !== ac) return bc - ac;
-    return String(a.ref || '').localeCompare(String(b.ref || ''), undefined, { numeric: true });
+    return String(a.ref).localeCompare(String(b.ref), undefined, { numeric: true });
   });
   const orderedControls = controls.slice().sort((a, b) => {
     const ac = linkedControlCounts.get(String(a.id)) || 0;
     const bc = linkedControlCounts.get(String(b.id)) || 0;
     if (bc !== ac) return bc - ac;
-    return String(a.ref || '').localeCompare(String(b.ref || ''), undefined, { numeric: true });
+    return String(a.ref).localeCompare(String(b.ref), undefined, { numeric: true });
   });
 
   const rowPx = Math.max(
@@ -1490,8 +1437,8 @@ function renderScopeBipartiteGraph(data) {
     .style('stroke-opacity', (d) => (d.applicability === 'partially_applicable' ? 0.6 : 0.76))
     .style('stroke-linecap', 'round')
     .attr('d', (d) => {
-      const y1 = (yClauses(d.clause_id) ?? margin.top) + yClauses.bandwidth() / 2;
-      const y2 = (yControls(d.control_id) ?? margin.top) + yControls.bandwidth() / 2;
+      const y1 = yClauses(d.clause_id) + yClauses.bandwidth() / 2;
+      const y2 = yControls(d.control_id) + yControls.bandwidth() / 2;
       const x1 = xL + leftW;
       const x2 = xR;
       const xm = x1 + linkGap / 2;
@@ -1499,9 +1446,9 @@ function renderScopeBipartiteGraph(data) {
     });
 
   linkSel.append('title').text((d) => {
-    const clause = clauseById.get(d.clause_id) || {};
-    const control = controlById.get(d.control_id) || {};
-    return `${clause.ref || 'Clause'} × ${control.ref || 'Control'}\n${_scopeApplicabilityLabel(d.applicability)}`;
+    const clause = clauseById.get(d.clause_id);
+    const control = controlById.get(d.control_id);
+    return `${clause.ref} × ${control.ref}\n${_scopeApplicabilityLabel(d.applicability)}`;
   });
 
   const gNodes = svg.append('g').attr('class', 'audit-scope-nodes');
@@ -1514,7 +1461,7 @@ function renderScopeBipartiteGraph(data) {
     .attr('class', 'scope-clause')
     .attr('href', (d) => _scopeClauseHref(d))
     .each(function (d) {
-      const y = yClauses(String(d.id)) ?? 0;
+      const y = yClauses(String(d.id));
       const group = d3
         .select(this)
         .append('g')
@@ -1539,7 +1486,7 @@ function renderScopeBipartiteGraph(data) {
         )
         .style('stroke', 'rgba(255,255,255,0.20)')
         .style('stroke-width', 1);
-      const label = `${d.ref || 'Clause'}${d.title ? ` - ${d.title}` : ''}`;
+      const label = `${d.ref}${d.title ? ` - ${d.title}` : ''}`;
       group
         .append('text')
         .attr('x', leftW / 2)
@@ -1576,7 +1523,7 @@ function renderScopeBipartiteGraph(data) {
     .attr('class', 'scope-control')
     .attr('href', (d) => _scopeControlHref(d))
     .each(function (d) {
-      const y = yControls(String(d.id)) ?? 0;
+      const y = yControls(String(d.id));
       const group = d3
         .select(this)
         .append('g')
@@ -1599,7 +1546,7 @@ function renderScopeBipartiteGraph(data) {
         )
         .style('stroke', 'rgba(255,255,255,0.18)')
         .style('stroke-width', 1);
-      const label = `${d.ref || 'Control'}${d.title ? ` - ${d.title}` : ''}`;
+      const label = `${d.ref}${d.title ? ` - ${d.title}` : ''}`;
       group
         .append('text')
         .attr('x', 10)
@@ -1683,22 +1630,19 @@ async function loadScopeVisualisation() {
   }
 }
 
+// The list loads once, before anyone can choose from it.
 function renderAttendeeUserOptions() {
-  const sel = document.getElementById('attendeeUserId');
-  if (!sel) return;
-  const cur = sel.value || '';
-  const rows = (attendeeUsers || [])
+  const rows = attendeeUsers
     .slice()
-    .sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
-  sel.innerHTML = `<option value="">Custom / external attendee</option>${rows.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}${u.email ? ` · ${esc(u.email)}` : ''}</option>`).join('')}`;
-  sel.value = rows.some((u) => String(u.id) === cur) ? cur : '';
+    .sort((a, b) => String(a.username).localeCompare(String(b.username)));
+  document.getElementById('attendeeUserId').innerHTML =
+    `<option value="">Custom / external attendee</option>${rows.map((u) => `<option value="${esc(u.id)}">${esc(u.username)}${u.email ? ` · ${esc(u.email)}` : ''}</option>`).join('')}`;
 }
 
+// The list loads when the page opens and after a new person is saved, who is
+// then chosen, so there is no earlier choice to keep.
 function renderAttendeePersonOptions() {
-  const sel = document.getElementById('attendeePersonId');
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML =
+  document.getElementById('attendeePersonId').innerHTML =
     '<option value="">Choose a person or enter a new name below</option>' +
     attendeePeople
       .map(
@@ -1706,7 +1650,6 @@ function renderAttendeePersonOptions() {
           `<option value="${esc(p.id)}">${esc(p.name)}${p.email ? ` · ${esc(p.email)}` : ''}${p.username ? ` · account ${esc(p.username)}` : ''}</option>`,
       )
       .join('');
-  sel.value = attendeePeople.some((p) => p.id === current) ? current : '';
   showAttendeePersonAccount();
 }
 
@@ -1714,7 +1657,6 @@ function renderAttendeePersonOptions() {
 // account will read the audit before the person is added.
 function showAttendeePersonAccount() {
   const note = document.getElementById('attendeePersonAccount');
-  if (!note) return;
   const id = document.getElementById('attendeePersonId')?.value || '';
   const person = id ? attendeePeople.find((p) => p.id === id) : null;
   note.textContent = person?.username
@@ -1726,7 +1668,7 @@ function showAttendeePersonAccount() {
 async function loadAttendeePeople() {
   if (!featureEnabled(me, 'people')) return;
   try {
-    attendeePeople = (await apiGet('/api/v1/isms/people')).items || [];
+    attendeePeople = (await apiGet('/api/v1/isms/people')).items;
     renderAttendeePersonOptions();
   } catch (err) {
     attendeePeople = [];
@@ -1736,8 +1678,7 @@ async function loadAttendeePeople() {
 
 function suggestPersonCreation() {
   const button = document.getElementById('attendeeCreatePerson');
-  if (!button) return;
-  const name = document.getElementById('attendeeName')?.value.trim() || '';
+  const name = document.getElementById('attendeeName').value.trim();
   const email = document.getElementById('attendeeEmail')?.value.trim().toLowerCase() || '';
   const matching = attendeePeople.find((p) =>
     email
@@ -1761,7 +1702,7 @@ async function loadAttendeeUsers() {
   if (!canManageAudits()) return;
   try {
     const data = await apiGet('/api/v1/audits/users');
-    attendeeUsers = Array.isArray(data?.items) ? data.items : [];
+    attendeeUsers = data.items;
     renderAttendeeUserOptions();
   } catch (e) {
     attendeeUsers = [];
@@ -1773,7 +1714,7 @@ async function loadAttendeeUsers() {
 function selectedAttendeeUser() {
   const id = document.getElementById('attendeeUserId')?.value || '';
   if (!id) return null;
-  return (attendeeUsers || []).find((u) => String(u.id) === String(id)) || null;
+  return attendeeUsers.find((u) => String(u.id) === String(id));
 }
 
 function syncAttendeeUserSelection() {
@@ -1781,10 +1722,10 @@ function syncAttendeeUserSelection() {
   const nameEl = document.getElementById('attendeeName');
   const emailEl = document.getElementById('attendeeEmail');
   if (user && nameEl && !String(nameEl.value || '').trim()) {
-    nameEl.value = user.username || '';
+    nameEl.value = user.username;
   }
   if (user && emailEl && !String(emailEl.value || '').trim()) {
-    emailEl.value = user.email || '';
+    emailEl.value = user.email;
   }
 }
 document.getElementById('attendeePersonId')?.addEventListener('change', () => {
@@ -1814,9 +1755,8 @@ document.getElementById('attendeeCreatePerson')?.addEventListener('click', async
   }
 });
 
-function renderAttendees(items) {
+function renderAttendees(arr) {
   const el = document.getElementById('attendees');
-  const arr = items || [];
   if (!arr.length) {
     el.innerHTML = '<span class="small-muted">No people listed yet.</span>';
     return;
@@ -1825,8 +1765,8 @@ function renderAttendees(items) {
     .map((x) => {
       const meta = [x.email, x.role].filter(Boolean);
       const who = x.user_id
-        ? userPillHtml({ username: x.username || x.name, email: x.email })
-        : esc(x.name || x.email || 'Attendee') +
+        ? userPillHtml({ username: x.username, email: x.email })
+        : esc(x.name) +
           (x.person_username
             ? ` ${userPillHtml(
                 { username: x.person_username },
@@ -1844,7 +1784,6 @@ function renderAttendees(items) {
     .join('')}</div>`;
   el.querySelectorAll('[data-del-attendee]').forEach((btn) =>
     btn.addEventListener('click', async () => {
-      if (!ensureAuditEditable()) return;
       await apiDelete(
         `/api/v1/audits/${encodeURIComponent(auditId)}/attendees/${encodeURIComponent(btn.getAttribute('data-del-attendee'))}`,
       );
@@ -1861,14 +1800,13 @@ function findingKindOptions(current) {
 }
 
 function findingStatusOptions(current) {
-  return `<option value="open" ${selectedAttr('open', current || 'open')}>Open</option>
+  return `<option value="open" ${selectedAttr('open', current)}>Open</option>
     <option value="accepted" ${selectedAttr('accepted', current)}>Accepted</option>
     <option value="closed" ${selectedAttr('closed', current)}>Closed</option>`;
 }
 
-function renderFindings(items) {
+function renderFindings(arr) {
   const el = document.getElementById('findings');
-  const arr = items || [];
   if (!arr.length) {
     el.innerHTML = '<span class="small-muted">No findings yet.</span>';
     return;
@@ -1884,13 +1822,13 @@ function renderFindings(items) {
       </div>
       ${canEditAudit() ? `<div class="d-flex gap-2"><button class="btn btn-sm btn-outline-primary" data-edit-finding="${esc(f.id)}">Edit</button><button class="btn btn-sm btn-outline-danger" data-del-finding="${esc(f.id)}">Remove</button></div>` : ''}
     </div>
-    ${f.control ? `<div class="small-muted mt-1">Control: ${esc(f.control.ref)} ${esc(f.control.title || '')}</div>` : ''}
+    ${f.control ? `<div class="small-muted mt-1">Control: ${esc(f.control.ref)} ${esc(f.control.title)}</div>` : ''}
     ${f.description ? `<div class="mt-2 rich-text-content">${renderRichTextContent(f.description, '')}</div>` : ''}
     ${
       canEditAudit()
         ? `<form class="row g-2 mt-3 d-none" data-finding-edit-form="${esc(f.id)}">
       <div class="col-12 col-md-4"><select class="form-select" data-finding-edit-kind="${esc(f.id)}">${findingKindOptions(f.kind)}</select></div>
-      <div class="col-12 col-md-4"><input class="form-control" data-finding-edit-title="${esc(f.id)}" value="${esc(f.title || '')}" required /></div>
+      <div class="col-12 col-md-4"><input class="form-control" data-finding-edit-title="${esc(f.id)}" value="${esc(f.title)}" required /></div>
       <div class="col-12 col-md-4"><select class="form-select" data-finding-edit-status="${esc(f.id)}">${findingStatusOptions(f.status)}</select></div>
       <div class="col-12 col-md-4"><input class="form-control" data-finding-edit-control="${esc(f.id)}" value="${esc(f.control?.ref || '')}" placeholder="Control ref/id (optional)" /></div>
       <div class="col-12"><div class="rich-text-editor"><textarea class="form-control" rows="3" data-rich-text="1" data-finding-edit-desc="${esc(f.id)}">${esc(f.description || '')}</textarea></div></div>
@@ -1921,7 +1859,6 @@ function renderFindings(items) {
   el.querySelectorAll('[data-finding-edit-form]').forEach((form) =>
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      if (!ensureAuditEditable()) return;
       const id = form.getAttribute('data-finding-edit-form');
       await apiPatch(
         `/api/v1/audits/${encodeURIComponent(auditId)}/findings/${encodeURIComponent(id)}`,
@@ -1931,9 +1868,9 @@ function renderFindings(items) {
           status: el.querySelector(`[data-finding-edit-status="${CSS.escape(id)}"]`)?.value,
           control:
             el.querySelector(`[data-finding-edit-control="${CSS.escape(id)}"]`)?.value || null,
-          description:
-            syncRichTextEditor(el.querySelector(`[data-finding-edit-desc="${CSS.escape(id)}"]`)) ||
-            '',
+          description: syncRichTextEditor(
+            el.querySelector(`[data-finding-edit-desc="${CSS.escape(id)}"]`),
+          ),
         },
       );
       toast(status, 'Finding saved', 'success');
@@ -1942,7 +1879,6 @@ function renderFindings(items) {
   );
   el.querySelectorAll('[data-del-finding]').forEach((btn) =>
     btn.addEventListener('click', async () => {
-      if (!ensureAuditEditable()) return;
       await apiDelete(
         `/api/v1/audits/${encodeURIComponent(auditId)}/findings/${encodeURIComponent(btn.getAttribute('data-del-finding'))}`,
       );
@@ -1951,9 +1887,8 @@ function renderFindings(items) {
   );
 }
 
-function renderEvidence(items) {
+function renderEvidence(arr) {
   const el = document.getElementById('evidence');
-  const arr = items || [];
   const bulk = canEditAudit();
   const selectAllWrap = document.getElementById('evidenceSelectAllWrap');
   if (selectAllWrap) selectAllWrap.hidden = !bulk || !arr.length;
@@ -1973,7 +1908,7 @@ function renderEvidence(items) {
           ? withFramework(`/event.html?id=${encodeURIComponent(ev.id)}`, audit?.framework_slug)
           : '#');
       const title = x.title || entity?.title || ev?.summary || x.evidence_url || 'Evidence';
-      const controls = (x.controls || ev?.controls || entity?.controls || [])
+      const controls = (x.controls || [])
         .map((c) => `<span class="badge badge-soft me-1">${esc(c.ref)}</span>`)
         .join('');
       const kind = entity?.kind || (ev ? 'Event evidence' : 'Evidence URL');
@@ -1984,7 +1919,7 @@ function renderEvidence(items) {
           ${bulk ? evidenceSelection.cellHtml(x.id) : ''}
           <div>
           <div class="mb-1"><span class="badge text-bg-light">${esc(kind)}</span></div>
-          <a class="fw-semibold" href="${esc(href || '#')}">${esc(title)}</a>
+          <a class="fw-semibold" href="${esc(href)}">${esc(title)}</a>
           <div class="small-muted">Added ${esc(fmtTs(x.added_at))} by ${userPillHtml(x.added_by_username)}${ev?.timestamp ? ` · Event time ${esc(fmtTs(ev.timestamp))}` : ''}${esc(subtitle)}</div>
           <div class="mt-1">${controls}</div>
           </div>
@@ -2001,10 +1936,10 @@ function renderEvidence(items) {
   refreshRichTextEditorStates(el);
   el.querySelectorAll('[data-save-evidence]').forEach((btn) =>
     btn.addEventListener('click', async () => {
-      if (!ensureAuditEditable()) return;
       const id = btn.getAttribute('data-save-evidence');
-      const notes =
-        syncRichTextEditor(el.querySelector(`[data-evidence-notes="${CSS.escape(id)}"]`)) || '';
+      const notes = syncRichTextEditor(
+        el.querySelector(`[data-evidence-notes="${CSS.escape(id)}"]`),
+      );
       await apiPatch(
         `/api/v1/audits/${encodeURIComponent(auditId)}/evidence/${encodeURIComponent(id)}`,
         { notes },
@@ -2016,7 +1951,6 @@ function renderEvidence(items) {
   evidenceSelection.rendered();
   el.querySelectorAll('[data-del-evidence]').forEach((btn) =>
     btn.addEventListener('click', async () => {
-      if (!ensureAuditEditable()) return;
       await apiDelete(
         `/api/v1/audits/${encodeURIComponent(auditId)}/evidence/${encodeURIComponent(btn.getAttribute('data-del-evidence'))}`,
       );
@@ -2037,9 +1971,9 @@ async function loadAudit({ preserveUnsaved = false } = {}) {
   setForm(audit);
   renderReport(audit);
   renderKpis(audit);
-  renderAttendees(audit.attendees || []);
-  renderFindings(audit.findings || []);
-  renderEvidence(audit.evidence || []);
+  renderAttendees(audit.attendees);
+  renderFindings(audit.findings);
+  renderEvidence(audit.evidence);
   await loadScopeItems();
   await loadScopeVisualisation();
   restoreUnsavedPageState(unsavedState);
@@ -2055,8 +1989,7 @@ function payloadDate(id) {
     const ok = auditEndWire?.syncHiddenFromText?.();
     if (ok === false) return undefined;
   }
-  const v = document.getElementById(id)?.value || '';
-  return v || null;
+  return document.getElementById(id).value || null;
 }
 
 document.getElementById('detailsForm')?.addEventListener('submit', async (ev) => {
@@ -2124,9 +2057,9 @@ document.getElementById('templateScheduleForm')?.addEventListener('submit', asyn
     }
     await apiPatch(`/api/v1/audits/scheduled/${encodeURIComponent(auditId)}`, {
       start_date: startDate,
-      schedule_date_rule: document.getElementById('tmplDateRule')?.value || 'exact',
+      schedule_date_rule: document.getElementById('tmplDateRule').value,
       schedule_anchor_month: templateDates.anchorMonth(),
-      schedule_recurrence: document.getElementById('tmplRecurrence')?.value || 'once',
+      schedule_recurrence: document.getElementById('tmplRecurrence').value,
       schedule_interval: Number(document.getElementById('tmplInterval')?.value || 1),
       schedule_until_date: tmplUntil?.value || null,
     });
@@ -2319,7 +2252,7 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
     toast(status, 'Admin role required.', 'danger');
     return;
   }
-  const title = audit?.title || 'this audit';
+  const title = audit.title;
   if (
     !(await confirmAction({
       title: `Delete audit ${title}`,
@@ -2333,7 +2266,7 @@ document.getElementById('deleteAudit')?.addEventListener('click', async () => {
   try {
     await apiDelete(`/api/v1/audits/${encodeURIComponent(auditId)}`);
     toast(status, 'Audit deleted', 'success');
-    location.href = withFramework('/audits.html', audit?.framework_slug || getCurrentFramework());
+    location.href = withFramework('/audits.html', audit.framework_slug);
   } catch (e) {
     toast(status, `Failed: ${errorText(e)}`, 'danger');
   }
@@ -2362,8 +2295,8 @@ async function loadSwotScope() {
     host.className = 'card card-body my-3';
     document.getElementById('scopeBody')?.prepend(host);
   }
-  selectedSwotIds = new Set((audit?.scoped_swot || []).map((r) => r.id));
-  let rows = audit?.scoped_swot || [];
+  selectedSwotIds = new Set(audit.scoped_swot.map((r) => r.id));
+  let rows = audit.scoped_swot;
   try {
     const data = await apiGet('/api/v1/isms/swot?limit=200');
     const byId = new Map([...data.items, ...rows].map((r) => [r.id, r]));

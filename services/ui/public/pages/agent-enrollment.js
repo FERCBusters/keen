@@ -44,7 +44,7 @@ export function enrollmentProfiles(host, onChanged) {
     q('[data-secret-box]').hidden = false;
   };
   const error = (e) => {
-    let text = String(e.message || e);
+    let text = e.message;
     try {
       const v = JSON.parse(text).detail;
       text = typeof v === 'string' ? v : 'Check the profile settings.';

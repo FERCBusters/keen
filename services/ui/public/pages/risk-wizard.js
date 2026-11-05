@@ -121,7 +121,7 @@ function visibleSteps() {
 }
 
 function currentStep() {
-  return visibleSteps()[stepIndex]?.[0] || 'review';
+  return visibleSteps()[stepIndex][0];
 }
 
 function renderStepper() {
@@ -224,7 +224,7 @@ function templatesForMethod() {
     .toLowerCase();
   return library.filter(
     (item) =>
-      (item.method || 'risk') === wanted &&
+      item.method === wanted &&
       (!q || `${item.name} ${item.threat_summary}`.toLowerCase().includes(q)),
   );
 }
@@ -240,9 +240,9 @@ function renderTemplates() {
           ) => `<button class="list-group-item list-group-item-action ${state.template?.id === item.id ? 'active' : ''}" type="button" data-template="${esc(item.id)}">
         <div class="d-flex flex-wrap justify-content-between gap-2">
           <span class="fw-semibold">${esc(item.name)}</span>
-          <span class="small">${esc(item.method === 'pestle' ? `${item.pestle_type} · ${item.lens}` : (item.risk_types || []).join(', ') || 'General risk')}</span>
+          <span class="small">${esc(item.method === 'pestle' ? `${item.pestle_type} · ${item.lens}` : item.risk_types.join(', ') || 'General risk')}</span>
         </div>
-        <div class="small ${state.template?.id === item.id ? '' : 'small-muted'}">${esc(item.threat_summary || '')}</div>
+        <div class="small ${state.template?.id === item.id ? '' : 'small-muted'}">${esc(item.threat_summary)}</div>
       </button>`,
         )
         .join('')
@@ -260,17 +260,17 @@ function applyTemplate(item) {
   // template's wording; the template supplies what is still blank.
   if (item.method === 'pestle') {
     state.method = 'pestle';
-    state.pestleType = item.pestle_type || '';
-    state.lens = item.lens || 'External';
-    if (!state.description) state.description = item.threat_summary || '';
-    if (!state.rationale) state.rationale = item.treatment_guidance || '';
+    state.pestleType = item.pestle_type;
+    state.lens = item.lens;
+    if (!state.description) state.description = item.threat_summary;
+    if (!state.rationale) state.rationale = item.treatment_guidance;
   } else {
-    state.method = (item.risk_types || []).length ? 'cia' : 'general';
-    state.riskTypes = [...(item.risk_types || [])];
-    if (!state.title) state.title = item.name || '';
-    if (!state.description) state.description = item.threat_summary || '';
-    if (!state.note) state.note = item.treatment_guidance || '';
-    const example = item.suggested_assessment || {};
+    state.method = item.risk_types.length ? 'cia' : 'general';
+    state.riskTypes = [...item.risk_types];
+    if (!state.title) state.title = item.name;
+    if (!state.description) state.description = item.threat_summary;
+    if (!state.note) state.note = item.treatment_guidance;
+    const example = item.suggested_assessment;
     for (const [target, key] of [
       [state.inherent, 'likelihood', 'inherent_likelihood'],
       [state.inherent, 'impact', 'inherent_impact'],
@@ -282,9 +282,7 @@ function applyTemplate(item) {
     }
     const suggestedAsset = String(example.asset || '').trim();
     if (suggestedAsset && !state.asset && !state.newAsset) {
-      const match = assets.find(
-        (a) => String(a.name || '').toLowerCase() === suggestedAsset.toLowerCase(),
-      );
+      const match = assets.find((a) => a.name.toLowerCase() === suggestedAsset.toLowerCase());
       if (match) state.asset = { id: match.id, name: match.name };
       else $('assetSearch').value = suggestedAsset;
     }
@@ -300,10 +298,7 @@ function assetMatches(query) {
   return assets
     .filter(
       (a) =>
-        !q ||
-        `${a.name} ${a.category?.name || ''} ${a.subcategory?.name || ''}`
-          .toLowerCase()
-          .includes(q),
+        !q || `${a.name} ${a.category.name} ${a.subcategory?.name || ''}`.toLowerCase().includes(q),
     )
     .slice(0, 30);
 }
@@ -311,7 +306,7 @@ function assetMatches(query) {
 function renderAssets() {
   const query = String($('assetSearch').value || '').trim();
   const matches = assetMatches(query);
-  const exact = matches.find((a) => String(a.name || '').toLowerCase() === query.toLowerCase());
+  const exact = matches.find((a) => a.name.toLowerCase() === query.toLowerCase());
   $('assetList').innerHTML =
     matches
       .map(
@@ -367,10 +362,8 @@ function renderCategoryOptions() {
 
 function renderSubcategoryOptions() {
   const chosen = $('newAssetCategory').value.trim().toLowerCase();
-  const category = categories.find((c) => String(c.name || '').toLowerCase() === chosen);
-  const subs = category
-    ? category.subcategories || []
-    : categories.flatMap((c) => c.subcategories || []);
+  const category = categories.find((c) => c.name.toLowerCase() === chosen);
+  const subs = category ? category.subcategories : categories.flatMap((c) => c.subcategories);
   $('assetSubcategoryOptions').innerHTML = subs
     .map((s) => `<option value="${esc(s.name)}"></option>`)
     .join('');
@@ -381,13 +374,7 @@ function renderProcesses() {
   const q = query.toLowerCase();
   const chosen = new Set(state.processes.map((p) => p.id));
   const rows = businessProcesses
-    .filter(
-      (p) =>
-        !q ||
-        String(p.name || '')
-          .toLowerCase()
-          .includes(q),
-    )
+    .filter((p) => !q || p.name.toLowerCase().includes(q))
     .slice(0, 50)
     .map(
       (p) => `<label class="list-group-item d-flex gap-2 align-items-center">
@@ -400,7 +387,7 @@ function renderProcesses() {
       `<label class="list-group-item d-flex gap-2 align-items-center"><input class="form-check-input mt-0" type="checkbox" data-new-process="${esc(name)}" checked><span>${esc(name)} <span class="badge text-bg-light border">new</span></span></label>`,
     );
   const exact =
-    businessProcesses.some((p) => String(p.name || '').toLowerCase() === q) ||
+    businessProcesses.some((p) => p.name.toLowerCase() === q) ||
     state.newProcesses.some((n) => n.toLowerCase() === q);
   if (query && !exact)
     rows.push(
@@ -427,19 +414,19 @@ function renderParties() {
   const chosen = new Set(state.parties.map(partyKey));
   const kindLabel = { interested_party: 'Interested party', person: 'Person', vendor: 'Vendor' };
   const rows = allPartyOptions()
-    .filter((p) => !q || `${p.label} ${p.detail || ''}`.toLowerCase().includes(q))
+    .filter((p) => !q || `${p.label} ${p.detail}`.toLowerCase().includes(q))
     .slice(0, 60)
     .map(
       (p) => `<label class="list-group-item d-flex gap-2 align-items-center">
       <input class="form-check-input mt-0" type="checkbox" data-party="${esc(partyKey(p))}" ${chosen.has(partyKey(p)) ? 'checked' : ''}>
       <span class="flex-grow-1"><span class="fw-semibold">${esc(p.label)}</span>${p.detail ? ` <span class="small-muted">- ${esc(p.detail)}</span>` : ''}</span>
-      <span class="badge text-bg-light border">${esc(kindLabel[p.kind] || p.kind)}</span>
+      <span class="badge text-bg-light border">${esc(kindLabel[p.kind])}</span>
     </label>`,
     );
   $('partyList').innerHTML =
     rows.join('') ||
     `<div class="list-group-item small-muted">${query ? 'Nobody by that name yet.' : 'No interested parties, people or vendors recorded yet. Type a name to add one.'}</div>`;
-  const exact = allPartyOptions().some((p) => String(p.label || '').toLowerCase() === q);
+  const exact = allPartyOptions().some((p) => p.label.toLowerCase() === q);
   const alreadyNew = state.parties.some((p) => p.kind === 'new' && p.label.toLowerCase() === q);
   $('newPartyPanel').hidden = !query || exact || alreadyNew;
   $('newPartyName').textContent = query;
@@ -473,19 +460,19 @@ function renderDescribe() {
       <div class="small-muted">${esc(CIA_HELP[type])}</div>
     </label></div>`,
   ).join('');
-  $('pestleTypeChoices').innerHTML = (pestleMeta.types || [])
+  $('pestleTypeChoices').innerHTML = pestleMeta.types
     .map(
       (type) =>
         `<label class="btn btn-sm ${state.pestleType === type ? 'btn-info' : 'btn-outline-secondary'}"><input class="visually-hidden" type="radio" name="pestleType" value="${esc(type)}" ${state.pestleType === type ? 'checked' : ''}>${esc(type)}</label>`,
     )
     .join('');
-  $('pestleLens').innerHTML = (pestleMeta.lenses || [])
+  $('pestleLens').innerHTML = pestleMeta.lenses
     .map(
       (lens) =>
         `<option value="${esc(lens)}" ${state.lens === lens ? 'selected' : ''}>${esc(lens)}</option>`,
     )
     .join('');
-  $('pestleRelevance').innerHTML = (pestleMeta.relevance_levels || [])
+  $('pestleRelevance').innerHTML = pestleMeta.relevance_levels
     .map(
       (level) =>
         `<option value="${esc(level.code)}" ${state.relevance === level.code ? 'selected' : ''}>${esc(level.label)}</option>`,
@@ -559,9 +546,9 @@ function renderClauses() {
   const q = String($('clauseSearch').value || '')
     .trim()
     .toLowerCase();
-  const levels = (pestleMeta.relevance_levels || []).filter((l) => l.code !== 'na');
-  const defaultCode =
-    state.relevance && state.relevance !== 'na' ? state.relevance : levels[0]?.code || 'high';
+  const levels = pestleMeta.relevance_levels.filter((l) => l.code !== 'na');
+  // An overall relevance of "na" matches no option, so the list shows the first level.
+  const defaultCode = state.relevance;
   $('clauseList').innerHTML =
     clauses
       .filter((c) => !q || `${c.ref} ${c.title}`.toLowerCase().includes(q))
@@ -570,7 +557,7 @@ function renderClauses() {
         const chosen = state.clauseRelevance.get(c.id);
         return `<div class="d-flex gap-2 align-items-center py-1">
         <input class="form-check-input mt-0" type="checkbox" data-clause="${esc(c.id)}" ${chosen ? 'checked' : ''} aria-label="${esc(c.ref)}">
-        <span class="flex-grow-1"><span class="fw-semibold">${esc(c.ref)}</span> <span class="small-muted">${esc(c.title || '')}</span></span>
+        <span class="flex-grow-1"><span class="fw-semibold">${esc(c.ref)}</span> <span class="small-muted">${esc(c.title)}</span></span>
         <select class="form-select form-select-sm w-auto" data-clause-level="${esc(c.id)}" ${chosen ? '' : 'disabled'} aria-label="Relevance of ${esc(c.ref)}">${levels.map((l) => `<option value="${esc(l.code)}" ${(chosen || defaultCode) === l.code ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select>
       </div>`;
       })
@@ -592,7 +579,7 @@ function renderControls() {
     .map(
       (c) => `<label class="d-flex gap-2 align-items-start py-1">
       <input class="form-check-input mt-1" type="checkbox" data-control="${esc(c.id)}" ${state.controls.has(c.id) ? 'checked' : ''}>
-      <span><span class="fw-semibold">${esc(c.ref || 'Control')}</span> ${esc(c.title || '')}${suggested.has(c.id) ? ' <span class="badge text-bg-info">suggested</span>' : ''}${c.in_scope === false ? ' <span class="badge text-bg-secondary">out of scope</span>' : ''}</span>
+      <span><span class="fw-semibold">${esc(c.ref)}</span> ${esc(c.title)}${suggested.has(c.id) ? ' <span class="badge text-bg-info">suggested</span>' : ''}${c.in_scope === false ? ' <span class="badge text-bg-secondary">out of scope</span>' : ''}</span>
     </label>`,
     );
   $('controlList').innerHTML = rows.join('') || '<div class="small-muted">No controls match.</div>';
@@ -640,17 +627,13 @@ function renderReview() {
         'subject',
       ),
     );
-    rows.push(reviewRow('Factor', esc(state.description || '-'), 'describe'));
-    rows.push(
-      reviewRow('Type and lens', esc(`${state.pestleType || '-'} · ${state.lens}`), 'describe'),
-    );
-    const level = (pestleMeta.relevance_levels || []).find((l) => l.code === state.relevance);
-    rows.push(
-      reviewRow('Overall relevance', esc(level?.label || state.relevance || '-'), 'describe'),
-    );
+    rows.push(reviewRow('Factor', esc(state.description), 'describe'));
+    rows.push(reviewRow('Type and lens', esc(`${state.pestleType} · ${state.lens}`), 'describe'));
+    const level = pestleMeta.relevance_levels.find((l) => l.code === state.relevance);
+    rows.push(reviewRow('Overall relevance', esc(level.label), 'describe'));
     if (state.rationale) rows.push(reviewRow('Rationale', esc(state.rationale), 'describe'));
     const picked = [...state.clauseRelevance.keys()].map(
-      (id) => clauses.find((c) => c.id === id)?.ref || id,
+      (id) => clauses.find((c) => c.id === id).ref,
     );
     rows.push(
       reviewRow(
@@ -665,9 +648,7 @@ function renderReview() {
         'Asset',
         state.asset
           ? esc(state.asset.name)
-          : state.newAsset?.name
-            ? `${esc(state.newAsset.name)} <span class="badge text-bg-light border">new</span>${state.newAsset.category ? ` <span class="small-muted">${esc(state.newAsset.category)}${state.newAsset.subcategory ? ` › ${esc(state.newAsset.subcategory)}` : ''}</span>` : ''}`
-            : '<span class="text-danger">Not chosen</span>',
+          : `${esc(state.newAsset.name)} <span class="badge text-bg-light border">new</span> <span class="small-muted">${esc(state.newAsset.category)} › ${esc(state.newAsset.subcategory)}</span>`,
         'subject',
       ),
     );
@@ -685,18 +666,10 @@ function renderReview() {
         'parties',
       ),
     );
-    rows.push(reviewRow('Name', esc(state.title || '-'), 'describe'));
+    rows.push(reviewRow('Name', esc(state.title), 'describe'));
     rows.push(reviewRow('What could happen', esc(state.description || '-'), 'describe'));
     if (state.method === 'cia')
-      rows.push(
-        reviewRow(
-          'Security properties',
-          state.riskTypes.length
-            ? esc(state.riskTypes.join(', '))
-            : '<span class="text-danger">None chosen</span>',
-          'describe',
-        ),
-      );
+      rows.push(reviewRow('Security properties', esc(state.riskTypes.join(', ')), 'describe'));
     const i = state.inherent.likelihood * state.inherent.impact;
     const r = state.residual.likelihood * state.residual.impact;
     rows.push(
@@ -708,13 +681,12 @@ function renderReview() {
     );
     const ownerLabel = ownerLabelFor(state.owner);
     rows.push(reviewRow('Owner', esc(ownerLabel || 'Nobody yet'), 'rate'));
-    const strategy =
-      TREATMENT_STRATEGIES.find(([v]) => v === state.treatment.strategy)?.[1] || 'Not decided yet';
+    const [, strategy] = TREATMENT_STRATEGIES.find(([v]) => v === state.treatment.strategy);
     rows.push(
       reviewRow(
         'Treatment',
         esc(strategy.split(' - ')[0]) +
-          ` <span class="small-muted">(${esc(TREATMENT_STATUSES.find(([v]) => v === state.treatment.status)?.[1] || 'Open')}${state.treatment.due ? `, due ${esc(state.treatment.due)}` : ''})</span>`,
+          ` <span class="small-muted">(${esc(TREATMENT_STATUSES.find(([v]) => v === state.treatment.status)[1])}${state.treatment.due ? `, due ${esc(state.treatment.due)}` : ''})</span>`,
         'rate',
       ),
     );
@@ -733,8 +705,8 @@ function renderReview() {
 
 function ownerLabelFor(value) {
   const [kind, id] = String(value || '').split(':');
-  if (kind === 'user') return users.find((u) => u.id === id)?.username || '';
-  if (kind === 'role') return roles.find((r) => r.id === id)?.name || '';
+  if (kind === 'user') return users.find((u) => u.id === id).username;
+  if (kind === 'role') return roles.find((r) => r.id === id).name;
   return '';
 }
 
@@ -858,7 +830,7 @@ async function savePestle() {
     type: state.pestleType,
     lens: state.lens,
     item: state.description,
-    overall_relevance_code: state.relevance || 'na',
+    overall_relevance_code: state.relevance,
     rationale: [state.rationale, state.note].filter(Boolean).join('\n\n'),
   });
   const code = state.relevance && state.relevance !== 'na' ? state.relevance : 'high';
@@ -936,16 +908,16 @@ async function loadOptions() {
     // The heatmap carries the severity thresholds the rating step bands with.
     apiGet('/api/v1/risks/register/heatmap').catch(() => null),
   ]);
-  categories = categoryData?.items || [];
-  assets = assetData?.items || [];
-  users = userData?.items || [];
-  roles = userData?.roles || [];
-  allControls = controlData?.items || [];
-  library = libraryData?.items || [];
-  partyOptions = { ...partyOptions, ...(partyData || {}) };
-  keenAfEnabled = (catalog?.items || []).some((item) => item.slug === 'KEEN-AF:1.0');
+  categories = categoryData.items;
+  assets = assetData.items;
+  users = userData.items;
+  roles = userData.roles;
+  allControls = controlData.items;
+  library = libraryData.items;
+  partyOptions = { ...partyOptions, ...partyData };
+  keenAfEnabled = catalog.items.some((item) => item.slug === 'KEEN-AF:1.0');
   if (registerData?.thresholds) thresholds = registerData.thresholds;
-  $('partyNatureOptions').innerHTML = (partyOptions.natures || [])
+  $('partyNatureOptions').innerHTML = partyOptions.natures
     .map((n) => `<option value="${esc(n)}"></option>`)
     .join('');
   if (canManagePestle && featureEnabled(me, 'pestle')) {
@@ -956,12 +928,11 @@ async function loadOptions() {
         items: [],
       })),
     ]);
-    pestleMeta = meta || pestleMeta;
-    businessProcesses = processes?.items || [];
-    clauses = clauseData?.items || [];
+    pestleMeta = meta;
+    businessProcesses = processes.items;
+    clauses = clauseData.items;
     if (!state.relevance)
-      state.relevance =
-        (pestleMeta.relevance_levels || []).find((l) => l.code !== 'na')?.code || 'na';
+      state.relevance = pestleMeta.relevance_levels.find((l) => l.code !== 'na')?.code;
   }
 }
 
@@ -970,20 +941,18 @@ async function loadExisting() {
     `/api/v1/risks/${encodeURIComponent(editingId)}?framework=${encodeURIComponent(framework)}`,
   );
   state.existing = risk;
-  state.method = (risk.risk_types || []).length ? 'cia' : 'general';
-  state.asset = risk.asset_id
-    ? { id: risk.asset_id, name: risk.asset || risk.asset_entity?.name || '' }
-    : null;
-  state.parties = (risk.interested_parties || []).map((p) => ({
+  state.method = risk.risk_types.length ? 'cia' : 'general';
+  state.asset = { id: risk.asset_id, name: risk.asset };
+  state.parties = risk.interested_parties.map((p) => ({
     kind: p.kind,
     id: p.id,
     label: p.label,
     detail: p.detail,
   }));
-  state.title = risk.title || '';
-  state.description = risk.threat_summary || '';
-  state.note = risk.note || '';
-  state.riskTypes = [...(risk.risk_types || [])];
+  state.title = risk.title;
+  state.description = risk.threat_summary;
+  state.note = risk.note;
+  state.riskTypes = [...risk.risk_types];
   state.inherent = {
     likelihood: clampScore(risk.register_likelihood),
     impact: clampScore(risk.register_impact),
@@ -995,15 +964,15 @@ async function loadExisting() {
   const owner = risk.risk_owner;
   state.owner = owner?.id ? `${owner.type === 'role' ? 'role' : 'user'}:${owner.id}` : '';
   state.treatment = {
-    strategy: risk.treatment_strategy || '',
-    status: risk.treatment_status || 'open',
-    due: risk.treatment_due_at || '',
-    plan: risk.treatment_plan || '',
+    strategy: risk.treatment_strategy,
+    status: risk.treatment_status,
+    due: risk.treatment_due_at,
+    plan: risk.treatment_plan,
   };
-  state.controls = new Set((risk.controls || []).map((c) => c.id));
+  state.controls = new Set(risk.controls.map((c) => c.id));
   $('wizardTitle').textContent = 'Edit risk';
   $('wizardIntro').textContent =
-    `Change anything about “${risk.display || risk.title || 'this risk'}”. The register updates when you save.`;
+    `Change anything about “${risk.display}”. The register updates when you save.`;
 }
 
 function applyDraft(draft) {
@@ -1018,13 +987,13 @@ function applyDraft(draft) {
   if (draft.note) state.note = String(draft.note);
   if (draft.asset_name) {
     const match = assets.find(
-      (a) => String(a.name || '').toLowerCase() === String(draft.asset_name).toLowerCase(),
+      (a) => a.name.toLowerCase() === String(draft.asset_name).toLowerCase(),
     );
     if (match) state.asset = { id: match.id, name: match.name };
     else {
       $('assetSearch').value = String(draft.asset_name);
-      $('newAssetCategory').value = String(draft.category_name || '');
-      $('newAssetSubcategory').value = String(draft.subcategory_name || '');
+      $('newAssetCategory').value = String(draft.category_name ?? '');
+      $('newAssetSubcategory').value = String(draft.subcategory_name ?? '');
     }
   }
   if (Array.isArray(draft.controls)) {
@@ -1037,14 +1006,14 @@ function applyDraft(draft) {
       state.parties.push({
         kind: party.kind,
         id: party.id,
-        label: party.label || '',
-        detail: party.detail || '',
+        label: party.label,
+        detail: party.detail,
       });
     else if (party?.name)
       state.parties.push({
         kind: 'new',
         label: String(party.name),
-        detail: String(party.nature || ''),
+        detail: String(party.nature ?? ''),
       });
   }
   if (draft.mitigator_context && typeof draft.mitigator_context === 'object')
@@ -1096,8 +1065,6 @@ $('skipStep').addEventListener('click', () => {
   stepIndex = Math.min(stepIndex + 1, visibleSteps().length - 1);
   const next = currentStep();
   if (next === 'describe') renderDescribe();
-  if (next === 'rate') renderRatings();
-  if (next === 'controls') renderControls();
   showStep(next);
 });
 
@@ -1113,16 +1080,13 @@ document.addEventListener('click', (ev) => {
     }
     if (step === 'parties') renderParties();
     if (step === 'describe') renderDescribe();
-    if (step === 'rate') renderRatings();
     if (step === 'controls') renderControls();
     goTo(step);
   }
 });
 
 $('methodChoices').addEventListener('change', (ev) => {
-  const input = ev.target.closest('input[name="riskMethod"]');
-  if (!input) return;
-  state.method = input.value;
+  state.method = ev.target.value;
   if (state.template && (state.template.method === 'pestle') !== isPestle()) state.template = null;
   renderMethodChoices();
   // The number of steps depends on the method.
@@ -1142,7 +1106,6 @@ $('assetList').addEventListener('click', (ev) => {
   const btn = ev.target.closest('[data-asset]');
   if (!btn) return;
   const row = assets.find((a) => a.id === btn.dataset.asset);
-  if (!row) return;
   state.asset = state.asset?.id === row.id ? null : { id: row.id, name: row.name };
   state.newAsset = null;
   if (state.asset) $('assetSearch').value = row.name;
@@ -1185,17 +1148,15 @@ $('processList').addEventListener('change', (ev) => {
 
 $('partySearch').addEventListener('input', debounce(renderParties, 120));
 $('partyList').addEventListener('change', (ev) => {
-  const box = ev.target.closest('[data-party]');
-  if (!box) return;
+  const box = ev.target;
   const option = allPartyOptions().find((p) => partyKey(p) === box.dataset.party);
-  if (!option) return;
   state.parties = state.parties.filter((p) => partyKey(p) !== box.dataset.party);
   if (box.checked)
     state.parties.push({
       kind: option.kind,
       id: option.id,
       label: option.label,
-      detail: option.detail || '',
+      detail: option.detail,
     });
   renderSelectedParties();
 });
@@ -1221,9 +1182,7 @@ $('selectedParties').addEventListener('click', (ev) => {
 });
 
 $('pestleTypeChoices').addEventListener('change', (ev) => {
-  const input = ev.target.closest('input[name="pestleType"]');
-  if (!input) return;
-  state.pestleType = input.value;
+  state.pestleType = ev.target.value;
   for (const label of $('pestleTypeChoices').querySelectorAll('label')) {
     const checked = label.querySelector('input').checked;
     label.classList.toggle('btn-info', checked);
@@ -1259,8 +1218,7 @@ $('clauseList').addEventListener('change', (ev) => {
 
 $('controlSearch').addEventListener('input', debounce(renderControls, 120));
 $('controlList').addEventListener('change', (ev) => {
-  const box = ev.target.closest('[data-control]');
-  if (!box) return;
+  const box = ev.target;
   if (box.checked) state.controls.add(box.dataset.control);
   else state.controls.delete(box.dataset.control);
   $('controlCount').textContent = String(state.controls.size);

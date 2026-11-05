@@ -133,7 +133,7 @@ async function refresh() {
   }
   $('finish').hidden =
     !['ready', 'manage'].includes(state.stage) || (state.required && !factors.length);
-  $('finish').disabled = busy || (codesPending && !$('savedCodes').checked);
+  $('finish').disabled = busy;
 }
 function preferredMethod() {
   let saved;

@@ -295,6 +295,7 @@ const pages = {
   soa: 'soa',
   audits: 'audits',
   risks: 'risks',
+  'risk-wizard': 'risks',
   pestle: 'context',
   mitigator: 'mitigator',
   'interested-party': 'context',
@@ -391,16 +392,16 @@ const panes = {
 const own = (map, key) => (Object.hasOwn(map, key) ? map[key] : null);
 export function resolveHelp(trigger) {
   let key = trigger.dataset.helpTopic;
+  // The navigation bar adds the page's Help link. Every page with one names
+  // itself in `pages`, and the admin page always has one of `panes` active;
+  // context-help-launch-and-page-topics.test.mjs holds both.
   if (key === 'page') {
-    const page = document.body.dataset.page || '';
-    const pane = document.querySelector('#adminTabContent > .tab-pane.active');
-    if (page === 'admin') key = own(panes, pane?.id) || 'sources';
+    const page = document.body.dataset.page;
+    if (page === 'admin')
+      key = own(panes, document.querySelector('#adminTabContent > .tab-pane.active').id);
     else {
       const swot = location.pathname === '/swot.html';
-      key =
-        activeTabTopic() ||
-        (swot ? 'swot' : own(pages, page)) ||
-        (page.startsWith('isms') ? 'isms' : 'start');
+      key = activeTabTopic() || (swot ? 'swot' : own(pages, page));
     }
   }
   if (key === 'sources' && document.querySelector('#hub-mapping[aria-selected="true"]'))

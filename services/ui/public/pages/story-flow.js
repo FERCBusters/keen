@@ -52,7 +52,7 @@ export function gridPositions(
 export function createFlowCanvas({
   host,
   editable = false,
-  onChange = () => {},
+  onChange,
   linkFor = (item) => item.url,
 }) {
   let items = [];
@@ -109,9 +109,9 @@ export function createFlowCanvas({
     layer.style.width = `${size.width}px`;
     layer.style.height = `${size.height}px`;
     for (const link of links) {
+      // The server keeps links only between items of the same story.
       const from = byId(link.from_item_id),
         to = byId(link.to_item_id);
-      if (!from || !to) continue;
       const path = linkPath(from, to);
       const group = document.createElementNS(SVG_NS, 'g');
       group.setAttribute('class', 'story-link' + (link === selectedLink ? ' selected' : ''));
@@ -146,7 +146,7 @@ export function createFlowCanvas({
     // Record pages are same-origin paths; anything else stays plain text.
     const href = item.withheld ? '' : localPath(linkFor(item));
     if (!href) return esc(title);
-    const name = `Open ${item.kind_label || item.kind}: ${item.title || title} (opens in a new tab)`;
+    const name = `Open ${item.kind_label}: ${item.title || title} (opens in a new tab)`;
     return `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" draggable="false" title="${esc(name)}" aria-label="${esc(name)}">${esc(title)}</a>`;
   }
 
@@ -157,7 +157,7 @@ export function createFlowCanvas({
     const when = item.occurred_at
       ? `<div class="small-muted story-node-time">${esc(fmtTs(item.occurred_at))}</div>`
       : '';
-    return `<span class="badge badge-soft story-node-kind">${esc(item.kind_label || item.kind)}</span>
+    return `<span class="badge badge-soft story-node-kind">${esc(item.kind_label)}</span>
       <div class="story-node-title">${titleHtml(item, title)}</div>
       ${subtitle ? `<div class="small-muted story-node-subtitle">${esc(subtitle)}</div>` : ''}${when}`;
   }
@@ -172,7 +172,7 @@ export function createFlowCanvas({
       node.style.left = `${item.x}px`;
       node.style.top = `${item.y}px`;
       node.setAttribute('role', 'group');
-      node.setAttribute('aria-label', `${item.kind_label || item.kind}: ${item.title || ''}`);
+      node.setAttribute('aria-label', `${item.kind_label}: ${item.title}`);
       node.innerHTML = nodeHtml(item);
       if (linkFrom === item.id) node.classList.add('story-node-linking');
       layer.append(node);
@@ -192,7 +192,7 @@ export function createFlowCanvas({
   }
 
   function selectLink(link) {
-    selectedLink = link || null;
+    selectedLink = link;
     drawLinks();
     onChange({ type: 'select', link: selectedLink });
   }
@@ -208,8 +208,8 @@ export function createFlowCanvas({
     return link;
   }
 
+  // The page offers link editing only while a link is selected.
   function removeSelectedLink() {
-    if (!selectedLink) return;
     links = links.filter((link) => link !== selectedLink);
     selectedLink = null;
     drawLinks();
@@ -217,8 +217,7 @@ export function createFlowCanvas({
   }
 
   function labelSelectedLink(label) {
-    if (!selectedLink) return;
-    selectedLink.label = String(label || '').slice(0, 128);
+    selectedLink.label = String(label).slice(0, 128);
     drawLinks();
     onChange({ type: 'links' });
   }
@@ -229,7 +228,6 @@ export function createFlowCanvas({
     // A title link opens its record; boxes are dragged by the rest of the box.
     if (!linkMode && ev.target.closest('a')) return;
     const item = byId(node.dataset.itemId);
-    if (!item) return;
     if (linkMode) {
       ev.preventDefault();
       if (!linkFrom) {

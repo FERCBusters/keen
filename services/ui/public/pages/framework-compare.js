@@ -54,7 +54,7 @@ export function compareNodes(before, after) {
 // A linear prefix/suffix diff keeps large imported descriptions inexpensive.
 // Multiple edits in the middle appear together as one replaced passage.
 function textPair(left, right) {
-  if (left === right) return [esc(left || '—'), esc(right || '—')];
+  if (left === right) return [esc(left), esc(right)];
   const a = left.split(/(\s+)/),
     b = right.split(/(\s+)/);
   let start = 0,
@@ -157,7 +157,7 @@ export function frameworkComparison(host) {
         row.status === 'changed'
           ? row.fields
           : FIELDS.filter(([field]) => value(row.left, field) || value(row.right, field));
-      item.innerHTML = `<div class="card-header"><span class="badge text-bg-${tone} me-2">${symbol} ${row.status}</span><strong>${esc(row.kind)} ${esc(row.ref)}</strong> · ${esc((row.right || row.left).title || '')}</div><div class="card-body">${fieldsTable(row.left, row.right, fields, before.name, after.name)}</div>`;
+      item.innerHTML = `<div class="card-header"><span class="badge text-bg-${tone} me-2">${symbol} ${row.status}</span><strong>${esc(row.kind)} ${esc(row.ref)}</strong> · ${esc((row.right || row.left).title)}</div><div class="card-body">${fieldsTable(row.left, row.right, fields, before.name, after.name)}</div>`;
       list.append(item);
     }
     find('[data-prev]').onclick = () => {
@@ -189,7 +189,7 @@ export function frameworkComparison(host) {
         ),
       );
       if (request !== generation) return;
-      rows = compareNodes(old.items || [], next.items || []);
+      rows = compareNodes(old.items, next.items);
       find('[data-feedback]').textContent = '';
       render();
     } catch (error) {

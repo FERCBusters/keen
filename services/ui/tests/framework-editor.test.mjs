@@ -66,6 +66,8 @@ async function editor(t, options = {}) {
         return structuredClone(state.selection);
       }
       const m = u.pathname.match(/^\/api\/v1\/admin\/frameworks\/([^/]+)\/nodes$/);
+      if (m && options.nodesFail?.includes(decodeURIComponent(m[1])))
+        throw new Error('Nodes offline');
       if (m) return { items: structuredClone(state.nodes[decodeURIComponent(m[1])] || []) };
       throw new Error('Unexpected GET ' + u);
     },
@@ -104,6 +106,7 @@ async function editor(t, options = {}) {
   const $ = (id) => ui.el('fe-' + id);
   await settle(
     () =>
+      options.ready?.($) ||
       $('tree').children.length ||
       $('message').textContent ||
       ($('slug').value && !state.nodes[$('slug').value]?.length),
@@ -561,4 +564,54 @@ test('catalogue edit and new actions reveal a separate editor and retain browsin
   $('create').click();
   assert.equal($('editor').hidden, false);
   assert.equal($('slug').value, '');
+});
+
+test('an empty framework catalogue offers nothing to edit and requests no nodes', async (t) => {
+  const { ui, $ } = await editor(t, {
+    selection: selection({ items: [], default: '', environment_restricted: false }),
+    ready: ($) => $('page-status').textContent,
+  });
+  await settle(() => ui.idle());
+  assert.equal($('page-status').textContent, 'No frameworks match these filters.');
+  assert.equal($('message').textContent, '');
+  assert.equal($('frameworks').options.length, 0);
+  assert.equal($('slug').value, '');
+  assert.equal($('tree').children.length, 0);
+  assert.equal(
+    ui.calls.some((c) => c.url.includes('/nodes')),
+    false,
+  );
+});
+
+test('nodes whose parent is missing, or whose reference starts with a symbol, form their own section', async (t) => {
+  const { $ } = await editor(t, {
+    extraNodes: [
+      { kind: 'annex_control', ref: 'B.2', title: 'Orphan', parent_ref: 'B' },
+      { kind: 'custom', ref: '§7', title: 'Symbol' },
+    ],
+  });
+  const row = (ref) => [...$('tree').children].find((b) => b.textContent.startsWith(`${ref}  `));
+  assert.equal(row('B.2').title, 'Section B · annex_control');
+  assert.equal(row('§7').title, 'Section §7 · custom');
+  assert.equal(row('A.5.1').title, 'Section A · annex_control');
+});
+
+test('a declined deletion keeps the node', async (t) => {
+  const prompts = [];
+  const { $, state } = await editor(t, { confirm: (options) => (prompts.push(options), false) });
+  [...$('tree').children].find((b) => b.textContent.startsWith('A.5.1')).click();
+  $('delete-node').click();
+  await settle(() => prompts.length === 1);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(state.removed, []);
+  assert.equal($('ref').value, 'A.5.1');
+  assert.equal($('message').textContent, '');
+});
+
+test("a framework card's Edit reports nodes that cannot load", async (t) => {
+  const { ui, $ } = await editor(t, { nodesFail: ['B'] });
+  ui.document.querySelector('[data-edit-framework="B"]').click();
+  await settle(() => $('message').textContent === 'Nodes offline');
+  assert.equal($('editor').hidden, false);
+  assert.equal($('slug').value, 'B');
 });

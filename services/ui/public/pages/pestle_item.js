@@ -101,7 +101,7 @@ function activateTab(tabName) {
       questions: pestleQuestionsTab,
       changelog: pestleChangelogTab,
     },
-    tabName || 'details',
+    tabName,
     pestleDetailsTab,
   );
   if (!tab || !window.bootstrap?.Tab) return;
@@ -125,16 +125,9 @@ function wireTabs() {
   activateTab(requestedTab);
 }
 
-function relevanceLabel(rowOrCode) {
-  if (typeof rowOrCode === 'object' && rowOrCode) return rowOrCode.label || 'N/A';
-  const code = String(rowOrCode || 'na');
-  return meta.relevance_levels.find((x) => x.code === code)?.label || 'N/A';
-}
-
 function relevanceOptions(selectedCodeOrId = 'na') {
-  const selected =
-    selectedCodeOrId === null || selectedCodeOrId === undefined ? 'na' : String(selectedCodeOrId);
-  return (meta.relevance_levels || [])
+  const selected = String(selectedCodeOrId);
+  return meta.relevance_levels
     .map((r) => {
       const isSelected =
         selected !== '' && (selected === String(r.id) || selected === String(r.code));
@@ -144,19 +137,19 @@ function relevanceOptions(selectedCodeOrId = 'na') {
 }
 
 function badgeForRelevance(rel) {
-  const code = rel?.code || rel || 'na';
+  const code = rel.code;
   let cls = 'text-bg-light';
   if (code === 'high') cls = 'text-bg-danger';
   else if (code === 'medium') cls = 'text-bg-warning';
   else if (code === 'low') cls = 'text-bg-success';
-  return `<span class="badge ${cls}">${esc(relevanceLabel(rel))}</span>`;
+  return `<span class="badge ${cls}">${esc(rel.label)}</span>`;
 }
 
 function fillSelects() {
-  const typeOptions = (meta.types || [])
+  const typeOptions = meta.types
     .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`)
     .join('');
-  const lensOptions = (meta.lenses || [])
+  const lensOptions = meta.lenses
     .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`)
     .join('');
   if (pestleType) pestleType.innerHTML = typeOptions;
@@ -165,11 +158,11 @@ function fillSelects() {
 }
 
 function clauseHref(id) {
-  return withFramework(`/clause.html?id=${encodeURIComponent(id || '')}&tab=pestle`, framework);
+  return withFramework(`/clause.html?id=${encodeURIComponent(id)}&tab=pestle`, framework);
 }
 
 function controlHref(id) {
-  return withFramework(`/control.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(`/control.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function setFormReadOnly(readonly) {
@@ -193,22 +186,21 @@ function setFormReadOnly(readonly) {
 }
 
 function formPayload() {
-  const itemText = (pestleItemText?.value || '').trim();
+  const itemText = pestleItemText.value.trim();
   if (!itemText) throw new Error('Enter a PESTLE(E) item');
   return {
     framework,
-    type: pestleType?.value || 'Political',
-    lens: pestleLens?.value || 'External',
+    type: pestleType.value,
+    lens: pestleLens.value,
     item: itemText,
-    overall_relevance_code: pestleOverallRelevance?.value || 'na',
-    rationale: pestleRationale?.value || '',
+    overall_relevance_code: pestleOverallRelevance.value,
+    rationale: pestleRationale.value,
   };
 }
 
 function renderRelatedControls(item) {
   const rows = Array.isArray(item?.related_controls) ? item.related_controls : [];
   if (relatedControlsCount) relatedControlsCount.textContent = String(rows.length);
-  if (!relatedControls) return;
   if (!item?.id) {
     relatedControls.className = 'p-3 small-muted';
     relatedControls.innerHTML = 'Save the item and map clauses to see related controls.';
@@ -226,8 +218,8 @@ function renderRelatedControls(item) {
     <tbody>${rows
       .map(
         (c) => `<tr>
-      <td class="fw-semibold"><a href="${esc(controlHref(c.id || ''))}">${esc(c.ref || '')}</a></td>
-      <td class="wrap">${esc(c.title || '')}</td>
+      <td class="fw-semibold"><a href="${esc(controlHref(c.id))}">${esc(c.ref)}</a></td>
+      <td class="wrap">${esc(c.title)}</td>
       <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>
     </tr>`,
       )
@@ -238,14 +230,14 @@ function renderRelatedControls(item) {
 function renderItem(item = null) {
   currentItem = item;
   if (pestleId) pestleId.value = item?.id || '';
-  if (pestleType) pestleType.value = item?.type || meta.types?.[0] || 'Political';
-  if (pestleLens) pestleLens.value = item?.lens || meta.lenses?.[0] || 'External';
+  if (pestleType) pestleType.value = item?.type || meta.types[0];
+  if (pestleLens) pestleLens.value = item?.lens || meta.lenses[0];
   if (pestleOverallRelevance) pestleOverallRelevance.value = item?.overall_relevance?.code || 'na';
   if (pestleItemText) pestleItemText.value = item?.item || '';
   if (pestleRationale) pestleRationale.value = item?.rationale || '';
 
   const isExisting = !!item?.id;
-  const title = isExisting ? shorten(item.item || 'PESTLE(E) item', 90) : 'New PESTLE(E) item';
+  const title = isExisting ? shorten(item.item, 90) : 'New PESTLE(E) item';
   if (pestleItemTitle) pestleItemTitle.textContent = title;
   if (pestleEditorTitle)
     pestleEditorTitle.textContent = isExisting
@@ -253,17 +245,13 @@ function renderItem(item = null) {
       : 'New PESTLE(E) item';
   if (pestleItemMeta) {
     const bits = isExisting
-      ? [
-          item.framework || framework,
-          `${item.type || ''} / ${item.lens || ''}`,
-          `updated ${fmtTs(item.updated_at) || 'unknown'}`,
-        ]
+      ? [item.framework, `${item.type} / ${item.lens}`, `updated ${fmtTs(item.updated_at)}`]
       : [framework || 'selected framework', 'new item'];
     pestleItemMeta.textContent = bits.filter(Boolean).join(' · ');
   }
   if (pestleBadges) {
     pestleBadges.innerHTML = isExisting
-      ? `${badgeForRelevance(item.overall_relevance)} <span class="badge badge-soft">${esc(item.type || '')}</span> <span class="badge badge-soft">${esc(item.lens || '')}</span>`
+      ? `${badgeForRelevance(item.overall_relevance)} <span class="badge badge-soft">${esc(item.type)}</span> <span class="badge badge-soft">${esc(item.lens)}</span>`
       : '<span class="badge text-bg-light">unsaved</span>';
   }
 
@@ -281,7 +269,6 @@ function renderItem(item = null) {
 }
 
 function renderProcessRelevance() {
-  if (!businessProcessRelevanceList) return;
   if (!itemId) {
     businessProcessRelevanceList.innerHTML = '<div class="small-muted">Save the item first.</div>';
     return;
@@ -295,10 +282,10 @@ function renderProcessRelevance() {
     <thead><tr><th>Business process</th><th style="width:140px;">Relevance</th></tr></thead>
     <tbody>${processRelevanceRows
       .map((row) => {
-        const bp = row.business_process || {};
+        const bp = row.business_process;
         return `<tr>
-        <td>${esc(bp.name || '')}</td>
-        <td><select class="form-select form-select-sm process-relevance" data-process-id="${esc(bp.id || '')}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
+        <td>${esc(bp.name)}</td>
+        <td><select class="form-select form-select-sm process-relevance" data-process-id="${esc(bp.id)}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
       </tr>`;
       })
       .join('')}</tbody>
@@ -306,7 +293,6 @@ function renderProcessRelevance() {
 }
 
 function renderClauseRelevance() {
-  if (!clauseRelevanceList) return;
   if (!itemId) {
     clauseRelevanceList.innerHTML = '<div class="small-muted">Save the item first.</div>';
     return;
@@ -316,8 +302,8 @@ function renderClauseRelevance() {
     .toLowerCase();
   const rows = clauseRelevanceRows.filter((row) => {
     if (!q) return true;
-    const c = row.clause || {};
-    return `${c.ref || ''} ${c.title || ''}`.toLowerCase().includes(q);
+    const c = row.clause;
+    return `${c.ref} ${c.title}`.toLowerCase().includes(q);
   });
   if (!rows.length) {
     clauseRelevanceList.innerHTML = '<div class="small-muted">No clauses match.</div>';
@@ -327,11 +313,11 @@ function renderClauseRelevance() {
     <thead><tr><th style="width:120px;">Clause</th><th>Title</th><th style="width:140px;">Relevance</th></tr></thead>
     <tbody>${rows
       .map((row) => {
-        const c = row.clause || {};
+        const c = row.clause;
         return `<tr>
-        <td><a class="fw-semibold" href="${esc(clauseHref(c.id || ''))}">${esc(c.ref || '')}</a></td>
-        <td class="wrap small-muted">${esc(c.title || '')}</td>
-        <td><select class="form-select form-select-sm clause-relevance" data-clause-id="${esc(c.id || '')}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
+        <td><a class="fw-semibold" href="${esc(clauseHref(c.id))}">${esc(c.ref)}</a></td>
+        <td class="wrap small-muted">${esc(c.title)}</td>
+        <td><select class="form-select form-select-sm clause-relevance" data-clause-id="${esc(c.id)}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
       </tr>`;
       })
       .join('')}</tbody>
@@ -357,24 +343,18 @@ async function loadItem() {
   renderItem(item);
 }
 
-async function loadItemRelations(id = itemId) {
-  if (!id) {
-    renderProcessRelevance();
-    renderClauseRelevance();
-    return;
-  }
+async function loadItemRelations(id) {
   const [bpData, clauseData] = await Promise.all([
     apiGet(`/api/v1/pestle/items/${encodeURIComponent(id)}/business-processes`),
     apiGet(`/api/v1/pestle/items/${encodeURIComponent(id)}/clauses`),
   ]);
-  processRelevanceRows = bpData?.items || [];
-  clauseRelevanceRows = clauseData?.items || [];
+  processRelevanceRows = bpData.items;
+  clauseRelevanceRows = clauseData.items;
   renderProcessRelevance();
   renderClauseRelevance();
 }
 
 async function loadPestleChangelog() {
-  if (!pestleChangelogEl) return;
   if (!itemId) {
     pestleChangelogEl.innerHTML = '<div class="p-3 small-muted">Save the item first.</div>';
     return;
@@ -422,27 +402,25 @@ async function saveCurrentItem(ev) {
 
 function collectProcessRelevancePayload() {
   return {
-    items: Array.from(businessProcessRelevanceList?.querySelectorAll('.process-relevance') || [])
+    items: Array.from(businessProcessRelevanceList.querySelectorAll('.process-relevance'))
       .map((sel) => ({
         business_process_id: sel.dataset.processId,
-        relevance_code: sel.value || 'na',
+        relevance_code: sel.value,
       }))
       .filter((x) => x.business_process_id),
   };
 }
 
 function collectClauseRelevancePayload() {
-  const visible = Array.from(clauseRelevanceList?.querySelectorAll('.clause-relevance') || []);
-  const updates = new Map(
-    visible.map((sel) => [String(sel.dataset.clauseId || ''), sel.value || 'na']),
-  );
+  const visible = Array.from(clauseRelevanceList.querySelectorAll('.clause-relevance'));
+  const updates = new Map(visible.map((sel) => [sel.dataset.clauseId, sel.value]));
   return {
     items: clauseRelevanceRows
       .map((row) => {
-        const cid = String(row.clause?.id || '');
+        const cid = row.clause.id;
         return {
           clause_id: cid,
-          relevance_code: updates.has(cid) ? updates.get(cid) : row.relevance?.code || 'na',
+          relevance_code: updates.has(cid) ? updates.get(cid) : row.relevance.code,
         };
       })
       .filter((x) => x.clause_id),
@@ -460,7 +438,7 @@ saveBusinessProcessRelevance?.addEventListener('click', async () => {
       `/api/v1/pestle/items/${encodeURIComponent(itemId)}/business-processes`,
       collectProcessRelevancePayload(),
     );
-    processRelevanceRows = data?.items || [];
+    processRelevanceRows = data.items;
     renderProcessRelevance();
     await Promise.all([loadItem(), loadPestleChangelog()]);
     toast(status, 'Business process relevance saved', 'success');
@@ -479,7 +457,7 @@ saveClauseRelevance?.addEventListener('click', async () => {
       `/api/v1/pestle/items/${encodeURIComponent(itemId)}/clauses`,
       collectClauseRelevancePayload(),
     );
-    clauseRelevanceRows = data?.items || [];
+    clauseRelevanceRows = data.items;
     renderClauseRelevance();
     await Promise.all([loadItem(), loadPestleChangelog()]);
     toast(status, 'Clause relevance saved', 'success');
@@ -494,15 +472,14 @@ samplePestleAudit?.addEventListener('click', () => {
   openAuditSampleModal({
     me,
     entityType: 'pestle_item',
-    entityId: currentItem?.id || itemId,
-    title: currentItem?.item || 'PESTLE(E) item',
-    framework: currentItem?.framework || framework,
+    entityId: currentItem.id,
+    title: currentItem.item,
+    framework: currentItem.framework,
     statusEl: status,
   });
 });
 
 deletePestleItem?.addEventListener('click', async () => {
-  if (!canManagePestle || !itemId) return;
   if (
     !(await confirmAction({
       title: 'Delete PESTLE(E) item',

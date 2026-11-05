@@ -85,12 +85,18 @@ const graphs = {
           kind: 'communication',
           count: 2,
         },
-        { id: 'c9', kind: 'control', ref: 'A.9', label: 'A.9 Access control' },
+        {
+          id: 'communication|Audit|Annually|Board|Report',
+          label: 'Audit × Board',
+          subtitle: 'Annually · Report',
+          kind: 'communication',
+          count: 1,
+        },
       ],
     },
     links: [
       { source: 'p1', target: 'communication|Breach|72h|Commissioner|Email', count: 2 },
-      { source: 'p2', target: 'c9', count: 1 },
+      { source: 'p2', target: 'communication|Audit|Annually|Board|Report', count: 1 },
       { source: 'p2', target: 'missing' },
     ],
     stats: { left_count: 2, right_count: 2, link_count: 3 },
@@ -355,17 +361,17 @@ test('the communications graph draws linked parties and rules with full-label to
   );
   assert.equal(nodes[0].querySelector('text').querySelectorAll('tspan').length, 2);
   assert.equal(nodes[0].style.cursor, 'pointer');
-  // Communication rules have no page of their own; controls do.
+  // Communication rules have no page of their own.
   assert.equal(nodes[2].style.cursor, '');
   assert.match(nodes[2].textContent, /Breach × Commissioner \(2\)/);
   assert.match(nodes[2].textContent, /72h · Email/);
-  assert.equal(nodes[3].style.cursor, 'pointer');
-  assert.match(nodes[3].textContent, /^A\.9/);
-  assert.match(nodes[3].textContent, /Access control/);
+  assert.equal(nodes[3].style.cursor, '');
+  assert.match(nodes[3].textContent, /^Audit × Board/);
+  assert.match(nodes[3].textContent, /Annually · Report/);
   const links = [...svg.querySelectorAll('path > title')].map((x) => x.textContent);
   assert.deepEqual(links, [
     `${longParty} × Breach × Commissioner (2)`,
-    'Customers × A.9 Access control',
+    'Customers × Audit × Board',
     'Customers × Related item',
   ]);
   host.querySelector('[data-zoom="in"]').click();

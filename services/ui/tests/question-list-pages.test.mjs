@@ -35,6 +35,7 @@ async function questionsPage(t, name, options = {}) {
   const ui = await page(t, name, {
     me: options.me || { is_admin: true },
     globals: options.globals,
+    confirm: options.confirm,
     vendor: options.vendor,
     setup(window) {
       // The design system's navbar exposes this hook for the question bell.
@@ -97,17 +98,19 @@ test('the admin queue filters by status and refreshes', async (t) => {
 });
 
 test('question deletion confirms and reloads the queue', async (t) => {
-  const cancelled = await questionsPage(t, 'questions', { globals: { confirm: () => false } });
+  const cancelled = await questionsPage(t, 'questions', { confirm: false });
   cancelled.ui.document.querySelector('[data-delete-question="t1"]').click();
+  await settle(() => cancelled.ui.confirmations.length === 1);
+  await new Promise((r) => setTimeout(r, 5));
   assert.deepEqual(cancelled.state.removed, []);
-  const { ui, state } = await questionsPage(t, 'questions', { globals: { confirm: () => true } });
+  assert.equal(cancelled.ui.el('queueBody').querySelectorAll('tr').length, 3);
+  const { ui, state } = await questionsPage(t, 'questions');
   ui.document.querySelector('[data-delete-question="t2"]').click();
   await settle(() => ui.el('queueBody').querySelectorAll('tr').length === 2);
   assert.deepEqual(state.removed, ['/api/v1/questions/t2']);
   assert.equal(ui.el('status').textContent, 'Question deleted');
   const failed = await questionsPage(t, 'questions', {
     deleteFail: true,
-    globals: { confirm: () => true },
   });
   failed.ui.document.querySelector('[data-delete-question="t1"]').click();
   await settle(() => failed.ui.el('status').textContent === 'Delete refused');
@@ -130,7 +133,6 @@ test('users with delete permission can remove their threads; empty and failed li
   const { ui, state } = await questionsPage(t, 'questions', {
     me: { can_delete_questions: true },
     items: [items[0]],
-    globals: { confirm: () => true },
   });
   ui.document.querySelector('[data-delete-question="t1"]').click();
   await settle(() => ui.el('questionsEmpty').style.display === '');

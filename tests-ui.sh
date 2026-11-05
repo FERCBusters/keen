@@ -9,11 +9,10 @@ if [ ! -f services/ui/tests/node_modules/c8/bin/c8.js ]; then
   echo 'Install frontend test dependencies: npm ci --prefix services/ui/tests' >&2
   exit 1
 fi
-# The coverage floors sit a little below the current totals; raise them as
-# coverage rises.
+# Every statement, branch and function of the first-party UI is tested.
 node services/ui/tests/node_modules/c8/bin/c8.js \
-  --all --include='services/ui/public/app.js' --include='services/ui/public/pages/**/*.js' \
-  --check-coverage --lines 99 --branches 76 --functions 98 \
+  --all --include='services/ui/public/**/*.js' --exclude='services/ui/public/vendor/**' \
+  --check-coverage --statements 100 --lines 100 --branches 100 --functions 100 \
   --reporter=text-summary --reporter=json-summary --reporter=lcov --reporter=html \
   --reports-dir="$report_dir/frontend-coverage" \
   node --experimental-vm-modules --test \

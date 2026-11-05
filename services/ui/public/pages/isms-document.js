@@ -23,7 +23,7 @@ import {
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
-const params = new URLSearchParams(window.location.search || '');
+const params = new URLSearchParams(window.location.search);
 const documentId = params.get('id') || params.get('document') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
@@ -32,7 +32,7 @@ const canSampleAudits = canSampleIntoAudit(me, 'isms');
 let documentRow = null;
 
 function documentHref(id = documentId) {
-  return withFramework(`/isms-document.html?id=${encodeURIComponent(id || '')}`, framework);
+  return withFramework(`/isms-document.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function fileHref(row) {
@@ -40,7 +40,7 @@ function fileHref(row) {
 }
 
 function renderDocument(row) {
-  documentRow = row || {};
+  documentRow = row;
   const title = documentRow.title || 'Policy / Process';
   document.title = `Keen - ${title}`;
   $('documentTitle').textContent = title;
@@ -48,7 +48,7 @@ function renderDocument(row) {
     documentRow.document_type || 'document',
     documentRow.has_file ? 'uploaded file' : '',
     documentRow.external_url ? 'external URL' : '',
-    `updated ${fmtTs(documentRow.updated_at) || '-'}`,
+    `updated ${fmtTs(documentRow.updated_at)}`,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -57,7 +57,7 @@ function renderDocument(row) {
   $('documentContent').innerHTML = renderRichTextContent(documentRow.content_html);
   $('documentTags').textContent = (documentRow.tags || []).join(', ') || '-';
   $('documentType').textContent = documentRow.document_type || '-';
-  $('documentUpdated').textContent = fmtTs(documentRow.updated_at) || '-';
+  $('documentUpdated').textContent = fmtTs(documentRow.updated_at);
   $('documentUploadedAt').textContent = fmtTs(documentRow.uploaded_at) || '-';
   $('documentUploadedBy').innerHTML = userPillHtml(documentRow.uploaded_by);
   $('documentControls').innerHTML = controlBadges(documentRow.controls, framework, { tab: '' });
@@ -81,7 +81,7 @@ function renderDocument(row) {
   const edit = $('editDocumentLink');
   if (edit) {
     edit.href = withFramework(
-      `/isms.html?tab=documents&edit=document:${encodeURIComponent(documentRow.id || '')}`,
+      `/isms.html?tab=documents&edit=document:${encodeURIComponent(documentRow.id)}`,
       framework,
     );
     edit.style.display = canManageIsms ? '' : 'none';
@@ -116,12 +116,11 @@ async function load() {
 }
 
 $('sampleDocumentAudit')?.addEventListener('click', () => {
-  if (!documentRow) return;
   openAuditSampleModal({
     me,
     entityType: 'isms_document',
     entityId: documentRow.id,
-    title: documentRow.title || 'ISMS document',
+    title: documentRow.title,
     evidenceUrl: documentHref(documentRow.id),
     framework,
     statusEl: status,

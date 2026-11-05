@@ -51,8 +51,9 @@ responses. These DOM integration tests run in jsdom; real-browser end-to-end
 behaviour is outside their scope.
 
 `test-results/frontend.xml` contains JUnit results. Frontend HTML and LCOV
-reports live in `test-results/frontend-coverage/`. Coverage includes all
-first-party page modules, including untested pages; vendor code is excluded.
+reports live in `test-results/frontend-coverage/`. Coverage includes every
+first-party script under `services/ui/public`, the Help site's among them;
+vendor code is excluded.
 The VM-module flag used by the harness can emit a Node experimental warning.
 
 ## Backend contracts and coverage
@@ -87,11 +88,10 @@ and frontend reports alongside them. Both suites run even if backend tests fail.
 Coverage measures the whole application, including modules a change leaves
 untouched. A change that leaves its behaviour untested fails the run: every
 statement and branch of the API is tested, and `tests.sh` requires that of
-pytest's combined statement and branch coverage, while `tests-ui.sh` gives c8
-minimums for lines, branches and functions a little below the UI's current
-level. Raise a UI floor when coverage rises, and explain any reduction in the
-change that makes it. Use the HTML reports to find uncovered behaviour, then
-add assertions that exercise it through the page or API.
+pytest's combined statement and branch coverage. Every statement, branch and
+function of the first-party UI is tested too, and `tests-ui.sh` requires that
+of c8's coverage. Use the HTML reports to find uncovered behaviour, then add
+assertions that exercise it through the page or API.
 
 Each test asserts the outcome of the condition it reaches, so deleting or
 inverting that condition fails it: a status and message, a value, the rows kept
@@ -99,8 +99,8 @@ or changed, what was sent or logged. Fakes stand in only at boundaries such as
 network peers, Valkey, storage and the clock, to produce the failure a branch
 handles. Code that cannot run is removed, and a guard on untrusted input or
 authorisation that no route reaches yet is tested by calling it directly.
-Coverage exclusions such as `# pragma: no cover` are reserved for the few
-lines listed in the repository today.
+The API and the UI carry no coverage exclusions such as `# pragma: no cover`
+or `c8 ignore` comments, and a change adds none.
 
 A test that holds work to a time budget measures it with
 `tests.timing.measured`. Late in a run, a full garbage collection walks every

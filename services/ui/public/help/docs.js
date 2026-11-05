@@ -30,11 +30,10 @@ if (window.matchMedia('(max-width: 850px)').matches) {
 
 const themeToggle = document.getElementById('docs-theme-toggle');
 function describeTheme() {
-  if (themeToggle)
-    themeToggle.textContent =
-      document.documentElement.dataset.bsTheme === 'dark' ? 'Light mode' : 'Dark mode';
+  themeToggle.textContent =
+    document.documentElement.dataset.bsTheme === 'dark' ? 'Light mode' : 'Dark mode';
 }
-themeToggle?.addEventListener('click', () => {
+themeToggle.addEventListener('click', () => {
   const root = document.documentElement;
   root.dataset.bsTheme = root.dataset.bsTheme === 'dark' ? 'light' : 'dark';
   try {

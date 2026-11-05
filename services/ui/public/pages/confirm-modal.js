@@ -77,9 +77,7 @@ function ensureDialog() {
   dialog.querySelector('[data-confirm]').addEventListener('click', () => finish(true));
   const typedInput = dialog.querySelector('[data-typed-input]');
   typedInput.addEventListener('input', () => {
-    const expected = String(dialog.dataset.typedWord || '')
-      .trim()
-      .toLowerCase();
+    const expected = dialog.dataset.typedWord.trim().toLowerCase();
     dialog.querySelector('[data-confirm]').disabled =
       typedInput.value.trim().toLowerCase() !== expected;
   });

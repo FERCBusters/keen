@@ -1,6 +1,6 @@
 import { enrollmentProfiles } from './agent-enrollment.js';
 import { openState, platformIcon } from './platform.js';
-import { fmtTs, apiGet, apiPost, apiPatch, initNavbar, confirmAction, esc } from '/app.js';
+import { fmtTs, apiGet, apiPost, apiPatch, confirmAction, esc } from '/app.js';
 const root = '/api/v1/admin/agents',
   $ = (id) => document.getElementById('ka-' + id);
 let people = [];
@@ -38,7 +38,7 @@ function msg(text, tone = 'info') {
   $('status').hidden = !text;
 }
 function fail(e) {
-  let text = String(e.message || e);
+  let text = e.message;
   try {
     const d = JSON.parse(text).detail;
     text = typeof d === 'string' ? d : 'Request failed; check the entered values.';
@@ -444,7 +444,6 @@ $('yaml').onclick = () => {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-if (!document.getElementById('pane-agents')) await initNavbar();
 await load().catch(fail);
 setInterval(() => {
   if (!document.hidden) load().catch(fail);

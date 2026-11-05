@@ -178,7 +178,8 @@ test('link mode joins two boxes, labels the link and removes it again', async (t
     to_item_id: 'i3',
     label: 'then',
   });
-  // Clicking a drawn link selects it; empty canvas clears the selection.
+  // Clicking a drawn link selects it, and removing it clears the selection.
+  // story-flow-stacked-boxes-and-selection clears a selection from the canvas.
   host
     .querySelector('[data-link-from="i1"] .story-link-hit')
     .dispatchEvent(new ui.window.MouseEvent('click', { bubbles: true }));
@@ -188,9 +189,6 @@ test('link mode joins two boxes, labels the link and removes it again', async (t
     flow.layout().links.map((l) => l.from_item_id),
     ['i2'],
   );
-  host
-    .querySelector('.story-flow-nodes')
-    .dispatchEvent(new ui.window.MouseEvent('click', { bubbles: true }));
   assert.equal(flow.selectedLink, null);
   flow.setLinkMode(false);
   assert.equal(host.classList.contains('story-flow-link-mode'), false);

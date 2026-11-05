@@ -71,7 +71,7 @@ function itemHtml(item) {
   const controls = (item.controls || [])
     .map(
       (c) =>
-        `<a class="badge badge-soft me-1" href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" title="${esc(c.title || '')}">${esc(c.ref)}</a>`,
+        `<a class="badge badge-soft me-1" href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
     )
     .join('');
   const editor = story?.can_edit
@@ -109,7 +109,7 @@ function render() {
     `badge ${story.status === 'closed' ? 'text-bg-secondary' : 'text-bg-success'}`;
   $('storyMeta').textContent =
     `${story.item_count} item${story.item_count === 1 ? '' : 's'} · created by ${story.created_by || 'unknown'} · updated ${fmtTs(story.updated_at)}`;
-  $('storySummary').textContent = story.summary || '';
+  $('storySummary').textContent = story.summary;
   $('storySummary').hidden = !story.summary;
   $('edit').hidden = !story.can_edit;
   $('deleteStory').hidden = !story.can_edit;
@@ -119,21 +119,21 @@ function render() {
   $('flowHint').hidden = !story.can_edit;
   $('commentForm').hidden = false;
   $('commentCount').textContent = story.comment_count ? String(story.comment_count) : '';
-  const controls = story.controls || [];
+  const controls = story.controls;
   $('controlsLine').hidden = !controls.length;
   $('controlsList').innerHTML = controls
     .map(
       (c) =>
-        `<a class="badge badge-soft me-1" href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" title="${esc(c.title || '')}">${esc(c.ref)}</a>`,
+        `<a class="badge badge-soft me-1" href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
     )
     .join('');
-  const ordered = timelineOrder(story.items || []);
+  const ordered = timelineOrder(story.items);
   $('timeline').innerHTML = ordered.length
     ? ordered.map(itemHtml).join('')
     : '<li class="small-muted">No items yet. Add events from the Events screen or records below.</li>';
   flow.setEditable(story.can_edit);
   // The flow chart receives the items in timeline order so Arrange by time follows it.
-  flow.load(ordered, story.links || []);
+  flow.load(ordered, story.links);
   layoutDirty = false;
   $('saveLayout').disabled = true;
   $('linkEditor').hidden = true;
@@ -153,7 +153,7 @@ function applyStory(next) {
 
 $('edit').addEventListener('click', () => {
   $('title').value = story.title;
-  $('summary').value = story.summary || '';
+  $('summary').value = story.summary;
   $('statusSelect').value = story.status;
   $('storyForm').hidden = false;
   $('title').focus();
@@ -243,7 +243,7 @@ async function findCandidates() {
     if (kind === 'event') {
       const params = new URLSearchParams({ q, limit: '20', framework });
       const data = await apiGet(`/api/v1/events?${params}`);
-      candidates = (data.items || []).map((event) => ({
+      candidates = data.items.map((event) => ({
         kind,
         kind_label: 'Event',
         id: event.id,
@@ -254,14 +254,14 @@ async function findCandidates() {
       const data = await apiGet(
         `/api/v1/stories/choices/${encodeURIComponent(kind)}?q=${encodeURIComponent(q)}`,
       );
-      candidates = (data.items || []).map((record) => ({
+      candidates = data.items.map((record) => ({
         kind,
         kind_label: $('addKind').selectedOptions[0].textContent,
         id: record.target_id,
         title: record.title,
       }));
     }
-    const present = new Set((story.items || []).map((item) => `${item.kind}:${item.entity_id}`));
+    const present = new Set(story.items.map((item) => `${item.kind}:${item.entity_id}`));
     candidates = candidates.filter((c) => !present.has(`${c.kind}:${c.id}`));
     list.innerHTML = candidates.length
       ? candidates.map(candidateHtml).join('')
@@ -335,9 +335,9 @@ $('timeline').addEventListener('click', async (ev) => {
     fail(error);
   }
 });
+// Every form in the timeline edits one item.
 $('timeline').addEventListener('submit', async (ev) => {
   const form = ev.target.closest('[data-item-form]');
-  if (!form) return;
   ev.preventDefault();
   const when = form.elements.occurred_at.value;
   const payload = {
@@ -387,7 +387,7 @@ window.addEventListener('beforeunload', (ev) => {
 
 async function loadComments() {
   const data = await apiGet(`${base}/comments`);
-  const items = data.items || [];
+  const items = data.items;
   $('comments').innerHTML = items.length
     ? items
         .map(
@@ -436,7 +436,8 @@ const storyQuestions = mountQuestionThreads({
   me,
   status: $('status'),
   placeholder: 'Write a question about this story',
-  base: () => (storyId ? `/api/v1/questions/entities/story/${encodeURIComponent(storyId)}` : null),
+  // The page stops before loading questions when no story is named.
+  base: () => `/api/v1/questions/entities/story/${encodeURIComponent(storyId)}`,
 });
 
 // --- Start -------------------------------------------------------------------

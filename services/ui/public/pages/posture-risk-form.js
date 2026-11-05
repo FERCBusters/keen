@@ -26,16 +26,16 @@ const tones = {
 export const OPERATORS = { lt: '<', lte: '≤', eq: '=', gte: '≥', gt: '>' };
 
 export function postureBadge(status) {
-  return `<span class="badge text-bg-${tones[status] || 'secondary'}">${esc(POSTURE_LABELS[status] || 'Not established')}</span>`;
+  return `<span class="badge text-bg-${tones[status]}">${esc(POSTURE_LABELS[status])}</span>`;
 }
 
 // Linked risks as text: an accepted risk names its review date, and a lapsed
 // acceptance says so. Titles arrive only for viewers with risk access.
 export function linkedRisks(list, framework) {
-  return (list || [])
+  return list
     .map((r) => {
       const state = r.accepted
-        ? `Risk accepted until ${esc(r.due || '')}`
+        ? `Risk accepted until ${esc(r.due)}`
         : r.acceptance_expired
           ? 'Acceptance expired'
           : 'Risk recorded';
@@ -190,7 +190,7 @@ export function openPostureRiskForm({
     } catch (error) {
       submit.disabled = false;
       status.className = 'col-12 small text-danger';
-      status.textContent = errorText(error) || 'The risk could not be saved.';
+      status.textContent = errorText(error);
       return;
     }
     await saved(created, framework);

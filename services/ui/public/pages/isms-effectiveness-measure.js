@@ -31,7 +31,7 @@ const me = await initNavbar();
 enableTableSorting();
 
 const framework = getCurrentFramework();
-const params = new URLSearchParams(window.location.search || '');
+const params = new URLSearchParams(window.location.search);
 const measureId = params.get('id') || params.get('measure') || '';
 const status = document.getElementById('status');
 const $ = (id) => document.getElementById(id);
@@ -42,25 +42,19 @@ let metrics = [];
 let sourceMeta = {};
 
 function measureHref(id = measureId) {
-  return withFramework(
-    `/isms-effectiveness-measure.html?id=${encodeURIComponent(id || '')}`,
-    framework,
-  );
+  return withFramework(`/isms-effectiveness-measure.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function metricHref(id) {
-  return withFramework(
-    `/isms-effectiveness-metric.html?id=${encodeURIComponent(id || '')}`,
-    framework,
-  );
+  return withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function sourceHtml(entry) {
-  const source = entry?.source_type || 'other';
+  const source = entry.source_type;
   const badge = sourceBadgeHtml(
     source,
     sourceMeta,
-    source ? withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework) : '',
+    withFramework(`/source.html?source=${encodeURIComponent(source)}`, framework),
   );
   const title = entry?.source_url
     ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || 'Open source')}</a>`
@@ -85,7 +79,7 @@ function latestValueHtml(entry, row) {
 
 export function thresholdExplanationHtml(row) {
   const target = String(row?.target_display || '').trim();
-  const unit = String(row?.target_unit || '').trim();
+  const unit = String(row.target_unit).trim();
   if (!target) {
     return `<p class="mb-0">This measure has no numeric target. Each metric entry records the observed value or qualitative result for its period; review the history to judge the trend.</p>`;
   }
@@ -93,7 +87,7 @@ export function thresholdExplanationHtml(row) {
 }
 
 function measureSourceHtml(row) {
-  const source = String(row?.source_type || 'other').trim() || 'other';
+  const source = row.source_type;
   if (source === 'other') return 'Other';
   return sourceBadgeHtml(
     source,
@@ -103,12 +97,12 @@ function measureSourceHtml(row) {
 }
 
 function renderMeasure(row) {
-  measure = row || {};
+  measure = row;
   const title = measure.summary || 'Effectiveness measure';
   document.title = `Keen - ${title}`;
   $('measureTitle').textContent = title;
   $('measureMeta').textContent = [
-    measure.framework || framework,
+    measure.framework,
     measure.metric_key ? `key: ${measure.metric_key}` : '',
     measure.metric_entry_count
       ? `${measure.metric_entry_count} metric entries`
@@ -136,18 +130,18 @@ function renderMeasure(row) {
       panel,
       () => ({
         key: measure.metric_key,
-        framework: measure.framework || framework,
-        unit: measure.target_unit || '',
-        sourceType: measure.source_type || 'other',
+        framework: measure.framework,
+        unit: measure.target_unit,
+        sourceType: measure.source_type,
       }),
       {
-        secretPath: `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measure.id)}/submission-secret?framework=${encodeURIComponent(measure.framework || framework)}`,
+        secretPath: `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measure.id)}/submission-secret?framework=${encodeURIComponent(measure.framework)}`,
         issuedAt: measure.submission_secret_issued_at,
       },
     );
   }
   $('metricKey').innerHTML = measure.metric_key ? `<code>${esc(measure.metric_key)}</code>` : '-';
-  $('measureUpdated').textContent = fmtTs(measure.updated_at) || '-';
+  $('measureUpdated').textContent = fmtTs(measure.updated_at);
   $('linkedControls').innerHTML = effectivenessControlBadges(measure.controls, framework);
   // A quiz's measure records the quiz's results and changes from the quiz.
   const quiz = measure.quiz;
@@ -179,7 +173,6 @@ function renderMeasure(row) {
 
 function renderMetrics() {
   const tbody = $('metricsRows');
-  if (!tbody) return;
   const q = String($('metricsFilter')?.value || '')
     .trim()
     .toLowerCase();
@@ -210,7 +203,7 @@ function renderMetrics() {
             ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-metric="${esc(entry.id)}" title="Delete metric entry"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete metric entry</span></button>`
             : '';
         return `<tr data-metric-id="${esc(entry.id)}">
-      <td class="small-muted" data-sort="${esc(entry.recorded_at || '')}">${esc(fmtTs(entry.recorded_at) || '-')}</td>
+      <td class="small-muted" data-sort="${esc(entry.recorded_at)}">${esc(fmtTs(entry.recorded_at))}</td>
       <td>${esc(entry.period || '-')}</td>
       <td>${effectivenessMetricValueHtml(entry, measure, { href: metricHref(entry.id), fallback: 'Metric entry' })}${effectivenessMetricThresholdBadgeHtml(measure, entry)}</td>
       <td class="wrap">${sourceHtml(entry)}</td>
@@ -222,14 +215,12 @@ function renderMetrics() {
     '<tr><td colspan="6" class="p-4 small-muted">No metric entries recorded yet.</td></tr>';
 }
 
+// Every entry has a recorded time, so each one has a date.
 function metricEntryDate(entry) {
-  const raw = entry?.recorded_at || entry?.created_at || '';
-  const ms = Date.parse(raw);
-  return Number.isFinite(ms) ? new Date(ms) : null;
+  return new Date(entry.recorded_at);
 }
 
 function isoDateOnly(date) {
-  if (!(date instanceof Date) || !Number.isFinite(date.getTime())) return '';
   return date.toISOString().slice(0, 10);
 }
 
@@ -237,8 +228,7 @@ function metricEntryNumericValue(entry) {
   // Qualitative-only entries carry metric_value: null, which Number() would read as 0.
   const raw = entry?.metric_value;
   if (raw === null || raw === undefined || raw === '') return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
+  return Number(raw);
 }
 
 // Entries for the selected source within the selected period, split into the
@@ -249,14 +239,14 @@ function metricTrendSelection() {
   const to = String($('trendTo')?.value || '').trim();
   const fromMs = from ? Date.parse(`${from}T00:00:00Z`) : null;
   const toMs = to ? Date.parse(`${to}T23:59:59.999Z`) : null;
-  const selected = (metrics || [])
+  const selected = metrics
     .map((entry) => ({
       entry,
       date: metricEntryDate(entry),
       value: metricEntryNumericValue(entry),
     }))
     .filter((x) => x.date)
-    .filter((x) => !src || String(x.entry.source_type || '') === src)
+    .filter((x) => !src || x.entry.source_type === src)
     .filter((x) => fromMs === null || x.date.getTime() >= fromMs)
     .filter((x) => toMs === null || x.date.getTime() <= toMs);
   const data = selected.filter((x) => x.value !== null).sort((a, b) => a.date - b.date);
@@ -265,12 +255,9 @@ function metricTrendSelection() {
 
 function populateTrendSources() {
   const select = $('trendSource');
-  if (!select) return;
   const current = String(select.value || '').trim();
   const sources = Array.from(
-    new Set(
-      (metrics || []).map((entry) => String(entry.source_type || 'other').trim()).filter(Boolean),
-    ),
+    new Set(metrics.map((entry) => String(entry.source_type).trim()).filter(Boolean)),
   ).sort((a, b) => a.localeCompare(b));
   select.innerHTML =
     '<option value="">All sources</option>' +
@@ -282,7 +269,7 @@ function populateTrendSources() {
 }
 
 function resetTrendRangeToData() {
-  const dated = (metrics || [])
+  const dated = metrics
     .map(metricEntryDate)
     .filter(Boolean)
     .sort((a, b) => a - b);
@@ -293,7 +280,6 @@ function resetTrendRangeToData() {
 function renderMetricTrend() {
   const svgEl = $('metricTrendSvg');
   const meta = $('trendMeta');
-  if (!svgEl || !meta) return;
   const d3lib = window.d3;
   if (!d3lib) {
     meta.textContent = 'D3 is unavailable; cannot render metric trend visualisation.';
@@ -386,7 +372,7 @@ function renderMetricTrend() {
     .append('title')
     .text(
       (d) =>
-        `${d.entry.value_display || d.value}\n${fmtTs(d.entry.recorded_at)}\n${d.entry.source_title || d.entry.source_type || ''}`,
+        `${d.entry.value_display}\n${fmtTs(d.entry.recorded_at)}\n${d.entry.source_title || d.entry.source_type}`,
     );
 
   svg
@@ -398,7 +384,8 @@ function renderMetricTrend() {
     .attr('cy', (d) => y(d.value))
     .attr('r', 3.5);
 
-  const target = Number(measure?.target_value);
+  // A measure without a numeric target has no target line; Number(null) would draw one at 0.
+  const target = Number(measure?.target_value ?? NaN);
   if (Number.isFinite(target) && target >= y.domain()[0] && target <= y.domain()[1]) {
     svg
       .append('line')
@@ -413,7 +400,7 @@ function renderMetricTrend() {
       .attr('x', width - margin.right)
       .attr('y', y(target) - 6)
       .attr('text-anchor', 'end')
-      .text(`Target ${measure.target_display || target}`);
+      .text(`Target ${measure.target_display}`);
   }
 
   meta.textContent = `${data.length} numeric metric ${data.length === 1 ? 'entry' : 'entries'} plotted${selectedSource ? ` for ${selectedSource}` : ''}${nonNumericCount ? ` (${nonNumericCount} qualitative/non-numeric omitted)` : ''}.`;
@@ -423,14 +410,9 @@ async function loadSourceMeta() {
   try {
     const data = await apiGet('/api/v1/sources');
     sourceMeta = {};
-    for (const x of data.items || []) {
-      const src = String(x.source || '').trim();
-      if (!src) continue;
-      sourceMeta[src] = {
-        source: src,
-        label: String(x.label || src).trim() || src,
-        color: String(x.color || '').trim(),
-      };
+    for (const x of data.items) {
+      const src = String(x.source).trim();
+      sourceMeta[src] = { source: src, label: x.label, color: x.color };
     }
   } catch {
     sourceMeta = {};
@@ -468,7 +450,7 @@ async function load() {
     const metricData = await apiGet(
       `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}/metrics?framework=${encodeURIComponent(framework)}`,
     );
-    metrics = metricData.items || [];
+    metrics = metricData.items;
     renderMetrics();
     populateTrendSources();
     resetTrendRangeToData();
@@ -498,13 +480,13 @@ window.addEventListener('resize', () => {
       renderMetricTrend();
   });
 });
+// The button is shown once the measure has loaded.
 $('sampleMeasureAudit')?.addEventListener('click', () => {
-  if (!measure) return;
   openAuditSampleModal({
     me,
     entityType: 'isms_effectiveness_measure',
     entityId: measure.id,
-    title: measure.summary || measure.metric || 'Effectiveness measure',
+    title: measure.summary || 'Effectiveness measure',
     evidenceUrl: measureHref(measure.id),
     framework,
     statusEl: status,
@@ -544,8 +526,7 @@ document.addEventListener('click', async (ev) => {
         `/api/v1/isms/effectiveness-metrics/${encodeURIComponent(id)}?framework=${encodeURIComponent(framework)}`,
       );
       metrics = metrics.filter((x) => String(x.id) !== String(id));
-      if (measure)
-        measure.metric_entry_count = Math.max(0, Number(measure.metric_entry_count || 0) - 1);
+      if (measure) measure.metric_entry_count = Math.max(0, measure.metric_entry_count - 1);
       renderMetrics();
       populateTrendSources();
       renderMetricTrend();
@@ -558,7 +539,7 @@ document.addEventListener('click', async (ev) => {
 
 for (const btn of Array.from(document.querySelectorAll('#measureTabs [data-bs-toggle="tab"]'))) {
   btn.addEventListener('shown.bs.tab', () => {
-    const name = String(btn.id || '')
+    const name = btn.id
       .replace(/^measure/, '')
       .replace(/Tab$/, '')
       .toLowerCase();

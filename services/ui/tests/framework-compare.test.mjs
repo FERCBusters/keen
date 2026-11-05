@@ -178,3 +178,95 @@ test('opening comparison finishes scrolling before focusing the native selector'
   assert.equal(host.querySelector('[data-after]'), after);
   assert.equal(calls.length, 2);
 });
+
+test('scope changes and inserted words are marked on the side that has them', async (t) => {
+  const ui = await compare(t, async (url) => ({
+    items: url.includes('/old/')
+      ? [node('4', { description: 'Keep records', in_scope: true })]
+      : [node('4', { description: 'Keep signed records', in_scope: false })],
+  }));
+  ui.run();
+  await settle(() => ui.$('[data-diff-status="changed"]'));
+  const rows = Object.fromEntries(
+    [...ui.$('[data-diff-status="changed"] tbody').rows].map((row) => [
+      row.cells[0].textContent,
+      [row.cells[1], row.cells[2]],
+    ]),
+  );
+  assert.deepEqual(
+    rows.Scope.map((cell) => cell.textContent),
+    ['In scope', 'Out of scope'],
+  );
+  // Only the later text gains a passage; the earlier text is shown unmarked.
+  const [before, after] = rows.Description;
+  assert.equal(before.textContent, 'Keep records');
+  assert.equal(before.querySelector('del'), null);
+  assert.equal(after.querySelector('ins').textContent, 'signed ');
+  assert.equal(after.textContent, 'Keep signed records');
+});
+
+test('frameworks with the same details compare without a details section, and Previous pages back', async (t) => {
+  const ui = await loadUi('pages/framework-compare.js', {
+    html: '<section id="compare"></section>',
+    vendor: {
+      apiGet: async (url) => ({
+        items: url.includes('/copy/') ? [] : Array.from({ length: 51 }, (_, i) => node(String(i))),
+      }),
+    },
+    setup: (window) => {
+      window.HTMLElement.prototype.scrollIntoView = () => {};
+    },
+  });
+  t.after(() => ui.close());
+  const host = ui.document.getElementById('compare');
+  ui.api.frameworkComparison(host).open('copy', [
+    { slug: 'copy', name: 'Same', version: '1' },
+    { slug: 'twin', name: 'Same', version: '1' },
+  ]);
+  host
+    .querySelector('[data-compare-form]')
+    .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => host.querySelector('[data-next]'));
+  assert.equal(host.querySelector('details'), null);
+  assert.equal(host.querySelector('[data-prev]').disabled, true);
+  host.querySelector('[data-next]').click();
+  assert.equal(host.querySelector('[data-prev]').disabled, false);
+  assert.match(host.textContent, /51–51 of 51/);
+  host.querySelector('[data-prev]').click();
+  assert.match(host.textContent, /1–50 of 51/);
+  assert.equal(host.querySelectorAll('article').length, 50);
+  assert.equal(host.querySelector('[data-prev]').disabled, true);
+});
+
+test('a comparison that fails after the selection changed reports nothing', async (t) => {
+  const pending = [];
+  const ui = await compare(t, () => new Promise((resolve, reject) => pending.push(reject)));
+  ui.run();
+  assert.equal(ui.$('[data-feedback]').textContent, 'Loading framework contents…');
+  ui.$('[data-after]').dispatchEvent(new ui.window.Event('change'));
+  for (const reject of pending) reject(new Error('Offline'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(ui.$('[data-feedback]').textContent, '');
+  assert.equal(ui.$('[data-run]').disabled, false);
+});
+
+test('a catalogue with one framework offers it on both sides and asks for two', async (t) => {
+  const ui = await loadUi('pages/framework-compare.js', {
+    html: '<section id="compare"></section>',
+    setup: (window) => {
+      window.HTMLElement.prototype.scrollIntoView = () => {};
+    },
+  });
+  t.after(() => ui.close());
+  const host = ui.document.getElementById('compare');
+  ui.api.frameworkComparison(host).open('only', [{ slug: 'only', name: 'Only one' }]);
+  assert.equal(host.querySelector('[data-before]').value, 'only');
+  assert.equal(host.querySelector('[data-after]').value, 'only');
+  host
+    .querySelector('[data-compare-form]')
+    .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  assert.equal(
+    host.querySelector('[data-feedback]').textContent,
+    'Choose two different frameworks.',
+  );
+});

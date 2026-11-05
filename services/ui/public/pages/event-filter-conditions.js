@@ -53,8 +53,9 @@ export function formatCondition({ field, op, value }) {
 export function describeCondition(raw) {
   const parsed = parseCondition(raw);
   if (!parsed) return '';
-  const field = CONDITION_FIELDS.find(([value]) => value === parsed.field)?.[1] || parsed.field;
-  const op = CONDITION_OPERATORS.find(([value]) => value === parsed.op)?.[1] || parsed.op;
+  // parseCondition accepts only listed fields and operators, so both have labels.
+  const field = CONDITION_FIELDS.find(([value]) => value === parsed.field)[1];
+  const op = CONDITION_OPERATORS.find(([value]) => value === parsed.op)[1];
   return `${field} ${op} “${parsed.value}”`;
 }
 

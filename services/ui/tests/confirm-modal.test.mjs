@@ -3,6 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadUi } from './support/load-ui.mjs';
+import { firstPartyScripts } from './support/first-party-scripts.mjs';
+import { page } from './support/page-fixture.mjs';
 
 // jsdom has no modal dialog focus machinery; the browser-native parts are
 // reduced to their observable state.
@@ -185,4 +187,38 @@ test('the same dialog element is reused across requests', async (t) => {
   assert.equal(btn(ui, 'confirm').disabled, false);
   btn(ui, 'confirm').click();
   assert.equal(await second, true);
+});
+
+// A call of the browser's own confirm(), by name or through window or
+// globalThis. Property reads such as `confirm.textContent` are not calls.
+const BROWSER_CONFIRM = /(?<![\w.$])(?:(?:window|globalThis|self)\.)?confirm\s*\(/;
+
+test('pages ask through confirmAction and never call the browser confirm()', async () => {
+  const scripts = await firstPartyScripts();
+  assert.ok(scripts.length > 100, `expected the first-party scripts, found ${scripts.length}`);
+  const callers = scripts
+    .filter(({ source }) => BROWSER_CONFIRM.test(source.replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, '')))
+    .map((script) => script.path);
+  assert.deepEqual(callers, []);
+  // The check finds each way of calling it, and leaves the dialog's own button alone.
+  const sample = [
+    'if (!confirm("Delete?")) return;',
+    'window.confirm("Delete?");',
+    'globalThis.confirm ("Delete?");',
+    'const confirm = dialog.querySelector("[data-confirm]"); confirm.textContent = label;',
+    'await confirmAction({ title: "Delete" });',
+  ].join('\n');
+  assert.deepEqual(
+    [...sample.matchAll(new RegExp(BROWSER_CONFIRM, 'g'))].map((m) => m[0]),
+    ['confirm(', 'window.confirm(', 'globalThis.confirm ('],
+  );
+});
+
+test('the page fixture refuses a stub of the browser confirm()', async (t) => {
+  // Such a stub answered nothing: the fixture's own `confirm` option decides
+  // what confirmAction returns.
+  await assert.rejects(
+    page(t, 'questions', { globals: { confirm: () => false } }),
+    /pass `confirm`, not `globals.confirm`/,
+  );
 });

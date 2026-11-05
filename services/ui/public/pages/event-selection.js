@@ -31,7 +31,6 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
   }
 
   function render() {
-    if (!bar) return;
     bar.hidden = selected.size === 0;
     if (count) count.textContent = `${selected.size} selected`;
     if (titleInput && !titleInput.value && selected.size) {
@@ -51,7 +50,7 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
         );
         return;
       }
-      selected.set(id, summary || '');
+      selected.set(id, summary);
     } else selected.delete(id);
     render();
   }
@@ -65,9 +64,10 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
     return [...selected.keys()].map((id) => ({ kind: 'event', entity_id: id }));
   }
 
+  // The bar holding Create story shows only while events are selected, and its
+  // title field always has a placeholder.
   async function createStory() {
-    if (!selected.size) return;
-    const title = (titleInput?.value || titleInput?.placeholder || 'Story').trim();
+    const title = (titleInput.value || titleInput.placeholder).trim();
     try {
       const story = await apiPost(`/api/v1/stories?framework=${encodeURIComponent(framework)}`, {
         title,
@@ -84,7 +84,7 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
     if (!targetSelect || storiesLoaded) return;
     try {
       const data = await apiGet('/api/v1/stories?status=open&limit=200');
-      const own = (data.items || []).filter((story) => story.can_edit);
+      const own = data.items.filter((story) => story.can_edit);
       targetSelect.innerHTML =
         '<option value="">Choose a story</option>' +
         own
@@ -122,7 +122,6 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
   }
 
   function showMenu(ev, row) {
-    if (!menu) return;
     ev.preventDefault();
     const id = row.dataset.eventId;
     if (!selected.has(id)) toggle(id, row.querySelector('[data-event-summary]')?.textContent, true);
@@ -135,8 +134,8 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
 
   if (enabled) {
     tbody.addEventListener('change', (ev) => {
+      // The rows hold no other form controls.
       const box = ev.target.closest('[data-select-event]');
-      if (!box) return;
       const row = box.closest('tr[data-event-id]');
       toggle(box.value, row?.querySelector('[data-event-summary]')?.textContent, box.checked);
     });
@@ -186,14 +185,10 @@ export function createEventSelection({ me, framework, tbody, bar, menu, statusEl
       // Header sorting reads each row's cells by header position, and the
       // hidden selection header still holds the first one.
       if (!enabled) return '<td class="story-select-cell" hidden></td>';
-      const summary = String(event.summary || '');
+      const summary = String(event.summary);
       return `<td class="story-select-cell"><input class="form-check-input" type="checkbox" data-select-event value="${esc(event.id)}" aria-label="Select ${esc(summary.slice(0, 80) || 'event')}"></td>`;
     },
     rendered: syncRows,
-    get size() {
-      return selected.size;
-    },
-    ids: () => [...selected.keys()],
     clear,
   };
 }

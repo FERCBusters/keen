@@ -54,9 +54,13 @@ test('audit delete confirms and refreshes the list', async (t) => {
   assert.equal(ui.el('status').textContent, 'Audit deleted');
 });
 test('cancelling audit deletion sends no mutation', async (t) => {
-  const ui = await fixture(t, { globals: { confirm: () => false } });
+  const ui = await fixture(t, { confirm: false });
   ui.document.querySelector('[data-delete-audit="a1"]').click();
+  await settle(() => ui.confirmations.length === 1);
+  assert.equal(ui.confirmations[0].title, 'Delete audit <img src=x> Annual audit');
+  await new Promise((resolve) => setTimeout(resolve, 20));
   assert.ok(!ui.calls.some((c) => c.method === 'DELETE'));
+  assert.match(ui.el('rows').textContent, /Annual audit/);
 });
 test('audit search and status filter are sent to the backend', async (t) => {
   const ui = await fixture(t);

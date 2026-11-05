@@ -6,7 +6,7 @@ const names = ['Strengths', 'Weaknesses', 'Opportunities', 'Threats'];
 const relatedTypes = ['objective', 'document', 'asset', 'risk', 'person', 'vendor'];
 const heading = (value) => value.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
 const xml = (value) =>
-  String(value ?? '')
+  String(value)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '')
     .replace(
       /[&<>"']/g,

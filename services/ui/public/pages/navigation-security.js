@@ -23,7 +23,7 @@ if (globalThis.location?.pathname?.startsWith('//')) location.replace('/');
 
 /** Resolve post-authentication navigation using the browser's URL rules. */
 export function safeNext(raw, origin = location.origin) {
-  const value = localPath(String(raw || '').trim());
+  const value = localPath(String(raw).trim());
   if (!value) return '/';
   try {
     const url = new URL(value, origin);

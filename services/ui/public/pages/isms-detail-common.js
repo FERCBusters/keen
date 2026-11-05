@@ -5,7 +5,7 @@ export function badgeList(items, labelKey = 'ref', urlFn = null) {
   if (!arr.length) return '<span class="small-muted">-</span>';
   return arr
     .map((it) => {
-      const label = String(it?.[labelKey] || it?.name || it?.title || 'Item');
+      const label = String(it[labelKey]);
       const title = String(it?.title || it?.name || label);
       const href = urlFn ? urlFn(it) : '';
       if (href)
@@ -34,7 +34,7 @@ export function effectivenessControlBadges(items, framework) {
   return arr
     .map(
       (c) =>
-        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref || 'Control')}">${esc(c.ref || 'Control')}</a>`,
+        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`,
     )
     .join('');
 }

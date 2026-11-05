@@ -11,7 +11,8 @@ const params = new URLSearchParams(location.search);
 const status = $('status');
 let attempt = null;
 let page = 0;
-// Answers by position, kept across pages until each page is saved.
+// Answers by position, kept across pages until each page is saved. Sitting
+// starts with every question's saved answer, so each position has one.
 const answers = new Map();
 let started = Date.now();
 
@@ -25,7 +26,7 @@ function positions(onPage = page) {
 }
 
 function answered(question) {
-  const answer = answers.get(question.position) || {};
+  const answer = answers.get(question.position);
   return question.kind === 'choice' ? Boolean(answer.option_id) : Boolean(answer.text?.trim());
 }
 
@@ -47,7 +48,7 @@ function renderProgress() {
 }
 
 function questionHtml(question) {
-  const answer = answers.get(question.position) || {};
+  const answer = answers.get(question.position);
   const name = `q${question.position}`;
   const body =
     question.kind === 'choice'
@@ -76,10 +77,10 @@ function renderPage() {
 
 function pageAnswers(onPage = page) {
   return positions(onPage).map((question) => {
-    const answer = answers.get(question.position) || {};
+    const answer = answers.get(question.position);
     return question.kind === 'choice'
       ? { position: question.position, option_id: answer.option_id || null }
-      : { position: question.position, text: answer.text || '' };
+      : { position: question.position, text: answer.text };
   });
 }
 

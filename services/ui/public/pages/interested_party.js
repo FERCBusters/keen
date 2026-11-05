@@ -87,7 +87,7 @@ function optionHtml(rows, selected = '') {
   return rows
     .map(
       (r) =>
-        `<option value="${esc(r.id)}" ${String(selected) === String(r.id) ? 'selected' : ''}>${esc(r.name || '')}</option>`,
+        `<option value="${esc(r.id)}" ${String(selected) === String(r.id) ? 'selected' : ''}>${esc(r.name)}</option>`,
     )
     .join('');
 }
@@ -98,19 +98,16 @@ function fillSelects() {
     partyNature.innerHTML = optionHtml(natures, currentItem?.nature_id || currentItem?.nature?.id);
 }
 function controlHref(id) {
-  return withFramework(
-    `/control.html?id=${encodeURIComponent(id || '')}&tab=governance`,
-    framework,
-  );
+  return withFramework(`/control.html?id=${encodeURIComponent(id)}&tab=governance`, framework);
 }
 function renderChrome() {
   const label = currentItem
-    ? `${currentItem.name?.name || ''} - ${currentItem.nature?.name || ''}`
+    ? `${currentItem.name.name} - ${currentItem.nature.name}`
     : 'New interested party';
   if (title) title.textContent = label;
   if (metaEl)
     metaEl.textContent = currentItem
-      ? `Organisation-wide · controls shown for ${framework} · Updated ${fmtTs(currentItem.updated_at) || '-'}`
+      ? `Organisation-wide · controls shown for ${framework} · Updated ${fmtTs(currentItem.updated_at)}`
       : `Organisation-wide · controls for ${framework}`;
   if (partyId) partyId.value = itemId || '';
   if (partyNote) partyNote.value = currentItem?.note || '';
@@ -121,7 +118,6 @@ function renderChrome() {
   if (saveParty) saveParty.style.display = canManage ? '' : 'none';
 }
 function renderControls() {
-  if (!controlsChecklist) return;
   const q = (controlSearch?.value || '').trim().toLowerCase();
   const selected = new Set((currentItem?.controls || []).map((c) => String(c.id)));
   const rows = controls.filter((c) => !q || `${c.ref} ${c.title}`.toLowerCase().includes(q));
@@ -132,13 +128,13 @@ function renderControls() {
   controlsChecklist.innerHTML = rows
     .map(
       (c) =>
-        `<label class="d-flex gap-2 align-items-start py-1 border-bottom"><input class="form-check-input mt-1" type="checkbox" value="${esc(c.id)}" data-control-check ${selected.has(String(c.id)) ? 'checked' : ''} ${canManage ? '' : 'disabled'}><span><a href="${esc(controlHref(c.id))}" class="fw-semibold">${esc(c.ref || '')}</a> ${esc(c.title || '')}</span></label>`,
+        `<label class="d-flex gap-2 align-items-start py-1 border-bottom"><input class="form-check-input mt-1" type="checkbox" value="${esc(c.id)}" data-control-check ${selected.has(String(c.id)) ? 'checked' : ''} ${canManage ? '' : 'disabled'}><span><a href="${esc(controlHref(c.id))}" class="fw-semibold">${esc(c.ref)}</a> ${esc(c.title)}</span></label>`,
     )
     .join('');
 }
-function methodCheckboxes(selected = []) {
-  const set = new Set(selected || []);
-  return (meta.methods || [])
+function methodCheckboxes(selected) {
+  const set = new Set(selected);
+  return meta.methods
     .map(
       (m) =>
         `<label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" value="${esc(m)}" ${set.has(m) ? 'checked' : ''} ${canManage ? '' : 'disabled'}> <span class="form-check-label">${esc(m)}</span></label>`,
@@ -146,7 +142,7 @@ function methodCheckboxes(selected = []) {
     .join('');
 }
 function selectOptions(rows, selected = '') {
-  return (rows || [])
+  return rows
     .map(
       (x) =>
         `<option value="${esc(x)}" ${String(x) === String(selected) ? 'selected' : ''}>${esc(x)}</option>`,
@@ -154,7 +150,6 @@ function selectOptions(rows, selected = '') {
     .join('');
 }
 function renderCommunications() {
-  if (!communicationsList) return;
   if (!communications.length) {
     communicationsList.innerHTML =
       '<div class="border rounded p-3 bg-light small-muted">No communications have been added yet.</div>';
@@ -163,15 +158,15 @@ function renderCommunications() {
   communicationsList.innerHTML = communications
     .map(
       (c, idx) =>
-        `<div class="border rounded p-3" data-comm-row="${idx}"><div class="row g-2"><div class="col-12 col-lg-3"><label class="form-label">Event</label><select class="form-select" data-comm-event ${canManage ? '' : 'disabled'}>${selectOptions(meta.events, c.event)}</select></div><div class="col-12 col-lg-3"><label class="form-label">When</label><select class="form-select" data-comm-when ${canManage ? '' : 'disabled'}>${selectOptions(meta.when, c.when)}</select></div><div class="col-12 col-lg-3"><label class="form-label">With whom</label><select class="form-select" data-comm-with-whom ${canManage ? '' : 'disabled'}>${selectOptions(meta.with_whom, c.with_whom)}</select></div><div class="col-12 col-lg-3 no-print text-lg-end"><label class="form-label d-block">Actions</label>${canManage ? `<button class="btn btn-sm btn-outline-danger" type="button" data-remove-comm="${idx}">Remove</button>` : ''}</div><div class="col-12"><label class="form-label d-block">Method</label><div data-comm-methods>${methodCheckboxes(c.methods || [])}</div></div></div></div>`,
+        `<div class="border rounded p-3" data-comm-row="${idx}"><div class="row g-2"><div class="col-12 col-lg-3"><label class="form-label">Event</label><select class="form-select" data-comm-event ${canManage ? '' : 'disabled'}>${selectOptions(meta.events, c.event)}</select></div><div class="col-12 col-lg-3"><label class="form-label">When</label><select class="form-select" data-comm-when ${canManage ? '' : 'disabled'}>${selectOptions(meta.when, c.when)}</select></div><div class="col-12 col-lg-3"><label class="form-label">With whom</label><select class="form-select" data-comm-with-whom ${canManage ? '' : 'disabled'}>${selectOptions(meta.with_whom, c.with_whom)}</select></div><div class="col-12 col-lg-3 no-print text-lg-end"><label class="form-label d-block">Actions</label>${canManage ? `<button class="btn btn-sm btn-outline-danger" type="button" data-remove-comm="${idx}">Remove</button>` : ''}</div><div class="col-12"><label class="form-label d-block">Method</label><div data-comm-methods>${methodCheckboxes(c.methods)}</div></div></div></div>`,
     )
     .join('');
 }
 function readCommunicationsFromDom() {
   return Array.from(document.querySelectorAll('[data-comm-row]')).map((row) => ({
-    event: row.querySelector('[data-comm-event]')?.value || '',
-    when: row.querySelector('[data-comm-when]')?.value || '',
-    with_whom: row.querySelector('[data-comm-with-whom]')?.value || '',
+    event: row.querySelector('[data-comm-event]').value,
+    when: row.querySelector('[data-comm-when]').value,
+    with_whom: row.querySelector('[data-comm-with-whom]').value,
     methods: Array.from(row.querySelectorAll('[data-comm-methods] input:checked')).map(
       (x) => x.value,
     ),
@@ -205,9 +200,9 @@ async function loadLookupsAndControls() {
       : { items: [] },
   ]);
   meta = m;
-  names = nameData.items || [];
-  natures = natureData.items || [];
-  controls = controlData.items || [];
+  names = nameData.items;
+  natures = natureData.items;
+  controls = controlData.items;
   fillSelects();
   renderControls();
 }
@@ -226,7 +221,7 @@ async function loadItem() {
   currentItem = await apiGet(
     `/api/v1/interested-parties/${encodeURIComponent(itemId)}?framework=${encodeURIComponent(framework)}`,
   );
-  communications = (currentItem.communications || []).map((x) => ({ ...x }));
+  communications = currentItem.communications.map((x) => ({ ...x }));
   fillSelects();
   renderChrome();
   renderControls();
@@ -241,7 +236,7 @@ async function saveItem(ev) {
     : await apiPost('/api/v1/interested-parties', payload);
   currentItem = res;
   itemId = res.id;
-  communications = res.communications || communications;
+  communications = res.communications;
   renderChrome();
   setTabQuery('details');
   toast(status, 'Interested party saved.', 'success');
@@ -256,7 +251,7 @@ async function saveComms() {
     { items: communications },
   );
   currentItem = res;
-  communications = res.communications || [];
+  communications = res.communications;
   renderCommunications();
   toast(status, 'Communications saved.', 'success');
 }
@@ -293,10 +288,10 @@ function wireEvents() {
   addCommunication?.addEventListener('click', () => {
     communications = readCommunicationsFromDom();
     communications.push({
-      event: meta.events?.[0] || 'Business as Usual',
-      when: meta.when?.[0] || 'As Required',
-      with_whom: meta.with_whom?.[0] || 'Individual member',
-      methods: [meta.methods?.[0] || 'Email'],
+      event: meta.events[0],
+      when: meta.when[0],
+      with_whom: meta.with_whom[0],
+      methods: [meta.methods[0]],
     });
     renderCommunications();
   });
@@ -310,20 +305,17 @@ function wireEvents() {
     const btn = ev.target.closest('[data-remove-comm]');
     if (!btn) return;
     communications = readCommunicationsFromDom();
-    communications.splice(Number(btn.dataset.removeComm || 0), 1);
+    communications.splice(Number(btn.dataset.removeComm), 1);
     renderCommunications();
   });
 }
 
 samplePartyAudit?.addEventListener('click', () => {
-  const label = currentItem
-    ? `${currentItem.name?.name || ''} - ${currentItem.nature?.name || ''}`
-    : 'Interested party';
   openAuditSampleModal({
     me,
     entityType: 'interested_party',
-    entityId: currentItem?.id || itemId,
-    title: label,
+    entityId: currentItem.id,
+    title: `${currentItem.name.name} - ${currentItem.nature.name}`,
     framework,
     statusEl: status,
   });

@@ -2,10 +2,9 @@
 
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// Every caller passes the interval the histogram API answered with.
 export function histStepMs(interval) {
-  const it = String(interval || 'day')
-    .trim()
-    .toLowerCase();
+  const it = String(interval).trim().toLowerCase();
   if (it === 'second') return 1000;
   if (it === 'minute') return 60 * 1000;
   if (it === 'hour') return 60 * 60 * 1000;
@@ -13,9 +12,7 @@ export function histStepMs(interval) {
 }
 
 export function histNextFinerInterval(interval) {
-  const it = String(interval || 'day')
-    .trim()
-    .toLowerCase();
+  const it = String(interval).trim().toLowerCase();
   if (it === 'day') return 'hour';
   if (it === 'hour') return 'minute';
   if (it === 'minute') return 'second';
@@ -25,11 +22,7 @@ export function histNextFinerInterval(interval) {
 export function histBucketToUtcMs(bucket, interval) {
   const b = String(bucket || '').trim();
   if (!b) return NaN;
-  if (
-    String(interval || 'day')
-      .trim()
-      .toLowerCase() === 'day'
-  ) {
+  if (String(interval).trim().toLowerCase() === 'day') {
     // Ensure date-only buckets are interpreted in UTC.
     return Date.parse(`${b}T00:00:00Z`);
   }

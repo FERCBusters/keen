@@ -64,10 +64,10 @@ async function load() {
       const status = String(queueStatusEl.value || '').trim();
       if (status) url.searchParams.set('status', status);
       const data = await apiGet(url.pathname + url.search);
-      renderQueue(Array.isArray(data?.items) ? data.items : []);
+      renderQueue(data.items);
     } else {
       const data = await apiGet('/api/v1/me/questions');
-      renderOwn(Array.isArray(data?.items) ? data.items : []);
+      renderOwn(data.items);
     }
     // Keep the navbar's question count in step with the list.
     window.keenRefreshBell?.();
@@ -88,7 +88,7 @@ async function deleteClicked(ev) {
       await load();
     }
   } catch (err) {
-    toast(statusEl, err?.message || 'Failed to delete question.', 'danger');
+    toast(statusEl, err.message, 'danger');
   }
 }
 

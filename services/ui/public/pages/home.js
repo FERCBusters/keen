@@ -58,18 +58,15 @@ if (ensureHomeLayout()) {
   // Render sentinel: a failed load is reported, never dressed up as "no data".
   const LOAD_FAILED = { failed: true };
 
-  async function safeGet(url, fallback = null) {
+  async function safeGet(url) {
     try {
       return await apiGet(url);
     } catch (err) {
-      if (fallback === null) {
-        // Permissions and missing records read like the not-found layer;
-        // transport and other failures get the load-failure reporting.
-        if (/\b(403|404)\b/.test(errorText(err))) return null;
-        console.debug(`Home load failed: ${url}`, err);
-        return LOAD_FAILED;
-      }
-      return fallback;
+      // Permissions and missing records read like the not-found layer;
+      // transport and other failures get the load-failure reporting.
+      if (/\b(403|404)\b/.test(errorText(err))) return null;
+      console.debug(`Home load failed: ${url}`, err);
+      return LOAD_FAILED;
     }
   }
 
@@ -79,7 +76,7 @@ if (ensureHomeLayout()) {
 
   async function loadCatalog() {
     if (catalogData) return catalogData;
-    catalogData = await safeGet('/api/v1/frameworks', null);
+    catalogData = await safeGet('/api/v1/frameworks');
     return catalogData;
   }
 
@@ -101,12 +98,9 @@ if (ensureHomeLayout()) {
   }
 
   function apiUrl(path, params = {}, { includeFramework = true } = {}) {
-    const u = new URL(String(path || '/'), window.location.origin);
+    const u = new URL(path, window.location.origin);
     if (includeFramework && framework) u.searchParams.set('framework', framework);
-    for (const [key, value] of Object.entries(params || {})) {
-      if (value === undefined || value === null || value === '') continue;
-      u.searchParams.set(key, String(value));
-    }
+    for (const [key, value] of Object.entries(params)) u.searchParams.set(key, String(value));
     return `${u.pathname}${u.search}`;
   }
 
@@ -114,7 +108,7 @@ if (ensureHomeLayout()) {
     return esc(localPath(withFramework(href, framework)) || '#');
   }
   function homeNumber(value) {
-    return Number.isFinite(value) ? value.toLocaleString() : '-';
+    return value.toLocaleString();
   }
 
   // Every role-permitted shortcut renders in a compact grid: the navigation is
@@ -347,12 +341,12 @@ if (ensureHomeLayout()) {
       return;
     }
     section.hidden = false;
-    const items = Array.isArray(activity.items) ? activity.items : [];
+    const items = activity.items;
     const totals = items.map((item) => Number(item?.total) || 0);
     const collected = totals.reduce((sum, value) => sum + value, 0);
     const mapped = items.reduce((sum, item) => sum + (Number(item?.mapped) || 0), 0);
     const peak = Math.max(0, ...totals);
-    const peakDay = peak > 0 ? String(items[totals.indexOf(peak)]?.bucket || '') : '';
+    const peakDay = peak > 0 ? items[totals.indexOf(peak)].bucket : '';
     if (collected > 0 && items.length >= 2) {
       const width = 320;
       const height = 64;
@@ -379,16 +373,16 @@ if (ensureHomeLayout()) {
       sparkHolder.innerHTML = '';
       note.textContent = 'No events collected in the last 30 days.';
     }
-    const metas = Array.isArray(activity.sources) ? activity.sources : [];
+    const metas = activity.sources;
     const top = metas.filter((m) => Number.isFinite(Number(m?.total))).slice(0, 4);
     if (top.length) {
       sourcesPanel.hidden = false;
       list.innerHTML = top
         .map((m) => {
-          const name = String(m.label || m.source || '').trim() || 'Unknown source';
+          const name = m.label;
           // Source tints are the account's own palette; only a plain sRGB hex
           // may reach an inline style.
-          const validColor = /^#[0-9a-fA-F]{6}$/.test(String(m.color || ''));
+          const validColor = /^#[0-9a-fA-F]{6}$/.test(String(m.color));
           const dot = validColor ? ` style="background:${esc(String(m.color))}"` : '';
           return `<li><a href="${homeLink(`/events.html?source=${encodeURIComponent(String(m.source || ''))}`)}"><span class="home-source-dot"${dot} aria-hidden="true"></span><span class="home-source-name">${esc(name)}</span><span class="home-source-count">${homeNumber(Number(m.total))}</span></a></li>`;
         })

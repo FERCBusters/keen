@@ -28,7 +28,7 @@ enableTableSorting();
 
 // Keep top action links on the selected framework.
 for (const a of Array.from(document.querySelectorAll('a[href]'))) {
-  const href = String(a.getAttribute('href') || '');
+  const href = a.getAttribute('href');
   if (href.startsWith('/events.html?unmapped=true')) {
     a.setAttribute('href', withFramework(href, framework));
   }
@@ -150,7 +150,7 @@ function render() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td data-sort="${esc(c.ref)}"><a class="fw-semibold" href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}">${esc(c.ref)}</a></td>
-      <td class="wrap">${esc(c.title || '')}</td>
+      <td class="wrap">${esc(c.title)}</td>
       <td class="small-muted" data-sort="${esc(c.justification || '')}">${esc(c.justification || '-')}</td>
       ${requirementsCell(c)}
       <td data-sort="${ev}">${evHtml}</td>
@@ -222,7 +222,7 @@ async function load() {
       `/api/v1/stats/controls?limit=5000&framework=${encodeURIComponent(framework)}`,
     );
     isms = await requirements;
-    all = (data.items || []).filter((item) => item.type !== 'clause');
+    all = data.items.filter((item) => item.type !== 'clause');
     if (all.length === 0) {
       toast(status, 'No controls loaded yet. Go to Admin → Frameworks.', 'warning');
       tbody.innerHTML =
@@ -268,7 +268,7 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
   const name = (prompt('Name this saved search', defName) || '').trim();
   if (!name) return;
 
-  const url = location.pathname + (location.search || '');
+  const url = location.pathname + location.search;
   try {
     await apiPost('/api/v1/me/saved-searches', { name, url });
     toast(status, 'Saved', 'success');

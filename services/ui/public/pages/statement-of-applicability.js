@@ -93,7 +93,7 @@ function controlLink(control) {
     `/control.html?id=${encodeURIComponent(control.id)}`,
     control.framework || framework,
   );
-  return `<a href="${esc(href)}">${esc(control.ref || '')}</a>`;
+  return `<a href="${esc(href)}">${esc(control.ref)}</a>`;
 }
 
 function clauseLink(clause) {
@@ -101,7 +101,7 @@ function clauseLink(clause) {
     `/clause.html?id=${encodeURIComponent(clause.id)}`,
     clause.framework || framework,
   );
-  return `<a href="${esc(href)}">${esc(clause.ref || '')}</a>`;
+  return `<a href="${esc(href)}">${esc(clause.ref)}</a>`;
 }
 
 function riskLink(risk) {
@@ -160,7 +160,7 @@ function effectivenessLatestValue(item) {
   const bits = [];
   if (entry.period) bits.push(entry.period);
   if (entry.source_title || entry.source_type) bits.push(entry.source_title || entry.source_type);
-  return `${valueHtml}${bits.length ? `<div class="small-muted">${esc(bits.join(' · '))}</div>` : ''}`;
+  return `${valueHtml}<div class="small-muted">${esc(bits.join(' · '))}</div>`;
 }
 
 function relevanceBadge(rel) {
@@ -189,20 +189,20 @@ function renderControls() {
     <th style="min-width:260px;">Title</th>
     <th style="min-width:90px;">Scope</th>
     <th style="min-width:210px;">Justification</th>
-    ${clauses.map((c) => `<th class="text-center" style="min-width:78px;" title="${esc(`${c.ref || ''} ${c.title || ''}`.trim())}">${clauseLink(c)}</th>`).join('')}
+    ${clauses.map((c) => `<th class="text-center" style="min-width:78px;" title="${esc(`${c.ref} ${c.title}`.trim())}">${clauseLink(c)}</th>`).join('')}
   </tr>`;
 
   const rows = controls.filter((c) => {
     if (!q) return true;
-    return `${c.ref || ''} ${c.title || ''} ${c.justification || ''}`.toLowerCase().includes(q);
+    return `${c.ref} ${c.title || ''} ${c.justification || ''}`.toLowerCase().includes(q);
   });
 
   controlsRows.innerHTML = rows
     .map((c) => {
-      const links = c.clauses || {};
+      const links = c.clauses;
       return `<tr>
-      <td class="soa-sticky-col fw-semibold" data-sort="${esc(c.ref || '')}">${controlLink(c)}</td>
-      <td class="wrap">${esc(c.title || '')}</td>
+      <td class="soa-sticky-col fw-semibold" data-sort="${esc(c.ref)}">${controlLink(c)}</td>
+      <td class="wrap">${esc(c.title)}</td>
       <td>${scopeBadge(c)}</td>
       <td class="small-muted">${esc(c.justification || '-')}</td>
       ${clauses.map((clause) => `<td class="text-center" data-sort="${esc(applicabilityShort(links[clause.id]))}">${applicabilityCell(links[clause.id])}</td>`).join('')}
@@ -224,23 +224,21 @@ function renderClauses() {
     <th class="soa-sticky-col" style="min-width:120px;">Clause</th>
     <th style="min-width:280px;">Title</th>
     <th style="min-width:300px;">Evidence</th>
-    ${controls.map((c) => `<th class="text-center" style="min-width:78px;" title="${esc(`${c.ref || ''} ${c.title || ''}`.trim())}">${controlLink(c)}</th>`).join('')}
+    ${controls.map((c) => `<th class="text-center" style="min-width:78px;" title="${esc(`${c.ref} ${c.title || ''}`.trim())}">${controlLink(c)}</th>`).join('')}
   </tr>`;
 
   const rows = clauses.filter((clause) => {
     if (!q) return true;
-    const evidence = (clause.evidence_mappings || [])
-      .map((m) => `${m.title || ''} ${m.url || ''}`)
-      .join(' ');
-    return `${clause.ref || ''} ${clause.title || ''} ${evidence}`.toLowerCase().includes(q);
+    const evidence = (clause.evidence_mappings || []).map((m) => `${m.title} ${m.url}`).join(' ');
+    return `${clause.ref} ${clause.title} ${evidence}`.toLowerCase().includes(q);
   });
 
   clausesRows.innerHTML = rows
     .map((clause) => {
-      const links = clause.controls || {};
+      const links = clause.controls;
       return `<tr>
       <td class="soa-sticky-col fw-semibold">${clauseLink(clause)}</td>
-      <td class="wrap">${esc(clause.title || '')}</td>
+      <td class="wrap">${esc(clause.title)}</td>
       <td>${titledLinksHtml(clause.evidence_mappings || [], { title: 'Open evidence mapping', empty: '<span class="small-muted">-</span>' })}</td>
       ${controls.map((control) => `<td class="text-center" data-sort="${esc(applicabilityShort(links[control.id]))}">${applicabilityCell(links[control.id])}</td>`).join('')}
     </tr>`;
@@ -264,7 +262,7 @@ function renderRisks() {
 
   const rows = risks.filter((r) => {
     if (!q) return true;
-    const controls = (r.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`).join(' ');
+    const controls = (r.controls || []).map((c) => `${c.ref} ${c.title || ''}`).join(' ');
     return `${r.asset || ''} ${r.category?.name || ''} ${r.subcategory?.name || ''} ${(r.risk_types || []).join(' ')} ${r.threat_summary || ''} ${controls}`
       .toLowerCase()
       .includes(q);
@@ -276,7 +274,7 @@ function renderRisks() {
         (r.controls || [])
           .map(
             (c) =>
-              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
+              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
           )
           .join('') || '<span class="small-muted">-</span>';
       return `<tr>
@@ -301,8 +299,6 @@ function renderRisks() {
 function renderPestle() {
   const items = Array.isArray(soa.pestle_items) ? soa.pestle_items : [];
   const q = filterText(pestleFilter);
-
-  if (!pestleRows) return;
 
   if (!soa.can_view_pestle) {
     pestleRows.innerHTML =
@@ -362,7 +358,6 @@ function renderPestle() {
 }
 
 function renderInterestedParties() {
-  if (!interestedPartiesRows) return;
   const items = Array.isArray(soa.interested_parties) ? soa.interested_parties : [];
   const q = filterText(interestedPartiesFilter);
 
@@ -374,14 +369,11 @@ function renderInterestedParties() {
 
   const rows = items.filter((item) => {
     if (!q) return true;
-    const controls = (item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`).join(' ');
+    const controls = (item.controls || []).map((c) => `${c.ref} ${c.title || ''}`).join(' ');
     const comms = (item.communications || [])
-      .map(
-        (c) =>
-          `${c.event || ''} ${c.when || ''} ${c.with_whom || ''} ${(c.methods || []).join(' ')}`,
-      )
+      .map((c) => `${c.event} ${c.when} ${c.with_whom} ${c.methods.join(' ')}`)
       .join(' ');
-    return `${item.name?.name || ''} ${item.nature?.name || ''} ${item.note || ''} ${controls} ${comms}`
+    return `${item.name?.name || ''} ${item.nature?.name || ''} ${item.note} ${controls} ${comms}`
       .toLowerCase()
       .includes(q);
   });
@@ -392,18 +384,18 @@ function renderInterestedParties() {
         (item.controls || [])
           .map(
             (c) =>
-              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=governance`, c.framework || framework))}" title="${esc(c.title || '')}">${esc(c.ref || '')}</a>`,
+              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=governance`, c.framework || framework))}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
           )
           .join('') || '<span class="small-muted">-</span>';
       const comms =
         (item.communications || [])
-          .map((c) => `${esc(c.event || '')} · ${esc(c.when || '')} · ${esc(c.with_whom || '')}`)
+          .map((c) => `${esc(c.event)} · ${esc(c.when)} · ${esc(c.with_whom)}`)
           .join('<br>') || '<span class="small-muted">-</span>';
       const methods =
-        Array.from(new Set((item.communications || []).flatMap((c) => c.methods || [])))
+        Array.from(new Set((item.communications || []).flatMap((c) => c.methods)))
           .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
           .join('') || '<span class="small-muted">-</span>';
-      const note = (item.note || '').trim()
+      const note = item.note.trim()
         ? esc(shorten(item.note, 180))
         : '<span class="small-muted">-</span>';
       return `<tr>
@@ -424,7 +416,6 @@ function renderInterestedParties() {
 }
 
 function renderIsmsObjectives() {
-  if (!ismsObjectivesRows) return;
   if (!soa.can_view_isms) {
     ismsObjectivesRows.innerHTML =
       '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view ISMS objectives.</td></tr>';
@@ -434,7 +425,7 @@ function renderIsmsObjectives() {
   const rows = (soa.isms_objectives || []).filter(
     (o) =>
       !q ||
-      `${o.goal || ''} ${o.requirement || ''} ${o.metric || ''} ${o.owner?.username || ''}`
+      `${o.goal || ''} ${o.requirement} ${o.metric || ''} ${o.owner?.username || ''}`
         .toLowerCase()
         .includes(q),
   );
@@ -442,14 +433,13 @@ function renderIsmsObjectives() {
     rows
       .map(
         (o) =>
-          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement || '', 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(isoDateToDisplay(o.completion_target_date) || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${controlBadges(o.controls, framework)}</td><td>${clauseBadges(o.clauses, framework)}</td></tr>`,
+          `<tr><td class="wrap fw-semibold">${esc(shorten(o.goal || o.requirement || 'Objective', 180))}<div class="small-muted">${esc(shorten(o.requirement, 180))}</div></td><td>${esc(o.metric || '-')}</td><td>${userPillHtml(o.owner)}</td><td>${esc(isoDateToDisplay(o.completion_target_date) || '-')}</td><td>${personBadges(o.resource_users)}<div class="small-muted">${esc(shorten(o.resource_requirements_text || '', 120))}</div></td><td>${controlBadges(o.controls, framework)}</td><td>${clauseBadges(o.clauses, framework)}</td></tr>`,
       )
       .join('') ||
     '<tr><td colspan="7" class="p-4 small-muted">No ISMS objectives match.</td></tr>';
 }
 
 function renderIsmsDocuments() {
-  if (!ismsDocumentsRows) return;
   if (!soa.can_view_isms) {
     ismsDocumentsRows.innerHTML =
       '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view ISMS documents.</td></tr>';
@@ -473,7 +463,6 @@ function renderIsmsDocuments() {
 }
 
 function renderIsmsEffectiveness() {
-  if (!ismsEffectivenessRows) return;
   if (!soa.can_view_isms) {
     ismsEffectivenessRows.innerHTML =
       '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view ISMS effectiveness measures.</td></tr>';
@@ -482,7 +471,7 @@ function renderIsmsEffectiveness() {
   const q = filterText(ismsEffectivenessFilter);
   const rows = (soa.isms_effectiveness_measures || []).filter((item) => {
     if (!q) return true;
-    const controls = (item.controls || []).map((c) => `${c.ref || ''} ${c.title || ''}`).join(' ');
+    const controls = (item.controls || []).map((c) => `${c.ref} ${c.title || ''}`).join(' ');
     const latest = item.latest_entry || {};
     return `${item.summary || ''} ${item.description || ''} ${item.source_type || ''} ${item.metric_key || ''} ${item.target_display || ''} ${item.frequency || ''} ${item.owner?.username || ''} ${item.notes || ''} ${latest.value_display || ''} ${latest.source_title || ''} ${latest.source_type || ''} ${controls}`
       .toLowerCase()
@@ -492,9 +481,9 @@ function renderIsmsEffectiveness() {
     rows
       .map(
         (item) => `<tr>
-    <td class="wrap fw-semibold">${effectivenessMeasureLink(item)}${item.description ? `<div class="small-muted mt-1">${esc(shorten(item.description || '', 180))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
+    <td class="wrap fw-semibold">${effectivenessMeasureLink(item)}${item.description ? `<div class="small-muted mt-1">${esc(shorten(item.description, 180))}</div>` : ''}${item.metric_key ? `<div class="small-muted mt-1"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
     <td>${esc(item.source_type && item.source_type !== 'other' ? item.source_type : 'Other')}</td>
-    <td class="wrap">${effectivenessLatestValue(item)}${Number(item.metric_entry_count || 0) ? `<div class="small-muted">${esc(String(item.metric_entry_count))} metric ${Number(item.metric_entry_count || 0) === 1 ? 'entry' : 'entries'}</div>` : ''}</td>
+    <td class="wrap">${effectivenessLatestValue(item)}${Number(item.metric_entry_count || 0) ? `<div class="small-muted">${esc(String(item.metric_entry_count))} metric ${Number(item.metric_entry_count) === 1 ? 'entry' : 'entries'}</div>` : ''}</td>
     <td>${esc(item.target_display || '-')}</td>
     <td>${esc(item.frequency || '-')}</td>
     <td>${userPillHtml(item.owner)}</td>
@@ -523,7 +512,7 @@ function renderIsmsOrgAssets() {
       assets
         .map(
           (a) =>
-            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '-')}</td><td>${esc(a.subcategory?.name || a.subcategory_name || '-')}</td><td>${esc(a.license || '-')}</td><td>${esc(a.owner_org_node?.name || '-')}</td><td>${esc(a.register_held_by_org_node?.name || '-')}</td><td>${controlBadges(a.controls, framework)}</td><td>${clauseBadges(a.clauses, framework)}</td></tr>`,
+            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '-')}</td><td>${esc(a.subcategory_name || '-')}</td><td>${esc(a.license || '-')}</td><td>${esc(a.owner_org_node?.name || '-')}</td><td>${esc(a.register_held_by_org_node?.name || '-')}</td><td>${controlBadges(a.controls, framework)}</td><td>${clauseBadges(a.clauses, framework)}</td></tr>`,
         )
         .join('') ||
       `<tr><td colspan="8" class="p-4 small-muted">${soa.can_view_isms ? 'No ISMS assets yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
@@ -538,7 +527,7 @@ function renderSwot() {
     (soa.swot_items || [])
       .map((item) => {
         const href = withFramework(`/swot.html?id=${encodeURIComponent(item.id)}`, framework);
-        const refs = (items, link) => (items || []).map(link).join(', ') || '-';
+        const refs = (items, link) => items.map(link).join(', ') || '-';
         return `<tr><td><a href="${esc(href)}">${esc(item.title)}</a></td><td>${esc(item.kind)}</td><td>${esc(item.significance)}/5</td><td>${esc(String(item.status).replaceAll('_', ' '))}</td><td>${refs(item.controls, controlLink)}</td><td>${refs(item.clauses, clauseLink)}</td></tr>`;
       })
       .join('') ||
@@ -610,7 +599,7 @@ ismsDocumentsFilter?.addEventListener('input', renderIsmsDocuments);
 ismsEffectivenessFilter?.addEventListener('input', renderIsmsEffectiveness);
 
 function activateInitialTab() {
-  const tab = new URLSearchParams(window.location.search || '').get('tab');
+  const tab = new URLSearchParams(window.location.search).get('tab');
   if (!tab) return;
   const mapped = lookupTab(
     {
@@ -634,10 +623,7 @@ function activateInitialTab() {
 
 for (const btn of Array.from(document.querySelectorAll('#soaTabs [data-bs-toggle="tab"]'))) {
   btn.addEventListener('shown.bs.tab', () => {
-    const name = String(btn.id || '')
-      .replace(/^soa/, '')
-      .replace(/Tab$/, '')
-      .toLowerCase();
+    const name = btn.id.replace(/^soa/, '').replace(/Tab$/, '').toLowerCase();
     const url = new URL(window.location.href);
     url.searchParams.set('tab', name);
     window.history.replaceState({}, '', url.toString());

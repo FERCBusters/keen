@@ -93,3 +93,29 @@ test('only direct admin links can be removed and untrusted text is escaped', asy
   ui.browser.update([]);
   assert.match(ui.el('crossFrameworkLinks').textContent, /No related controls/);
 });
+
+test('frameworks missing from the catalogue are named and ordered by slug', async (t) => {
+  const ui = await fixture(t);
+  ui.browser.update(
+    [link(1, 'ZETA'), link(2, 'BETA'), link(3, 'A')],
+    [{ slug: 'A', name: 'Delta' }],
+  );
+  assert.deepEqual(
+    [...ui.el('crossFrameworkView').options].map((o) => o.textContent),
+    ['Choose framework', 'BETA (1)', 'Delta (1)', 'ZETA (1)'],
+  );
+});
+
+test('Previous returns to the earlier page of related controls', async (t) => {
+  const ui = await fixture(t);
+  ui.browser.update(Array.from({ length: 12 }, (_, i) => link(i)));
+  ui.choose('A');
+  ui.el('crossFrameworkNext').click();
+  assert.equal(ui.el('crossFrameworkPrevious').disabled, false);
+  assert.equal(ui.el('crossFrameworkPage').textContent, 'Page 2 of 2');
+  ui.el('crossFrameworkPrevious').click();
+  assert.equal(ui.el('crossFrameworkLinks').querySelectorAll('a').length, 10);
+  assert.equal(ui.el('crossFrameworkPage').textContent, 'Page 1 of 2');
+  assert.equal(ui.el('crossFrameworkPrevious').disabled, true);
+  assert.match(ui.el('crossFrameworkSummary').textContent, /1-10 of 12/);
+});

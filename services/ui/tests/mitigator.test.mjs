@@ -348,3 +348,135 @@ test('failures and permissions are explained', async (t) => {
   assert.equal(nobody.ui.el('mitigatorAnalyse').disabled, true);
   assert.equal(nobody.state.posted.length, 0);
 });
+
+// An analysis shaped as the API sends it when little matched: an existing
+// risk has no residual score, and suggestions arrive under both names.
+function sparseAnalysis(overrides = {}) {
+  const controls = overrides.controls || [
+    {
+      control: { id: 'c1', ref: 'A.5.1', title: 'Policies', in_scope: true },
+      score: 3,
+      confidence: 'weak',
+      matched_terms: [],
+      reasons: ['The control title matched.'],
+    },
+  ];
+  return {
+    framework: 'A',
+    signals: [],
+    suggestions: controls,
+    control_suggestions: controls,
+    library_suggestions: [
+      {
+        id: 'tpl2',
+        name: 'Lost laptop',
+        risk_types: ['Confidentiality'],
+        threat_summary: 'A laptop is lost in transit',
+        reason: 'Shares the word laptop.',
+        control_refs: [],
+        suggested_assessment: {},
+        matched_terms: ['laptop'],
+      },
+    ],
+    pestle_hits: [],
+    interested_party_suggestions: [],
+    existing_matches: {
+      cia_risks: [],
+      pestle_items: [],
+      interested_parties: [],
+      ...overrides.existing,
+    },
+    draft_risk: {
+      asset_name: '',
+      risk_types: ['Confidentiality'],
+      threat_summary: 'Lost laptop',
+      note: '',
+    },
+    draft_pestle_item: null,
+  };
+}
+
+test('one existing risk without types or a residual score, one control and a bare template read plainly', async (t) => {
+  const analysis = sparseAnalysis({
+    existing: {
+      cia_risks: [
+        {
+          id: 'r9',
+          asset_name: 'Laptop',
+          risk_types: [],
+          threat_summary: 'Laptop left on a train',
+          score: 9,
+          confidence: 'weak',
+          matched_terms: ['laptop'],
+        },
+      ],
+    },
+  });
+  const { ui, state } = await mitigator(t, { analysis });
+  await analyse(ui, state, 'A laptop goes missing.');
+  assert.equal(
+    ui.el('mitigatorResultsMeta').textContent,
+    '1 existing match, 1 template and 1 suggested control for A.',
+  );
+  const [existing, template] = ui.el('mitigatorSuggestions').querySelectorAll('section');
+  // The threat summary heads the card once; the asset follows without types
+  // or a score after controls.
+  const card = existing.querySelector('.mitigator-suggestion-card > div');
+  assert.equal(card.querySelector('.fw-semibold').textContent, 'Laptop left on a train');
+  assert.deepEqual(
+    [...card.querySelectorAll('.small-muted')].map((d) => d.textContent),
+    ['Laptop'],
+  );
+  assert.equal(card.querySelector('.badge'), null);
+  assert.doesNotMatch(template.textContent, /Suggested controls here|Example rating/);
+  assert.match(template.textContent, /A laptop is lost in transit\s*Shares the word laptop\./);
+});
+
+test('an unnamed PESTLE(E) factor without clauses or matched words, and controls past the eighth unticked', async (t) => {
+  const controls = Array.from({ length: 9 }, (_, i) => ({
+    control: { id: `c${i}`, ref: `A.${i}`, title: `Control ${i}`, in_scope: true },
+    score: 9 - i,
+    confidence: 'weak',
+    matched_terms: [],
+    reasons: ['The control title matched.'],
+  }));
+  const analysis = sparseAnalysis({
+    controls,
+    existing: {
+      pestle_items: [
+        {
+          id: 'pi9',
+          framework: 'A',
+          type: 'Economic',
+          lens: 'External',
+          item: '',
+          rationale: '',
+          score: 9,
+          confidence: 'weak',
+          matched_terms: [],
+          clauses: [],
+          business_processes: [],
+        },
+      ],
+    },
+  });
+  const { ui, state } = await mitigator(t, { analysis });
+  await analyse(ui, state, 'Supplier prices rise.');
+  const factor = ui.el('mitigatorSuggestions').querySelector('section .mitigator-suggestion-card');
+  assert.match(factor.querySelector('.fw-semibold').textContent, /PESTLE\(E\) factor$/);
+  assert.equal(
+    factor.querySelector('.small-muted').textContent.replace(/\s+/g, ' ').trim(),
+    'Economic · External Weak match',
+  );
+  // Without matched words the card has no row for them.
+  assert.equal(factor.querySelector('.gap-1'), null);
+  const boxes = [...ui.el('mitigatorSuggestions').querySelectorAll('.mitigator-suggestion-select')];
+  assert.deepEqual(
+    boxes.map((b) => b.checked),
+    [true, true, true, true, true, true, true, true, false],
+  );
+  assert.equal(
+    ui.el('mitigatorResultsMeta').textContent,
+    '1 existing match, 1 template and 9 suggested controls for A.',
+  );
+});
