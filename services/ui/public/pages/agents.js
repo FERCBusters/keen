@@ -1,6 +1,6 @@
 import { enrollmentProfiles } from './agent-enrollment.js';
 import { openState, platformIcon } from './platform.js';
-import { fmtTs, apiGet, apiPost, apiPatch, confirmAction, esc } from '/app.js';
+import { fmtTs, apiGet, apiPost, apiPatch, confirmAction, errorText, esc } from '/app.js';
 const root = '/api/v1/admin/agents',
   $ = (id) => document.getElementById('ka-' + id);
 let people = [];
@@ -38,12 +38,7 @@ function msg(text, tone = 'info') {
   $('status').hidden = !text;
 }
 function fail(e) {
-  let text = e.message;
-  try {
-    const d = JSON.parse(text).detail;
-    text = typeof d === 'string' ? d : 'Request failed; check the entered values.';
-  } catch {}
-  msg(text, 'danger');
+  msg(errorText(e), 'danger');
 }
 function date(v) {
   return v ? fmtTs(v) : 'Never';

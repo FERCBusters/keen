@@ -1,4 +1,4 @@
-import { apiPost } from '/app.js';
+import { apiPost, errorText } from '/app.js';
 const token = new URLSearchParams(location.hash.slice(1)).get('token');
 history.replaceState(null, '', location.pathname);
 const button = document.getElementById('confirmEmail'),
@@ -16,7 +16,7 @@ button.addEventListener('click', async () => {
     button.hidden = true;
   } catch (error) {
     status.textContent =
-      error.message +
+      errorText(error) +
       ' Sign into the requesting account and reopen the email link, or request a fresh link from Account → Security.';
     button.disabled = false;
   }

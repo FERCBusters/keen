@@ -5,6 +5,7 @@ import {
   apiDelete,
   confirmAction,
   refreshFrameworkNavigation,
+  errorText,
 } from '/app.js';
 
 import { frameworkRegions } from './framework-regions.js';
@@ -246,7 +247,7 @@ function compare(a, b) {
 }
 
 $('frameworks').addEventListener('change', () =>
-  selectFramework().catch((error) => message(error.message)),
+  selectFramework().catch((error) => message(errorText(error))),
 );
 $('search').addEventListener('input', renderTree);
 $('new').addEventListener('click', newNode);
@@ -279,7 +280,7 @@ $('save-framework').addEventListener('click', async () => {
     await refreshFrameworks(slug);
     message('Framework saved');
   } catch (error) {
-    message(error.message);
+    message(errorText(error));
   }
 });
 $('save-node').addEventListener('click', async () => {
@@ -305,7 +306,7 @@ $('save-node').addEventListener('click', async () => {
     if (item) editNode(item, { scroll: true });
     message('Node saved');
   } catch (error) {
-    message(error.message);
+    message(errorText(error));
   }
 });
 $('delete-node').addEventListener('click', async () => {
@@ -324,12 +325,12 @@ $('delete-node').addEventListener('click', async () => {
     await selectFramework();
     message('Node deleted');
   } catch (error) {
-    message(error.message);
+    message(errorText(error));
   }
 });
 refreshFrameworks().catch((error) => {
-  message(error.message);
-  $('organisation-note').textContent = error.message;
+  message(errorText(error));
+  $('organisation-note').textContent = errorText(error);
 });
 
 let selectionVersion = 0;
@@ -378,7 +379,7 @@ function renderOrganisationFrameworks(data) {
       try {
         await selectFramework();
       } catch (error) {
-        message(error.message);
+        message(errorText(error));
       }
     };
     actions.append(edit);
@@ -472,7 +473,7 @@ $('save-selection').addEventListener('click', async () => {
     await refreshFrameworkNavigation(data);
     $('organisation-note').textContent = 'Organisation selection saved. Navigation updated.';
   } catch (error) {
-    $('organisation-note').textContent = error.message;
+    $('organisation-note').textContent = errorText(error);
   } finally {
     button.disabled = false;
   }

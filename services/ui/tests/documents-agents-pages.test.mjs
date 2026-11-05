@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { readError } from './support/error-text.mjs';
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
@@ -620,16 +621,18 @@ test('declined confirmations, demo mode and failures leave agents unchanged', as
   assert.equal(demo.$('register-button').disabled, true);
   assert.match(demo.$('status').textContent, /demo environment/);
   assert.equal(demo.$('agents').querySelector('.agent-actions button'), null);
-  const failing = await agentsPage(t, { fail: true });
-  assert.equal(failing.$('status').textContent, 'Agents unavailable');
+  const failing = await agentsPage(t, { fail: true, vendor: { errorText: readError } });
+  assert.equal(failing.$('status').textContent, 'read: {"detail":"Agents unavailable"}');
   assert.match(failing.$('status').className, /alert-danger/);
-  const rejected = await agentsPage(t, { postFail: true, navigator: {} });
+  const rejected = await agentsPage(t, {
+    postFail: true,
+    navigator: {},
+    vendor: { errorText: readError },
+  });
   rejected
     .$('register')
     .dispatchEvent(new rejected.ui.window.Event('submit', { cancelable: true }));
-  await settle(
-    () => rejected.$('status').textContent === 'Request failed; check the entered values.',
-  );
+  await settle(() => rejected.$('status').textContent === 'read: {"detail":[{"msg":"bad"}]}');
   assert.equal(rejected.$('register-button').disabled, false);
   rejected.$('copy').click();
   await settle(() => /Clipboard unavailable/.test(rejected.$('status').textContent));

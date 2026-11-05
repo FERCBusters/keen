@@ -88,7 +88,7 @@ async function deleteClicked(ev) {
       await load();
     }
   } catch (err) {
-    toast(statusEl, err.message, 'danger');
+    toast(statusEl, errorText(err), 'danger');
   }
 }
 

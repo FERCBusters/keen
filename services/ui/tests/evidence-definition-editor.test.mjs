@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { loadUi } from './support/load-ui.mjs';
+import { readError } from './support/error-text.mjs';
 const html = await readFile(new URL('../public/admin.html', import.meta.url), 'utf8');
 const hostile = '<img src=x onerror=alert(1)>';
 const collectorId = (adapter, section, key) => JSON.stringify([adapter, section, String(key)]);
@@ -261,6 +262,7 @@ async function editor(t, server = {}) {
       apiPut: put,
       apiDelete: remove,
       getCurrentFramework: () => 'A',
+      errorText: readError,
     },
   });
   t.after(() => ui.close());
@@ -2095,16 +2097,11 @@ test('saving needs a preview of this version, and no evidence asks for confirmat
   await ui.click('save-rule');
   assert.match(ui.$('status').textContent, /Preview this version/);
   await ui.click('preview');
+  // A refused save shows what the design system's errorText makes of it.
   ui.state.failSave = '{"detail":[{"msg":"Rule id is taken"},{"msg":"Pick another"}]}';
   await ui.click('save-rule');
-  assert.equal(ui.$('status').textContent, 'Rule id is taken; Pick another');
+  assert.equal(ui.$('status').textContent, `read: ${ui.state.failSave}`);
   assert.equal(ui.$('status').getAttribute('role'), 'alert');
-  ui.state.failSave = '{"detail":"Rules changed in another session"}';
-  await ui.click('save-rule');
-  assert.equal(ui.$('status').textContent, 'Rules changed in another session');
-  ui.state.failSave = '{not json';
-  await ui.click('save-rule');
-  assert.equal(ui.$('status').textContent, '{not json');
 });
 
 test('a legacy summary regex is saved unchanged without a structured condition', async (t) => {

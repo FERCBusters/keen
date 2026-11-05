@@ -1,4 +1,4 @@
-import { fmtTs, apiGet, apiPost, confirmAction, esc } from '/app.js';
+import { fmtTs, apiGet, apiPost, confirmAction, errorText, esc } from '/app.js';
 
 const modes = {
   events: 'Recognised events only',
@@ -43,14 +43,7 @@ export function enrollmentProfiles(host, onChanged) {
     q('#ep-secret').value = key;
     q('[data-secret-box]').hidden = false;
   };
-  const error = (e) => {
-    let text = e.message;
-    try {
-      const v = JSON.parse(text).detail;
-      text = typeof v === 'string' ? v : 'Check the profile settings.';
-    } catch {}
-    status(text);
-  };
+  const error = (e) => status(errorText(e));
   async function run(button, fn) {
     button.disabled = true;
     try {

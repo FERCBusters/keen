@@ -1,5 +1,14 @@
 import { confirmEvidenceRemoval } from './evidence-removal.js';
-import { fmtTs, apiGet, apiPost, apiPut, confirmAction, esc, unsavedGuard } from '/app.js';
+import {
+  fmtTs,
+  apiGet,
+  apiPost,
+  apiPut,
+  confirmAction,
+  errorText,
+  esc,
+  unsavedGuard,
+} from '/app.js';
 const root = '/api/v1/admin/integrations';
 const $ = (id) => document.getElementById('ig-' + id);
 let data = { connections: [], collectors: [], runs: [], templates: [], measures: [] },
@@ -16,12 +25,7 @@ function message(text, tone = 'info') {
   $('status').textContent = text;
 }
 function error(e) {
-  let text = e.message;
-  try {
-    const d = JSON.parse(text).detail;
-    text = Array.isArray(d) ? d.map((x) => x.msg).join('; ') : d || text;
-  } catch {}
-  message(text, 'danger');
+  message(errorText(e), 'danger');
 }
 function state(status) {
   const busy = ['queued', 'running'].includes(status),

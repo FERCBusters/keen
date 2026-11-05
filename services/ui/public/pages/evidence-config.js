@@ -10,6 +10,7 @@ import {
   apiPut,
   apiDelete,
   confirmAction,
+  errorText,
   getCurrentFramework,
   unsavedGuard,
 } from '/app.js';
@@ -24,16 +25,7 @@ let statusTimer = null;
 function status(message, tone = 'danger') {
   clearTimeout(statusTimer);
   const element = $('status');
-  let readable = String(message || '');
-  if (readable.startsWith('{')) {
-    try {
-      const detail = JSON.parse(readable).detail;
-      if (typeof detail === 'string') readable = detail;
-      else if (Array.isArray(detail)) readable = detail.map((item) => item.msg).join('; ');
-    } catch {
-      /* Keep plain text errors as they are. */
-    }
-  }
+  const readable = String(message || '');
   element.textContent = readable;
   element.hidden = !readable;
   element.className = readable ? `alert alert-${tone} mb-3` : '';
@@ -351,7 +343,7 @@ function paintDefinitionEntry() {
         : adapter;
     $('bookstack-picker').hidden = true;
     $('bookstack-conditions-panel').hidden = adapter !== 'bookstack';
-    loadSamples().catch((error) => status(error.message));
+    loadSamples().catch((error) => status(errorText(error)));
     return;
   }
   const selected = $('definition-entry').value;
@@ -398,7 +390,7 @@ function paintDefinitionEntry() {
   $('when-source').value = adapter === 'webhooks' ? `webhook:${found?.key || ''}` : adapter;
   $('bookstack-picker').hidden = adapter !== 'bookstack';
   $('bookstack-conditions-panel').hidden = adapter !== 'bookstack';
-  loadSamples().catch((error) => status(error.message));
+  loadSamples().catch((error) => status(errorText(error)));
 }
 function paintDefinitionChoices() {
   const adapter = $('definition-adapter').value,
@@ -435,7 +427,8 @@ function paintConnectionChoices() {
     select.className = 'form-select';
     label.append(text, select);
     $('definition-adapter').parentElement.after(label);
-    select.onchange = () => selectDefinitionAdapter(true).catch((error) => status(error.message));
+    select.onchange = () =>
+      selectDefinitionAdapter(true).catch((error) => status(errorText(error)));
   }
   const previous = select.value,
     adapter = $('definition-adapter').value;
@@ -476,7 +469,7 @@ function showSeveral(several) {
   ])
     $(id).hidden = true;
   syncSourcePicker();
-  loadSamples().catch((error) => status(error.message));
+  loadSamples().catch((error) => status(errorText(error)));
 }
 function syncSourcePicker() {
   sourcePicker?.setSelected(sourcesOf($('when-source_regex').value) || [], {
@@ -504,7 +497,7 @@ async function selectDefinitionAdapter(keepConnection = false) {
     try {
       await loadBookstackBooks();
     } catch (error) {
-      $('bookstack-status').textContent = error.message;
+      $('bookstack-status').textContent = errorText(error);
     }
   }
 }
@@ -725,7 +718,7 @@ function nextStep() {
     try {
       definitionFromForm();
     } catch (error) {
-      status(error.message);
+      status(errorText(error));
       return;
     }
   }
@@ -1161,7 +1154,7 @@ async function editRule(rule, { suggestion = null } = {}) {
   if (suggestion) activeSuggestion = suggestion;
   else {
     await loadRuleRevisions();
-    loadRecentBackfill(rule.id).catch((error) => status(error.message));
+    loadRecentBackfill(rule.id).catch((error) => status(errorText(error)));
   }
   showStep(1);
   unsaved.markClean();
@@ -1238,7 +1231,7 @@ function renderRules() {
     const insight = insightFor(rule.id);
     if (insight && insight.status !== 'paused') btn.append(' ', statusBadge(insight));
     btn.append(meta);
-    btn.addEventListener('click', () => editRule(rule).catch((error) => status(error.message)));
+    btn.addEventListener('click', () => editRule(rule).catch((error) => status(errorText(error))));
     const row = document.createElement('div');
     row.className = 'd-flex gap-2 align-items-center mb-2';
     btn.classList.add('flex-grow-1');
@@ -1271,7 +1264,7 @@ function renderRules() {
           'success',
         );
       } catch (error) {
-        status(error.message);
+        status(errorText(error));
       }
     });
     row.append(btn, pause, remove);
@@ -1318,7 +1311,7 @@ function ruleLink(ruleId) {
   link.className = 'btn btn-link btn-sm p-0 align-baseline';
   link.textContent = rule?.description || ruleId;
   link.disabled = !rule;
-  link.addEventListener('click', () => editRule(rule).catch((error) => status(error.message)));
+  link.addEventListener('click', () => editRule(rule).catch((error) => status(errorText(error))));
   return link;
 }
 function ruleLinks(ids) {
@@ -1379,7 +1372,7 @@ function renderInsights() {
     open.className = 'btn btn-outline-primary btn-sm';
     open.textContent = 'Open rule';
     open.setAttribute('aria-label', `Open ${name.textContent}`);
-    open.addEventListener('click', () => editRule(rule).catch((error) => status(error.message)));
+    open.addEventListener('click', () => editRule(rule).catch((error) => status(errorText(error))));
     const pause = document.createElement('button');
     pause.type = 'button';
     pause.className = 'btn btn-outline-secondary btn-sm';
@@ -1444,7 +1437,7 @@ async function loadInsights() {
     if (request !== insightsRequest) return;
     insights = null;
     renderInsights();
-    $('insights-meta').textContent = `Rule insights are unavailable: ${error.message}`;
+    $('insights-meta').textContent = `Rule insights are unavailable: ${errorText(error)}`;
   }
 }
 // Pausing keeps a rule and its mappings; Keen skips it for new events until it resumes.
@@ -1500,7 +1493,7 @@ async function setRulePaused(rule, paused) {
       'success',
     );
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   }
 }
 // Framework clauses are also catalogue rows (type "clause"), so a clause and a
@@ -1686,7 +1679,7 @@ async function loadFrameworkControls() {
   renderTargets();
 }
 $('framework').addEventListener('change', () =>
-  loadFrameworkControls().catch((error) => status(error.message)),
+  loadFrameworkControls().catch((error) => status(errorText(error))),
 );
 $('control-filter').addEventListener('input', fillControlPicker);
 $('control-filter').addEventListener('keydown', (event) => {
@@ -1733,7 +1726,7 @@ async function restore(selectedRevision) {
   );
 }
 $('rule-restore').addEventListener('click', () =>
-  restore($('rule-revision').value).catch((error) => status(error.message)),
+  restore($('rule-revision').value).catch((error) => status(errorText(error))),
 );
 async function loadSettings() {
   const adapter = $('settings-adapter').value;
@@ -1742,7 +1735,7 @@ async function loadSettings() {
   $('settings-json').value = JSON.stringify(data.settings, null, 2);
 }
 $('settings-adapter').addEventListener('change', () =>
-  loadSettings().catch((error) => status(error.message)),
+  loadSettings().catch((error) => status(errorText(error))),
 );
 $('save-settings').addEventListener('click', async () => {
   try {
@@ -1755,29 +1748,29 @@ $('save-settings').addEventListener('click', async () => {
     await loadSettings();
     status(`Saved shared ${adapter} settings as revision ${result.version}.`, 'success');
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   }
 });
 $('when-source').addEventListener('change', () =>
-  loadSamples().catch((error) => status(error.message)),
+  loadSamples().catch((error) => status(errorText(error))),
 );
 $('definition-adapter').addEventListener('change', () => {
   // Conditions only BookStack pages carry stay behind when a rule reads another source.
   if ($('definition-adapter').value !== 'bookstack')
     for (const field of bookstackConditions) $(`when-${field}`).value = '';
-  selectDefinitionAdapter().catch((error) => status(error.message));
+  selectDefinitionAdapter().catch((error) => status(errorText(error)));
 });
 $('definition-section').addEventListener('change', paintDefinitionChoices);
 $('definition-entry').addEventListener('change', paintDefinitionEntry);
 $('bookstack-book').addEventListener('change', () =>
-  loadBookstackPages().catch((error) => ($('bookstack-status').textContent = error.message)),
+  loadBookstackPages().catch((error) => ($('bookstack-status').textContent = errorText(error))),
 );
 $('bookstack-page').addEventListener('change', selectBookstackPage);
 $('bookstack-more-books').addEventListener('click', () =>
-  loadBookstackBooks(true).catch((error) => ($('bookstack-status').textContent = error.message)),
+  loadBookstackBooks(true).catch((error) => ($('bookstack-status').textContent = errorText(error))),
 );
 $('bookstack-more-pages').addEventListener('click', () =>
-  loadBookstackPages(true).catch((error) => ($('bookstack-status').textContent = error.message)),
+  loadBookstackPages(true).catch((error) => ($('bookstack-status').textContent = errorText(error))),
 );
 $('sample').addEventListener('change', () => {
   const sample = samples[Number($('sample').value)];
@@ -1830,7 +1823,7 @@ $('export-rules').addEventListener('click', async () => {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   } finally {
     button.disabled = false;
   }
@@ -1855,7 +1848,7 @@ $('editor').addEventListener('click', (event) => {
   if (button && !button.disabled) goToStep(Number(button.dataset.ecGoto));
 });
 $('next-step').addEventListener('click', nextStep);
-$('new-rule').addEventListener('click', () => newRule().catch((error) => status(error.message)));
+$('new-rule').addEventListener('click', () => newRule().catch((error) => status(errorText(error))));
 function addSelectedTarget() {
   const select = $('control'),
     framework = $('framework').value,
@@ -1906,7 +1899,7 @@ $('suggest-controls').addEventListener('click', async () => {
       list.append(button);
     }
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   }
 });
 // A previewed event, opened in a new tab so the rule being written stays open.
@@ -1962,7 +1955,7 @@ $('preview').addEventListener('click', async () => {
     }
   } catch (error) {
     previewedRule = null;
-    $('preview-results').textContent = error.message;
+    $('preview-results').textContent = errorText(error);
   }
 });
 let pollingJobId = null;
@@ -2016,7 +2009,7 @@ async function pollBackfill(id, newlyStarted = false) {
   }
   if (['queued', 'running'].includes(data.status))
     setTimeout(() => {
-      if (pollingJobId === id) pollBackfill(id).catch((error) => status(error.message));
+      if (pollingJobId === id) pollBackfill(id).catch((error) => status(errorText(error)));
     }, 5000);
 }
 async function loadRecentBackfill(ruleId) {
@@ -2082,7 +2075,7 @@ $('save-rule').addEventListener('click', async () => {
     if (saved.backfill?.id) await pollBackfill(saved.backfill.id, true);
     else if (saved.backfill) showBackfill(saved.backfill);
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   }
 });
 // The rule is saved either way; a failure here leaves the suggestion to dismiss.
@@ -2120,7 +2113,7 @@ $('backfill-start').addEventListener('click', async () => {
     if (result.backfill?.id) await pollBackfill(result.backfill.id, true);
     else showBackfill(result.backfill);
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   }
 });
 $('delete-rule').addEventListener('click', async () => {
@@ -2145,7 +2138,7 @@ $('delete-rule').addEventListener('click', async () => {
     await loadRules();
     status('Definition removed. Existing evidence and mappings are retained.', 'success');
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   }
 });
 // Create mapping waits for the first load: opening the editor sooner would
@@ -2204,14 +2197,14 @@ async function load() {
     const names = selectedFilterPillValues($('sources'));
     $('when-source_regex').value = names.length ? sourcePattern(names) : '';
     ruleSentence();
-    loadSamples().catch((error) => status(error.message));
+    loadSamples().catch((error) => status(errorText(error)));
   });
   $('when-source_regex').addEventListener('input', () => {
     if (severalMode) syncSourcePicker();
     ruleSentence();
   });
   $('when-source_regex').addEventListener('change', () => {
-    if (severalMode) loadSamples().catch((error) => status(error.message));
+    if (severalMode) loadSamples().catch((error) => status(errorText(error)));
   });
   $('source-pattern').addEventListener('click', () => {
     $('more-filters').open = true;
@@ -2237,7 +2230,7 @@ async function load() {
     showEditor(1);
   }
 }
-init().catch((error) => status(error.message));
+init().catch((error) => status(errorText(error)));
 
 // Generic integrations are source-wide inputs; rules retain the existing mapping workflow.
 window.addEventListener('keen-integration-rule', async (event) => {
@@ -2251,7 +2244,7 @@ window.addEventListener('keen-integration-rule', async (event) => {
     await selectDefinitionAdapter();
     $('description').value = name;
   } catch (error) {
-    status(error.message);
+    status(errorText(error));
   }
 });
 
@@ -2289,14 +2282,14 @@ window.addEventListener('keen-collection-create', async (event) => {
 });
 // A background source refresh must preserve the active tab and mapping draft.
 window.addEventListener('keen-connections-changed', () =>
-  loadRules({ resetEditor: false }).catch((e) => status(e.message)),
+  loadRules({ resetEditor: false }).catch((e) => status(errorText(e))),
 );
 // A rule created from Suggested rules joins the library.
 window.addEventListener('keen-rules-changed', () =>
-  loadRules({ resetEditor: false }).catch((e) => status(e.message)),
+  loadRules({ resetEditor: false }).catch((e) => status(errorText(e))),
 );
 window.addEventListener('keen-suggested-rule', (event) =>
-  draftFromSuggestion(event.detail).catch((e) => status(e.message)),
+  draftFromSuggestion(event.detail).catch((e) => status(errorText(e))),
 );
 
 function currentEventFields() {

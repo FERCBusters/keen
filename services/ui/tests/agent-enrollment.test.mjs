@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadUi } from './support/load-ui.mjs';
+import { readError } from './support/error-text.mjs';
 
 test('enrollment profile creation displays a one-time key and clears it on navigation', async (t) => {
   let saved;
@@ -98,7 +99,7 @@ test('profile revocation is explicit and revoked profiles have no reactivation c
   assert.equal(host.querySelector('[data-create]').disabled, true);
 });
 
-test("creation errors are shown as the server's detail, and the key can be revealed or copied", async (t) => {
+test('creation errors are shown as the design system reads them, and the key can be revealed or copied', async (t) => {
   let failure = null;
   const copied = [];
   const ui = await loadUi('pages/agent-enrollment.js', {
@@ -115,6 +116,7 @@ test("creation errors are shown as the server's detail, and the key can be revea
       });
     },
     vendor: {
+      errorText: readError,
       apiGet: async () => ({ profiles: [] }),
       apiPost: async () => {
         if (failure) throw new Error(failure);
@@ -144,12 +146,9 @@ test("creation errors are shown as the server's detail, and the key can be revea
   assert.equal(status(), 'Use key=value for each label.');
   host.querySelector('#ep-labels').value = '';
 
-  failure = '{"detail":"Name already in use"}';
-  await submit();
-  assert.equal(status(), 'Name already in use');
   failure = '{"detail":[{"msg":"token_days too large"}]}';
   await submit();
-  assert.equal(status(), 'Check the profile settings.');
+  assert.equal(status(), `read: ${failure}`);
   failure = 'Network down';
   await submit();
   assert.equal(status(), 'Network down');

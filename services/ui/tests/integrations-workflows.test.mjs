@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { loadUi } from './support/load-ui.mjs';
 import { settle } from './support/page-fixture.mjs';
+import { readError } from './support/error-text.mjs';
 
 const html = await readFile(new URL('../public/admin.html', import.meta.url), 'utf8');
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -212,7 +213,7 @@ async function builder(t, options = {}) {
           return structuredClone(state.data);
         }
         if (url === `${root}/collectors/c1/revisions`) {
-          if (fail.revisions) throw new Error(JSON.stringify({ detail: 'Revisions unavailable' }));
+          if (fail.revisions) throw new Error('Revisions unavailable');
           return {
             items: [
               { revision: 2, created_at: '2026-09-30T10:00:00' },
@@ -269,6 +270,7 @@ async function builder(t, options = {}) {
           /[&<>"']/g,
           (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
         ),
+      ...options.vendor,
     },
   });
   t.after(ui.close);
@@ -390,18 +392,18 @@ test('collector actions post the draft version and report the outcome', async (t
   assert.equal(ctx.ui.window.location.hash, '#evidence-config');
 });
 
-test('API errors show the server detail, including validation lists', async (t) => {
-  const list = await builder(t, {
-    fail: {
-      post: JSON.stringify({ detail: [{ msg: 'version is stale' }, { msg: 'reload first' }] }),
-    },
-  });
+test('API errors are shown as the design system reads them', async (t) => {
+  const detail = JSON.stringify({ detail: [{ msg: 'version is stale' }, { msg: 'reload first' }] });
+  const list = await builder(t, { fail: { post: detail }, vendor: { errorText: readError } });
   list.buttonIn(cardFor(list, 'Waiting'), 'Run now').click();
-  await settle(() => list.el('status').textContent === 'version is stale; reload first');
+  await settle(() => list.el('status').textContent === `read: ${detail}`);
   assert.equal(list.el('status').className, 'alert alert-danger');
   const button = list.buttonIn(cardFor(list, 'Waiting'), 'Run now');
   assert.equal(button.disabled, false);
-  const text = await builder(t, { fail: { post: 'Worker unavailable' } });
+  const text = await builder(t, {
+    fail: { post: 'Worker unavailable' },
+    vendor: { errorText: readError },
+  });
   text.buttonIn(cardFor(text, 'Waiting'), 'Pause').click();
   await settle(() => text.el('status').textContent === 'Worker unavailable');
 });

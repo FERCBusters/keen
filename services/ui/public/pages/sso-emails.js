@@ -1,4 +1,4 @@
-import { apiGet, apiPost, confirmAction } from '/app.js';
+import { apiGet, apiPost, confirmAction, errorText } from '/app.js';
 const status = document.getElementById('ssoEmailStatus');
 const form = document.getElementById('ssoEmailForm');
 const list = document.getElementById('ssoEmailList');
@@ -33,7 +33,7 @@ async function load() {
         await apiPost('/api/v1/me/sso-emails/remove', { email: address.email });
         await load();
       } catch (error) {
-        status.textContent = error.message;
+        status.textContent = errorText(error);
         button.disabled = false;
       }
     });
@@ -58,11 +58,11 @@ form.addEventListener('submit', async (event) => {
       ? 'This address is already verified.'
       : 'Verification email sent. Stay signed into this account and open the link within 30 minutes. Requesting another link replaces this one.';
   } catch (error) {
-    status.textContent = error.message;
+    status.textContent = errorText(error);
   } finally {
     button.disabled = false;
   }
 });
 load().catch((error) => {
-  status.textContent = error.message;
+  status.textContent = errorText(error);
 });

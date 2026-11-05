@@ -314,7 +314,7 @@ test('a preview whose progress cannot be read stops being followed and says why'
         : { ok: true },
     runReply: () => {
       reads++;
-      throw new Error(JSON.stringify({ detail: 'Run not found' }));
+      throw new Error('Run not found');
     },
   });
   buttonIn(card('Uptime checks'), 'Edit / test').click();
