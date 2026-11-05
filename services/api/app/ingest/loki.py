@@ -68,7 +68,8 @@ def _summarize_json(
     """Return (summary, extracted). Handles OSSEC/"rule" shaped logs well."""
     extracted: dict[str, Any] = {}
     if isinstance(parsed, dict):
-        rule = parsed.get("rule") if isinstance(parsed.get("rule"), dict) else {}
+        raw_rule = parsed.get("rule")
+        rule = raw_rule if isinstance(raw_rule, dict) else {}
         sid = rule.get("sidid") or rule.get("sid") or rule.get("id")
         comment = rule.get("comment") or rule.get("description")
         level = (
@@ -132,8 +133,9 @@ def _summarize_json(
 
         # fall back to common message-ish fields
         for k in ("message", "msg", "event", "text"):
-            if isinstance(parsed.get(k), str) and parsed.get(k).strip():
-                return truncate(parsed.get(k), 260), extracted
+            value = parsed.get(k)
+            if isinstance(value, str) and value.strip():
+                return truncate(value, 260), extracted
 
     # Default: keep line but truncate to keep UI usable
     return truncate(line, 340), extracted
@@ -343,6 +345,8 @@ def ingest_loki_once(
             chunk_max_seen_ts: datetime | None = None
 
             for stream in results:
+                if not isinstance(stream, dict):
+                    continue
                 labels = stream.get("stream", {}) or {}
                 values = stream.get("values", []) or []
                 chunk_returned_values += len(values)

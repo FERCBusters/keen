@@ -259,7 +259,7 @@ def control_evidence_summary(*, control_id: str, db: Session, user) -> dict:
             .group_by(Event.source)
             .all()
         )
-        sources = [
+        sources: list[dict[str, Any]] = [
             {
                 "source": source or "",
                 "count": int(count),

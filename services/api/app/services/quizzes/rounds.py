@@ -89,14 +89,15 @@ def quiz_availability(quiz: Quiz, rounds, stats) -> dict[str, Any]:
     scheduled = quiz.schedule_next_run_date is not None
     next_date, _ = advance_past_missed_runs(quiz, run_today=today)
     if quiz.status == "draft":
-        if scheduled and next_date is None:
-            return {"state": "draft", "on_activation": "nothing"}
-        if scheduled and next_date > today:
-            return {
-                "state": "draft",
-                "on_activation": "scheduled",
-                "opens_on": iso(next_date),
-            }
+        if scheduled:
+            if next_date is None:
+                return {"state": "draft", "on_activation": "nothing"}
+            if next_date > today:
+                return {
+                    "state": "draft",
+                    "on_activation": "scheduled",
+                    "opens_on": iso(next_date),
+                }
         until = today + timedelta(days=int(quiz.due_days or 1))
         return {"state": "draft", "on_activation": "now", "until": iso(until)}
     sittable = [

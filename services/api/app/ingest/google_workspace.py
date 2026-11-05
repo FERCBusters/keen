@@ -440,9 +440,10 @@ def ingest_google_workspace_stream(
 
         outcome = (cfg.get("outcome") or "").strip() or _outcome_from_names(names)
 
-        if "severity" in cfg and cfg.get("severity") is not None:
+        configured_severity = cfg.get("severity")
+        if configured_severity is not None:
             try:
-                severity = int(cfg.get("severity"))
+                severity = int(configured_severity)
             except Exception:
                 severity = 3
         else:

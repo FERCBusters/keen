@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import AbstractContextManager
 from copy import deepcopy
 from typing import Any
 from urllib.parse import urlparse
@@ -784,6 +785,12 @@ def get_evidence_definitions(*, db: Session):
             ):
                 key = _collector_key(connection.source, section, entry, provider)
                 if key:
+                    version = 0
+                    if connection.managed_by == "database":
+                        stored = db.get(SourceConnection, connection.id)
+                        if stored is None:
+                            continue  # Deleted since the connections were listed.
+                        version = stored.version
                     items.append(
                         {
                             "adapter": connection.source,
@@ -793,11 +800,7 @@ def get_evidence_definitions(*, db: Session):
                             "entry": withheld_inputs(connection.source, section, entry),
                             "connection_id": connection.id,
                             "connection_name": connection.name,
-                            "version": (
-                                db.get(SourceConnection, connection.id).version
-                                if connection.managed_by == "database"
-                                else 0
-                            ),
+                            "version": version,
                         }
                     )
     rules = _normalized_rules(db)
@@ -831,7 +834,7 @@ def source_catalogue(*, db: Session):
         .group_by(Event.source)
         .all()
     }
-    items = []
+    items: list[dict[str, Any]] = []
     for name in [*CONNECTORS, "imap"]:
         enabled = bool(getattr(settings, f"{name}_enabled", False))
         if name in ("redmine", "riskledger", "imap") and settings.demo_mode:
@@ -888,6 +891,7 @@ def source_catalogue(*, db: Session):
     scopes = dict(
         db.query(CloudPostureScope.provider, func.count(CloudPostureScope.id))
         .group_by(CloudPostureScope.provider)
+        .tuples()
         .all()
     )
     for provider in cloud_providers():
@@ -963,7 +967,7 @@ def bookstack_catalog(
     from app.ingest.bookstack import _client
     from app.ingest.connections import connection_scope, connections, resolve
 
-    scope = nullcontext()
+    scope: AbstractContextManager[object] = nullcontext()
     if connection_id:
         connection = next(
             (c for c in connections(db, "bookstack") if c.id == connection_id), None
@@ -1544,8 +1548,8 @@ def preview_rule(*, payload: RuleInput, db: Session):
             )
         )
     events = query.order_by(Event.timestamp.desc()).limit(200).all()
-    examples = []
-    nonmatches = []
+    examples: list[dict[str, Any]] = []
+    nonmatches: list[dict[str, Any]] = []
     count = 0
     for event in events:
         hits = evaluate_by_framework(
@@ -1665,7 +1669,7 @@ def _rule_history(db: Session, rule_id: str) -> list[dict]:
     Unrelated edits and no-op saves do not create rule revisions. A deletion
     resets history so a newly created rule reusing an ID has its own lifetime.
     """
-    history = []
+    history: list[dict] = []
     previous = None
     rows = (
         db.query(ManagedConfigurationRevision)
@@ -2015,7 +2019,7 @@ def _connection_plan(key: str, db: Session):
                 "webhook:" + provider for provider in document.get("providers", {})
             ]
         children = []
-        versions = {"connector": _version(db, identity)}
+        versions: dict[str, object] = {"connector": _version(db, identity)}
         count = sum(
             len(document.get(section, []))
             for section in COLLECTION_SECTIONS

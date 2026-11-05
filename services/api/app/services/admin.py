@@ -1656,7 +1656,8 @@ def admin_update_diary(
     editor = getattr(context.actor, "username", None)
 
     # Resolve control choices first, so a refused choice changes nothing.
-    chosen = missing = None
+    chosen: list[ControlItem] | None = None
+    missing: list[str] = []
     if "controls" in body or "control_refs" in body:
         framework = (
             str(body.get("framework") or "").strip() or settings.default_framework_slug

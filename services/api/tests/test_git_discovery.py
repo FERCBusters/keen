@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from app.ingest import forgejo, gitea, gitea_compatible, gitlab
 from app.mapping.collector import (
@@ -420,6 +420,42 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
             [r for r in results if r.get("project") == 2][0]["created_events"], 0
         )
         db.rollback.assert_called_once()
+
+    def test_a_project_without_a_usable_id_fails_alone(self):
+        # Discovery keeps each project's ID; one that is a list or an object
+        # is reported, and the scope's other projects are still read.
+        for bad in ([1], {"id": 1}):
+            with self.subTest(bad=bad):
+                db = self._db()
+                db.scalars.return_value.all.return_value = []
+                client = Mock()
+                client.get.side_effect = [
+                    self._page([{"id": bad}, {"id": 2, "path_with_namespace": "a/b"}]),
+                    self._page([]),
+                    # The second project's activity.
+                    self._page([]),
+                ]
+                opened = MagicMock()
+                opened.return_value.__enter__.return_value = client
+                with (
+                    patch.object(gitlab.settings, "gitlab_enabled", True),
+                    patch.object(gitlab.settings, "gitlab_base_url", self.BASE),
+                    patch.object(gitlab, "is_safe_url", return_value=True),
+                    patch.object(gitlab.settings, "gitlab_token", "synthetic-token"),
+                    patch.object(
+                        gitlab, "load_document", return_value={"users": [{"user": "a"}]}
+                    ),
+                    patch.object(gitlab, "ingestion_client", opened),
+                    patch.object(gitlab, "store_event_with_artifact"),
+                ):
+                    results = gitlab.ingest_gitlab_all(db)
+                self.assertEqual(results[0]["discovered_projects"], 2)
+                self.assertEqual(
+                    [r["project_id"] for r in results if "project_id" in r], [None]
+                )
+                (read,) = [r for r in results if r.get("project") == "a/b"]
+                self.assertEqual(read["created_events"], 0)
+                self.assertEqual(client.get.call_count, 3)
 
     def test_a_failing_scope_is_reported_and_the_next_scope_still_runs(self):
         db = self._db()

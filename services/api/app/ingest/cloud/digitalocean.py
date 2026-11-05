@@ -69,8 +69,10 @@ class DigitalOcean(JsonApi):
             )
             batch = items(body, key)
             found.extend(batch)
-            links = body.get("links") if isinstance(body.get("links"), dict) else {}
-            pages = links.get("pages") if isinstance(links.get("pages"), dict) else {}
+            links = body.get("links")
+            links = links if isinstance(links, dict) else {}
+            pages = links.get("pages")
+            pages = pages if isinstance(pages, dict) else {}
             if not pages.get("next") or not batch:
                 return found, True
         return found, False
@@ -138,9 +140,8 @@ def exposed_ports(firewall: dict) -> list[int]:
     for port in ADMIN_PORTS:
         allowed = denied = False
         for rule in rules:
-            sources = (
-                rule.get("sources") if isinstance(rule.get("sources"), dict) else {}
-            )
+            sources = rule.get("sources")
+            sources = sources if isinstance(sources, dict) else {}
             if not _covers(rule, port) or not everywhere(sources.get("addresses")):
                 continue
             if str(rule.get("action") or "allow").lower() == "deny":
@@ -278,10 +279,12 @@ def findings(api: DigitalOcean) -> Check:
             "/v2/security/scans/latest",
             params={"severity": severity, "per_page": PAGE_SIZE, "page": 1},
         )
-        scan = body.get("scan") if isinstance(body.get("scan"), dict) else {}
+        scan = body.get("scan")
+        scan = scan if isinstance(scan, dict) else {}
         if scan.get("status") in ("CSPM_NOT_ENABLED", "SCAN_NOT_RUN"):
             raise Unavailable("not_configured")
-        meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+        meta = body.get("meta")
+        meta = meta if isinstance(meta, dict) else {}
         total = meta.get("total")
         listed = [f for f in scan.get("findings") or [] if isinstance(f, dict)]
         counts[severity] = (
@@ -327,7 +330,7 @@ def action_entry(action: dict, scope: str) -> Activity | None:
     if when is None or not isinstance(ident, int) or not kind:
         return None
     outcome = {"completed": "success", "errored": "failure"}.get(
-        action.get("status"), "info"
+        text_field(action.get("status")), "info"
     )
     resource = text_field(action.get("resource_type"), 64)
     return Activity(
@@ -355,14 +358,17 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
     first, so reading stops at the first page older than the window."""
     with connect() as api:
         key = team(api)[0]
-        found, complete = [], False
+        found: list[Activity] = []
+        complete = False
         for page in range(1, MAX_ACTIVITY // PAGE_SIZE + 2):
             body = api.get("/v2/actions", params={"page": page, "per_page": PAGE_SIZE})
             entries = [action_entry(a, key) for a in items(body, "actions")]
             found.extend(e for e in entries if e is not None and since <= e.at < until)
             oldest = min((e.at for e in entries if e is not None), default=None)
-            links = body.get("links") if isinstance(body.get("links"), dict) else {}
-            pages = links.get("pages") if isinstance(links.get("pages"), dict) else {}
+            links = body.get("links")
+            links = links if isinstance(links, dict) else {}
+            pages = links.get("pages")
+            pages = pages if isinstance(pages, dict) else {}
             if (
                 not entries
                 or not pages.get("next")

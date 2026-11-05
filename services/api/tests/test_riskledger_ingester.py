@@ -164,6 +164,45 @@ def test_account_pin_and_framework_level_filter(db, records):
     )
 
 
+class SuppliersAPI(FakeAPI):
+    def __init__(self, records, suppliers):
+        super().__init__(records)
+        self.suppliers = suppliers
+
+    def pages(self, kind, cfg):
+        if kind == "suppliers":
+            yield from copy.deepcopy(self.suppliers)
+        else:
+            yield from super().pages(kind, cfg)
+
+
+@pytest.mark.parametrize("bad", [[LEVEL], {"id": LEVEL}], ids=["list", "object"])
+def test_a_supplier_whose_level_id_is_not_text_is_outside_the_chosen_levels(
+    db, records, bad
+):
+    odd = {
+        **copy.deepcopy(records["supplier"]),
+        "id": "00000000-0000-4000-8000-000000000007",
+        "name": "Odd supplier",
+        "framework": {"level": {"id": bad}, "addOnDomains": []},
+    }
+    client = SuppliersAPI(records, [odd, records["supplier"]])
+    cfg = {"organizations": [{"org": "*"}], "framework_level_ids": [LEVEL]}
+    result = rl._collect(db, client, cfg)
+    # The supplier and risk at the chosen level are imported.
+    assert result["examined"] == 2
+    assert [v.name for v in db.query(IsmsVendor)] == ["Supplier"]
+    assert db.query(Risk).count() == 1
+
+
+def test_domain_entries_other_than_objects_are_passed_over(db, records):
+    records["supplier"]["complianceByDomain"].extend(["D", 7, None])
+    records["supplier"]["framework"]["addOnDomains"] = ["x", [DOM]]
+    result = rl._collect(db, FakeAPI(records), {"organizations": [{"org": "*"}]})
+    assert (result["created_events"], result["domains_discovered"]) == (4, 1)
+    assert db.query(IsmsVendor).count() == 1
+
+
 def test_explicit_control_discovery_without_native_imports(db, records):
     result = rl._collect(
         db,

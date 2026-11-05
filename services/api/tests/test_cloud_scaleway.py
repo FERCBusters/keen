@@ -572,6 +572,124 @@ def test_activity_without_names_keeps_principal_ids(use):
     assert APP in deleted.actor
 
 
+ADMINS = {
+    "alex@example.org",
+    "application/terraform",
+    "group/platform",
+    "idle@example.org",
+    "sam@example.org",
+}
+P_ODD = uid(15)
+
+
+def _odd_policy(data, bad, field):
+    data["/iam/v1alpha1/policies"].append({"id": P_ODD, field: bad})
+    data[("/iam/v1alpha1/rules", P_ODD)] = [{"permission_set_names": ["IAMManager"]}]
+
+
+# Where one malformed ID goes, and what that principal adds to the
+# administrators and to the holders of old keys.
+MALFORMED = {
+    "owner": (
+        lambda data, bad: data["/iam/v1alpha1/users"].append(
+            {
+                "id": bad,
+                "email": "odd@example.org",
+                "type": "owner",
+                "mfa": False,
+                "status": "activated",
+                "last_login_at": ago(1),
+            }
+        ),
+        {"odd@example.org"},
+        set(),
+    ),
+    "application": (
+        lambda data, bad: data["/iam/v1alpha1/applications"].append(
+            {"id": bad, "name": "broken"}
+        ),
+        set(),
+        set(),
+    ),
+    "group": (
+        lambda data, bad: data["/iam/v1alpha1/groups"].append(
+            {"id": bad, "name": "ghost", "user_ids": [PENDING]}
+        ),
+        set(),
+        set(),
+    ),
+    "group member": (
+        lambda data, bad: data["/iam/v1alpha1/groups"][0]["user_ids"].append(bad),
+        set(),
+        set(),
+    ),
+    "policy user": (lambda data, bad: _odd_policy(data, bad, "user_id"), set(), set()),
+    "policy group": (
+        lambda data, bad: _odd_policy(data, bad, "group_id"),
+        set(),
+        set(),
+    ),
+    "policy application": (
+        lambda data, bad: _odd_policy(data, bad, "application_id"),
+        {"application/unknown"},
+        set(),
+    ),
+    "permission set": (
+        lambda data, bad: data[("/iam/v1alpha1/rules", P_READ)][0][
+            "permission_set_names"
+        ].append(bad),
+        set(),
+        set(),
+    ),
+    "key bearer": (
+        lambda data, bad: data["/iam/v1alpha1/api-keys"].append(
+            {
+                "access_key": "SCWDDDDDDDDDDDDDDDDD",
+                "user_id": bad,
+                "created_at": ago(300),
+            }
+        ),
+        set(),
+        {"SCWDDDDDDDDDDDDDDDDD"},
+    ),
+}
+
+
+@pytest.mark.parametrize("bad", [[uid(7)], {"id": uid(7)}], ids=["list", "object"])
+@pytest.mark.parametrize("site", MALFORMED)
+def test_one_principal_without_a_usable_id_leaves_the_refresh_intact(use, site, bad):
+    add, admins, keys = MALFORMED[site]
+    data = default_data()
+    add(data, bad)
+    use(Api(data))
+    [scope] = scw.collect()
+    checks = by_key(scope.checks)
+    assert set(checks) == set(scw.CHECKS)
+    assert not [c.key for c in scope.checks if c.status == "unknown"]
+    assert set(checks["identity.admins"].subjects) == ADMINS | admins
+    assert "sam@example.org" in checks["identity.admin_mfa"].subjects
+    assert (
+        set(checks["credentials.key_age"].subjects) == {"application/terraform"} | keys
+    )
+    assert checks["network.admin_ports"].subjects == ["fr-par-1/legacy"]
+    # Activity reads the same names, and the well-formed principals keep theirs.
+    entries, complete = scw.activity(NOW - timedelta(hours=6), NOW)
+    assert complete
+    assert [(e.action, e.actor) for e in entries] == [
+        ("SignIn", "sam@example.org"),
+        ("CreateAPIKey", "sam@example.org"),
+        ("DeleteServer", "application/terraform"),
+    ]
+
+
+def test_names_leave_out_principals_without_a_usable_id():
+    named = scw.names(
+        [{"id": MEMBER, "email": "sam@example.org"}, {"id": [MEMBER]}, {"email": "x"}],
+        [{"id": APP, "name": "terraform"}, {"id": {"id": APP}, "name": "broken"}],
+    )
+    assert named == {MEMBER: "sam@example.org", APP: "application/terraform"}
+
+
 def test_help_documents_permission_sets_checks_and_settings():
     from pathlib import Path
 

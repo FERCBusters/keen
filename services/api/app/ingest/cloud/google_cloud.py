@@ -143,10 +143,10 @@ def _assets(api: Api, asset_type: str) -> list[dict]:
     )
     out = []
     for asset in found:
-        resource = (
-            asset.get("resource") if isinstance(asset.get("resource"), dict) else {}
-        )
-        data = resource.get("data") if isinstance(resource.get("data"), dict) else {}
+        resource = asset.get("resource")
+        resource = resource if isinstance(resource, dict) else {}
+        data = resource.get("data")
+        data = data if isinstance(data, dict) else {}
         out.append({"_name": str(asset.get("name") or ""), **data})
     return out
 
@@ -188,9 +188,8 @@ def administrators(api: Api) -> tuple[Check, list[Identity]]:
             MAX_PAGES,
         )
         for result in results:
-            policy = (
-                result.get("policy") if isinstance(result.get("policy"), dict) else {}
-            )
+            policy = result.get("policy")
+            policy = policy if isinstance(policy, dict) else {}
             for binding in policy.get("bindings") or []:
                 if not isinstance(binding, dict) or binding.get("role") != role:
                     continue
@@ -294,7 +293,8 @@ def _restricted(spec: dict) -> tuple[bool, int]:
             continue
         if rule.get("allowAll") is True:
             return False, 0
-        values = rule.get("values") if isinstance(rule.get("values"), dict) else {}
+        values = rule.get("values")
+        values = values if isinstance(values, dict) else {}
         listed = [v for v in values.get("allowedValues") or [] if isinstance(v, str)]
         if listed or rule.get("denyAll") is True:
             limited = True
@@ -449,11 +449,8 @@ def network(api: Api) -> list[Check]:
     instances = _assets(api, SQL_ASSET)
     exposed = []
     for instance in instances:
-        configured = (
-            instance.get("settings")
-            if isinstance(instance.get("settings"), dict)
-            else {}
-        )
+        configured = instance.get("settings")
+        configured = configured if isinstance(configured, dict) else {}
         ip = configured.get("ipConfiguration")
         ip = ip if isinstance(ip, dict) else {}
         if ip.get("ipv4Enabled") is False:
@@ -508,9 +505,8 @@ def findings(api: Api) -> Check:
     )
     counts = {"critical": 0, "high": 0}
     for group in groups:
-        props = (
-            group.get("properties") if isinstance(group.get("properties"), dict) else {}
-        )
+        props = group.get("properties")
+        props = props if isinstance(props, dict) else {}
         severity = str(props.get("severity") or "").lower()
         try:
             number = int(group.get("count") or 0)
@@ -573,21 +569,22 @@ def collect() -> list[ScopeResult]:
 def activity_entry(entry: dict, scope: str) -> Activity | None:
     when = parse_time(entry.get("timestamp"))
     ident = text_field(entry.get("insertId"))
-    payload = (
-        entry.get("protoPayload") if isinstance(entry.get("protoPayload"), dict) else {}
-    )
+    payload = entry.get("protoPayload")
+    payload = payload if isinstance(payload, dict) else {}
     method = text_field(payload.get("methodName"), 256)
     if when is None or not ident or not method:
         return None
     short = method.rsplit(".", 1)[-1]
-    status = payload.get("status") if isinstance(payload.get("status"), dict) else {}
+    status = payload.get("status")
+    status = status if isinstance(status, dict) else {}
     code = status.get("code")
     outcome = "failure" if isinstance(code, int) and code != 0 else "success"
     auth = payload.get("authenticationInfo")
     who = text_field(
         (auth if isinstance(auth, dict) else {}).get("principalEmail"), 256
     )
-    resource = entry.get("resource") if isinstance(entry.get("resource"), dict) else {}
+    resource = entry.get("resource")
+    resource = resource if isinstance(resource, dict) else {}
     return Activity(
         # Insert IDs are unique within a log; the time keeps them apart across logs.
         id=f"{api_timestamp(when)}|{ident}",
@@ -626,7 +623,8 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
         f"AND ({methods})"
     )
     entries = api.client("logging", "v2", [READ_ONLY]).entries()
-    found, token, complete = [], None, False
+    found: list[dict] = []
+    token, complete = None, False
     for _ in range(MAX_ACTIVITY // LOG_PAGE + 1):
         page = google.execute(
             entries.list(

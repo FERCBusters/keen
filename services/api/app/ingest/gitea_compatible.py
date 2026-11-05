@@ -626,7 +626,8 @@ class GiteaCompatibleCollector:
         url = f"{base_url.rstrip('/')}/api/v1/{route}/{quote(name, safe='')}/repos"
         headers = {"Accept": "application/json", **self._auth_headers()}
         auth = self._basic_auth() if self._auth_mode() == "basic" else None
-        repos, seen = [], set()
+        repos: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
         with ingestion_client(
             timeout=30.0,
             follow_redirects=False,

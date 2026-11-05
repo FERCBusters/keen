@@ -56,11 +56,14 @@ def _pages(client, base, path, params=None, *, keep):
 
 
 def _project_reference(project):
-    """The fields kept for each discovered project while its events are read."""
+    """The fields kept for each discovered project while its events are read.
+    An ID other than a number or text reads as missing, so that project fails
+    alone."""
     if not isinstance(project, dict):
         return {"id": None}
     path = project.get("path_with_namespace")
-    reference = {"id": project.get("id")}
+    ident = project.get("id")
+    reference = {"id": ident if isinstance(ident, (int, str)) else None}
     if isinstance(path, str):
         reference["path_with_namespace"] = path
     return reference

@@ -281,6 +281,52 @@ def test_ingest_project_timeline_skips_seen_cursor_entries(db):
     store.assert_called_once()
 
 
+def _timeline(db, body):
+    with (
+        auth(),
+        serving(lambda request: httpx.Response(200, json=body)),
+        patch.object(
+            tg, "store_event_with_artifact", return_value={"deduped": False}
+        ) as store,
+    ):
+        result = tg.ingest_taiga_project_timeline(db, 12, "prod")
+    return result, store
+
+
+def test_ingest_project_timeline_skips_entries_other_than_objects(db):
+    body = ["created", ["created"], 7, None, ENTRY]
+    result, store = _timeline(db, body)
+    assert result["created_events"] == 1
+    assert result["cursor_last_ts"] == "2026-10-09T12:00:00"
+    assert store.call_args.kwargs["external_id"] == "taiga:12:55"
+    db.commit.assert_called_once()
+
+
+@pytest.mark.parametrize("data", [["user", "project"], "userstory", 7])
+def test_ingest_project_timeline_reads_other_data_as_empty(db, data):
+    odd = {"id": 56, "created": "2026-10-09T13:00:00Z", "data": data}
+    result, store = _timeline(db, [ENTRY, odd])
+    assert result["created_events"] == 2
+    kept = store.call_args_list[-1].kwargs
+    assert kept["external_id"] == "taiga:12:56"
+    assert kept["actor"] is None and kept["raw_pointer"]["taiga"]["url"] is None
+    assert kept["summary"] == "[prod] timeline"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"created": "2026-10-09T12:00:00Z", "results": [ENTRY]},
+        {"date": "2026-10-09T12:00:00Z"},
+    ],
+)
+def test_ingest_project_timeline_reads_a_response_other_than_a_list_as_empty(db, body):
+    result, store = _timeline(db, body)
+    assert result == {"project_id": 12, "created_events": 0, "cursor_last_ts": None}
+    store.assert_not_called()
+    db.commit.assert_called_once()
+
+
 def test_ingest_all(db):
     with patch.object(tg.settings, "taiga_enabled", False):
         results = tg.ingest_taiga_all(db)

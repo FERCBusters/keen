@@ -127,7 +127,7 @@ def _fetch_pages(
                 break
             if len(batch) > per_page:
                 raise ValueError("GitHub returned more items than a page holds")
-            items.extend(batch)
+            items.extend(item for item in batch if isinstance(item, dict))
             # GitHub returns up to 100 per page; stop early if we received less.
             if len(batch) < per_page:
                 break

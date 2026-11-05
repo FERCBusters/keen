@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
@@ -81,7 +81,13 @@ _RECORD_PAGES = {
     "interested_party": "/interested_party.html?id={id}",
 }
 # Risks and interested parties keep their control links in tables of their own.
-_DIRECT_LINKS = {
+_DIRECT_LINKS: dict[
+    str,
+    tuple[
+        type[RiskControlLink | InterestedPartyControlLink],
+        InstrumentedAttribute[uuid.UUID],
+    ],
+] = {
     "risk": (RiskControlLink, RiskControlLink.risk_id),
     "interested_party": (
         InterestedPartyControlLink,

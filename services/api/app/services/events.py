@@ -104,13 +104,10 @@ def _maybe_mask_event_sample_value(value: Any, sample_export: bool) -> Any:
     return _mask_event_data_obj(value)
 
 
-def _event_visible_or_404(
-    db: Session, context: ChangeContext, event_id: uuid.UUID
-) -> Event:
+def _event_visible_or_404(db: Session, user: User, event_id: uuid.UUID) -> Event:
     event = db.query(Event).filter(Event.id == event_id).one_or_none()
     if not event:
         raise DomainError(status_code=404, detail="Event not found")
-    user = context.actor
     if event.source == "diary" and not is_diary_event_visible(db, user, event_id):
         raise DomainError(status_code=404, detail="Event not found")
     return event
@@ -128,7 +125,7 @@ def _incident_to_dict(incident: EventIncident) -> dict[str, Any]:
     }
 
 
-def _event_conditions(db: Session, filters: EventFilters, user: User | None) -> list:
+def _event_conditions(db: Session, filters: EventFilters, user: User) -> list:
     """Conditions on ``Event`` selecting the filtered events the caller may see.
 
     An empty list means every event counts. The conditions are column tests
@@ -957,8 +954,9 @@ def create_event_incident(
         raise DomainError(status_code=503, detail="Incident webhook is not configured")
 
     user = context.actor
-    if not is_effective_admin(db, user) and not has_permission(
-        db, user, INCIDENT_CREATE_PERMISSION
+    if user is None or (
+        not is_effective_admin(db, user)
+        and not has_permission(db, user, INCIDENT_CREATE_PERMISSION)
     ):
         raise DomainError(status_code=403, detail="incident.create permission required")
 
@@ -966,7 +964,7 @@ def create_event_incident(
     if not eid:
         raise DomainError(status_code=400, detail="event_id must be a UUID")
 
-    event = _event_visible_or_404(db, context, eid)
+    event = _event_visible_or_404(db, user, eid)
 
     title = sanitize_plain_text(payload.title, max_chars=256)
     text = sanitize_plain_text(payload.text, max_chars=5000)
@@ -1051,8 +1049,9 @@ def delete_event_incident(
     *, event_id: str, incident_id: str, context: ChangeContext, db: Session
 ):
     user = context.actor
-    if not is_effective_admin(db, user) and not has_permission(
-        db, user, INCIDENT_DELETE_PERMISSION
+    if user is None or (
+        not is_effective_admin(db, user)
+        and not has_permission(db, user, INCIDENT_DELETE_PERMISSION)
     ):
         raise DomainError(status_code=403, detail="incident.delete permission required")
 
@@ -1063,7 +1062,7 @@ def delete_event_incident(
             status_code=400, detail="event_id and incident_id must be UUIDs"
         )
 
-    event = _event_visible_or_404(db, context, eid)
+    event = _event_visible_or_404(db, user, eid)
     incident = (
         db.query(EventIncident)
         .filter(EventIncident.id == iid, EventIncident.event_id == event.id)

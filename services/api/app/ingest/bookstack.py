@@ -189,7 +189,7 @@ def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional
         return cache[cache_key]
 
     # Prefer a filtered lookup when supported, then fall back to a bounded scan.
-    requests = [
+    requests: list[dict[str, int | str]] = [
         {"count": 1, "filter[slug]": slug},
         {"count": 500},
     ]
@@ -202,7 +202,7 @@ def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional
                 if item_slug.lower() != slug.lower():
                     continue
                 try:
-                    book_id = int(item.get("id"))
+                    book_id = int(item["id"])
                     cache[cache_key] = book_id
                     return book_id
                 except Exception:
@@ -274,7 +274,8 @@ def _parse_page_mappings(cfg: dict[str, Any]) -> list[PageMapping]:
     for i, item in enumerate(raw):
         if not isinstance(item, dict):
             continue
-        match = item.get("match") if isinstance(item.get("match"), dict) else item
+        raw_match = item.get("match")
+        match = raw_match if isinstance(raw_match, dict) else item
         map_to = item.get("map_to") or item.get("controls") or []
         if isinstance(map_to, str):
             map_to = [c.strip() for c in map_to.split(",") if c.strip()]
@@ -286,12 +287,12 @@ def _parse_page_mappings(cfg: dict[str, Any]) -> list[PageMapping]:
         mbid = match.get("book_id")
         mbslug = match.get("book_slug") or match.get("book") or ""
         # Support nested form: match: { book: { slug: ... , id: ... } }
-        if isinstance(match.get("book"), dict):
-            b = match.get("book")
+        b = match.get("book")
+        if isinstance(b, dict):
             mbid = b.get("id") if mbid is None else mbid
             mbslug = b.get("slug") or b.get("book_slug") or mbslug
-        elif isinstance(match.get("book"), str):
-            mbslug = match.get("book")
+        elif isinstance(b, str):
+            mbslug = b
         try:
             mbid = int(mbid) if mbid is not None else None
         except Exception:
@@ -672,15 +673,15 @@ def _ensure_and_add_mappings(
     by_ref = {ref: ci for (ref, _), ci in found.items()}
     for ref, _ in absent:
         ci_type = "annex_control" if ref.upper().startswith("A.") else "clause"
-        ci = ControlItem(
+        placeholder = ControlItem(
             framework_slug=settings.default_framework_slug,
             type=ci_type,
             ref=ref,
             title=None,
         )
-        db.add(ci)
+        db.add(placeholder)
         db.flush()
-        by_ref[ref] = ci
+        by_ref[ref] = placeholder
 
     created = 0
     for ref in refs:
@@ -823,7 +824,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     """Poll BookStack for page changes and store each page snapshot as an evidence event."""
     cfg = load_bookstack_config(settings.bookstack_config_path)
     label = str(cfg.get("label") or "bookstack").strip() or "bookstack"
-    poll = cfg.get("poll") if isinstance(cfg.get("poll"), dict) else {}
+    poll = _nested_dict(cfg, "poll")
     lookback_days = int(poll.get("lookback_days") or 30)
     count = int(poll.get("count") or 200)
     include_drafts = bool(poll.get("include_drafts") or False)
@@ -835,7 +836,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
     book_id, book_slug, books = book_scope(cfg)
 
     # Evidence capture settings
-    capture = cfg.get("capture") if isinstance(cfg.get("capture"), dict) else {}
+    capture = _nested_dict(cfg, "capture")
     try:
         preview_chars = int(
             capture.get("preview_chars") or cfg.get("preview_chars") or 500
@@ -967,24 +968,24 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                         else:
                             scopes = [(None, None)]
 
-                        p = None
+                        found = None
                         for bid, bslug in scopes:
                             try:
-                                p = _find_page_by_slug(
+                                found = _find_page_by_slug(
                                     client, pm.match_slug, book_id=bid, book_slug=bslug
                                 )
                             except Exception:
-                                p = None
-                            if p:
+                                found = None
+                            if found:
                                 break
-                        if p and isinstance(p.get("id"), int):
-                            pages_by_id.setdefault(int(p["id"]), p)
+                        if found and isinstance(found.get("id"), int):
+                            pages_by_id.setdefault(int(found["id"]), found)
                         continue
                     if pm.match_slug_regex:
                         # Regex page-slug mappings can match multiple pages. There is no
                         # generic BookStack regex filter, so list within the narrowest
                         # available book scope and apply the regex in Keen.
-                        scopes: list[tuple[Optional[int], Optional[str]]] = []
+                        scopes = []
                         if pm.match_book_id is not None or pm.match_book_slug:
                             scopes = [(pm.match_book_id, pm.match_book_slug)]
                         elif book_id is not None or book_slug:
@@ -1017,7 +1018,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                                 continue
                         continue
                     if pm.match_title:
-                        scopes: list[tuple[Optional[int], Optional[str]]] = []
+                        scopes = []
                         if pm.match_book_id is not None or pm.match_book_slug:
                             scopes = [(pm.match_book_id, pm.match_book_slug)]
                         elif book_id is not None or book_slug:
@@ -1027,18 +1028,18 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                         else:
                             scopes = [(None, None)]
 
-                        p = None
+                        found = None
                         for bid, bslug in scopes:
                             try:
-                                p = _find_page_by_title(
+                                found = _find_page_by_title(
                                     client, pm.match_title, book_id=bid, book_slug=bslug
                                 )
                             except Exception:
-                                p = None
-                            if p:
+                                found = None
+                            if found:
                                 break
-                        if p and isinstance(p.get("id"), int):
-                            pages_by_id.setdefault(int(p["id"]), p)
+                        if found and isinstance(found.get("id"), int):
+                            pages_by_id.setdefault(int(found["id"]), found)
                 except Exception:
                     # Keep ingestion robust even if a mapping entry is wrong.
                     continue
@@ -1093,8 +1094,8 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                 ub = page_full.get("updated_by")
                 if isinstance(ub, dict):
                     actor = (ub.get("name") or ub.get("slug") or "").strip() or None
-                if not actor and isinstance(page_full.get("created_by"), dict):
-                    cb = page_full.get("created_by")
+                cb = page_full.get("created_by")
+                if not actor and isinstance(cb, dict):
                     actor = (cb.get("name") or cb.get("slug") or "").strip() or None
 
                 # Prefer the configured book scope if present, otherwise fall back

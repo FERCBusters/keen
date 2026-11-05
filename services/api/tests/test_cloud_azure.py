@@ -764,6 +764,10 @@ def test_security_defaults_and_licences(monkeypatch, credentials):
         ),
         ({"grantControls": {"operator": "OR", "builtInControls": ["block"]}}, False),
         ({"conditions": {"locations": {"includeLocations": ["trusted"]}}}, False),
+        ({"conditions": {"locations": {"includeLocations": ["All"]}}}, True),
+        # A location that is a list or an object is not "All".
+        ({"conditions": {"locations": {"includeLocations": [["All"]]}}}, False),
+        ({"conditions": {"locations": {"includeLocations": [{"id": "All"}]}}}, False),
         ({"conditions": {"clientAppTypes": ["browser"]}}, False),
         (
             {

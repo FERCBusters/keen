@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, overload
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -246,12 +246,18 @@ def _asset_categories_out(db: Session) -> list[dict[str, Any]]:
     ]
 
 
+@overload
+def _license_out(
+    row: IsmsLicense, *, include_asset_count: bool = False
+) -> dict[str, Any]: ...
+@overload
+def _license_out(row: None, *, include_asset_count: bool = False) -> None: ...
 def _license_out(
     row: IsmsLicense | None, *, include_asset_count: bool = False
 ) -> dict[str, Any] | None:
     if row is None:
         return None
-    out = {
+    out: dict[str, Any] = {
         "id": str(row.id),
         "name": row.name,
         "description": row.description or "",
@@ -450,7 +456,7 @@ def _effectiveness_measure_out(
         reverse=True,
     )
     latest = entries[0] if entries else None
-    out = {
+    out: dict[str, Any] = {
         "id": str(row.id),
         "framework": row.framework_slug,
         "summary": row.summary or "",
@@ -497,13 +503,13 @@ def _effectiveness_measure_out(
 def _meeting_out(
     db: Session, row: IsmsMeeting, framework: str, *, include_links: bool = True
 ) -> dict[str, Any]:
-    attendees = []
-    apologies = []
+    attendees: list[dict[str, Any] | None] = []
+    apologies: list[dict[str, Any] | None] = []
     for link in list(row.attendees or []):
         target = attendees if link.attendance_type == "attendee" else apologies
         target.append(_user_summary(link.user))
-    attendee_person_ids = []
-    apology_person_ids = []
+    attendee_person_ids: list[str] = []
+    apology_person_ids: list[str] = []
     for link in (
         db.query(IsmsMeetingPerson).filter(IsmsMeetingPerson.meeting_id == row.id).all()
     ):

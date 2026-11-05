@@ -20,7 +20,7 @@ the session, flushes or ends.
 import uuid
 from datetime import datetime
 from types import MappingProxyType
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy import column, event, exists, false, func, select, values
 from sqlalchemy.orm import Session, aliased
@@ -719,7 +719,7 @@ def page_controls(db, framework, event_ids):
             )
         )
     }
-    inherited = {}
+    inherited: dict[uuid.UUID, list[dict[str, Any]]] = {}
     links = crosswalk_links(
         db,
         enabled=_enabled_frameworks(db),
@@ -749,7 +749,7 @@ def page_controls(db, framework, event_ids):
                     "inherited_from_control_id": str(link.source_control_id),
                 }
             )
-    result = {}
+    result: dict[uuid.UUID, dict[str, dict[str, Any]]] = {}
     # Two passes preserve direct evidence over inherited evidence regardless of
     # mapping order. Sorting source UUIDs makes multi-source attribution stable.
     for event_id, source_id in mappings:

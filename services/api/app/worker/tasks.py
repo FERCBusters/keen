@@ -324,13 +324,13 @@ def send_question_webhooks_task(thread_id: str, post_id: str) -> dict:
                 .order_by(ControlItem.ref.asc())
                 .all()
             )
-            rows = iso or (
+            control_rows = iso or (
                 q.order_by(
                     ControlItem.framework_slug.asc(), ControlItem.ref.asc()
                 ).all()
             )
             # Keep payload bounded.
-            for c in rows[:200]:
+            for c in control_rows[:200]:
                 controls.append(
                     {
                         "framework_slug": c.framework_slug,
@@ -481,13 +481,13 @@ def send_question_reply_webhooks_task(thread_id: str, post_id: str) -> dict:
                 .order_by(ControlItem.ref.asc())
                 .all()
             )
-            rows = (
+            control_rows = (
                 iso
                 or q.order_by(
                     ControlItem.framework_slug.asc(), ControlItem.ref.asc()
                 ).all()
             )
-            for c in rows[:200]:
+            for c in control_rows[:200]:
                 controls.append(
                     {
                         "framework_slug": c.framework_slug,

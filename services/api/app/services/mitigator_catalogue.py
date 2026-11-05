@@ -97,7 +97,7 @@ def rank_library(entries, *, issue: str, asset_name: str = "", rules=None, limit
             expanded.update(values)
             expansions.append((set().union(*triggers), members))
     documents = []
-    frequency = Counter()
+    frequency: Counter[str] = Counter()
     for entry in entries:
         # Deliberately exclude mapped controls: scoring them here feeds the answer
         # back into the query and overstates unrelated scenarios' relevance.
@@ -119,12 +119,12 @@ def rank_library(entries, *, issue: str, asset_name: str = "", rules=None, limit
         # Distinct input concepts, not the number of synonyms, establish relevance.
         direct = query & tokens
         concepts = set(direct)
-        for triggers, members in expansions:
+        for trigger_words, members in expansions:
             matched_members = [
                 member for member in members if member and member <= tokens
             ]
             if matched_members:
-                concepts.update(triggers)
+                concepts.update(trigger_words)
                 hits.update(set().union(*matched_members))
         if not concepts:
             continue

@@ -141,7 +141,8 @@ def _taiga_ui_url(base_url: str, data: dict[str, Any]) -> str | None:
     if not base:
         return None
 
-    project = data.get("project") if isinstance(data.get("project"), dict) else {}
+    raw_project = data.get("project")
+    project = raw_project if isinstance(raw_project, dict) else {}
     slug = project.get("slug")
     if not slug:
         return None
@@ -166,12 +167,18 @@ def _taiga_ui_url(base_url: str, data: dict[str, Any]) -> str | None:
     return f"{base}/project/{slug}/{seg}/{ref}"
 
 
+def _data(entry: dict[str, Any]) -> dict[str, Any]:
+    """A timeline entry's ``data`` object; any other value reads as empty."""
+    data = entry.get("data")
+    return data if isinstance(data, dict) else {}
+
+
 def _build_summary(
     entry: dict[str, Any], project_id: int, label: Optional[str]
 ) -> tuple[str, Optional[str], str, dict[str, Any]]:
     """Return (summary, actor, action, extracted_fields)."""
     etype = entry.get("event_type") or entry.get("type") or "timeline"
-    data = entry.get("data") or {}
+    data = _data(entry)
 
     # actor
     actor = None
@@ -281,8 +288,12 @@ def ingest_taiga_project_timeline(
                     pass
         return None
 
-    parsed_entries = [(parse_ts(e), e) for e in entries]
-    parsed_entries = [(t, e) for (t, e) in parsed_entries if t is not None]
+    # A response other than a list holds no entries, and an entry other than
+    # an object is skipped, as an entry without a timestamp is.
+    if not isinstance(entries, list):
+        entries = []
+    stamped_entries = [(parse_ts(e), e) for e in entries if isinstance(e, dict)]
+    parsed_entries = [(t, e) for (t, e) in stamped_entries if t is not None]
     parsed_entries.sort(key=lambda x: x[0])
 
     for ts, e in parsed_entries:
@@ -305,7 +316,7 @@ def ingest_taiga_project_timeline(
             "utf-8"
         )
 
-        ui_url = _taiga_ui_url(settings.taiga_base_url, (e.get("data") or {}))
+        ui_url = _taiga_ui_url(settings.taiga_base_url, _data(e))
 
         key = f"taiga/project/{project_id}/{ts.date().isoformat()}/{ext_id}.json"
         res = store_event_with_artifact(

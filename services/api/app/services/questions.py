@@ -32,7 +32,7 @@ from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
 from app.security.roles import is_effective_admin
 from app.services.activity_log import record_action as _audit_action
-from app.services.context import ChangeContext
+from app.services.context import ChangeContext, signed_in_user
 from app.services.errors import DomainError
 from app.services.uploads import Upload
 from app.storage.filenames import safe_download_ext
@@ -162,10 +162,15 @@ def _ensure_question_target_visible(
         from app.services.stories import readable_story, require_read
 
         require_read(db, user)
-        row = readable_story(db, user, entity_id)
-        if not row:
+        story = readable_story(db, user, entity_id)
+        if not story:
             raise DomainError(404, "Story not found")
-        return (row.status, row.title, f"/story.html?id={row.id}&tab=questions", None)
+        return (
+            story.status,
+            story.title,
+            f"/story.html?id={story.id}&tab=questions",
+            None,
+        )
     if target_type == "event":
         ev = _ensure_event_visible(db, user, entity_id)
         return (
@@ -607,7 +612,7 @@ def _store_attachments(
 
 
 def list_event_questions(*, event_id: str, context: ChangeContext, db: Session):
-    user = context.actor
+    user = signed_in_user(context)
     eid = _try_uuid(event_id)
     if not eid:
         raise DomainError(status_code=400, detail="Invalid event id")
@@ -702,7 +707,7 @@ def _create_event_question(
     files,
     notices: _Notices,
 ):
-    user = context.actor
+    user = signed_in_user(context)
     eid = _try_uuid(event_id)
     if not eid:
         raise DomainError(status_code=400, detail="Invalid event id")
@@ -814,7 +819,7 @@ def _reply_to_question(
     files,
     notices: _Notices,
 ):
-    user = context.actor
+    user = signed_in_user(context)
     tid = _try_uuid(thread_id)
     if not tid:
         raise DomainError(status_code=400, detail="Invalid thread id")
@@ -853,14 +858,20 @@ def _reply_to_question(
     db.add(post)
     db.flush()
 
-    artifact_ids = _store_attachments(
-        db,
-        event_id=thread.event_id,
-        thread_id=thread.id,
-        post_id=post.id,
-        files=files,
-        captured_by=f"keen:question:{user.username}",
-    )
+    artifact_ids: list[uuid.UUID] = []
+    if files:
+        # Attachments are refused above outside evidence threads, and
+        # _ensure_thread_visible_for_user refuses an evidence thread that has
+        # no event.
+        assert thread.event_id is not None
+        artifact_ids = _store_attachments(
+            db,
+            event_id=thread.event_id,
+            thread_id=thread.id,
+            post_id=post.id,
+            files=files,
+            captured_by=f"keen:question:{user.username}",
+        )
     for aid in artifact_ids:
         db.add(
             EventQuestionPostAttachment(
@@ -938,7 +949,7 @@ async def delete_question_thread(
 def _delete_question_thread(
     *, thread_id: str, context: ChangeContext, db: Session, notices: _Notices
 ):
-    user = context.actor
+    user = signed_in_user(context)
     tid = _try_uuid(thread_id)
     if not tid:
         raise DomainError(status_code=400, detail="Invalid thread id")
@@ -1010,7 +1021,7 @@ def _delete_question_thread(
 
 
 def my_questions_list(*, context: ChangeContext, db: Session):
-    user = context.actor
+    user = signed_in_user(context)
 
     threads = (
         db.query(EventQuestionThread)
@@ -1082,7 +1093,7 @@ def my_questions_list(*, context: ChangeContext, db: Session):
 def list_entity_questions(
     *, entity_type: str, entity_id: str, context: ChangeContext, db: Session
 ):
-    user = context.actor
+    user = signed_in_user(context)
     eid = _try_uuid(entity_id)
     if not eid:
         raise DomainError(status_code=400, detail="Invalid entity id")
@@ -1150,7 +1161,7 @@ def _create_entity_question(
     files,
     notices: _Notices,
 ):
-    user = context.actor
+    user = signed_in_user(context)
     eid = _try_uuid(entity_id)
     if not eid:
         raise DomainError(status_code=400, detail="Invalid entity id")
@@ -1242,7 +1253,7 @@ def _mark_entity_questions_seen(
     db: Session,
     notices: _Notices,
 ):
-    user = context.actor
+    user = signed_in_user(context)
     eid = _try_uuid(entity_id)
     if not eid:
         raise DomainError(status_code=400, detail="Invalid entity id")
@@ -1289,7 +1300,7 @@ async def mark_event_questions_seen(
 def _mark_event_questions_seen(
     *, event_id: str, context: ChangeContext, db: Session, notices: _Notices
 ):
-    user = context.actor
+    user = signed_in_user(context)
     eid = _try_uuid(event_id)
     if not eid:
         raise DomainError(status_code=400, detail="Invalid event id")

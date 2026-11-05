@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
@@ -41,6 +41,7 @@ INTERESTED_PARTIES_READ_PERMISSION = "interested_parties.read"
 INTERESTED_PARTIES_MANAGE_PERMISSION = "interested_parties.manage"
 RISK_READ_PERMISSION = "risk.read"
 RISK_MANAGE_PERMISSION = "risk.manage"
+_LookupRow = TypeVar("_LookupRow", InterestedPartyName, InterestedPartyNature)
 COMMUNICATION_EVENTS = [
     "Business as Usual",
     "Incident",
@@ -146,7 +147,9 @@ def _methods(raw: list[str] | None) -> list[str]:
     return out
 
 
-def _name_out(row: InterestedPartyName | None) -> dict[str, Any]:
+def _name_out(
+    row: InterestedPartyName | InterestedPartyNature | None,
+) -> dict[str, Any]:
     return {
         "id": str(row.id) if row else None,
         "name": row.name if row else None,
@@ -432,13 +435,13 @@ def _party_or_404(db: Session, party_id: str) -> InterestedParty:
 
 def _lookup_by_id_or_name(
     db: Session,
-    model: type[InterestedPartyName] | type[InterestedPartyNature],
+    model: type[_LookupRow],
     *,
     row_id: uuid.UUID | None = None,
     name: str | None = None,
     user: User | None = None,
     label: str = "name",
-) -> InterestedPartyName | InterestedPartyNature:
+) -> _LookupRow:
     """An existing lookup row by id, or by name; a new name is created."""
 
     if row_id:

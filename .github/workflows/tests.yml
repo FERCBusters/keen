@@ -93,14 +93,21 @@ jobs:
       - name: Check Python lint
         run: |
           if [ -f keen/services/api/pyproject.toml ]; then cd keen; fi
+          mkdir -p test-results
           cd services/api
+          # The JSON findings feed the ruff badge; the second run decides the step.
+          poetry run ruff check ../.. --exit-zero --output-format=json \
+            --output-file ../../test-results/ruff-findings.json
           poetry run ruff check ../..
 
       - name: Check Python types
         run: |
+          set -o pipefail
           if [ -f keen/services/api/pyproject.toml ]; then cd keen; fi
+          mkdir -p test-results
           cd services/api
-          poetry run python ../../tools/mypy_baseline.py check
+          # mypy's summary line, kept in the report, feeds the mypy badge.
+          poetry run mypy | tee ../../test-results/mypy-report.txt
 
       - name: Check frontend formatting
         run: |

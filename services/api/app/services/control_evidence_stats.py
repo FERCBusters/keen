@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import func, text
+from redis.typing import EncodableT, FieldT
+from sqlalchemy import CursorResult, func, text
 from sqlalchemy.orm import Session
 
 from app.core.cache import (
@@ -99,9 +100,12 @@ def _load_from_cache(framework: str) -> dict[uuid.UUID, dict[str, Any]] | None:
     if ttl <= 0:
         return None
     try:
-        return _decode_cached_payload(
-            get_valkey().hgetall(control_evidence_stats_cache_key(framework))
+        # redis-py types replies as bytes or str; get_valkey() decodes them to str.
+        raw = cast(
+            dict[str, str],
+            get_valkey().hgetall(control_evidence_stats_cache_key(framework)),
         )
+        return _decode_cached_payload(raw)
     except Exception:
         return None
 
@@ -129,7 +133,9 @@ def _store_in_cache(framework: str, stats: dict[uuid.UUID, dict[str, Any]]) -> N
             payload = {_EMPTY_SENTINEL: "1"}
         pipe = client.pipeline(transaction=False)
         pipe.delete(key)
-        pipe.hset(key, mapping=payload)
+        # redis-py's mapping parameter has an invariant key type, which a
+        # dict[str, str] cannot satisfy although redis-py accepts str fields.
+        pipe.hset(key, mapping=cast(dict[FieldT, EncodableT], payload))
         pipe.expire(key, ttl)
         pipe.execute()
     except Exception:
@@ -306,7 +312,9 @@ def rebuild_control_evidence_stats(db: Session, *, clear_cache: bool = True) -> 
     )
     if clear_cache:
         clear_stats_caches()
-    return int(result.rowcount or 0)
+    # Session.execute is typed as returning Result; an INSERT returns a
+    # CursorResult, which carries rowcount.
+    return int(cast(CursorResult[Any], result).rowcount or 0)
 
 
 def rebuild_framework_event_stats(

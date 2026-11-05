@@ -137,6 +137,7 @@ def _holders(db: Session, node_ids: set[uuid.UUID]) -> list[tuple[uuid.UUID, Any
             User.is_active.is_(True),
         )
         .distinct()
+        .tuples()
         .all()
     )
 

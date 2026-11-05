@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional, cast
 
+from sqlalchemy import String
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -229,9 +230,10 @@ def normalise_ingested_fields(
     # the column refuses would fail its whole collection run. Apply bounds after
     # redaction/masking, which can expand the text. Keep full evidence in the
     # normalised payload/artifact and never truncate dedupe IDs.
+    # SQLAlchemy types each column's type as TypeEngine; these columns are String(n).
     columns = Event.__table__.c
     system, actor, action, outcome = (
-        None if value is None else value[: column.type.length]
+        None if value is None else value[: cast(String, column.type).length]
         for value, column in (
             (system, columns.system),
             (actor, columns.actor),
@@ -290,7 +292,7 @@ def store_event_with_artifact(
         action,
         outcome,
         summary,
-        external_id,
+        stored_external_id,
         raw_pointer,
         normalized_payload,
         artifact_bytes,
@@ -308,6 +310,9 @@ def store_event_with_artifact(
         artifact_content_type=artifact_content_type,
         payload_redaction=payload_redaction,
     )
+    # The external ID passed in is a str, so a str comes back.
+    assert stored_external_id is not None
+    external_id = stored_external_id
 
     # Fast de-dupe check (avoids triggering a rollback that would also undo
     # ingestion cursor updates that may be pending in the same session).

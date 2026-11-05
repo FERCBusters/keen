@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -67,7 +67,7 @@ def stats_event_counts(
     the framework's inheritance state already resolved in this request.
     """
     user = context.actor
-    if not can_read_events(db, user):
+    if user is None or not can_read_events(db, user):
         return None
     cache_parts = {
         "framework": framework,
@@ -116,7 +116,7 @@ def _summary_without_evidence(*, framework: str, db: Session) -> dict:
         .filter(ControlItem.framework_slug == framework)
         .one()
     )
-    controls = {
+    controls: dict[str, int | None] = {
         "total": int(total or 0),
         "in_scope": int(in_scope or 0),
         "out_of_scope": max(0, int(total or 0) - int(in_scope or 0)),
@@ -139,7 +139,7 @@ def stats_summary(
     """Framework dashboard summary."""
 
     user = context.actor
-    if not can_read_events(db, user):
+    if user is None or not can_read_events(db, user):
         return _summary_without_evidence(framework=framework, db=db)
     cache_parts = {
         "framework": framework,
@@ -287,7 +287,7 @@ def stats_controls(
 
 def _controls_without_evidence(*, framework: str, limit: int, db: Session) -> dict:
     """Control catalogue rows with evidence counts withheld."""
-    items = [
+    items: list[dict[str, Any]] = [
         {
             "id": str(c.id),
             "framework": c.framework_slug,
@@ -329,6 +329,7 @@ def _stats_controls(
         has_inheritance = has_inherited_evidence(db, framework)
 
         def _item(c: ControlItem, evidence_count: int, last_evidence) -> dict:
+            last_evidence_value: str | None
             if isinstance(last_evidence, datetime):
                 last_evidence_value = last_evidence.isoformat()
             else:
@@ -509,7 +510,7 @@ def _stats_events_timeseries(
     """
 
     user = context.actor
-    if not can_read_events(db, user):
+    if user is None or not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
     scope = scope or EventFilters(framework=framework)
     scope_filters = event_predicates(scope, db)

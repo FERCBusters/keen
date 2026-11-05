@@ -104,8 +104,10 @@ def list_my_attendee_audits(*, limit: int, offset: int, db: Session, user: User)
     items = []
     for audit in rows:
         item = audit_summary(db, audit, authors)
-        attendee = attendee_by_audit.get(audit.id)
-        item["my_attendee"] = attendee_dict(attendee) if attendee is not None else None
+        my_attendee = attendee_by_audit.get(audit.id)
+        item["my_attendee"] = (
+            attendee_dict(my_attendee) if my_attendee is not None else None
+        )
         items.append(item)
 
     return {"total": total, "limit": limit, "offset": offset, "items": items}

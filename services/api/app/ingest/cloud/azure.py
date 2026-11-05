@@ -399,7 +399,7 @@ def _narrowed(conditions: dict) -> bool:
     platforms, client apps, devices or risk levels."""
     places = conditions.get("locations")
     if isinstance(places, dict) and (
-        set(places.get("includeLocations") or ["All"]) != {"All"}
+        {str(p) for p in places.get("includeLocations") or ["All"]} != {"All"}
         or places.get("excludeLocations")
     ):
         return True
@@ -901,7 +901,8 @@ def defender(api: Azure, sub: str) -> Check:
         params={"api-version": VERSIONS["graph"]},
     )
     counts = {"high": 0, "medium": 0, "low": 0}
-    for row in result.get("data") if isinstance(result.get("data"), list) else []:
+    rows = result.get("data")
+    for row in rows if isinstance(rows, list) else []:
         severity = str(_dict(row).get("severity") or "").lower()
         number = _dict(row).get("findings")
         if severity in counts and isinstance(number, int) and number >= 0:
@@ -957,7 +958,7 @@ def sign_in_entry(item: dict, tenant: str) -> Activity | None:
     who = text_field(item.get("userPrincipalName"), 256) or text_field(
         item.get("userId")
     )
-    detail = {
+    detail: dict[str, str | bool] = {
         "service": "entra",
         "application": text_field(item.get("appDisplayName")),
         "source_ip": text_field(item.get("ipAddress"), 64),
@@ -987,7 +988,7 @@ def audit_entry(item: dict, tenant: str) -> Activity | None:
     if when is None or not ident or not name:
         return None
     outcome = {"success": "success", "failure": "failure", "timeout": "failure"}.get(
-        item.get("result"), "info"
+        text_field(item.get("result")), "info"
     )
     initiated = _dict(item.get("initiatedBy"))
     user, app = _dict(initiated.get("user")), _dict(initiated.get("app"))
@@ -1053,7 +1054,8 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
     log, in [since, until)."""
     api = connect()
     try:
-        found, complete = [], True
+        found: list[Activity | None] = []
+        complete = True
         for path, field, parse in (
             ("/v1.0/auditLogs/signIns", "createdDateTime", sign_in_entry),
             ("/v1.0/auditLogs/directoryAudits", "activityDateTime", audit_entry),

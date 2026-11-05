@@ -168,7 +168,8 @@ def event_id_from_url(raw: str | None) -> uuid.UUID | None:
         if path and not path.endswith("/event.html") and path != "/event.html":
             return None
         qs = parse_qs(parts.query or "")
-        val = (qs.get("id") or [None])[0]
+        ids = qs.get("id")
+        val = ids[0] if ids else None
         return try_uuid(str(val)) if val else None
     except Exception:
         return None

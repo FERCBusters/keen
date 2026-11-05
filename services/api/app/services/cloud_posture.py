@@ -105,7 +105,7 @@ def _people(db, scopes) -> dict:
         .order_by(IsmsPerson.name, IsmsPerson.id)
         .all()
     )
-    out = {}
+    out: dict[str, dict[str, str]] = {}
     for ident, name, email in rows:
         out.setdefault(email.lower(), {"id": str(ident), "name": name})
     return out

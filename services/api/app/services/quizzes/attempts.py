@@ -150,14 +150,16 @@ def _finished_on(attempt: QuizAttempt | None):
 
 
 def _sitting(quiz: Quiz, round_: QuizRound, attempt: QuizAttempt | None) -> Sitting:
-    shown = attempt is not None and score_visible(quiz, attempt)
+    score = (
+        attempt.score if attempt is not None and score_visible(quiz, attempt) else None
+    )
     return Sitting(
         opens_on=round_.opens_on,
         due_on=round_.due_on,
         closed=round_.status == "closed",
         finished_on=_finished_on(attempt),
-        trophy=trophy(attempt.score, quiz.pass_mark) if shown else None,
-        perfect=bool(shown and attempt.score >= 100),
+        trophy=trophy(score, quiz.pass_mark),
+        perfect=score is not None and score >= 100,
     )
 
 
@@ -209,7 +211,7 @@ def attempt_view(
                 "pending": answer.points is None,
             }
         questions.append(question)
-    out = {
+    out: dict[str, Any] = {
         "id": str(attempt.id),
         "quiz_id": str(quiz.id),
         "round_id": str(round_.id),
@@ -517,16 +519,16 @@ def _save_answers(
         page, question_count=len(layout), page_size=attempt.page_size
     )
     given: dict[int, QuizAnswerInput] = {}
-    for answer in answers:
-        if answer.position not in positions:
+    for submitted in answers:
+        if submitted.position not in positions:
             raise DomainError(
                 status_code=400, detail="An answer is not for a question on this page"
             )
-        if answer.position in given:
+        if submitted.position in given:
             raise DomainError(
                 status_code=400, detail="A question on this page is answered twice"
             )
-        given[answer.position] = answer
+        given[submitted.position] = submitted
     rows = {row.position: row for row in attempt.answers}
     for position in positions:
         item = layout[position]

@@ -13,7 +13,9 @@ import csv
 import io
 import json
 import time
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
 import boto3
@@ -211,6 +213,13 @@ def roles() -> list[str]:
     return found
 
 
+def _account_of(role: str) -> str:
+    """The account ID in a role ARN."""
+    matched = ROLE_ARN.fullmatch(role)
+    assert matched is not None  # roles() accepts only roles that ROLE_ARN matches
+    return matched.group(1)
+
+
 def network_regions_setting() -> list[str]:
     found = split_list(settings.aws_regions)
     if len(found) > MAX_REGIONS or any(not REGION.fullmatch(r) for r in found):
@@ -238,7 +247,7 @@ def account_session(base, role: str | None) -> Session:
     home = region()
     expected = ""
     if role:
-        expected = ROLE_ARN.fullmatch(role).group(1)
+        expected = _account_of(role)
         external = str(settings.aws_external_id or "")
         if external and not EXTERNAL_ID.fullmatch(external):
             raise Unavailable("not_configured")
@@ -308,7 +317,7 @@ def credential_report(iam, *, deadline: float = REPORT_DEADLINE) -> list[dict]:
 
 
 def authorisation_details(iam) -> dict:
-    out = {
+    out: dict[str, list[dict[str, Any]]] = {
         "UserDetailList": [],
         "RoleDetailList": [],
         "GroupDetailList": [],
@@ -483,13 +492,15 @@ def identity_checks(aws: Session, now: datetime) -> tuple[list[Check], list[Iden
                 detail=(" and ".join(access) or "No console or keys").capitalize(),
             )
         )
-    console = [p for p in people if p.mfa is not None]
+    console_users = [p for p in people if p.mfa is not None]
     checks = [
-        mfa_check("identity.mfa", CHECKS["identity.mfa"], console, who="console users"),
+        mfa_check(
+            "identity.mfa", CHECKS["identity.mfa"], console_users, who="console users"
+        ),
         mfa_check(
             "identity.admin_mfa",
             CHECKS["identity.admin_mfa"],
-            [p for p in console if p.admin],
+            [p for p in console_users if p.admin],
             who="administrators",
         ),
     ]
@@ -742,7 +753,8 @@ def public_access(aws: Session) -> Check:
 def _all(method, key: str, token: str = "NextToken", **options) -> list:
     """Every item of a paged EC2 or RDS listing; a longer listing is refused,
     since a partial population would misstate a check."""
-    items, marker = [], None
+    items: list[dict[str, Any]] = []
+    marker = None
     for _ in range(NETWORK_PAGES):
         page = call(method, **options, **({token: marker} if marker else {}))
         items.extend(i for i in page.get(key) or [] if isinstance(i, dict))
@@ -985,7 +997,7 @@ def account_result(aws: Session) -> ScopeResult:
     return ScopeResult(aws.account_id, alias or aws.account_id, checks, people)
 
 
-def _targets():
+def _targets() -> tuple[boto3.Session, Sequence[str | None]]:
     base = _base_session()
     return base, (roles() or [None])
 
@@ -999,7 +1011,7 @@ def collect() -> list[ScopeResult]:
         except Unavailable as exc:
             if role is None:
                 raise
-            account = ROLE_ARN.fullmatch(role).group(1)
+            account = _account_of(role)
             out.append(
                 ScopeResult(account, account, unknown(CHECKS, CHECKS, exc.reason))
             )
@@ -1027,11 +1039,8 @@ def trail_entry(event: dict, account: str) -> Activity | None:
     detail = _trail_detail(event.get("CloudTrailEvent"))
     name = text_field(event.get("EventName") or detail.get("eventName"))
     source = text_field(detail.get("eventSource") or event.get("EventSource"))
-    who = (
-        detail.get("userIdentity")
-        if isinstance(detail.get("userIdentity"), dict)
-        else {}
-    )
+    who = detail.get("userIdentity")
+    who = who if isinstance(who, dict) else {}
     kind = text_field(who.get("type"), 32)
     actor = text_field(who.get("arn"), 512)
     if not actor and kind == "Root":
@@ -1046,7 +1055,9 @@ def trail_entry(event: dict, account: str) -> Activity | None:
     if source == "signin.amazonaws.com":
         if name in ("ConsoleLogin", "SwitchRole"):
             response = detail.get("responseElements")
-            result = response.get(name) if isinstance(response, dict) else None
+            result = (
+                text_field(response.get(name)) if isinstance(response, dict) else ""
+            )
             outcome = {"Success": "success", "Failure": "failure"}.get(result, "info")
             extra = detail.get("additionalEventData")
             if isinstance(extra, dict) and extra.get("MFAUsed") in ("Yes", "No"):

@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Render API and UI coverage badges from the reports written by tests.sh.
+"""Render the coverage, mypy and ruff badges from KEEN CI's reports.
 
 Usage: coverage_badges.py RESULTS_DIR OUTPUT_DIR
 
-RESULTS_DIR is searched recursively for backend-coverage.json (pytest-cov) and
-frontend-coverage/coverage-summary.json (c8), so it works on a local
-test-results/ directory or on a downloaded CI artifact.
+RESULTS_DIR is searched recursively, so it works on a local test-results/
+directory or on a downloaded CI artifact, for:
+
+- backend-coverage.json (pytest-cov) and frontend-coverage/coverage-summary.json
+  (c8), which tests.sh writes;
+- mypy-report.txt, mypy's output, and ruff-findings.json, ruff's JSON findings,
+  which the CI type and lint checks write.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -24,14 +29,19 @@ _WIDTHS = {
     "U": 7.7,
 }  # fmt: skip
 
+_PASSING, _FAILING = "#4c1", "#e05d44"
 _COLOURS = [  # (minimum percent, colour)
-    (90, "#4c1"),
+    (90, _PASSING),
     (80, "#97ca00"),
     (70, "#a4a61d"),
     (60, "#dfb317"),
     (50, "#fe7d37"),
-    (0, "#e05d44"),
+    (0, _FAILING),
 ]
+_MYPY_CLEAN = re.compile(r"Success: no issues found in \d+ source files?")
+_MYPY_FOUND = re.compile(
+    r"Found (\d+) errors? in \d+ files? \(checked \d+ source files?\)"
+)
 
 
 def _text_width(text: str) -> float:
@@ -42,8 +52,7 @@ def _colour(percent: float) -> str:
     return next(colour for floor, colour in _COLOURS if percent >= floor)
 
 
-def render_badge(label: str, percent: float) -> str:
-    value = f"{percent:.0f}%"
+def render_badge(label: str, value: str, colour: str) -> str:
     lw = round(_text_width(label) + 10)
     vw = round(_text_width(value) + 10)
     total = lw + vw
@@ -56,7 +65,7 @@ role="img" aria-label="{label}: {value}">
 stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
 <clipPath id="r"><rect width="{total}" height="20" rx="3" fill="#fff"/></clipPath>
 <g clip-path="url(#r)"><rect width="{lw}" height="20" fill="#555"/>\
-<rect x="{lw}" width="{vw}" height="20" fill="{_colour(percent)}"/>\
+<rect x="{lw}" width="{vw}" height="20" fill="{colour}"/>\
 <rect width="{total}" height="20" fill="url(#s)"/></g>
 <g fill="#fff" text-anchor="middle" \
 font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="110">
@@ -68,6 +77,35 @@ transform="scale(.1)">{value}</text>
 <text x="{vx:.0f}" y="140" transform="scale(.1)">{value}</text>
 </g></svg>
 """
+
+
+def coverage_badge(label: str, percent: float) -> str:
+    return render_badge(label, f"{percent:.0f}%", _colour(percent))
+
+
+def count_badge(label: str, count: int, noun: str) -> str:
+    """A check's badge: passing colours for no findings, failing for any."""
+    value = f"{count} {noun}" + ("" if count == 1 else "s")
+    return render_badge(label, value, _PASSING if count == 0 else _FAILING)
+
+
+def mypy_errors(report: str) -> int:
+    """The error count in mypy's summary line, the report's last line."""
+    lines = [line.strip() for line in report.splitlines() if line.strip()]
+    summary = lines[-1] if lines else ""
+    if _MYPY_CLEAN.fullmatch(summary):
+        return 0
+    found = _MYPY_FOUND.fullmatch(summary)
+    if found is None:
+        raise SystemExit(f"mypy report ends without a summary: {summary!r}")
+    return int(found[1])
+
+
+def ruff_findings(report: str) -> int:
+    findings = json.loads(report)
+    if not isinstance(findings, list):
+        raise SystemExit("ruff report is not a list of findings")
+    return len(findings)
 
 
 def _find_one(root: Path, pattern: str) -> Path:
@@ -100,9 +138,17 @@ def main(argv: list[str]) -> None:
     # c8 line coverage, as shown in its text summary.
     ui_pct = _percent(ui["total"]["lines"]["pct"])
 
-    (out / "coverage-api.svg").write_text(render_badge("API coverage", api_pct))
-    (out / "coverage-ui.svg").write_text(render_badge("UI coverage", ui_pct))
-    print(f"API coverage: {api_pct:.1f}%  UI coverage: {ui_pct:.1f}%")
+    errors = mypy_errors(_find_one(results, "mypy-report.txt").read_text())
+    findings = ruff_findings(_find_one(results, "ruff-findings.json").read_text())
+
+    (out / "coverage-api.svg").write_text(coverage_badge("API coverage", api_pct))
+    (out / "coverage-ui.svg").write_text(coverage_badge("UI coverage", ui_pct))
+    (out / "mypy.svg").write_text(count_badge("mypy", errors, "error"))
+    (out / "ruff.svg").write_text(count_badge("ruff", findings, "issue"))
+    print(
+        f"API coverage: {api_pct:.1f}%  UI coverage: {ui_pct:.1f}%  "
+        f"mypy: {errors} errors  ruff: {findings} issues"
+    )
 
 
 if __name__ == "__main__":

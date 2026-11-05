@@ -27,7 +27,7 @@ import os
 import re
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import Any
+from typing import Any, overload
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
@@ -314,6 +314,10 @@ def redact_url(url: str) -> str:
         return REDACTED
 
 
+@overload
+def redact_str(s: str) -> str: ...
+@overload
+def redact_str(s: None) -> None: ...
 def redact_str(s: str | None) -> str | None:
     if s is None:
         return None

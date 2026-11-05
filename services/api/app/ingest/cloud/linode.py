@@ -191,7 +191,8 @@ def _covers(rule: dict, port: int) -> bool:
 def exposed_ports(firewall: dict) -> list[int]:
     """Remote-access ports the internet reaches through one firewall: rules
     apply in order, and traffic no rule matches meets the inbound policy."""
-    rules = firewall.get("rules") if isinstance(firewall.get("rules"), dict) else {}
+    rules = firewall.get("rules")
+    rules = rules if isinstance(rules, dict) else {}
     inbound = [r for r in rules.get("inbound") or [] if isinstance(r, dict)]
     policy = str(rules.get("inbound_policy") or "").upper()
     out = []
@@ -385,7 +386,7 @@ def login_entry(login: dict, account: str) -> Activity | None:
     if when is None or not isinstance(ident, int):
         return None
     outcome = {"successful": "success", "failed": "failure"}.get(
-        login.get("status"), "info"
+        text_field(login.get("status")), "info"
     )
     who = text_field(login.get("username"), 256)
     return Activity(
@@ -411,8 +412,9 @@ def event_entry(event: dict, account: str) -> Activity | None:
         "failed": "failure",
         "finished": "success",
         "notification": "success",
-    }.get(event.get("status"), "info")
-    entity = event.get("entity") if isinstance(event.get("entity"), dict) else {}
+    }.get(text_field(event.get("status")), "info")
+    entity = event.get("entity")
+    entity = entity if isinstance(entity, dict) else {}
     who = text_field(event.get("username"), 256)
     return Activity(
         id=f"event:{ident}",

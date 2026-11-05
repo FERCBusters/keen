@@ -138,7 +138,8 @@ def execute(request, *, missing=None):
 def pages(request_for, key: str, limit: int) -> list[dict]:
     """Items under ``key`` across at most ``limit`` pages; a longer listing is
     refused, since a partial population would misstate a check."""
-    found, token = [], None
+    found: list[dict] = []
+    token = None
     for _ in range(limit):
         page = execute(request_for(token))
         found.extend(i for i in page.get(key) or [] if isinstance(i, dict))

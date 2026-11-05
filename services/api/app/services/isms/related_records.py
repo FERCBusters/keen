@@ -24,7 +24,18 @@ from app.services.errors import DomainError
 
 from .access import can_read_isms
 
-TARGETS = {
+TargetRecord = (
+    IsmsObjective
+    | IsmsDocument
+    | RiskAsset
+    | IsmsPerson
+    | IsmsVendor
+    | Risk
+    | IsmsSwot
+    | IsmsEffectivenessMeasure
+    | IsmsMeeting
+)
+TARGETS: dict[str, type[TargetRecord]] = {
     "objective": IsmsObjective,
     "document": IsmsDocument,
     "asset": RiskAsset,

@@ -436,10 +436,11 @@ def display_payload(payload):
         return redact_obj(payload)
     spec = None
     ref = doc.get("catalogue")
+    event_type = doc.get("event_type")
     if isinstance(ref, dict):
         known = catalogues.lookup(str(ref.get("id")), str(ref.get("version")))
-        if known is not None:
-            spec = known.event_types.get(doc.get("event_type"))
+        if known is not None and isinstance(event_type, str):
+            spec = known.event_types.get(event_type)
     redacted, _ = redact(doc, spec)
     return {
         **redact_obj({k: v for k, v in payload.items() if k != "ueu"}),

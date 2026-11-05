@@ -496,21 +496,23 @@ def _record(db, row, action, before, after, user, context: ChangeContext | None)
 def _listing(db: Session, user: User, rows: list[Story]) -> list[dict]:
     """Stories as list entries, with their item counts and authors."""
     ids = [row.id for row in rows]
-    counts = dict(
+    counts: dict[uuid.UUID, int] = dict(
         db.query(StoryItem.story_id, func.count(StoryItem.id))
         .filter(StoryItem.story_id.in_(ids))
         .group_by(StoryItem.story_id)
+        .tuples()
         .all()
         if ids
         else []
     )
-    names = dict(
+    names: dict[uuid.UUID, str] = dict(
         db.query(User.id, User.username)
         .filter(
             User.id.in_(
                 {row.created_by_user_id for row in rows if row.created_by_user_id}
             )
         )
+        .tuples()
         .all()
         if rows
         else []
@@ -519,7 +521,9 @@ def _listing(db: Session, user: User, rows: list[Story]) -> list[dict]:
         {
             **summary(
                 row,
-                created_by=names.get(row.created_by_user_id),
+                created_by=names.get(row.created_by_user_id)
+                if row.created_by_user_id
+                else None,
                 item_count=int(counts.get(row.id, 0)),
             ),
             "can_edit": can_edit(db, user, row),

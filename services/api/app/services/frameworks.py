@@ -203,7 +203,7 @@ def framework_nodes(*, slug: str, db: Session):
         .filter(FrameworkClause.framework_slug == slug)
         .all()
     }
-    links = {}
+    links: dict[uuid.UUID, list[str]] = {}
     for link in (
         db.query(ControlClauseLink)
         .join(ControlItem)
@@ -257,7 +257,7 @@ def save_framework_node(
                 400, "Parent must exist in the same framework and category"
             )
         seen = {ref}
-        cursor = parent
+        cursor: ControlItem | None = parent
         while cursor:
             if cursor.ref in seen:
                 raise DomainError(400, "Parent relationship would form a cycle")
@@ -294,7 +294,7 @@ def save_framework_node(
         .one_or_none()
     )
     created = row is None
-    if created:
+    if row is None:
         row = ControlItem(framework_slug=slug, type=kind, ref=ref)
         db.add(row)
     row.title = payload.title.strip()

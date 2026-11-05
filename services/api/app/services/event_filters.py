@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
-from sqlalchemy import and_, exists, false, or_, select, text
+from sqlalchemy import ColumnElement, and_, exists, false, or_, select, text
 from sqlalchemy.exc import DataError, OperationalError
 from sqlalchemy.orm import Session, aliased
 
@@ -497,7 +497,7 @@ def clause_event_condition(framework: str, clauses, db: Session):
 
 def event_predicates(filters: EventFilters, db: Session) -> list:
     """Predicates for every filter not excluded; the time window is separate."""
-    predicates = []
+    predicates: list[ColumnElement[bool]] = []
     if filters.sources and applies(filters, "source"):
         predicates.append(Event.source.in_(filters.sources))
     if filters.system:

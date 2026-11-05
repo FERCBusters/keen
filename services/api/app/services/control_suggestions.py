@@ -148,7 +148,7 @@ def rank_controls(
     ordered by how well the description alone matches, then by score.
     """
     documents = [(c, *_catalogue(c)) for c in controls]
-    frequency = Counter()
+    frequency: Counter[str] = Counter()
     for _, title, body in documents:
         frequency.update(_tokens(title + " " + body))
     queries = [
@@ -188,7 +188,7 @@ def rank_controls(
                 * (1 + math.log((len(documents) + 1) / (frequency[hit] + 1)))
                 for hit in hits
             )
-            concept_score = 0
+            concept_score: float = 0
             for concept, trigger, targets, excluded in active:
                 matches = [
                     (raw, field)

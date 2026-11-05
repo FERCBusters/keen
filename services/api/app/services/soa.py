@@ -372,12 +372,14 @@ def statement_of_applicability(
             .all()
         ]
         isms_business_processes = [
-            _business_process_out(row)
+            process
             for row in db.query(IsmsBusinessProcess)
             .order_by(
                 IsmsBusinessProcess.sort_order.asc(), IsmsBusinessProcess.name.asc()
             )
             .all()
+            # _business_process_out answers None only for a missing row.
+            if (process := _business_process_out(row)) is not None
         ]
         isms_effectiveness_measures = [
             _effectiveness_measure_out(db, row, fw, include_entries=False)

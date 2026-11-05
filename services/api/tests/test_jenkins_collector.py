@@ -4,6 +4,7 @@ import contextlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from app.core.datetime_utils import to_utc_naive
 from app.ingest import jenkins as jk
@@ -152,6 +153,41 @@ def test_ingest_job_cursor_blocks_old_builds(db):
     store.assert_not_called()
     assert result["created_events"] == 0
     assert result["cursor_last_ts"] is not None
+    db.commit.assert_called_once()
+
+
+def _builds(db, body):
+    stored = []
+    with serving(lambda request: httpx.Response(200, json=body)):
+        with (
+            patch.object(jk.settings, "jenkins_base_url", "https://jenkins.example"),
+            patch.object(
+                jk, "_get_or_create_cursor", return_value=MagicMock(last_ts=None)
+            ),
+            patch.object(
+                jk,
+                "store_event_with_artifact",
+                side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
+            ),
+        ):
+            result = jk.ingest_jenkins_job(db, "deploy", None, None)
+    return result, stored
+
+
+def test_ingest_job_skips_builds_other_than_objects(db):
+    body = {"builds": [build(2), "build 1", 7, None, ["number", 1], build(0)]}
+    result, stored = _builds(db, body)
+    assert result["created_events"] == 2
+    assert [s["raw_pointer"]["jenkins"]["build_number"] for s in stored] == [0, 2]
+    db.commit.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "body", [[build(1)], {"builds": {"0": build(1)}}, {"builds": "builds"}]
+)
+def test_ingest_job_reads_a_listing_of_another_shape_as_empty(db, body):
+    result, stored = _builds(db, body)
+    assert (result["created_events"], stored) == (0, [])
     db.commit.assert_called_once()
 
 

@@ -5,7 +5,7 @@ import json
 import logging
 import pickle
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, overload
 
 from app.core.config import settings
 from app.mapping.collector import matches_collector
@@ -569,6 +569,24 @@ def _conditions_hold(
         return False
 
     return True
+
+
+@overload
+def evaluate_by_framework(
+    event: dict[str, Any],
+    rules: list[Rule],
+    *,
+    details: Literal[False] = False,
+) -> dict[str, list[str]]: ...
+
+
+@overload
+def evaluate_by_framework(
+    event: dict[str, Any],
+    rules: list[Rule],
+    *,
+    details: Literal[True],
+) -> dict[str, list[dict[str, Any]]]: ...
 
 
 def evaluate_by_framework(

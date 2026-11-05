@@ -221,7 +221,7 @@ def _parse_feed(xml_bytes: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]]
             if href and not meta["link"]:
                 meta["link"] = href
 
-        entries: list[dict[str, Any]] = []
+        entries = []
         for entry in list(root):
             if _local(entry.tag).lower() != "entry":
                 continue

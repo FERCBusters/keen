@@ -10,6 +10,7 @@ import hashlib
 import json
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from urllib.parse import quote, urlsplit
 
 from app.core.datetime_utils import utc_now_naive
@@ -82,8 +83,8 @@ def validate_input(entry):
                 "Field mappings must be simple field names or dotted paths"
             )
         result[key] = value
-    for key, (default, low, high) in LIMITS.items():
-        value = entry.get(key, default)
+    for key, (fallback, low, high) in LIMITS.items():
+        value = entry.get(key, fallback)
         if type(value) is not int or not low <= value <= high:
             raise ElasticsearchInputError(
                 f"{key} must be an integer between {low} and {high}"
@@ -259,7 +260,7 @@ def _window(db, client, entry, start, end, deadline):
                 raise ElasticsearchInputError(
                     "Collection reached its time budget; reduce the input window or narrow the query"
                 )
-            filters = [
+            filters: list[dict[str, Any]] = [
                 {
                     "range": {
                         entry["timestamp_field"]: {

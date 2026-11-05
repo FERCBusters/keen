@@ -24,7 +24,7 @@ class PolicyPayload(BaseModel):
                 raise ValueError("Disabled retention must have no limit")
         elif self.value is None:
             raise ValueError("A positive limit is required")
-        if self.mode == "age" and self.value > 36500:
+        elif self.mode == "age" and self.value > 36500:
             raise ValueError("Age must be between 1 and 36500 days")
         return self
 

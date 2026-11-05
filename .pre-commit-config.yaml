@@ -20,8 +20,8 @@ repos:
         files: '^(services/ui/public/.*\.js|services/ui/tests/(eslint\.config\.js|eslint-suppressions\.json|package(-lock)?\.json)|lint-ui\.sh)$'
         exclude: '/(vendor|node_modules|dist)/'
       - id: python-types
-        name: Check Python types against the mypy baseline
-        entry: bash -c 'cd services/api && poetry run python ../../tools/mypy_baseline.py check'
+        name: Check Python types
+        entry: bash -c 'cd services/api && poetry run mypy'
         language: system
         pass_filenames: false
-        files: '^(services/api/(app/.*\.py|pyproject\.toml|poetry\.lock|mypy-baseline\.txt)|tools/mypy_baseline\.py)$'
+        files: '^services/api/(app/.*\.py|pyproject\.toml|poetry\.lock)$'

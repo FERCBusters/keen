@@ -1022,6 +1022,28 @@ def test_undeclared_integers_under_secret_names_are_redacted():
     assert changes == [{"path": "attributes.password", "reason": "sensitive_name"}]
 
 
+@pytest.mark.parametrize(
+    "event_type",
+    [["endpoint.screen_lock.observed"], {"name": "endpoint.screen_lock.observed"}],
+    ids=["list", "object"],
+)
+def test_a_stored_envelope_whose_event_type_is_not_text_is_displayed(event_type):
+    # The catalogue is known, so only the event type stands between the
+    # envelope and its declared fields; one that is not text names none.
+    payload = {
+        "source": "keen-agent",
+        "ueu": {
+            "catalogue": {"id": "keen", "version": catalogues.KEEN_VERSIONS[-1]},
+            "event_type": event_type,
+            "attributes": {"password": "hunter2", "count": 5},
+        },
+    }
+    shown = display_payload(payload)
+    assert shown["source"] == "keen-agent"
+    assert shown["ueu"]["event_type"] == event_type
+    assert shown["ueu"]["attributes"] == {"password": "REDACTED", "count": 5}
+
+
 def test_duplicate_json_names_cannot_hide_a_secret():
     from app.security.redaction import redact_str
 

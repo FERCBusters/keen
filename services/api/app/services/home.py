@@ -184,12 +184,12 @@ def home_overview(
             IntegrationCollector.enabled.is_(True), IntegrationCollector.failures > 0
         )
         result["collectors_with_failures"] = failed.count()
-        for row in failed.order_by(IntegrationCollector.name).limit(5):
+        for collector in failed.order_by(IntegrationCollector.name).limit(5):
             result["attention"].append(
                 {
                     "kind": "collection",
-                    "label": row.name,
-                    "detail": f"API collector · {row.failures} consecutive failures · installation-wide",
+                    "label": collector.name,
+                    "detail": f"API collector · {collector.failures} consecutive failures · installation-wide",
                     "href": "/admin.html#integrations",
                 }
             )
@@ -214,7 +214,7 @@ def home_overview(
 
 
 def control_tree(rows, prefix=""):
-    groups = {}
+    groups: dict[str, int] = {}
     leaves = []
     for row in rows:
         ref = row.ref or ""

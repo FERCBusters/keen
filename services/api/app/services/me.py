@@ -26,7 +26,7 @@ from app.security.permissions import has_permission
 from app.security.rate_limit import address_window_allow, fixed_window_allow
 from app.security.regex import scan_pattern
 from app.security.roles import compute_effective_role, is_effective_admin
-from app.services.context import ChangeContext
+from app.services.context import ChangeContext, signed_in_user
 from app.services.errors import DomainError
 from app.services.features import state
 from app.services.mailer import smtp_configured, user_email
@@ -354,9 +354,7 @@ def _unread_question_replies(db: Session, user: User) -> int:
 
 
 def me(*, context: ChangeContext, db: Session) -> dict:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
+    user = signed_in_user(context)
 
     # Middleware normally attaches the effective role (which accounts for group
     # role inheritance); compute it when this runs outside that path.
@@ -412,9 +410,7 @@ def me(*, context: ChangeContext, db: Session) -> dict:
 
 
 def get_my_preferences(*, context: ChangeContext) -> PreferencesOut:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
+    user = signed_in_user(context)
 
     return _preferences_out(user)
 
@@ -422,9 +418,7 @@ def get_my_preferences(*, context: ChangeContext) -> PreferencesOut:
 def update_my_preferences(
     *, payload: PreferencesUpdatePayload, context: ChangeContext, db: Session
 ) -> PreferencesOut:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
+    user = signed_in_user(context)
 
     # Apply updates (PATCH semantics: only apply fields present in the payload).
     fields = set(payload.model_fields_set or set())
@@ -488,9 +482,7 @@ def update_my_preferences(
 def list_my_saved_searches(
     *, context: ChangeContext, db: Session
 ) -> list[SavedSearchOut]:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
+    user = signed_in_user(context)
 
     rows = (
         db.query(SavedSearch)
@@ -514,9 +506,7 @@ def list_my_saved_searches(
 def upsert_my_saved_search(
     *, payload: SavedSearchCreatePayload, context: ChangeContext, db: Session
 ) -> SavedSearchOut:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
+    user = signed_in_user(context)
 
     name = (payload.name or "").strip()
     if not name:
@@ -562,9 +552,7 @@ def upsert_my_saved_search(
 def delete_my_saved_search(
     *, saved_search_id: str, context: ChangeContext, db: Session
 ) -> dict:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
+    user = signed_in_user(context)
 
     sid = _try_uuid(saved_search_id)
     if not sid:
@@ -587,9 +575,7 @@ def delete_my_saved_search(
 def change_my_password(
     *, payload: ChangePasswordPayload, context: ChangeContext, db: Session
 ) -> dict:
-    user = context.actor
-    if not isinstance(user, User):
-        raise DomainError(status_code=401, detail="Not authenticated")
+    user = signed_in_user(context)
 
     # Rate limit password changes to prevent abuse (fail closed if Redis unavailable)
     try:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import httpx
+from sqlalchemy import Table
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -28,7 +29,8 @@ def _get_or_create_cursor(db: Session, name: str) -> IngestionCursor:
         return cur
 
     stmt = (
-        insert(IngestionCursor.__table__)
+        # Declarative mapping types __table__ as FromClause; this one is a Table.
+        insert(cast(Table, IngestionCursor.__table__))
         .values(name=name, last_ts=None, metadata={}, updated_at=utcnow())
         .on_conflict_do_nothing(index_elements=[IngestionCursor.__table__.c.name])
     )
@@ -78,12 +80,17 @@ def ingest_jenkins_job(
         r.raise_for_status()
         job = r.json() or {}
 
-    builds = job.get("builds", []) or []
+    # A response or build listing of another shape holds no builds, and a
+    # build other than an object is skipped.
+    builds = job.get("builds") if isinstance(job, dict) else None
+    builds = builds if isinstance(builds, list) else []
     created = 0
     newest_ts = to_utc_naive(cur.last_ts) if cur.last_ts else None
 
     # builds are newest-first; process oldest-first
     for b in reversed(builds[:50]):
+        if not isinstance(b, dict):
+            continue
         ts_ms = b.get("timestamp")
         if not ts_ms:
             continue

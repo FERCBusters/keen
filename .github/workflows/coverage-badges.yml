@@ -1,8 +1,8 @@
-name: Coverage badges
+name: Badges
 
-# Runs after a successful KEEN CI push to main and publishes coverage badges to
-# the orphan "badges" branch. Kept separate from tests.yml so the reusable test
-# workflow (called by release.yml) never needs write permission.
+# Runs after a successful KEEN CI push to main and publishes the coverage, mypy
+# and ruff badges to the orphan "badges" branch. Kept separate from tests.yml so
+# the reusable test workflow (called by release.yml) never needs write permission.
 on:
   workflow_run:
     workflows: ["KEEN CI"]
@@ -34,7 +34,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           path: repo
 
-      - name: Download coverage reports
+      - name: Download test and check reports
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: keen-test-results
@@ -58,7 +58,7 @@ jobs:
           git switch --orphan badges
           cp "$RUNNER_TEMP"/badges/*.svg .
           git add -- *.svg
-          git commit --quiet -m "Coverage badges for ${HEAD_SHA}"
+          git commit --quiet -m "Badges for ${HEAD_SHA}"
           if git fetch --quiet --depth=1 origin badges &&
              [ "$(git rev-parse HEAD^{tree})" = "$(git rev-parse FETCH_HEAD^{tree})" ]; then
             echo 'Badges unchanged.'

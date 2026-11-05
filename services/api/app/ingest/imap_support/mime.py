@@ -6,6 +6,9 @@ import quopri
 
 from app.security.redaction import redact_str
 
+# A parsed BODYSTRUCTURE: nested lists of strings, with NIL as None.
+BodyStructure = list["BodyStructure"] | str | None
+
 
 def structure(raw):
     if len(raw) > 32768:
@@ -25,7 +28,7 @@ def structure(raw):
         char = raw[position : position + 1]
         position += 1
         if char == b"(":
-            result = []
+            result: list[BodyStructure] = []
             while True:
                 while position < len(raw) and raw[position : position + 1] == b" ":
                     position += 1

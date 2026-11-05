@@ -318,7 +318,7 @@ def database_batch():
             ).scalars()
         )
         deleted = 0
-        batches = set()
+        batches: set[uuid.UUID] = set()
         for event_id in ids:
             if not db.execute(
                 # UNPROTECTED is a module constant; the event id is bound.

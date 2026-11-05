@@ -646,6 +646,25 @@ def test_a_line_nested_too_deeply_is_stored_as_text_and_the_run_continues(lk):
     assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW
 
 
+@pytest.mark.parametrize("odd", ["stream", ["stream", "values"], 7, None])
+def test_a_result_other_than_a_stream_is_skipped_and_the_run_continues(lk, odd):
+    lk.upstream.replies.append(
+        [
+            odd,
+            {
+                "stream": {"app": "sshd"},
+                "values": [_line(NOW - timedelta(minutes=5), "plain line")],
+            },
+        ]
+    )
+
+    (result,) = lk.run()
+
+    assert result["created_events"] == 1, result
+    assert [e.normalized_payload["line"] for e in lk.events()] == ["plain line"]
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW
+
+
 def _failed_login(user):
     # An OSSEC-style line; `srcuser` is whatever a client typed as its username.
     return json.dumps(

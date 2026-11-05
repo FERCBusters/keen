@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from threading import RLock
 from weakref import WeakKeyDictionary
 
-from sqlalchemy import select
+from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import ManagedConfiguration, ManagedConfigurationRevision
@@ -136,7 +136,7 @@ def compile_state(version, document):
     ):
         raise DomainError(503, "Feature configuration is unavailable.")
     configured = {key: document.get(key, True) for key, _, _ in DEFINITIONS}
-    effective = {}
+    effective: dict[str, bool] = {}
     for key, _, parent in DEFINITIONS:
         effective[key] = configured[key] and (not parent or effective[parent])
     return FeatureState(version, tuple(configured.items()), tuple(effective.items()))
@@ -144,7 +144,7 @@ def compile_state(version, document):
 
 # One immutable document per live database engine. No user identities, secrets,
 # or authorisation decisions are cached. Each request checks the DB revision.
-_cache = WeakKeyDictionary()
+_cache: WeakKeyDictionary[Engine | Connection, FeatureState] = WeakKeyDictionary()
 _cache_lock = RLock()
 
 

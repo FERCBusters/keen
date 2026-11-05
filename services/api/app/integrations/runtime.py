@@ -5,6 +5,7 @@ import socket
 import ssl
 import uuid
 from datetime import date, timedelta
+from typing import Any, cast
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
@@ -23,7 +24,7 @@ from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
 from app.security.redaction import redact_obj, redact_url
 from app.services.ingestion_pause import is_paused
 from cryptography.fernet import InvalidToken
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 
 from .engine import collect, external_id, timestamp
 from .errors import IntegrationError
@@ -83,15 +84,27 @@ def queue_run(db, collector, preview=False):
         if collector.live_revision
         else None
     )
-    if not preview and not rev:
+    if preview:
+        revision, definition, connection_id = (
+            collector.version,
+            collector.draft,
+            collector.connection_id,
+        )
+    elif rev:
+        revision, definition, connection_id = (
+            rev.revision,
+            rev.definition,
+            rev.connection_id,
+        )
+    else:
         raise ValueError("Publish a revision before collecting evidence")
     run = Run(
         id=str(uuid.uuid4()),
         collector_id=collector.id,
-        revision=collector.version if preview else rev.revision,
+        revision=revision,
         preview=preview,
-        definition=collector.draft if preview else rev.definition,
-        connection_id=collector.connection_id if preview else rev.connection_id,
+        definition=definition,
+        connection_id=connection_id,
     )
     db.add(run)
     db.flush()
@@ -125,15 +138,22 @@ def fail(db, run, message):
 def run_job(run_id):
     db = SessionLocal()
     try:
-        claimed = db.execute(
-            update(Run)
-            .where(Run.id == run_id, Run.status == "queued")
-            .values(status="running", started_at=utc_now_naive())
+        # Session.execute is typed as Result; an UPDATE returns a CursorResult.
+        claimed = cast(
+            CursorResult[Any],
+            db.execute(
+                update(Run)
+                .where(Run.id == run_id, Run.status == "queued")
+                .values(status="running", started_at=utc_now_naive())
+            ),
         )
         db.commit()
         if not claimed.rowcount:
             return
         run = db.get(Run, run_id)
+        # This job has just marked the run as running, and connection removal
+        # refuses to delete a running run.
+        assert run is not None
         if is_paused(db, "api-ingesters"):
             run.status = "cancelled"
             run.message = "Source ingestion paused before collection began"
@@ -142,6 +162,8 @@ def run_job(run_id):
             return
         c = db.get(Collector, run.collector_id)
         conn = db.get(Connection, run.connection_id)
+        # The run's foreign keys keep its collector and connection while it exists.
+        assert c is not None and conn is not None
         d = Definition.model_validate(run.definition)
         auth, credential = connection_auth(conn)
         run.message = "Fetching records and checking field mappings"
@@ -159,7 +181,7 @@ def run_job(run_id):
                 "Measurement destination no longer exists or its unit differs"
             )
         source = "integration:" + c.id
-        rules = load_rules(settings.rules_path, db=db) if run.preview else None
+        rules = load_rules(settings.rules_path, db=db) if run.preview else []
         samples = []
         for index, item in enumerate(records):
             # Remove the actual credential even if a service echoes it under an unexpected key.
@@ -356,6 +378,10 @@ def tick():
         pending = []
         for c in collectors:
             revision = db.get(Revision, (c.id, c.live_revision))
+            if revision is None:
+                # Connection removal can delete a revision a concurrent rollback
+                # has just made live; queue_run refuses such a collector too.
+                continue
             c.next_run = now + timedelta(
                 minutes=revision.definition["interval_minutes"]
             )

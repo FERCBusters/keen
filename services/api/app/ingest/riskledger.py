@@ -550,17 +550,23 @@ def _collect(db, client, cfg):
             row = _clean(remote)
             sid = _id(row.get("id"))
             level = (row.get("framework") or {}).get("level") or {}
-            if levels and level.get("id") not in levels:
+            level_id = level.get("id")
+            if levels and not (isinstance(level_id, str) and level_id in levels):
                 continue
             allowed_suppliers.add(sid)
             examined += 1
             if cfg.get("import_suppliers", True):
                 vendors[sid] = _vendor(db, org, row)
             if cfg.get("import_framework", True):
-                ids = [x.get("domainID") for x in row.get("complianceByDomain") or []]
+                ids = [
+                    x.get("domainID")
+                    for x in row.get("complianceByDomain") or []
+                    if isinstance(x, dict)
+                ]
                 ids += [
                     x.get("id")
                     for x in (row.get("framework") or {}).get("addOnDomains") or []
+                    if isinstance(x, dict)
                 ]
                 for ident in ids:
                     if ident:

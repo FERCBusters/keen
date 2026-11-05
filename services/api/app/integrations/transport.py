@@ -103,6 +103,9 @@ def destination(url):
 
 
 class PinnedHTTPS(http.client.HTTPSConnection):
+    # HTTPSConnection keeps the context it is given here; its stubs omit it.
+    _context: ssl.SSLContext
+
     def __init__(self, hostname, port, address, timeout):
         super().__init__(
             hostname,

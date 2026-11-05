@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -23,7 +24,11 @@ def add_diary_entry(
     be trusted from the browser.
     """
     ts = timestamp or datetime.now(timezone.utc)
-    payload = {"summary": summary, "details": details or {}, "author": author}
+    payload: dict[str, Any] = {
+        "summary": summary,
+        "details": details or {},
+        "author": author,
+    }
     if links:
         payload["links"] = links
     payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(

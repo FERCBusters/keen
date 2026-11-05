@@ -216,6 +216,40 @@ def test_the_scheduler_queues_due_collectors_and_reports_broker_failures(
     assert db.get(Collector, "collector").next_run >= before + timedelta(minutes=60)
 
 
+def test_the_scheduler_passes_over_a_collector_whose_live_revision_is_gone(
+    database,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    # Connection removal can delete a revision a concurrent rollback has just
+    # made live; that collector waits, and the other due collectors are queued.
+    db, _ = database
+    api.action_collector("collector", "publish", api.Action(version=1), db)
+    db.add(
+        Collector(
+            id="orphan",
+            name="Orphan",
+            connection_id="connection",
+            draft=Definition().model_dump(),
+            live_revision=4,
+            enabled=True,
+        )
+    )
+    due = utc_now_naive() - timedelta(minutes=1)
+    for ident in ("collector", "orphan"):
+        db.get(Collector, ident).next_run = due
+    db.commit()
+    dispatched = []
+    monkeypatch.setattr(runtime, "dispatch", dispatched.append)
+
+    runtime.tick()
+
+    db.expire_all()
+    (run,) = db.query(Run).all()
+    assert (run.collector_id, run.status) == ("collector", "queued")
+    assert dispatched == [run.id]
+    assert db.get(Collector, "orphan").next_run == due
+
+
 def test_a_pause_cancels_queued_runs_at_the_next_tick(
     database,  # noqa: F811 - fixture imported above
     monkeypatch,

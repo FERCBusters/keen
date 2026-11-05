@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import timedelta
+from typing import Any
 
 from sqlalchemy import ColumnElement, and_, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -80,7 +81,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
                 if current
                 else None
             )
-            if active != job.rule_document:
+            if current is None or active != job.rule_document:
                 job.status = "superseded"
                 db.commit()
                 return False
@@ -154,7 +155,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
         existing = {
             (mapping.event_id, mapping.control_item_id) for mapping, _, _ in mappings
         }
-        owned = {}
+        owned: dict[uuid.UUID, list[tuple[Mapping, str, str]]] = {}
         for mapping, framework, ref in mappings:
             if (
                 mapping.method == "rule"
@@ -184,7 +185,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
                 matched += 1
             if event.id in owned:
                 # The rows the active rules still attach this event to.
-                supported = {}
+                supported: dict[uuid.UUID, dict[str, Any]] = {}
                 for framework, hits in evaluate_by_framework(
                     event_data, active_rules, details=True
                 ).items():
@@ -198,18 +199,18 @@ def process_batch(job_id: uuid.UUID) -> bool:
                         ):
                             supported[row_id] = hit
                 for mapping, framework, ref in owned[event.id]:
-                    hit = supported.get(mapping.control_item_id)
-                    if hit is None:
+                    support = supported.get(mapping.control_item_id)
+                    if support is None:
                         db.delete(mapping)
                         existing.discard((event.id, mapping.control_item_id))
                         changed = True
                     elif (mapping.confidence, mapping.rationale) != (
-                        hit["confidence"],
-                        hit["rationale"],
+                        support["confidence"],
+                        support["rationale"],
                     ):
                         # Another saved rule may still justify this control.
-                        mapping.confidence = hit["confidence"]
-                        mapping.rationale = hit["rationale"]
+                        mapping.confidence = support["confidence"]
+                        mapping.rationale = support["rationale"]
                         changed = True
             for framework, hits in result.items():
                 for hit in hits:

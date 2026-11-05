@@ -12,6 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from functools import wraps
 from pathlib import Path
+from typing import Any
 
 import yaml
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
@@ -49,8 +50,12 @@ FIELDS = {
         "aws_access_key_id aws_secret_access_key aws_session_token",
     ),
 }
-_current = ContextVar("ingestion_connection", default=None)
-_run_cache = ContextVar("ingestion_run_cache", default=None)
+_current: ContextVar["Connection | None"] = ContextVar(
+    "ingestion_connection", default=None
+)
+_run_cache: ContextVar[dict[str, Any] | None] = ContextVar(
+    "ingestion_run_cache", default=None
+)
 
 
 @dataclass(frozen=True)

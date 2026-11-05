@@ -89,7 +89,12 @@ class Scaleway(JsonApi):
         super().__init__(ORIGIN, {"X-Auth-Token": secret}, **kwargs)
         self.organisation = organisation
         self.zones = zones
-        self.regions = sorted({ZONE.fullmatch(z).group(1) for z in zones})
+        regions = set()
+        for zone in zones:
+            matched = ZONE.fullmatch(zone)
+            assert matched is not None  # connect() accepts only zones that ZONE matches
+            regions.add(matched.group(1))
+        self.regions = sorted(regions)
 
     def pages(self, path: str, key: str, *, params=None, size="page_size") -> list:
         """Every item of a numbered listing; a longer one is refused, since a
@@ -153,16 +158,32 @@ def everywhere(value) -> bool:
 # --- IAM ---------------------------------------------------------------------------
 
 
+def _principal(value) -> str:
+    """A user, group or application ID from a listing, clipped as Audit Trail
+    events read one; any other type reads as empty."""
+    return text_field(value, 64)
+
+
+def _listed(values) -> set[str]:
+    """The non-empty strings in a vendor list, such as a group's user IDs,
+    each read as ``_principal`` reads an ID."""
+    found = {_principal(v) for v in values} if isinstance(values, list) else set()
+    return found - {""}
+
+
 def names(users: list[dict], applications: list[dict]) -> dict:
-    """Display names for user and application IDs."""
+    """Display names for user and application IDs; a principal without a
+    usable ID is left out."""
     found = {
-        a.get("id"): "application/" + clip(a.get("name") or a.get("id"), 100)
+        ident: "application/" + clip(a.get("name") or ident, 100)
         for a in applications
+        if (ident := _principal(a.get("id")))
     }
     found.update(
         {
-            u.get("id"): clip(u.get("email") or u.get("username") or u.get("id"))
+            ident: clip(u.get("email") or u.get("username") or ident)
             for u in users
+            if (ident := _principal(u.get("id")))
         }
     )
     return found
@@ -171,35 +192,36 @@ def names(users: list[dict], applications: list[dict]) -> dict:
 def admins(api: Scaleway, users: list[dict], named: dict) -> tuple[set, list[str]]:
     """User IDs holding the owner role, OrganizationManager or IAMManager,
     directly or through a group, and the groups and applications holding
-    either permission set."""
+    either permission set. A principal without a usable ID is left out."""
     policies = api.iam("policies")
     if len(policies) > MAX_POLICIES:
         raise Unavailable("unavailable")
-    groups = {g.get("id"): g for g in api.iam("groups")}
-    held, others = {u.get("id") for u in users if u.get("type") == "owner"}, set()
+    groups = {ident: g for g in api.iam("groups") if (ident := _principal(g.get("id")))}
+    held = _listed([u.get("id") for u in users if u.get("type") == "owner"])
+    others = set()
     for policy in policies:
         rules = api.pages(
             "/iam/v1alpha1/rules",
             "rules",
             params={"policy_id": _uuid(policy.get("id"))},
         )
-        if not any(
-            set(r.get("permission_set_names") or []) & ADMIN_SETS for r in rules
-        ):
+        if not any(_listed(r.get("permission_set_names")) & ADMIN_SETS for r in rules):
             continue
+        group_id = _principal(policy.get("group_id"))
         if policy.get("user_id"):
-            held.add(policy["user_id"])
-        elif policy.get("group_id") in groups:
-            group = groups[policy["group_id"]]
+            held |= _listed([policy["user_id"]])
+        elif group_id in groups:
+            group = groups[group_id]
             members = (
-                {u.get("id") for u in users}
+                _listed([u.get("id") for u in users])
                 if group.get("all_users") is True
-                else set(group.get("user_ids") or [])
+                else _listed(group.get("user_ids"))
             )
             held |= members
-            others.add("group/" + clip(group.get("name") or group.get("id"), 100))
+            others.add("group/" + clip(group.get("name") or group_id, 100))
         elif policy.get("application_id"):
-            others.add(named.get(policy["application_id"]) or "application/unknown")
+            application = _principal(policy["application_id"])
+            others.add(named.get(application) or "application/unknown")
     return held, sorted(others)
 
 
@@ -223,13 +245,16 @@ def identity(
     for user in users:
         email = clip(user.get("email"))
         owner = user.get("type") == "owner"
+        # The owner role is read from the user, so an owner whose ID is
+        # unusable is still counted.
+        admin = owner or _principal(user.get("id")) in held
         mfa = user.get("mfa")
         pending = user.get("status") == "invitation_pending"
         locked = user.get("locked") is True
         person = Identity(
             name=email or clip(user.get("username") or user.get("id")),
             email=email if EMAIL.fullmatch(email) else "",
-            admin=user.get("id") in held,
+            admin=admin,
             mfa=mfa if isinstance(mfa, bool) else None,
             last_used=parse_time(user.get("last_login_at")),
             created=parse_time(user.get("created_at")),
@@ -237,7 +262,7 @@ def identity(
                 d
                 for d in (
                     "Owner" if owner else "",
-                    "IAM manager" if user.get("id") in held and not owner else "",
+                    "IAM manager" if admin and not owner else "",
                     "Invitation pending" if pending else "",
                     "Locked" if locked else "",
                 )
@@ -304,7 +329,7 @@ def keys(api: Scaleway, named: dict, now: datetime) -> Check:
         created = parse_time(key.get("created_at"))
         if created is None or now - created < limit:
             continue
-        bearer = key.get("user_id") or key.get("application_id")
+        bearer = _principal(key.get("user_id")) or _principal(key.get("application_id"))
         old.add(named.get(bearer) or clip(key.get("access_key") or "unknown", 64))
     label = CHECKS["credentials.key_age"]
     if not found:
@@ -335,13 +360,17 @@ def _covers(rule: dict, port: int) -> bool:
     return low <= port <= (high if isinstance(high, int) else low)
 
 
+def _position(rule: dict) -> int:
+    position = rule.get("position")
+    return position if isinstance(position, int) else 0
+
+
 def exposed_ports(group: dict, rules: list[dict]) -> list[int]:
     """Remote-access ports the internet reaches through one security group:
     inbound rules apply by position, the first match decides, and traffic no
     rule matches meets the group's inbound default policy."""
     inbound = sorted(
-        (r for r in rules if r.get("direction") == "inbound"),
-        key=lambda r: r.get("position") if isinstance(r.get("position"), int) else 0,
+        (r for r in rules if r.get("direction") == "inbound"), key=_position
     )
     out = []
     for port in ADMIN_PORTS:
@@ -559,7 +588,8 @@ def event_entry(event: dict, organisation: str, named: dict) -> Activity | None:
     outcome = "info" if status is None else "failure" if status >= 400 else "success"
     principal = event.get("principal")
     principal = principal if isinstance(principal, dict) else {}
-    who = named.get(principal.get("id")) or text_field(principal.get("id"), 64)
+    principal_id = _principal(principal.get("id"))
+    who = named.get(principal_id) or principal_id
     product = text_field(event.get("product_name"), 64)
     resources = [text_field(r.get("name") or r.get("id")) for r in _resources(event)]
     return Activity(
@@ -593,7 +623,7 @@ def sign_in_entry(event: dict, organisation: str) -> Activity | None:
     if when is None or not ident:
         return None
     outcome = {"success": "success", "failure": "failure"}.get(
-        event.get("result"), "info"
+        text_field(event.get("result")), "info"
     )
     who = next(
         (

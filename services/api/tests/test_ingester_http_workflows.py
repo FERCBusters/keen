@@ -148,6 +148,30 @@ def test_github_repo_cursor_overlap_order_dedup_and_provenance(
     assert store.call_args.kwargs["summary"].startswith("[Repository]")
 
 
+def test_github_events_other_than_objects_are_skipped(contract_db, monkeypatch):
+    event = {
+        "id": "1",
+        "created_at": "2026-01-03T00:00:00Z",
+        "type": "PushEvent",
+        "actor": {"login": "alice"},
+        "payload": {"size": 1},
+    }
+    body = ["event", event, 7, None, ["created_at", "2026-01-02T00:00:00Z"]]
+    monkeypatch.setattr(
+        github,
+        "_client",
+        lambda: httpx.Client(
+            base_url="https://api.example",
+            transport=httpx.MockTransport(lambda req: httpx.Response(200, json=body)),
+        ),
+    )
+    store = Mock(return_value={"deduped": False})
+    monkeypatch.setattr(github, "store_event_with_artifact", store)
+    result = github.ingest_github_repo(contract_db, "team", "repo")
+    assert result["created_events"] == 1
+    assert [c.kwargs["external_id"] for c in store.call_args_list] == ["1"]
+
+
 RSS = b"""<rss version="2.0"><channel><title>Security</title><link>https://example.org</link>
 <item><guid>1</guid><title>Old item</title><link>https://example.org/1</link><pubDate>Thu, 01 Jan 2026 12:00:00 GMT</pubDate></item>
 <item><guid>2</guid><title>New item</title><link>https://example.org/2</link><pubDate>Fri, 02 Jan 2026 12:00:00 GMT</pubDate><author>alice</author></item>

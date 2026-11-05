@@ -189,7 +189,7 @@ def _question_stats(attempts: list[QuizAttempt]) -> dict[str, _QuestionStats]:
 
 
 def _question_out(entry: _QuestionStats, *, manager: bool) -> dict[str, Any]:
-    out = {
+    out: dict[str, Any] = {
         "question_id": entry.question_id,
         "prompt": entry.prompt,
         "kind": entry.kind,
@@ -284,7 +284,9 @@ def _people(
         .order_by(func.lower(IsmsPerson.name))
         .all()
     )
-    rows = [(person, by_person.get(person.id)) for person in participants]
+    rows: list[tuple[IsmsPerson | None, QuizAttempt | None]] = [
+        (person, by_person.get(person.id)) for person in participants
+    ]
     rows.extend((None, a) for a in attempts if a.person_id is None)
     return [
         {

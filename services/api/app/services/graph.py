@@ -178,7 +178,7 @@ def graph_control_source(
     """
 
     user = context.actor
-    if not can_read_events(db, user):
+    if user is None or not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
     scope = scope or EventFilters(framework=framework)
     breakdown = parse_breakdown(breakdown)
@@ -290,7 +290,7 @@ def graph_control_source(
             ctrl_map = {c.id: c for c in ctrl_objs}
             for node in nodes.values():
                 if node.get("node_kind") == "control":
-                    cid = _try_uuid(node.get("control_id"))
+                    cid = _try_uuid(node["control_id"])
                     if cid and cid in ctrl_map:
                         node["upstream_url"] = _control_upstream_url(ctrl_map[cid])
 
@@ -322,7 +322,7 @@ def graph_clause_source(
     """
 
     user = context.actor
-    if not can_read_events(db, user):
+    if user is None or not can_read_events(db, user):
         raise DomainError(status_code=403, detail="events.read permission required")
     scope = scope or EventFilters(framework=framework)
     breakdown = parse_breakdown(breakdown)

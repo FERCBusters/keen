@@ -267,7 +267,11 @@ def update_quiz(
     activating = (
         "status" in fields and payload.status == "active" and quiz.status != "active"
     )
-    if "status" in fields and payload.status != quiz.status:
+    if (
+        "status" in fields
+        and payload.status is not None
+        and payload.status != quiz.status
+    ):
         _change_status(db, quiz, payload.status)
     # An active quiz opens the round it is due now: a one-off quiz as it is
     # activated, a scheduled one when today is a round date.

@@ -19,6 +19,7 @@ import yaml
 from app.core.config import settings
 from app.db.models import ControlItem, Event, Framework, SourceConnection
 from app.ingest import bookstack
+from app.ingest import connections as source_connections
 from app.ingest.connections import FIELDS as CONNECTION_FIELDS
 from app.integrations.transport import encrypt
 from app.services.managed_configurations import CONNECTORS, credential_name
@@ -944,6 +945,50 @@ def test_definitions_for_a_named_connection_stay_with_that_connection(defs):
     defs.db.refresh(production)
     assert (production.inputs, production.version) == (jobs, 4)
     assert defs.versions()["rules"] == 1
+
+
+def test_a_connection_removed_after_the_listing_is_left_out(defs, monkeypatch):
+    defs.db.add_all(
+        [
+            SourceConnection(
+                id="jenkins-prod",
+                source="jenkins",
+                name="Production CI",
+                configuration={"base_url": "https://ci.example"},
+                inputs={"jobs": [{"name": "release"}]},
+                version=3,
+            ),
+            SourceConnection(
+                id="jenkins-old",
+                source="jenkins",
+                name="Retired CI",
+                configuration={"base_url": "https://old-ci.example"},
+                inputs={"jobs": [{"name": "nightly"}]},
+                version=2,
+            ),
+        ]
+    )
+    defs.db.commit()
+    # The connections are listed, then one is removed before its version is read.
+    listed = source_connections.connections(defs.db)
+    defs.db.delete(defs.db.get(SourceConnection, "jenkins-old"))
+    defs.db.commit()
+    monkeypatch.setattr(
+        source_connections,
+        "connections",
+        lambda db, source=None: [c for c in listed if source in (None, c.source)],
+    )
+
+    listing = defs.admin.get("/v1/admin/evidence-definitions")
+    assert listing.status_code == 200, listing.text
+    assert [
+        (i["key"], i["connection_id"], i["version"])
+        for i in listing.json()["collectors"]
+    ] == [("release", "jenkins-prod", 3)]
+    catalogue = defs.admin.get("/v1/admin/source-catalogue")
+    assert catalogue.status_code == 200, catalogue.text
+    (jenkins,) = [i for i in catalogue.json()["items"] if i["adapter"] == "jenkins"]
+    assert jenkins["collection_items"] == 1
 
 
 def test_deployment_managed_connections_take_rules_but_not_input_edits(

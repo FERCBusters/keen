@@ -5,6 +5,7 @@ import json
 import math
 import time
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 from urllib.parse import quote, urljoin, urlsplit
 
 from app.security.regex import scan_pattern
@@ -136,11 +137,15 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
     if d.since_parameter:
         query[d.since_parameter] = since
     p = d.pagination
-    target = query if p.location == "query" else body
-    if p.location == "body" and (d.method != "POST" or body is None):
+    if p.location == "query":
+        target = query
+    elif d.method != "POST" or body is None:
         raise IntegrationError("Body pagination requires POST and a JSON body")
+    else:
+        target = body
     number, seen = p.start, set()
-    records, pages, watermark = [], 0, initial
+    records: list[dict[str, Any]] = []
+    pages, watermark = 0, initial
     skipped: dict[str, int] = {}
     total_bytes = 0
     requests = 0

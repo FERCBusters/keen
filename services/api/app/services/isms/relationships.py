@@ -52,6 +52,7 @@ def isms_entity_changelog(
 def _reverse_refs_for(
     entity_side: str, entity_id: uuid.UUID, framework: str, db: Session
 ) -> dict[str, Any]:
+    links: list[IsmsEntityControlLink] | list[IsmsEntityClauseLink]
     if entity_side == "control":
         links = (
             db.query(IsmsEntityControlLink)
@@ -70,7 +71,7 @@ def _reverse_refs_for(
             )
             .all()
         )
-    grouped = {
+    grouped: dict[str, list[dict[str, Any]]] = {
         "swot": [],
         "objectives": [],
         "documents": [],
@@ -88,11 +89,7 @@ def _reverse_refs_for(
             continue
         if et not in ENTITY_TYPES:
             continue
-        row = (
-            db.query(ENTITY_TYPES[et][0])
-            .filter(ENTITY_TYPES[et][0].id == link.entity_id)
-            .one_or_none()
-        )
+        row = db.query(ENTITY_TYPES[et][0]).filter_by(id=link.entity_id).one_or_none()
         if not row:
             continue
         if et in {"access_control_matrix", "effectiveness_metric"}:
@@ -107,8 +104,7 @@ def _reverse_refs_for(
             "meeting": "meetings",
         }[et]
         grouped[key].append(_entity_out(db, et, row, framework, include_links=False))
-    grouped["total"] = sum(len(v) for v in grouped.values() if isinstance(v, list))
-    return grouped
+    return {**grouped, "total": sum(len(v) for v in grouped.values())}
 
 
 def control_effectiveness_measures(

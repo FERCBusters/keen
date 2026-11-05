@@ -138,7 +138,7 @@ def collect(config, cursor, allowed_cidrs):
         end = min(last + 100, next_uid - 1)
         if end <= last:
             return {"uidvalidity": validity, "last_uid": last, "items": []}
-        raw = checked(client.uid("SEARCH", None, "UID", f"{last + 1}:{end}"))
+        raw = checked(client.uid("SEARCH", "UID", f"{last + 1}:{end}"))
         if len(raw) != 1 or not isinstance(raw[0], bytes) or len(raw[0]) > 1200:
             raise ValueError("Oversized IMAP search response")
         tokens = raw[0].split()

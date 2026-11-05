@@ -148,8 +148,10 @@ def record_observation(db, agent, event_id):
         return
     run = coverage(event)
     if run is not None:
-        key = hashlib.sha256(json.dumps(["coverage", run["collector"]]).encode())
-        _pointer(db, agent, event, key.hexdigest())
+        key = hashlib.sha256(
+            json.dumps(["coverage", run["collector"]]).encode()
+        ).hexdigest()
+        _pointer(db, agent, event, key)
 
 
 def _all_true(f, *keys):
@@ -348,7 +350,7 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
         if agents
         else []
     )
-    grouped = {}
+    grouped: dict[str, list[Event]] = {}
     for pointer, event in evidence:
         grouped.setdefault(pointer.agent_id, []).append(event)
     targets = thresholds(db)

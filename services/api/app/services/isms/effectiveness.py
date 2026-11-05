@@ -56,7 +56,7 @@ def add_effectiveness_measure(
     payload: EffectivenessMeasurePayload,
     context: ChangeContext | None,
     framework: str,
-    user: User | None,
+    user: User,
     db: Session,
 ) -> IsmsEffectivenessMeasure:
     """Create a measure and its control links in the caller's transaction."""
@@ -83,7 +83,7 @@ def revise_effectiveness_measure(
     row: IsmsEffectivenessMeasure,
     payload: EffectivenessMeasurePayload,
     context: ChangeContext | None,
-    user: User | None,
+    user: User,
     db: Session,
 ) -> None:
     """Apply the payload's fields to a measure in the caller's transaction."""
@@ -103,7 +103,7 @@ def remove_effectiveness_measure(
     *,
     row: IsmsEffectivenessMeasure,
     context: ChangeContext | None,
-    user: User | None,
+    user: User,
     db: Session,
 ) -> None:
     """Delete a measure, its links and its results in the caller's transaction."""

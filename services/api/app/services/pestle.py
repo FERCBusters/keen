@@ -665,12 +665,10 @@ def get_item_business_process_relevance(*, item_id: str, user, db: Session):
             {
                 "business_process": _business_process_out(proc),
                 "relevance": relevance_summary(
-                    links.get(str(proc.id)).relevance
-                    if str(proc.id) in links
-                    else default
+                    links[str(proc.id)].relevance if str(proc.id) in links else default
                 ),
                 "relevance_id": str(
-                    links.get(str(proc.id)).relevance_id
+                    links[str(proc.id)].relevance_id
                     if str(proc.id) in links
                     else default.id
                 ),
@@ -747,12 +745,12 @@ def get_item_clause_relevance(*, item_id: str, user, db: Session):
             {
                 "clause": clause_summary(clause),
                 "relevance": relevance_summary(
-                    links.get(str(clause.id)).relevance
+                    links[str(clause.id)].relevance
                     if str(clause.id) in links
                     else default
                 ),
                 "relevance_id": str(
-                    links.get(str(clause.id)).relevance_id
+                    links[str(clause.id)].relevance_id
                     if str(clause.id) in links
                     else default.id
                 ),
@@ -920,19 +918,19 @@ def pestle_visualisations(
             .filter(PestleRelevanceLevel.code != "na")
             .all()
         )
-        for link in proc_rows:
+        for process_link in proc_rows:
             process_links.append(
                 {
-                    "item_id": str(link.pestle_item_id),
-                    "item": link.pestle_item.item,
-                    "item_type": link.pestle_item.type,
-                    "type": link.pestle_item.type,
-                    "lens": link.pestle_item.lens,
-                    "business_process_id": str(link.business_process_id),
-                    "business_process": link.business_process.name,
-                    "relevance_code": link.relevance.code,
-                    "relevance_label": link.relevance.label,
-                    "relevance": relevance_summary(link.relevance),
+                    "item_id": str(process_link.pestle_item_id),
+                    "item": process_link.pestle_item.item,
+                    "item_type": process_link.pestle_item.type,
+                    "type": process_link.pestle_item.type,
+                    "lens": process_link.pestle_item.lens,
+                    "business_process_id": str(process_link.business_process_id),
+                    "business_process": process_link.business_process.name,
+                    "relevance_code": process_link.relevance.code,
+                    "relevance_label": process_link.relevance.label,
+                    "relevance": relevance_summary(process_link.relevance),
                 }
             )
 

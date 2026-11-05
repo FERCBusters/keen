@@ -936,15 +936,15 @@ def analyse_risk_mitigation(
 
     scenario_rules = rules.get("scenario_terms") or {}
     for key, cfg in scenario_rules.items():
-        matched = [t for t in cfg.get("terms") or [] if _contains_term(text_blob, t)]
-        if not matched:
+        hits = [t for t in cfg.get("terms") or [] if _contains_term(text_blob, t)]
+        if not hits:
             continue
         terms_for_matching.extend(cfg.get("mitigation_words") or [])
         signals.append(
             {
                 "kind": "scenario",
                 "label": key.replace("_", " ").title(),
-                "matched_terms": matched,
+                "matched_terms": hits,
                 "reason": cfg.get("reason")
                 or "The issue text matched this scenario pattern.",
             }

@@ -317,8 +317,12 @@ def set_audit_scope(
                 )
             )
     if effective_replace_clauses:
-        for c in clauses:
-            db.add(AuditScopedClause(audit_id=audit.id, clause_id=c.id, created_at=now))
+        for clause in clauses:
+            db.add(
+                AuditScopedClause(
+                    audit_id=audit.id, clause_id=clause.id, created_at=now
+                )
+            )
     if replace_documents:
         for d in documents:
             db.add(

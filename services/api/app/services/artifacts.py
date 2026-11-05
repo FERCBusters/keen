@@ -27,7 +27,7 @@ from app.storage.filenames import (
 )
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
-_PREVIEW_CACHE = OrderedDict()
+_PREVIEW_CACHE: OrderedDict[str, bytes] = OrderedDict()
 _PREVIEW_CACHE_LOCK = Lock()
 _PREVIEW_CACHE_BYTES = 32 * 1024 * 1024
 _PREVIEW_CACHE_ENTRIES = 128
@@ -101,15 +101,15 @@ def download_artifact(*, artifact_id: str, sample_export: bool, db: Session, use
         # Structured masking needs a complete document. Bound actual bytes,
         # including objects whose stored size metadata is stale or incorrect.
         stream = iter_stream(body)
-        data = bytearray()
+        buffer = bytearray()
         try:
             for chunk in stream:
-                if len(data) + len(chunk) > 20 * 1024 * 1024:
+                if len(buffer) + len(chunk) > 20 * 1024 * 1024:
                     raise DomainError(413, "Artifact exceeds the 20 MiB masking limit")
-                data.extend(chunk)
+                buffer.extend(chunk)
         finally:
             stream.close()
-        data = bytes(data)
+        data = bytes(buffer)
         masked, mask_status = mask_event_data_bytes(data, art.content_type)
         if mask_status == "redacted":
             headers["X-Artifact-Original-SHA256"] = art.sha256

@@ -604,7 +604,7 @@ RESULTS = {
     "scaleway": _scaleway,
 }
 
-ACTIVITY = {
+ACTIVITY: dict[str, list[tuple[str, str, str, str, dict[str, str | bool]]]] = {
     "azure": [
         (
             "7f3c2a1e-4b5d-4c6e-8f70-91a2b3c4d5e6",
@@ -761,7 +761,7 @@ def results(key: str, now: datetime | None = None) -> list[ScopeResult]:
 def activity(key: str, since: datetime, until: datetime) -> tuple[list[Activity], bool]:
     """One fictional entry per hour in [since, until), with stable IDs."""
     spec = ACTIVITY.get(key) or []
-    out = []
+    out: list[Activity] = []
     if not spec:
         return out, True
     hour = since.replace(minute=0, second=0, microsecond=0)
