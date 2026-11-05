@@ -33,6 +33,7 @@ from sqlalchemy import event as sql_event
 from sqlalchemy.orm import Session
 
 from tests.db_helpers import create_sqlite_schema
+from tests.timing import measured
 
 FW = "home-scale"
 OTHER = "home-other"
@@ -321,9 +322,9 @@ def test_scale_overview_counters_and_budget(scale_db, cache_off):
         statements.append(statement)
 
     sql_event.listen(db.bind, "before_cursor_execute", capture)
-    start = time.perf_counter()
-    result = overview(db, user)
-    elapsed = time.perf_counter() - start
+    with measured(time.perf_counter) as timing:
+        result = overview(db, user)
+    elapsed = timing.seconds
     sql_event.remove(db.bind, "before_cursor_execute", capture)
 
     overmaps = (SCALE_EVENTS - 5_000) // 20
@@ -441,16 +442,15 @@ def test_scale_inherited_overview_and_summary_stay_per_control(
 ):
     db = inherited_scale_db
     user = db.query(User).one()
-    start = time.perf_counter()
-    result = overview(db, user, framework=TARGET)
-    overview_elapsed = time.perf_counter() - start
-    start = time.perf_counter()
-    summary = stats_service.stats_summary(
-        context=ChangeContext(method="GET", path="/v1/stats/summary", actor=user),
-        framework=TARGET,
-        db=db,
-    )
-    summary_elapsed = time.perf_counter() - start
+    with measured(time.perf_counter) as overview_timing:
+        result = overview(db, user, framework=TARGET)
+    with measured(time.perf_counter) as summary_timing:
+        summary = stats_service.stats_summary(
+            context=ChangeContext(method="GET", path="/v1/stats/summary", actor=user),
+            framework=TARGET,
+            db=db,
+        )
+    overview_elapsed, summary_elapsed = overview_timing.seconds, summary_timing.seconds
 
     events = {
         "total": INHERITED_EVENTS,

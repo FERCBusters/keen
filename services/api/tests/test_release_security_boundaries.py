@@ -33,6 +33,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
 
+from tests.timing import measured
+
 
 def tls_certificate(tmp_path, hostname="feed.example"):
     """A self-signed certificate and key for a local TLS peer."""
@@ -556,11 +558,12 @@ def test_builtin_collection_budget_ends_a_dripping_response(
         with pytest.raises(httpx.ConnectError):
             client.get(f"https://wrong.example:{dripping_peer.port}/feed.xml")
         dripping_peer.drip = drip
-        started = time.monotonic()
-        with pytest.raises((httpx.TimeoutException, TimeoutError)):
+        with (
+            measured(time.monotonic) as timing,
+            pytest.raises((httpx.TimeoutException, TimeoutError)),
+        ):
             client.get(url)
-        elapsed = time.monotonic() - started
-    assert elapsed < BUDGET + 1.0
+    assert timing.seconds < BUDGET + 1.0
     assert dripping_peer.served == 2
 
 
@@ -581,10 +584,9 @@ def test_custom_api_budget_ends_a_dripping_response(dripping_peer, monkeypatch, 
         },
     )
     dripping_peer.drip = drip
-    started = time.monotonic()
-    with pytest.raises(TimeoutError):
+    with measured(time.monotonic) as timing, pytest.raises(TimeoutError):
         custom.request(url, timeout=BUDGET)
-    assert time.monotonic() - started < BUDGET + 1.0
+    assert timing.seconds < BUDGET + 1.0
 
 
 def test_api_bookstack_lookups_use_the_budgeted_collection_transport(monkeypatch):

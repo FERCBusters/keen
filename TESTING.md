@@ -93,6 +93,14 @@ rises, and explain any reduction in the change that makes it. Use the HTML
 reports to find uncovered behaviour, then add assertions that exercise it
 through the page or API.
 
+A test that holds work to a time budget measures it with
+`tests.timing.measured`. Late in a run, a full garbage collection walks every
+object the test process holds and takes longer than many budgets allow, and it
+runs in whichever piece of work falls due for one. `measured` freezes the
+objects that exist as the timed block starts, so the block pays only for
+collecting what it allocates. `tests/test_time_budgets.py` refuses a budget
+timed with a bare clock.
+
 ## Python types
 
 mypy checks `services/api/app` with the settings in

@@ -46,6 +46,7 @@
 
 - Use `.github/workflows/tests.yml` and `tests.sh` as the authoritative test workflow. Run against a disposable PostgreSQL database and Valkey; the suite changes database contents. Never point tests at an operational installation.
 - For focused local work, run the affected backend tests and `bash tests-ui.sh`. SQLite runs skip PostgreSQL-specific behavior and cannot establish migration, locking or concurrency correctness.
+- Measure every time budget in a test with `tests.timing.measured`, which keeps collection of the rest of the test process out of the budget; `tests/test_time_budgets.py` refuses a bare clock.
 - For security changes, add a reproducible negative test demonstrating the attack prerequisite and rejection. Test both permitted behavior and the boundary being protected, using synthetic credentials and local fixtures.
 - Run the assembled-application contracts in `tests/test_security_design_contracts.py` after route, middleware, session or policy changes. Preserve the local TLS hostname verification regression.
 - Test UI rendering and navigation with hostile strings as well as ordinary values. For CSP or vendor changes, verify actual vendor behavior and report any missing browser coverage.

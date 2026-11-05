@@ -7,6 +7,7 @@ from app.services.source_connections import _destination
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
+from tests.timing import measured
 
 
 @pytest.mark.parametrize("quote", ['"', "'"])
@@ -287,22 +288,22 @@ worker.main()
         "cursor": None,
         "allowed_cidrs": "",
     }
-    start = time.monotonic()
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", code, str(certfile)],
-            input=json.dumps(request).encode(),
-            capture_output=True,
-            cwd=Path(__file__).resolve().parents[1],
-            env={"PATH": os.defpath, "PYTHONIOENCODING": "utf-8"},
-            timeout=3,
-        )
-    finally:
-        stop.set()
-        thread.join(4)
-        listener.close()
+    with measured(time.monotonic) as timing:
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code, str(certfile)],
+                input=json.dumps(request).encode(),
+                capture_output=True,
+                cwd=Path(__file__).resolve().parents[1],
+                env={"PATH": os.defpath, "PYTHONIOENCODING": "utf-8"},
+                timeout=3,
+            )
+        finally:
+            stop.set()
+            thread.join(4)
+            listener.close()
     assert result.returncode == -signal.SIGALRM
-    assert time.monotonic() - start < 3
+    assert timing.seconds < 3
     assert len(sent) >= 5 and not errors and not thread.is_alive()
     assert b"synthetic-secret" not in result.stdout + result.stderr
 

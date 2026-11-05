@@ -35,6 +35,7 @@ from tests.test_security_design_contracts import (  # noqa: F401
     _notification_client,
     production_client,
 )
+from tests.timing import measured
 
 ISSUER = "https://tenant.auth0.example/"
 CLIENT_ID = "tenant-client"
@@ -361,13 +362,15 @@ def test_a_live_notification_socket_closes_when_the_demo_ends(
     client, _ = _notification_client(production_client, monkeypatch, recheck=60)
     _demo_ends_at(monkeypatch, datetime.now(timezone.utc) + timedelta(seconds=1))
 
-    started = time.monotonic()
-    with client.websocket_connect("/ws/notifications", headers=ORIGIN) as socket:
+    with (
+        measured(time.monotonic) as timing,
+        client.websocket_connect("/ws/notifications", headers=ORIGIN) as socket,
+    ):
         assert socket.receive_json()["type"] == "questions.unread_replies_count"
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_json()
     assert closed.value.code == 1008
-    assert 0.5 < time.monotonic() - started < 10
+    assert 0.5 < timing.seconds < 10
     assert not questions.notification_hub._user_sockets
 
     # After the end, a new socket is closed before it reaches the application.

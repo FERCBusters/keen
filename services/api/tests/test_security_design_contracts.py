@@ -22,6 +22,8 @@ from app.services.errors import DomainError
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
+from tests.timing import measured
+
 
 def request(path="/", method="GET", origin=None):
     return Request(
@@ -67,11 +69,13 @@ def test_session_refresh_cannot_resurrect_concurrent_logout(monkeypatch):
 
 def test_regex_accepted_polynomial_pattern_has_runtime_deadline():
     pattern = regex.compile_pattern("(a+)(a+)$")
-    started = time.monotonic()
     # Within the match window, so the pattern itself exhausts its budget.
-    with pytest.raises(regex.MatchBudgetExceeded, match="time budget"):
+    with (
+        measured(time.monotonic) as timing,
+        pytest.raises(regex.MatchBudgetExceeded, match="time budget"),
+    ):
         pattern.search("a" * (regex.MATCH_WINDOW_CHARS - 1) + "!")
-    assert time.monotonic() - started < 2
+    assert timing.seconds < 2
 
 
 def test_a_pattern_reads_a_bounded_window_of_any_value():
@@ -81,9 +85,9 @@ def test_a_pattern_reads_a_bounded_window_of_any_value():
     window = regex.MATCH_WINDOW_CHARS
     assert pattern.search("failed password" + "x" * 1_000_000)
     assert not pattern.search("x" * window + "failed password")
-    started = time.thread_time()
-    assert not pattern.search("failed " * 1_000_000)
-    assert time.thread_time() - started < regex.MATCH_TIMEOUT_SECONDS
+    with measured(time.thread_time) as timing:
+        assert not pattern.search("failed " * 1_000_000)
+    assert timing.seconds < regex.MATCH_TIMEOUT_SECONDS
 
 
 def test_a_timeout_from_other_threads_work_is_retried():

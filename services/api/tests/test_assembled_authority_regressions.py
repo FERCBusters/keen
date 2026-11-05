@@ -37,6 +37,8 @@ from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
+from tests.timing import measured
+
 BASE = "https://keen.example"
 PASSWORD = "synthetic-password-for-tests"
 
@@ -1187,10 +1189,11 @@ def test_json_bodies_are_bounded_and_decoded_off_the_event_loop(keen, monkeypatc
         413,
         "Request body holds too many values",
     )
-    started = time.process_time()
-    costliest = send(nobody, colours(MAX_JSON_VALUES - 2), "application/json")
+    costliest_body = colours(MAX_JSON_VALUES - 2)
+    with measured() as timing:
+        costliest = send(nobody, costliest_body, "application/json")
     assert costliest.status_code == 422, costliest.status_code
-    assert time.process_time() - started < 1.0
+    assert timing.seconds < 1.0
 
     # Administration requests, such as configuration imports, may send more.
     admin = keen.client(keen.user(role="admin"))

@@ -14,6 +14,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
+from tests.timing import measured
+
 
 @pytest.fixture(scope="module")
 def tls_files(tmp_path_factory):
@@ -436,31 +438,31 @@ transport.addresses = lambda *a: ['127.0.0.1']
 worker.COLLECTION_TIMEOUT = 1
 worker.main()
 """
-        started = time.monotonic()
-        result = subprocess.run(
-            [sys.executable, "-c", code, str(tls_files[0])],
-            input=json.dumps(
-                {
-                    "configuration": dict(
-                        host="mail.example",
-                        port=port,
-                        username="reader",
-                        password="synthetic-secret",
-                        folder="INBOX",
-                        fetch_body=False,
-                        body_max_chars=4000,
-                    ),
-                    "cursor": {"uidvalidity": 7, "last_uid": 1},
-                    "allowed_cidrs": "",
-                }
-            ).encode(),
-            capture_output=True,
-            cwd=Path(__file__).resolve().parents[1],
-            env={"PATH": os.defpath, "PYTHONIOENCODING": "utf-8"},
-            timeout=4,
-        )
+        with measured(time.monotonic) as timing:
+            result = subprocess.run(
+                [sys.executable, "-c", code, str(tls_files[0])],
+                input=json.dumps(
+                    {
+                        "configuration": dict(
+                            host="mail.example",
+                            port=port,
+                            username="reader",
+                            password="synthetic-secret",
+                            folder="INBOX",
+                            fetch_body=False,
+                            body_max_chars=4000,
+                        ),
+                        "cursor": {"uidvalidity": 7, "last_uid": 1},
+                        "allowed_cidrs": "",
+                    }
+                ).encode(),
+                capture_output=True,
+                cwd=Path(__file__).resolve().parents[1],
+                env={"PATH": os.defpath, "PYTHONIOENCODING": "utf-8"},
+                timeout=4,
+            )
     assert result.returncode == -signal.SIGALRM
-    assert time.monotonic() - started < 3
+    assert timing.seconds < 3
     assert len(sent) > 5
     assert not result.stdout and not result.stderr
     assert any(b"BODY.PEEK[HEADER.FIELDS" in line for line in commands)

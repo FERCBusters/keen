@@ -66,6 +66,7 @@ from tests.test_assembled_authority_regressions import (
     keen,  # noqa: F401
     unsafe,
 )
+from tests.timing import measured
 
 APP = Path(__file__).resolve().parents[1] / "app"
 
@@ -210,11 +211,11 @@ def test_feed_dates_are_parsed_only_at_a_dates_length():
     assert rss._parse_dt("2026-11-03T10:00:00Z") is not None
     # dateutil's time grows with the square of its input; a feed's date text
     # is refused at a length no date needs, before any parsing.
-    started = time.process_time()
-    assert rss._parse_dt("1." * 80_000) is None
-    costliest = rss._parse_dt(("1." * rss.MAX_DATE_CHARS)[: rss.MAX_DATE_CHARS])
+    with measured() as timing:
+        assert rss._parse_dt("1." * 80_000) is None
+        costliest = rss._parse_dt(("1." * rss.MAX_DATE_CHARS)[: rss.MAX_DATE_CHARS])
     assert costliest is None or costliest.year
-    assert time.process_time() - started < 0.1
+    assert timing.seconds < 0.1
 
 
 def test_dateutil_parses_only_through_the_bounded_feed_helper():
@@ -237,9 +238,9 @@ def test_link_headers_are_read_in_linear_time():
     assert next_link({"Link": header}) == "https://api.example/x?page=2"
     assert next_link({"link": '<https://api.example/x?page=9>; rel="last"'}) is None
     assert next_link({}) is None
-    started = time.process_time()
-    assert next_link({"Link": "<" * 65_536}) is None
-    assert time.process_time() - started < 0.1
+    with measured() as timing:
+        assert next_link({"Link": "<" * 65_536}) is None
+    assert timing.seconds < 0.1
 
 
 # A tenth of a custom API run's 110-second time budget.
@@ -251,13 +252,14 @@ def test_detail_paths_are_filled_in_linear_time():
     assert fill("7", "/checks/{/id}/runs/{/run}") == "/checks/7/runs/7"
     # Every "{" an administrator leaves unclosed starts an attempt, which ends
     # at the next brace; a pattern reading on to the end took 16 s for this.
-    started = time.process_time()
-    assert fill("7", "{" * 65_536) == "{" * 65_536
-    assert time.process_time() - started < 0.1
+    with measured() as timing:
+        assert fill("7", "{" * 65_536) == "{" * 65_536
+    assert timing.seconds < 0.1
     # The longest path a saved definition can hold.
-    started = time.process_time()
-    fill("7", "{" * request_limits.MAX_BODY)
-    assert time.process_time() - started < RUN_SHARE_SECONDS
+    longest = "{" * request_limits.MAX_BODY
+    with measured() as timing:
+        fill("7", longest)
+    assert timing.seconds < RUN_SHARE_SECONDS
 
 
 def encoded_path(levels, tail):
@@ -274,13 +276,15 @@ def test_dot_segments_are_found_within_a_bounded_number_of_decodings():
     assert has_dot_segment(encoded_path(MAX_DECODINGS + 1, "41"))
     # Each decoding of a value encoded within itself removes two characters;
     # decoding it until it stopped changing took 4 s for this record value.
-    started = time.process_time()
-    assert has_dot_segment("/checks/" + quote("%" + "25" * 32_768, safe=""))
-    assert time.process_time() - started < 0.1
+    value = "/checks/" + quote("%" + "25" * 32_768, safe="")
+    with measured() as timing:
+        assert has_dot_segment(value)
+    assert timing.seconds < 0.1
     # As long as the responses a run may read.
-    started = time.process_time()
-    has_dot_segment("/checks/" + quote("%" + "25" * (8 * 1024 * 1024), safe=""))
-    assert time.process_time() - started < RUN_SHARE_SECONDS
+    longest = "/checks/" + quote("%" + "25" * (8 * 1024 * 1024), safe="")
+    with measured() as timing:
+        has_dot_segment(longest)
+    assert timing.seconds < RUN_SHARE_SECONDS
 
 
 def test_github_paging_links_stay_under_the_api_base_path(monkeypatch):
@@ -346,10 +350,9 @@ def test_an_agents_concurrent_request_is_refused_without_waiting(postgres):
         db.commit()
     with Session(postgres) as first, Session(postgres) as second:
         locked_agent(first, first_id)
-        started = time.monotonic()
-        with pytest.raises(HTTPException) as busy:
+        with measured(time.monotonic) as timing, pytest.raises(HTTPException) as busy:
             locked_agent(second, first_id)
-        assert time.monotonic() - started < 1
+        assert timing.seconds < 1
         assert (busy.value.status_code, busy.value.headers) == (
             429,
             {"Retry-After": "5"},
@@ -372,11 +375,10 @@ def test_a_profile_held_elsewhere_is_waited_for_only_briefly(postgres, monkeypat
             text("SELECT id FROM agent_enrollment_profiles WHERE id = :id FOR UPDATE"),
             {"id": profile_id},
         )
-        started = time.monotonic()
-        with pytest.raises(HTTPException) as busy:
+        with measured(time.monotonic) as timing, pytest.raises(HTTPException) as busy:
             locked_agent(request, agent_id)
         assert busy.value.status_code == 429
-        assert 0.5 < time.monotonic() - started < 5
+        assert 0.5 < timing.seconds < 5
         request.rollback()
         admin.rollback()
         # Other database failures are not mistaken for a busy agent.
