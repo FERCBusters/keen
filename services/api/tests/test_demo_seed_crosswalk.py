@@ -18,17 +18,23 @@ os.environ.setdefault("KEEN_BOOTSTRAP_ADMIN_PASSWORD", "test-password")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts")]
 import pytest
+from app.core.config import settings
 from app.db.models import (
+    Audit,
     Base,
+    CloudPostureScope,
+    CloudProvider,
     ControlItem,
     CrossFrameworkControlLink,
     Event,
     FrameworkClause,
+    IsmsDocument,
     Mapping,
+    Risk,
     User,
 )
 from app.services.control_inheritance import evidence_pairs
-from seed_demo_data import DemoConfig, DemoSeeder
+from seed_demo_data import DemoConfig, DemoSeeder, seed
 from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
@@ -602,6 +608,34 @@ def test_a_dry_run_leaves_document_link_entries_out(db, artifact_storage):
     db.flush()
     assert db.query(Event).filter_by(source="diary", system="isms").count() == 0
     assert seeder.stats["link diary entries.skipped in dry run"] == 1
+    assert not artifact_storage.exists()
+
+
+def test_a_demo_keeps_its_dataset_alongside_its_cloud_posture(db, monkeypatch):
+    # Each provider refresh that stores the fictional cloud posture ends the
+    # transaction it finds, so a run that stored it before committing kept the
+    # cloud vendors alone.
+    monkeypatch.setattr(settings, "demo_mode", True)
+    seeder = seed(db, DemoConfig("iso_27001_2022", "Demo", None, False, True))
+
+    db.expire_all()
+    assert seeder.stats["cloud posture providers"] == db.query(CloudProvider).count()
+    assert db.query(CloudPostureScope).count() > 0
+    assert db.query(Risk).count() == seeder.stats["risks.created"] >= 10
+    assert db.query(IsmsDocument).count() == seeder.stats["isms_documents.created"]
+    assert db.query(Audit).count() == seeder.stats["audits.created"] > 0
+    sources = {source for (source,) in db.query(Event.source).distinct()}
+    assert {"diary", "github", "jenkins", "redmine", "loki"} <= sources
+
+
+def test_a_demo_dry_run_stores_no_cloud_posture(db, monkeypatch, artifact_storage):
+    monkeypatch.setattr(settings, "demo_mode", True)
+    before = {t.name: db.query(t).count() for t in Base.metadata.sorted_tables}
+
+    seeder = seed(db, DemoConfig("iso_27001_2022", "Demo", None, True, True))
+
+    assert "cloud posture providers" not in seeder.stats
+    assert before == {t.name: db.query(t).count() for t in Base.metadata.sorted_tables}
     assert not artifact_storage.exists()
 
 

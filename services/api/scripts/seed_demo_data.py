@@ -249,6 +249,12 @@ class DemoSeeder:
         }
 
     @property
+    def seeds_isms_dataset(self) -> bool:
+        """Whether this run writes the full ISMS dataset, or a single
+        framework's reviewed examples alone."""
+        return self.config.all_frameworks or self.framework == "iso_27001_2022"
+
+    @property
     def seeded_frameworks(self) -> list[str]:
         """The frameworks this run writes examples for, in catalogue order."""
         from demo_catalogue import CATALOGUE
@@ -1988,7 +1994,7 @@ class DemoSeeder:
         from demo_catalogue import seed_catalogue, select_frameworks
 
         frameworks = self.seeded_frameworks
-        if not self.config.all_frameworks and self.framework != "iso_27001_2022":
+        if not self.seeds_isms_dataset:
             seed_catalogue(self, frameworks)
             select_frameworks(self, frameworks)
             return
@@ -2024,10 +2030,6 @@ class DemoSeeder:
         seed_quizzes(self)
         seed_link_diary(self)
         seed_stories(self, events, docs, assets, risks, objectives)
-        # Fictional cloud posture shows on the cloud vendors' pages.
-        from app.ingest.cloud.demo import seed as seed_cloud_posture
-
-        self.stats["cloud posture providers"] += seed_cloud_posture(self.db)
         # The ISMS dataset is written against ISO 27001, so it leads.
         select_frameworks(self, frameworks, default="iso_27001_2022")
 
@@ -2090,22 +2092,38 @@ def parse_args() -> DemoConfig:
     )
 
 
-def main() -> int:
-    config = parse_args()
-    db = SessionLocal()
+def seed(db, config: DemoConfig) -> DemoSeeder:
+    """Seed the demonstration data, then commit it, or roll it back for a dry run.
+
+    Fictional cloud posture, which shows on the cloud vendors' pages, is stored
+    the way a provider refresh stores it: each refresh ends the transaction it
+    finds and commits its own. It therefore runs only after the dataset is
+    committed, and never in a dry run.
+    """
+    seeder = DemoSeeder(db, config)
     try:
-        seeder = DemoSeeder(db, config)
         seeder.run()
         if config.dry_run:
             db.rollback()
             print("\nDry run complete; transaction rolled back.")
-        else:
-            db.commit()
-            print("\nDemo data committed.")
-        seeder.print_summary()
+            return seeder
+        db.commit()
+        if seeder.seeds_isms_dataset:
+            from app.ingest.cloud.demo import seed as seed_cloud_posture
+
+            seeder.stats["cloud posture providers"] += seed_cloud_posture(db)
+        print("\nDemo data committed.")
     except Exception:
         db.rollback()
         raise
+    return seeder
+
+
+def main() -> int:
+    config = parse_args()
+    db = SessionLocal()
+    try:
+        seed(db, config).print_summary()
     finally:
         db.close()
     return 0
