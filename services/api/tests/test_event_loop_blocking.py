@@ -442,7 +442,10 @@ def test_forms_are_parsed_off_the_event_loop(monkeypatch):
     assert declared.status_code == 200, declared.text
     assert declared.json() == {"size": len(payload)}
     assert len(threads["parse"]) == 2 and len(threads["handler"]) == 2
-    assert not set(threads["parse"]) & set(threads["handler"])
+    # Each request is compared with its own handler, which is still running
+    # while the form is parsed: an ended thread's identifier can be given to a
+    # thread started later, such as the next request's.
+    assert all(p != h for p, h in zip(threads["parse"], threads["handler"]))
     # URL-encoded forms are read the same way.
     encoded = client.post("/encoded", data={"body": "question", "n": "1"})
     assert encoded.status_code == 200, encoded.text

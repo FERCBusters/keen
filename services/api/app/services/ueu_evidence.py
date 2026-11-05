@@ -184,7 +184,7 @@ def _lookup(doc, path):
     return value
 
 
-def _value(doc, paths, fallback):
+def _value(doc, paths, fallback=None):
     """The first of a placeholder's fields the envelope carries, as text."""
     for path in paths.split("|"):
         value = _lookup(doc, path)

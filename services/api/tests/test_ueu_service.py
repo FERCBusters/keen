@@ -108,6 +108,8 @@ def test_summaries_and_severities_read_the_envelope():
     assert ueu._value(doc, "facts.enabled") == "true"
     assert ueu._value(doc, "facts.ports") == "22, 443"
     assert ueu._value(doc, "facts.missing") == "unknown"
+    assert ueu._value(doc, "facts.missing|facts.enabled") == "true"
+    assert ueu._value(doc, "facts.missing", "none named") == "none named"
     alert = {
         "event_type": "security.alert.generated",
         "event": {"outcome": "info"},
