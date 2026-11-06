@@ -388,14 +388,9 @@ class Settings(BaseSettings):
     # Redirect URIs an MCP client may register, besides loopback http
     # callbacks (http://127.0.0.1, http://[::1] and http://localhost on any
     # port), which local clients such as Claude Code and Claude Desktop use.
-    # Comma-separated exact URIs. The defaults are claude.ai's connector
-    # callback and its announced successor.
-    mcp_redirect_uris: str = Field(
-        default=(
-            "https://claude.ai/api/mcp/auth_callback,"
-            "https://claude.com/api/mcp/auth_callback"
-        )
-    )
+    # Comma-separated exact URIs; empty admits local clients only. claude.ai's
+    # connectors return to https://claude.ai/api/mcp/auth_callback.
+    mcp_redirect_uris: str = Field(default="")
 
     @field_validator("mcp_redirect_uris")
     @classmethod

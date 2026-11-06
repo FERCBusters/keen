@@ -59,7 +59,7 @@ KEEN_PUBLIC_BASE_URL=https://keen.example.org</code></pre>
 <ol class="steps">
 <li>Serve Keen over HTTPS and set <code>KEEN_PUBLIC_BASE_URL</code> to that origin. Keen refuses to start with MCP enabled on a plain-HTTP origin other than localhost.</li>
 <li>Set <code>KEEN_MCP_ENABLED=true</code> and recreate the API container.</li>
-<li>For a hosted assistant, list its OAuth callback in <code>KEEN_MCP_REDIRECT_URIS</code>. The default lists claude.ai's callbacks; loopback callbacks, which local apps such as Claude Code use, are always accepted.</li>
+<li>For a hosted assistant, list its OAuth callback in <code>KEEN_MCP_REDIRECT_URIS</code>; for claude.ai, list <code>https://claude.ai/api/mcp/auth_callback</code> and <code>https://claude.com/api/mcp/auth_callback</code>. The setting is empty by default, which admits only local apps such as Claude Code and Claude Desktop; their loopback callbacks are always accepted.</li>
 </ol>
 <p>People connect from <strong>Account → Security</strong>, where Keen shows the server address, <code>https://keen.example.com/api/v1/mcp</code> for an installation at <code>https://keen.example.com</code>. A hosted assistant such as claude.ai connects from its provider's network, so Keen must be reachable from the internet for it; a local app connects from the person's computer.</p>
 <details class="more"><summary>Going deeper: how access is granted and limited</summary>

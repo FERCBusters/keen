@@ -31,7 +31,6 @@ from typing import Any, overload
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
-from app.security.mcp_tokens import is_secret
 from app.security.regex import scan_pattern
 
 REDACTED = "REDACTED"
@@ -293,12 +292,12 @@ def redact_query_string(
         return None
     parts: list[tuple[str, str]] = []
     for k, v in parse_qsl(qs, keep_blank_values=True):
-        if (
-            is_sensitive_key(k) or _normalize_key(k) in extra_keys or is_secret(v)
-        ) and v:
+        if (is_sensitive_key(k) or _normalize_key(k) in extra_keys) and v:
             parts.append((k, REDACTED))
         else:
-            parts.append((k, v))
+            # A Keen token or consent key can travel inside another value,
+            # such as a sign-in's return address.
+            parts.append((k, _MCP_SECRET_RE.sub(REDACTED, v)))
     return urlencode(parts, doseq=True)
 
 

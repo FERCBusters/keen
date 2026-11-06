@@ -141,17 +141,28 @@ def test_tools_ask_only_the_routes_inner_requests_may_reach():
     assert not any(p.fullmatch("/v1/risks/../admin") for p in allowed)
 
 
-def test_keen_secrets_are_recognised_and_redacted_wherever_they_appear():
+def test_keen_secrets_are_redacted_wherever_they_appear():
     from app.security.redaction import redact_query_string, redact_str
 
     key = new_secret(mcp_tokens.CONSENT_PREFIX)
-    assert mcp_tokens.is_secret(key) and not mcp_tokens.is_secret("kcr_short")
     referer = "https://keen.example/mcp-authorize.html?request=" + key
     assert key not in redact_str(referer)
-    assert key not in redact_query_string("next=" + key + "&q=x")
-    assert "q=x" in redact_query_string("next=" + key + "&q=x")
+    assert key not in redact_query_string("request=" + key + "&q=x")
+    # A sign-in's return address carries the key inside another value.
+    nested = redact_query_string("next=/mcp-authorize.html?request=" + key + "&q=x")
+    assert key not in nested and "mcp-authorize.html" in nested and "q=x" in nested
     token = new_secret(ACCESS_PREFIX)
     assert token not in redact_str("Authorization: Bearer " + token + " sent")
+    assert redact_query_string("request=kcr_short") == "request=kcr_short"
+
+
+def test_single_sign_on_returns_to_the_consent_page_with_its_request():
+    """Sign-in by OIDC, GitHub or Google starts from the login page with the
+    consent page as its return address, and the callback goes back there."""
+    from app.security.oidc import _normalize_next
+
+    target = "/mcp-authorize.html?request=" + new_secret(mcp_tokens.CONSENT_PREFIX)
+    assert _normalize_next(target) == target
 
 
 @pytest.mark.parametrize(
@@ -208,11 +219,8 @@ def test_configured_redirect_uris_are_validated(entry, problem):
 def test_mcp_is_off_by_default_and_its_settings_are_validated():
     base = {"public_base_url": "https://keen.example"}
     assert Settings(**base).mcp_enabled is False
-    defaults = Settings(**base).mcp_redirect_uris.split(",")
-    assert defaults == [
-        "https://claude.ai/api/mcp/auth_callback",
-        "https://claude.com/api/mcp/auth_callback",
-    ]
+    # Only loopback callbacks until an administrator lists a hosted one.
+    assert Settings(**base).mcp_redirect_uris == ""
     assert (
         Settings(
             **base, mcp_redirect_uris=" a.app:/cb , ,https://x.example/cb"
