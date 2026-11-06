@@ -331,6 +331,9 @@ def test_every_router_has_an_availability_decision():
         "inbox",
         "integrations",
         "managed_configurations",
+        # KEEN_MCP_ENABLED decides MCP's availability; each tool reads through
+        # routes whose own feature decisions apply.
+        "mcp",
         "me",
         "mfa",
         "source_connections",

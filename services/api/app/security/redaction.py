@@ -97,6 +97,9 @@ DEFAULT_SENSITIVE_KEYS: set[str] = {
 }
 
 _URL_RE = scan_pattern(r'https?://[^\s"\'<>]+', re.IGNORECASE)
+# Tokens, codes and consent keys Keen issues to MCP clients, wherever they
+# appear (app.security.mcp_tokens): a referrer or a pasted URL can carry one.
+_MCP_SECRET_RE = scan_pattern(r"(?:kat|krt|kac|kcr)_[A-Za-z0-9_-]{43}")
 
 # Measured workstation-posture facts whose names contain a sensitive-key
 # substring ("password", "signature") but which hold a boolean, a count or a
@@ -292,7 +295,9 @@ def redact_query_string(
         if (is_sensitive_key(k) or _normalize_key(k) in extra_keys) and v:
             parts.append((k, REDACTED))
         else:
-            parts.append((k, v))
+            # A Keen token or consent key can travel inside another value,
+            # such as a sign-in's return address.
+            parts.append((k, _MCP_SECRET_RE.sub(REDACTED, v)))
     return urlencode(parts, doseq=True)
 
 
@@ -344,7 +349,7 @@ def redact_str(s: str | None) -> str | None:
         return redact_url(m.group(0))
 
     txt = _URL_RE.sub(_url_sub, txt)
-    return txt
+    return _MCP_SECRET_RE.sub(REDACTED, txt)
 
 
 def redact_obj(obj: Any) -> Any:

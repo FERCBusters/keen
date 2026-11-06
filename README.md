@@ -24,6 +24,7 @@ Compliance and security should be in reach of anyone, even those without big bud
 - **Conduct audits:** plan and schedule audits, sample evidence, record findings, discuss evidence through questions, and retain reports and document revisions.
 - **Conduct training and awareness:** define quizzes of multiple-choice and written questions on your policies, assign them to people, accounts or organisation roles, and run them once or in scheduled rounds with invitations and reminders. Questions and options are shuffled for every sitting, written answers are graded blind. Each round's average is recorded on the quiz's effectiveness measure for the controls it tests.
 - **Keep people informed:** each person's notifications tell them when an audit they attend starts, when they are asked to take a quiz, when minutes are added for a meeting they attended, and when a measure they own falls outside its threshold, and link straight to the record.
+- **Give AI apps read-only access:** when an administrator enables it, people connect AI apps such as Claude to Keen over the Model Context Protocol (MCP). Each connection reads only the records its person approves, within their own permissions, and its access renews hourly until they revoke it.
 - **Add context to events through stories:** gather the events, risks, records and notes of one incident into a story with a timeline and a drag-and-drop flow chart, add notes and associate assets/policies. Stories, like everything else, can be sampled into audits.
 
 ## Try out a free demo
@@ -92,6 +93,10 @@ Open **Admin → Sources & Evidence Mapping**:
 4. **Add mapping rules.** Select the source connection and input, choose matching conditions, and select the controls the evidence supports. Built-in rules already map cloud posture checks, Keen Agent workstation observations and the server events the agent recognises to the Keen Assurance Framework; edit or disable them like any other rule. Keen also suggests rules for recent unmapped events, with the controls their wording matches; review them under **Suggested rules** and create each with one click.
 
 Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elasticsearch, CloudWatch Logs, Google Workspace, Redmine, Taiga, BookStack, Risk Ledger, IMAP mail, RSS/Atom and incoming webhooks. The custom API ingester builder supports declarative HTTP requests, field extraction, pagination and scheduling. There is also a separate 'Cloud posture' system that supports reading your security posture from AWS, Microsoft Azure/Entra, Google Cloud, Akamai (Linode), DigitalOcean and Scaleway. These records get summarised under ISMS → People/Vendors → Vendors.
+
+### AI agent access (MCP)
+
+Set `KEEN_MCP_ENABLED=true` to let people connect AI apps such as Claude, Claude Code and Cursor to Keen through the Model Context Protocol. Keen must be served over HTTPS. Each person adds the server address shown under **Account → Security** (`https://<your Keen>/api/v1/mcp`) to their AI app, which opens Keen to approve the connection. Hosted assistants register only the OAuth callbacks listed in `KEEN_MCP_REDIRECT_URIS`; local apps use loopback callbacks. The tools are read-only. Help, under **Local accounts, MFA and security email**, describes the access model.
 
 ### Keen Agent
 

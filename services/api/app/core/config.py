@@ -381,6 +381,44 @@ class Settings(BaseSettings):
     # Global receiving gate for all webhook connections.
     webhooks_enabled: bool = Field(default=True)
 
+    # AI agent access through the Model Context Protocol. Off unless enabled:
+    # the MCP endpoint, its OAuth endpoints and the consent page answer 404, and
+    # access tokens issued while it was on stop working.
+    mcp_enabled: bool = Field(default=False)
+    # Redirect URIs an MCP client may register, besides loopback http
+    # callbacks (http://127.0.0.1, http://[::1] and http://localhost on any
+    # port), which local clients such as Claude Code and Claude Desktop use.
+    # Comma-separated exact URIs; empty admits local clients only. claude.ai's
+    # connectors return to https://claude.ai/api/mcp/auth_callback.
+    mcp_redirect_uris: str = Field(default="")
+
+    @field_validator("mcp_redirect_uris")
+    @classmethod
+    def validate_mcp_redirect_uris(cls, v: str) -> str:
+        from app.security.mcp_tokens import configured_redirect_problem
+
+        entries = [entry.strip() for entry in (v or "").split(",") if entry.strip()]
+        for entry in entries:
+            if problem := configured_redirect_problem(entry):
+                raise ValueError(f"KEEN_MCP_REDIRECT_URIS: {problem}")
+        return ",".join(entries)
+
+    @model_validator(mode="after")
+    def validate_mcp_origin(self):
+        from urllib.parse import urlsplit
+
+        # OAuth requires HTTPS for an authorisation server's issuer (RFC 8414),
+        # except on this device for local testing.
+        if self.mcp_enabled and not (
+            self.public_base_url.startswith("https://")
+            or urlsplit(self.public_base_url).hostname
+            in ("localhost", "127.0.0.1", "::1")
+        ):
+            raise ValueError(
+                "KEEN_MCP_ENABLED requires an https:// KEEN_PUBLIC_BASE_URL"
+            )
+        return self
+
     # Loki
     elasticsearch_enabled: bool = Field(default=False)
     elasticsearch_base_url: str = Field(default="")

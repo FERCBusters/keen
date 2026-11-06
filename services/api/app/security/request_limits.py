@@ -48,6 +48,12 @@ def body_limit(path):
         return 10 * 1024 * 1024
     if _FILE_UPLOADS.fullmatch(path):
         return MAX_FILE_UPLOAD + _MULTIPART_ROOM
+    # MCP clients' OAuth requests are small forms and JSON documents, which the
+    # MCP SDK parses on the event loop; MCP calls carry short tool arguments.
+    if path.startswith("/v1/oauth/"):
+        return 16 * 1024
+    if path == "/v1/mcp":
+        return 256 * 1024
     return MAX_BODY
 
 

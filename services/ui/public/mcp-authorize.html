@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Keen - Connect an AI app</title><script src="/vendor/mosp-design-system/theme-boot.js"></script><link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css"><link rel="stylesheet" href="/styles.css"><link rel="icon" href="/favicon.svg"></head>
+<body class="d-flex flex-column min-vh-100">
+  <a class="visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <main id="main-content" class="container py-5 my-auto" style="max-width:680px"><div class="card"><div class="card-body p-4">
+    <h1 class="h3">Connect an AI app to Keen</h1>
+    <p id="consentStatus" role="status">Loading the request</p>
+    <form id="consentForm" hidden>
+      <p class="mb-1"><strong id="consentClient"></strong> wants to read Keen as you.</p>
+      <p class="small text-body-secondary">The app chose this name; Keen cannot confirm it. After you answer, your browser returns to <code id="consentRedirect"></code>.</p>
+      <div class="alert alert-warning">Approve only if you started this connection from your own AI app in the last few minutes. A link someone sent you could let them read Keen as you.</div>
+      <fieldset class="mb-3"><legend class="h6">What it may read</legend><div id="consentScopes"></div><p id="consentNoScopes" class="small text-body-secondary" hidden>Your account has none of the permissions these records need.</p><p class="small text-body-secondary mb-0">Every connection can also read frameworks, controls and the Statement of Applicability. It can change nothing, never reads more than your account can, and loses any access your account loses.</p></fieldset>
+      <p class="small text-body-secondary">The app renews its access hourly for up to 90 days. Revoke it at any time from Account, Security.</p>
+      <div class="d-flex gap-2"><button id="consentApprove" class="btn btn-primary" type="submit">Approve</button><button id="consentRefuse" class="btn btn-outline-secondary" type="button">Refuse</button></div>
+    </form>
+  </div></div></main>
+  <script type="module" src="/pages/mcp-authorize.js"></script>
+</body></html>
