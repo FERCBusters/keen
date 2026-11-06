@@ -293,11 +293,12 @@ def observe(
     check="disk_encryption",
     component="lsblk",
     facts=None,
+    lag=timedelta(minutes=1),
 ):
     """An observation the receiver records for the agent, at the next tick.
 
     Disk encryption by default; ``encrypted=None`` is a reading the device
-    could not establish.
+    could not establish. The device's own clock runs ``lag`` behind.
     """
     when = clock.tick()
     if facts is None:
@@ -311,7 +312,8 @@ def observe(
         "observation": {"scope": scope, "facts": facts},
     }
     event = Event(
-        timestamp=when,
+        timestamp=when - lag,
+        created_at=when,
         source="keen-agent",
         system=agent.name,
         action=doc["event_type"],
@@ -429,53 +431,144 @@ def test_a_closed_risk_treats_a_workstation_check_until_a_scope_fails_anew(
     ]
 
 
-def test_a_failure_with_no_recorded_start_needs_attention(keen, workstation):
-    clock, client, person, agent, _ = workstation
-    observe(keen, agent, clock, "/")
-    observe(keen, agent, clock, "/data")
-    # A result read before KEEN dated failures has no start; the other
-    # volume's start leaves the check undated all the same.
-    keen.db.expire_all()
-    rows = keen.db.query(AgentPostureObservation).filter_by(agent_id=agent.id).all()
-    assert len(rows) == 2
-    undated = min(rows, key=lambda row: row.attention_since)
-    undated.attention_since = None
+def undate(keen, agent):
+    """Strip the failure dates, as for readings stored before KEEN kept them."""
+    for row in keen.db.query(AgentPostureObservation).filter_by(agent_id=agent.id):
+        row.attention_since = None
     keen.db.commit()
+
+
+def test_a_reading_held_without_a_start_is_dated_from_its_receipt(keen, workstation):
+    clock, client, person, agent, _ = workstation
+    root_read = observe(keen, agent, clock, "/")
+    undate(keen, agent)
     risk_id = record_device_risk(client, person, agent)
     set_status(keen, client, risk_id, "closed", clock)
+    assert device_check(client, person)["status"] == "treated"
+
+    # A volume KEEN received only after the risk closed is newer than the
+    # closure, though the device stamped its reading earlier.
+    data_read = observe(keen, agent, clock, "/data", lag=timedelta(minutes=10))
+    undate(keen, agent)
     check = device_check(client, person)
     assert check["status"] == "attention"
     assert [(r["closed"], r["treated"]) for r in check["risks"]] == [(True, False)]
+    set_status(keen, client, risk_id, "in_progress", clock)
+    set_status(keen, client, risk_id, "closed", clock)
+    assert device_check(client, person)["status"] == "treated"
+
+    # Later failing readings carry on from the reading KEEN already held.
+    observe(keen, agent, clock, "/")
+    observe(keen, agent, clock, "/data")
+    assert failure_starts(keen, agent) == [root_read, data_read]
+    assert device_check(client, person)["status"] == "treated"
 
 
-def test_a_check_with_a_target_is_dated_by_the_organisations_target(keen, workstation):
-    clock, client, person, agent, _ = workstation
-    keen.db.add(
-        IsmsEffectivenessMeasure(
+def screen_lock_target(keen, clock, seconds):
+    """The organisation's screen-lock target, set at the next tick."""
+    measure = (
+        keen.db.query(IsmsEffectivenessMeasure)
+        .filter_by(metric_key="keen.workstation.screen_lock_seconds")
+        .one_or_none()
+    )
+    if measure is None:
+        measure = IsmsEffectivenessMeasure(
             framework_slug="iso27001",
-            summary="Screens lock within 15 minutes",
+            summary="Screens lock promptly",
             metric_key="keen.workstation.screen_lock_seconds",
-            target_value=900,
             target_unit="seconds",
             threshold_operator="lte",
         )
-    )
+        keen.db.add(measure)
+    measure.target_value = seconds
+    measure.updated_at = clock.tick()
     keen.db.commit()
-    # Locking after 30 minutes is configured, and fails the target alone.
-    failed = observe(
+    return measure.updated_at
+
+
+def lock_after(keen, agent, clock, seconds):
+    return observe(
         keen,
         agent,
         clock,
         "session",
         check="screen_lock",
         component="gnome",
-        facts={"automatic_lock_configured": True, "lock_after_seconds": 1800},
+        facts={"automatic_lock_configured": True, "lock_after_seconds": seconds},
     )
+
+
+def test_a_check_with_a_target_is_dated_by_the_organisations_target(keen, workstation):
+    clock, client, person, agent, _ = workstation
+    screen_lock_target(keen, clock, 900)
+    # Locking after 30 minutes is configured, and fails the target alone.
+    failed = lock_after(keen, agent, clock, 1800)
     assert device_check(client, person, "screen_lock")["status"] == "attention"
     assert failure_starts(keen, agent) == [failed]
     risk_id = record_device_risk(client, person, agent, "screen_lock", title="Lock")
     set_status(keen, client, risk_id, "closed", clock)
     assert device_check(client, person, "screen_lock")["status"] == "treated"
+
+    # The failure is judged against the target as it now stands, so a changed
+    # target dates it from the change.
+    screen_lock_target(keen, clock, 600)
+    assert device_check(client, person, "screen_lock")["status"] == "attention"
+    set_status(keen, client, risk_id, "in_progress", clock)
+    set_status(keen, client, risk_id, "closed", clock)
+    assert device_check(client, person, "screen_lock")["status"] == "treated"
+
+
+def test_a_reading_a_stricter_target_fails_is_dated_from_the_change(keen, workstation):
+    clock, client, person, agent, _ = workstation
+    screen_lock_target(keen, clock, 900)
+    lock_after(keen, agent, clock, 600)
+    assert device_check(client, person, "screen_lock")["status"] == "met"
+    assert failure_starts(keen, agent) == []
+    risk_id = record_device_risk(client, person, agent, "screen_lock", title="Lock")
+    set_status(keen, client, risk_id, "closed", clock)
+
+    # A risk closed before the stricter target does not treat what it fails.
+    tightened = screen_lock_target(keen, clock, 300)
+    check = device_check(client, person, "screen_lock")
+    assert check["status"] == "attention"
+    assert [(r["closed"], r["treated"]) for r in check["risks"]] == [(True, False)]
+    set_status(keen, client, risk_id, "in_progress", clock)
+    set_status(keen, client, risk_id, "closed", clock)
+    assert device_check(client, person, "screen_lock")["status"] == "treated"
+
+    # The next reading continues the failure KEEN already held, which began
+    # with the reading before it.
+    lock_after(keen, agent, clock, 600)
+    (start,) = failure_starts(keen, agent)
+    assert start < tightened
+    assert device_check(client, person, "screen_lock")["status"] == "treated"
+
+
+def test_a_cloud_result_held_without_a_record_is_dated_from_its_reading(
+    keen, cloud, clock
+):
+    refresh(keen, cloud, clock, "attention", ["bob"])
+    read = clock.now
+    # As stored before KEEN kept failure records.
+    row = keen.db.query(CloudPostureScope).filter_by(scope_key=ACCOUNT).one()
+    row.checks = [{k: v for k, v in c.items() if k != "attention"} for c in row.checks]
+    keen.db.commit()
+    vendor_id = vendor_of(keen)
+    client = keen.client(keen.user(*READER, "risk.manage"))
+    risk_id = record_cloud_risk(client, vendor_id)
+    set_status(keen, client, risk_id, "closed", clock)
+    assert mfa_check(client, vendor_id)[1]["status"] == "treated"
+
+    # The next refresh carries the failure on from that reading.
+    refresh(keen, cloud, clock, "attention", ["bob"])
+    assert stored_record(keen) == {
+        "since": read.isoformat(),
+        "subjects": {"bob": read.isoformat()},
+        "total": 1,
+    }
+    assert mfa_check(client, vendor_id)[1]["status"] == "treated"
+    refresh(keen, cloud, clock, "attention", ["bob", "carol"])
+    assert mfa_check(client, vendor_id)[1]["status"] == "attention"
 
 
 def test_a_check_listing_no_resources_is_treated_by_its_own_risk(keen, cloud, clock):

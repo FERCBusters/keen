@@ -27,7 +27,7 @@ from app.db.models import (
 )
 from app.ingest.cloud import KEYS
 from app.ingest.cloud import provider as cloud_provider
-from app.ingest.cloud.base import REASONS
+from app.ingest.cloud.base import REASONS, held_record
 from app.ingest.cloud.runner import enabled, scope_asset
 from app.security.auth import ROLE_ADMIN
 from app.security.permissions import has_permission
@@ -126,9 +126,12 @@ def _scope_out(provider, scope, links, people) -> dict:
     for check in scope.checks or []:
         key = check.get("key")
         status = check.get("status")
-        # When the failure began, and each listed resource's; a result stored
-        # before KEEN kept these has no start, so no closed risk treats it.
-        record = (check.get("attention") or {}) if status == "attention" else {}
+        # When the failure began, and each listed resource's.
+        record = (
+            (held_record(check, scope.checked_at) or {})
+            if status == "attention"
+            else {}
+        )
         risks = links.get((provider.key, scope.scope_key, key, ""), [])
         treated = posture_risks.settle(risks, _since(record.get("since")))
         subjects = []

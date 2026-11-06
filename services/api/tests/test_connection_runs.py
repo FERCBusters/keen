@@ -133,9 +133,9 @@ def test_a_lock_whose_session_is_lost_is_released_and_the_loss_reported(pg, lock
                 is True
             )
 
-    # The release reached a closed connection, and that loss is reported.
+    # The release reached a closed connection, and that loss is reported. The
+    # driver's wording depends on the transport, such as TLS to the database.
     assert lost.value.connection_invalidated is True
-    assert str(lost.value.orig).startswith("server closed the connection unexpectedly")
     # The lock ended with its session, so another run takes it.
     assert _taken_by_another_session(pg.get_bind().engine, key) is True
 

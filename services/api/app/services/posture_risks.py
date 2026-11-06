@@ -124,8 +124,7 @@ def settle(risks: list[dict], since: datetime | None) -> bool:
     """Mark which linked risks treat a failure that began at ``since``.
 
     A closed risk treats a failure that began before it closed. A result that
-    is not failing, or whose failure has no recorded start, has none treated.
-    Returns whether any risk treats it.
+    is not failing has none treated. Returns whether any risk treats it.
     """
     treated = False
     for risk in risks:
@@ -135,6 +134,20 @@ def settle(risks: list[dict], since: datetime | None) -> bool:
         )
         treated = treated or risk["treated"]
     return treated
+
+
+def failure_start(
+    recorded: datetime | None, received: datetime, changed: datetime | None
+) -> datetime:
+    """When a failing reading's failure began, judged against today's target.
+
+    ``recorded`` is when the run of failing readings began. A reading stored
+    before KEEN dated failures has none, and its failure is dated from when
+    KEEN received it. A target that changed later dates it from that change,
+    since the failure is judged against the target as it now stands.
+    """
+    start = recorded or received
+    return max(start, changed) if changed is not None else start
 
 
 def failing_since(previous: datetime | None, status: str, now: datetime):

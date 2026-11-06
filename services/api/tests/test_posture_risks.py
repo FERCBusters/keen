@@ -201,14 +201,18 @@ def test_recorded_risk_is_linked_and_its_acceptance_lapses(keen):
     _, found = check(client, person)
     assert found["status"] == "attention"
     assert found["risks"][0]["acceptance_expired"] is True
-    # Closing an accepted risk ends the acceptance. This failure was stored
-    # without a start date, so the closed risk does not treat it either.
+    # Closing an accepted risk ends the acceptance. The failure was stored
+    # without a start date, so it dates from when KEEN received the reading,
+    # and the risk closed since treats it.
     risk.treatment_due_at = today + timedelta(days=5)
     risk_service.set_treatment_status(risk, "closed")
     keen.db.commit()
     _, found = check(client, person)
-    assert found["status"] == "attention"
-    assert (found["risks"][0]["accepted"], found["risks"][0]["closed"]) == (False, True)
+    assert found["status"] == "treated"
+    assert [(r["accepted"], r["closed"], r["treated"]) for r in found["risks"]] == [
+        (False, True, True),
+        (False, False, False),
+    ]
 
 
 def test_reassigning_a_workstation_detaches_its_recorded_risks(keen):

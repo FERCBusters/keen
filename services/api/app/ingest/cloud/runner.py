@@ -262,6 +262,7 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
             .one_or_none()
         )
         before = {c.get("key"): c for c in (current.checks if current else [])}
+        read_at = current.checked_at if current else None
         checks = []
         for check in scope.checks:
             if check.key not in provider.checks or check.examined == 0:
@@ -269,7 +270,7 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
             item = check.as_dict()
             old = before.get(item["key"]) or {}
             item["attention"] = base.attention_record(
-                old.get("attention"),
+                base.held_record(old, read_at),
                 item["status"],
                 item["subjects"],
                 item["subjects_total"],

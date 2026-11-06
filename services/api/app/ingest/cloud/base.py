@@ -107,6 +107,25 @@ def attention_record(
     }
 
 
+def held_record(check: dict, read_at: datetime | None) -> dict | None:
+    """A stored check's failure record, as ``attention_record`` keeps it.
+
+    A failing result stored before KEEN kept these has none. The reading KEEN
+    holds shows that failure already present when it was read, so it is dated
+    from then, for the check and for each resource it lists.
+    """
+    record = check.get("attention")
+    if record is None and check.get("status") == "attention" and read_at:
+        stamp = read_at.isoformat()
+        subjects = check.get("subjects") or []
+        record = {
+            "since": stamp,
+            "subjects": dict.fromkeys(subjects, stamp),
+            "total": check.get("subjects_total", len(subjects)),
+        }
+    return record
+
+
 @dataclass
 class Check:
     key: str

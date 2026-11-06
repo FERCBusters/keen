@@ -114,22 +114,28 @@ def coverage(event):
     return {"collector": str(attrs.get("collector", "")), **lists}
 
 
-def _pointer(db, agent, event, key, status=None):
+def _pointer(db, agent, event, key, status=None, targets=None):
     """Point the stream at its latest observation, and date its failure.
 
     The date is KEEN's own clock when the stream's current run of attention
     results began, so a device clock cannot place a failure before a risk
-    that treats it. A coverage stream has no status.
+    that treats it. A stream with no date whose previous reading fails as
+    well, because KEEN stored it before dating failures or a target has since
+    made it fail, continues that reading's run. A coverage stream has no
+    status.
     """
     row = db.get(AgentPostureObservation, (agent.id, key))
     if row is not None:
         if event.timestamp <= row.observed_at:
             return
-        row.event_id, row.observed_at = event.id, event.timestamp
         if status is not None:
+            previous = row.attention_since
+            if previous is None and status == "attention":
+                previous = _failing_reading(db, row.event_id, targets or {})
             row.attention_since = posture_risks.failing_since(
-                row.attention_since, status, utc_now_naive()
+                previous, status, utc_now_naive()
             )
+        row.event_id, row.observed_at = event.id, event.timestamp
     else:
         count = db.query(AgentPostureObservation).filter_by(agent_id=agent.id).count()
         if count >= MAX_STREAMS:
@@ -150,6 +156,15 @@ def _pointer(db, agent, event, key, status=None):
     db.flush()
 
 
+def _failing_reading(db, event_id, targets):
+    """When KEEN received a stream's reading, if that reading fails now."""
+    event = db.get(Event, event_id)
+    found = observation(event) if event is not None else None
+    if found is not None and evaluate(found, targets)[0] == "attention":
+        return event.created_at
+    return None
+
+
 def record_observation(db, agent, event_id):
     """Caller holds the authenticated agent row lock and owns the transaction."""
     event = db.get(Event, event_id)
@@ -160,7 +175,7 @@ def record_observation(db, agent, event_id):
         key = hashlib.sha256(json.dumps(found["stream"]).encode()).hexdigest()
         # Only the checks with organisation targets read them.
         targets = thresholds(db) if found["check"] in TARGETED else {}
-        _pointer(db, agent, event, key, evaluate(found, targets)[0])
+        _pointer(db, agent, event, key, evaluate(found, targets)[0], targets)
         return
     run = coverage(event)
     if run is not None:
@@ -301,9 +316,10 @@ def evaluate(o, thresholds=None):
     return "unknown", ""
 
 
-def thresholds(db):
-    """The organisation's posture targets from ISMS effectiveness measures."""
-    out = {}
+def targets_and_changes(db):
+    """The organisation's posture targets from ISMS effectiveness measures,
+    and when each measure last changed."""
+    targets, changed = {}, {}
     rows = db.query(IsmsEffectivenessMeasure).filter(
         IsmsEffectivenessMeasure.metric_key.in_(list(THRESHOLDS))
     )
@@ -314,8 +330,14 @@ def thresholds(db):
             and row.threshold_operator in ("lt", "lte", "eq", "gte", "gt")
             and (row.target_unit or "").strip() == unit
         ):
-            out[check] = (row.target_value, row.threshold_operator, unit)
-    return out
+            targets[check] = (row.target_value, row.threshold_operator, unit)
+            changed[check] = row.updated_at
+    return targets, changed
+
+
+def thresholds(db):
+    """The organisation's posture targets from ISMS effectiveness measures."""
+    return targets_and_changes(db)[0]
 
 
 def _platform(agent, events):
@@ -371,7 +393,7 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
     for pointer, event in evidence:
         grouped.setdefault(pointer.agent_id, []).append(event)
         failing_from[event.id] = pointer.attention_since
-    targets = thresholds(db)
+    targets, changed = targets_and_changes(db)
     now = utc_now_naive()
     # Recorded risks show only where risk management is enabled; their titles
     # need risk read access, their effect on a result does not.
@@ -419,7 +441,11 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
                     }
                 )
                 if status == "attention":
-                    starts.append(failing_from[event.id])
+                    starts.append(
+                        posture_risks.failure_start(
+                            failing_from[event.id], event.created_at, changed.get(key)
+                        )
+                    )
             states = {r["status"] for r in rows}
             # Conservative across scopes: one unencrypted mount or unlocked session
             # cannot be hidden by another passing observation.
@@ -442,13 +468,9 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
             if agent.health.get("posture_overflow"):
                 status = "unknown"
             risks = links.get((agent.id, "", key, ""), [])
-            # The check's failure is as new as its newest failing scope; a scope
-            # with no recorded start leaves it undated.
+            # The check's failure is as new as its newest failing scope.
             treated = posture_risks.settle(
-                risks,
-                max(starts)
-                if status == "attention" and starts and None not in starts
-                else None,
+                risks, max(starts) if status == "attention" else None
             )
             if status == "attention" and any(r["accepted"] for r in risks):
                 status = "accepted"
