@@ -163,6 +163,7 @@ def _self_recursive(tree, prefix=""):
 # only from administrators or from structures already bounded.
 REVIEWED_RECURSION = {
     "agents/otlp.py:value": "OTLP AnyValue nesting stops at depth 8",
+    "api/mcp/shaping.py:compact": "stops at shaping.DEPTH_LIMIT (4)",
     "agents/ueu/custody.py:_walk": "UEU envelopes are parsed no deeper than 32",
     "agents/ueu/jcs.py:_write": "stops at jcs.MAX_DEPTH",
     "core/cache.py:_normalise_part": "cache keys built by the application",

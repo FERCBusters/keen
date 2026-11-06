@@ -23,6 +23,7 @@ def enqueue(db, user, event, *, ip=None):
     address = ip or "Unavailable (operator action or unknown address)"
     titles = {
         "sso-email-added": "An SSO email address was verified for your Keen account",
+        "mcp-connected": "An AI app was connected to your Keen account",
         "sso-email-removed": "An SSO email address was removed from your Keen account",
         "login-ip": "Sign-in from an unfamiliar IP address",
         "password-changed": "Your Keen password was changed",
@@ -40,6 +41,8 @@ def enqueue(db, user, event, *, ip=None):
         body += "This address has not previously been recorded for a successful sign-in to this account. A VPN, mobile connection or changing ISP address can cause this alert.\n\n"
     elif event == "verification-ended":
         body += f"Your password was accepted and {CODE_ATTEMPTS} incorrect authenticator or recovery codes were entered within an hour, so Keen accepts no code for this account for the next hour; a security key still signs you in. If this was not you, someone may know your password: change it and contact your Keen administrator.\n\n"
+    elif event == "mcp-connected":
+        body += "The app can read Keen as you through MCP, within the scopes approved. Review and revoke connected apps under Account, Security.\n\n"
     elif event == "verified-recovery":
         body += "Each recovery code works once. Replace your recovery codes under Account, Security when few remain.\n\n"
     body += "If this was you, no action is needed. If you do not recognise this activity, open your known Keen address directly and contact your Keen administrator. Review your password and authenticators.\n"
