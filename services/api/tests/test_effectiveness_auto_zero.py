@@ -226,7 +226,11 @@ def test_today_follows_the_configured_timezone(monkeypatch):
     monkeypatch.setattr(metrics, "log", log)
     monkeypatch.setattr(settings, "timezone", "Not/A_Zone")
     assert metrics._today_for_effectiveness_metrics() == date.today()
-    assert "Invalid KEEN_TIMEZONE" in log.warning.call_args.args[0]
+    log.warning.assert_called_once_with(
+        "Invalid KEEN_TIMEZONE=%r; falling back to server-local date for "
+        "effectiveness metrics",
+        "Not/A_Zone",
+    )
 
 
 def test_month_arithmetic_clamps_to_the_last_day():

@@ -298,6 +298,22 @@ def test_the_parent_is_an_organisation_or_a_project(monkeypatch, configured):
         assert caught.value.reason == "not_configured"
 
 
+def test_one_holder_takes_a_singular_verb(monkeypatch, configured):
+    fake = FakeCloud()
+    owner = {"role": "roles/owner", "members": ["user:alice@example.org"]}
+    fake.policies = {
+        "roles/owner": [{"policy": {"bindings": [owner]}}],
+        "roles/resourcemanager.organizationAdmin": [],
+    }
+    monkeypatch.setattr(gc, "connect", lambda: fake)
+    (result,) = gc.collect()
+    admins = by_key(result.checks)["identity.admins"]
+    assert (admins.detail, admins.subjects) == (
+        "1 user, group or service account holds Owner or Organization Administrator",
+        ["alice@example.org"],
+    )
+
+
 def test_collect_reads_each_check(monkeypatch, configured):
     fake = FakeCloud()
     monkeypatch.setattr(gc, "connect", lambda: fake)
@@ -483,7 +499,7 @@ def test_admin_activity_reads_iam_and_policy_changes(monkeypatch, configured):
     assert body["orderBy"] == "timestamp desc"
     assert 'protoPayload.methodName:"SetIamPolicy"' in body["filter"]
     monkeypatch.setattr(settings, "google_cloud_projects", "../x")
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         gc.activity(now - timedelta(hours=6), now)
 
 

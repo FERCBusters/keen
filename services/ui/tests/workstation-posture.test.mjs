@@ -412,6 +412,74 @@ test('cancelling the risk form returns focus; owners failing to load still allow
   assert.equal(host.querySelector('[data-posture-risk-form]'), null);
   assert.equal(ui.document.activeElement, button);
 });
+test('a closed risk shows a treated check in a neutral badge, or says the failure is newer', async (t) => {
+  const closed = (id) => ({
+    id,
+    title: null,
+    accepted: false,
+    closed: true,
+    treated: false,
+    due: null,
+  });
+  const data = {
+    ...unmet({
+      status: 'treated',
+      risks: [{ ...closed('r7'), treated: true }, closed('r6')],
+    }),
+    can_create_risk: true,
+  };
+  // A closed risk on a result that is not failing has no failure to predate.
+  const [, antivirus] = data.devices[0].checks;
+  antivirus.risks = [closed('r5')];
+  data.devices[0].checks.push(
+    {
+      check: 'firewall',
+      label: 'Firewall',
+      status: 'attention',
+      risks: [closed('r4')],
+      observations: [],
+    },
+    {
+      check: 'screen_lock',
+      label: 'Screen lock',
+      status: 'accepted',
+      risks: [closed('r3')],
+      observations: [],
+    },
+    {
+      check: 'automatic_updates',
+      label: 'Updates',
+      status: 'unknown',
+      risks: [closed('r2')],
+      observations: [],
+    },
+  );
+  const ui = await loadUi('pages/workstation-posture.js', {
+    html: '<section id="host"></section>',
+    vendor: { withFramework: (url) => url, apiGet: async () => data },
+  });
+  t.after(ui.close);
+  const host = ui.document.getElementById('host');
+  ui.api.workstationPosture(host, true).select({ id: 'p', name: 'Pat' });
+  await tick();
+  const badge = [...host.querySelectorAll('.badge')].find((b) => b.textContent === 'Risk treated');
+  assert.equal(badge.className, 'badge text-bg-secondary');
+  const rows = [...host.querySelectorAll('[data-posture-linked-risk]')].map((r) => r.textContent);
+  assert.deepEqual(rows, [
+    'Risk treated',
+    'Risk closed before this failure began',
+    'Risk closed',
+    'Risk closed before this failure began',
+    'Risk closed before this failure began',
+    'Risk closed',
+  ]);
+  // Treated needs no further risk; the failing firewall still offers one.
+  const offered = [...host.querySelectorAll('[data-posture-risk]')].map(
+    (b) => b.dataset.postureRisk,
+  );
+  assert.deepEqual(offered, ['2']);
+});
+
 test('without risk management, recorded risks show without titles or actions', async (t) => {
   const data = {
     ...unmet({

@@ -12,7 +12,7 @@ from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentKey, AgentServerKey
 from app.security import request_limits
 from app.services.errors import DomainError
-from cryptography.exceptions import InvalidTag
+from cryptography.exceptions import InvalidSignature, InvalidTag
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -23,6 +23,13 @@ from tests.ueu_agent import (
     SimAgent,
     response_aad,
     verify_server_key,
+)
+
+WRONG_FINGERPRINT = "error: --confirm-fingerprint must match the current fingerprint\n"
+RESET_NOTICE = (
+    "New identity fingerprint: {}. Every agent key is revoked. Restart the API "
+    "and worker so no process keeps the old keys. Every agent must enrol again "
+    "with a new code, and every enrolment profile needs a new bootstrap key.\n"
 )
 
 
@@ -71,7 +78,11 @@ def age_keys(keen, delta):
 def test_codes_bootstrap_keys_and_the_document_name_one_identity(keen):
     assert keen.client.get("/v1/admin/agents").json()["server_key_fingerprint"] is None
     # An anonymous request never creates KEEN's keys.
-    assert keen.client.get("/v1/agents/server-key").status_code == 404
+    refused = keen.client.get("/v1/agents/server-key")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This KEEN has issued no agent credentials yet"},
+    )
     with keen.db() as db:
         assert db.query(AgentServerKey).count() == 0
     code = register(keen)["enrollment_code"]
@@ -102,7 +113,7 @@ def test_a_tampered_document_is_refused_by_the_agent(keen):
     doc = keen.client.get("/v1/agents/server-key").json()
     forged = json.loads(json.dumps(doc))
     forged["encryption_key"]["public_key"] = doc["encryption_key"]["public_key"][::-1]
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidSignature):
         verify_server_key(forged, pin)
     with pytest.raises(AssertionError):
         verify_server_key(doc, "A" * 22)
@@ -111,8 +122,12 @@ def test_a_tampered_document_is_refused_by_the_agent(keen):
 def test_keys_need_the_integration_secret(keen, monkeypatch):
     monkeypatch.delenv("KEEN_INTEGRATION_SECRET_KEY")
     r = keen.client.post("/v1/admin/agents", json={"name": "web-01"})
-    assert r.status_code == 503
-    assert "KEEN_INTEGRATION_SECRET_KEY" in r.json()["detail"]
+    assert (r.status_code, r.json()) == (
+        503,
+        {
+            "detail": "Keen Agent encryption needs KEEN_INTEGRATION_SECRET_KEY on the API"
+        },
+    )
     # Bearer-token collectors do not use KEEN's keys.
     token = keen.client.post(
         "/v1/admin/agents", json={"name": "alloy", "credential_type": "token"}
@@ -123,8 +138,13 @@ def test_keys_need_the_integration_secret(keen, monkeypatch):
     # A different secret cannot read the stored keys.
     monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
     r = keen.client.get("/v1/agents/server-key")
-    assert r.status_code == 503
-    assert "cannot be read" in r.json()["detail"]
+    assert (r.status_code, r.json()) == (
+        503,
+        {
+            "detail": "KEEN's agent keys cannot be read with the configured "
+            "KEEN_INTEGRATION_SECRET_KEY"
+        },
+    )
 
 
 def test_an_inconsistent_identity_row_is_refused(keen):
@@ -133,7 +153,11 @@ def test_an_inconsistent_identity_row_is_refused(keen):
         row = server_keys.active(db, "identity")
         row.public_key = "A" * 43
         db.commit()
-    assert keen.client.get("/v1/agents/server-key").status_code == 503
+    refused = keen.client.get("/v1/agents/server-key")
+    assert (refused.status_code, refused.json()) == (
+        503,
+        {"detail": "KEEN's identity key is inconsistent"},
+    )
 
 
 def test_an_erased_identity_key_is_never_loaded(keen):
@@ -196,8 +220,13 @@ def test_plaintext_and_compressed_requests_from_key_agents_are_refused(keen):
     plain = agent.post_raw(
         "/v1/agents/heartbeat", body, "heartbeat", content_type="application/json"
     )
-    assert plain.status_code == 415
-    assert "upgrade keen-agent" in plain.json()["detail"]
+    assert (plain.status_code, plain.json()) == (
+        415,
+        {
+            "detail": "keen-agent requests must be encrypted to KEEN; "
+            "upgrade keen-agent to 0.3 or later"
+        },
+    )
     otlp = agent.post_raw(
         "/v1/otlp/logs", body, "otlp-logs", content_type="application/json"
     )
@@ -206,7 +235,10 @@ def test_plaintext_and_compressed_requests_from_key_agents_are_refused(keen):
     headers = agent.signed_headers(wire, "heartbeat")
     headers["Content-Encoding"] = "gzip"
     r = keen.client.post("/v1/agents/heartbeat", content=wire, headers=headers)
-    assert r.status_code == 415
+    assert (r.status_code, r.json()) == (
+        415,
+        {"detail": "Sealed requests are not compressed"},
+    )
 
 
 def test_sealed_bodies_are_bound_to_operation_sender_and_contents(keen):
@@ -222,13 +254,16 @@ def test_sealed_bodies_are_bound_to_operation_sender_and_contents(keen):
     # Altered, then re-signed.
     wire, _ = agent.encrypt(body, "heartbeat", agent.key_id)
     altered = wire[:-1] + bytes([wire[-1] ^ 1])
-    assert (
-        agent.post_raw("/v1/agents/heartbeat", altered, "heartbeat").status_code == 400
+    refused = agent.post_raw("/v1/agents/heartbeat", altered, "heartbeat")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Sealed request could not be opened"},
     )
     # Too short to hold a sealed body.
-    assert (
-        agent.post_raw("/v1/agents/heartbeat", wire[:100], "heartbeat").status_code
-        == 400
+    refused = agent.post_raw("/v1/agents/heartbeat", wire[:100], "heartbeat")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Sealed request could not be opened"},
     )
     # A malformed key identifier is not a signed request.
     headers = agent.signed_headers(wire, "heartbeat", key_id="not-hex")
@@ -245,10 +280,15 @@ def test_enrolment_is_sealed_and_names_its_key(keen):
     headers = agent.enrollment_headers()
     headers.pop("Keen-Encryption-Key")
     r = keen.client.post("/v1/agents/enroll", content=wire, headers=headers)
-    assert r.status_code == 400
+    assert (r.status_code, r.json()) == (
+        400,
+        {"detail": "Missing or malformed Keen-Encryption-Key"},
+    )
     # Not JSON once opened.
-    assert agent.post_enrollment(info["enrollment_code"], {}, raw=b"[").status_code == (
-        400
+    refused = agent.post_enrollment(info["enrollment_code"], {}, raw=b"[")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid enrollment request"},
     )
     assert agent.enroll(info["enrollment_code"]).status_code == 201
 
@@ -257,7 +297,10 @@ def test_unknown_keys_get_421_so_the_agent_fetches_the_document(keen):
     agent, _ = enrolled(keen)
     body = json.dumps({"version": "0.3.0"}).encode()
     r = agent.post("/v1/agents/heartbeat", body, "heartbeat", key_id="0" * 16)
-    assert r.status_code == 421
+    assert (r.status_code, r.json()) == (
+        421,
+        {"detail": "Unknown or expired encryption key; fetch /v1/agents/server-key"},
+    )
     sealed_logs = agent.post("/v1/otlp/logs", b"{}", "otlp-logs", key_id="0" * 16)
     assert sealed_logs.status_code == 421 and sealed_logs.json()["code"] == 14
 
@@ -265,7 +308,11 @@ def test_unknown_keys_get_421_so_the_agent_fetches_the_document(keen):
 def test_plaintext_limits_apply_after_opening(keen):
     agent, _ = enrolled(keen)
     big = json.dumps({"version": "x" * 33000}).encode()
-    assert agent.post("/v1/agents/heartbeat", big, "heartbeat").status_code == 413
+    refused = agent.post("/v1/agents/heartbeat", big, "heartbeat")
+    assert (refused.status_code, refused.json()) == (
+        413,
+        {"detail": "Request exceeds limit"},
+    )
     assert request_limits._SEALED_OVERHEAD == server_keys.SEALED_OVERHEAD
     assert request_limits.body_limit("/v1/agents/heartbeat") == (
         32 * 1024 + server_keys.SEALED_OVERHEAD
@@ -278,7 +325,10 @@ def test_oversized_sealed_batches_are_refused_after_opening(keen, monkeypatch):
     agent, _ = enrolled(keen)
     monkeypatch.setattr(api, "MAX_BODY", 1000)
     r = agent.post("/v1/otlp/logs", b"x" * 1001, "otlp-logs")
-    assert r.status_code == 413
+    assert (r.status_code, r.json()) == (
+        413,
+        {"code": 8, "message": "Request exceeds limit"},
+    )
 
 
 # -- rotation and erasure ----------------------------------------------------
@@ -302,7 +352,11 @@ def test_rotation_keeps_the_old_key_until_agents_must_stop_using_it(keen):
     assert old in server_keys._OPENED
     age_keys(keen, server_keys.VALID_FOR - server_keys.ROTATE_AFTER)
     age_keys(keen, server_keys.DESTROY_GRACE + timedelta(seconds=1))
-    assert agent.heartbeat().status_code == 421
+    refused = agent.heartbeat()
+    assert (refused.status_code, refused.json()) == (
+        421,
+        {"detail": "Unknown or expired encryption key; fetch /v1/agents/server-key"},
+    )
     assert old not in server_keys._OPENED
     with keen.db() as db:
         assert server_keys.destroy_expired(db, utc_now_naive()) >= 1
@@ -388,7 +442,11 @@ def test_an_inconsistent_encryption_key_is_refused(keen):
         row = server_keys.active(db, "encryption")
         row.private_key = server_keys.seal_private(b"short")
         db.commit()
-    assert agent.heartbeat().status_code == 503
+    refused = agent.heartbeat()
+    assert (refused.status_code, refused.json()) == (
+        503,
+        {"detail": "KEEN's encryption key is inconsistent"},
+    )
 
 
 # -- replacing the identity --------------------------------------------------
@@ -404,17 +462,19 @@ def test_resetting_the_identity_strands_every_earlier_credential(keen, capsys):
     old_pin = agent.pinned
     agent_server_key.main([], session=keen.db)
     assert capsys.readouterr().out.strip() == old_pin
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as refused:
         agent_server_key.main(
             ["--reset", "--confirm-fingerprint", "A" * 22], session=keen.db
         )
+    assert refused.value.code == 2
+    assert capsys.readouterr().err.endswith(WRONG_FINGERPRINT)
     agent_server_key.main(
         ["--reset", "--confirm-fingerprint", old_pin], session=keen.db
     )
     out = capsys.readouterr().out
     with keen.db() as db:
         new_pin = server_keys.current_fingerprint(db)
-        assert new_pin != old_pin and new_pin in out
+        assert new_pin != old_pin and out == RESET_NOTICE.format(new_pin)
         assert (
             db.query(AgentServerKey).filter(AgentServerKey.state != "destroyed").count()
             == 2
@@ -439,7 +499,13 @@ def test_resetting_the_identity_strands_every_earlier_credential(keen, capsys):
         "nonce": "n" * 43,
     }
     fresh.fetch_server_key(pinned=new_pin)
-    assert fresh.post_enrollment(profile["bootstrap_key"], body).status_code == 401
+    refused = fresh.post_enrollment(profile["bootstrap_key"], body)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {
+            "detail": "This credential was issued under a different KEEN identity key; ask an administrator for a new one"
+        },
+    )
     # A new code works: the agent enrols again with a fresh key.
     rotated = keen.client.post(
         "/v1/admin/agents/" + info["agent"]["id"] + "/rotate", json={}
@@ -472,8 +538,13 @@ def test_a_reset_while_an_enrolment_waits_strands_its_credential(
         refused = agent.enroll(info["enrollment_code"])
     else:
         refused = agent.enroll(profile["bootstrap_key"], name="web-02")
-    assert refused.status_code == 401, refused.text
-    assert "different KEEN identity key" in refused.json()["detail"]
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {
+            "detail": "This credential was issued under a different KEEN identity "
+            "key; ask an administrator for a new one"
+        },
+    )
     with keen.db() as db:
         assert db.query(AgentKey).filter_by(state="active").count() == 0
 
@@ -506,7 +577,7 @@ def test_the_script_accepts_a_fingerprint_that_starts_with_a_dash(keen, capsys):
     agent_server_key.main(["--reset", "--confirm-fingerprint", pin], session=keen.db)
     with keen.db() as db:
         second = server_keys.current_fingerprint(db)
-    assert second != pin and second in capsys.readouterr().out
+    assert second != pin and capsys.readouterr().out == RESET_NOTICE.format(second)
     agent_server_key.main(
         ["--reset", "--confirm-fingerprint=" + second], session=keen.db
     )
@@ -518,11 +589,16 @@ def test_the_script_reports_a_missing_identity(keen, capsys):
     import agent_server_key
 
     agent_server_key.main([], session=keen.db)
-    assert "no agent identity key yet" in capsys.readouterr().out
-    with pytest.raises(SystemExit):
+    assert capsys.readouterr().out == (
+        "KEEN has no agent identity key yet; it is made when the first agent "
+        "credential is issued.\n"
+    )
+    with pytest.raises(SystemExit) as refused:
         agent_server_key.main(
             ["--reset", "--confirm-fingerprint", "A" * 22], session=keen.db
         )
+    assert refused.value.code == 2
+    assert capsys.readouterr().err.endswith(WRONG_FINGERPRINT)
 
 
 def test_document_and_open_request_in_isolation(keen):
@@ -590,7 +666,11 @@ def test_concurrent_key_creation_keeps_one_active_key(keen, monkeypatch):
 
 def test_an_unreadable_renewal_is_refused(keen):
     agent, _ = enrolled(keen)
-    assert agent.post("/v1/agents/renew", b"{", "renew").status_code == 400
+    refused = agent.post("/v1/agents/renew", b"{", "renew")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid renewal request"},
+    )
 
 
 def test_wrong_codes_cannot_spend_an_agents_enrolment_allowance(keen, monkeypatch):

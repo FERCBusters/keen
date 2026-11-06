@@ -686,7 +686,7 @@ def test_ingest_source_connection_task_routes_and_validates():
         assert wt.ingest_source_connection_task("taiga", "conn-2") == RESULT
     taiga_ingest.assert_called_once_with(dbs[0], connection_id="conn-2")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Unknown polling source$"):
         wt.ingest_source_connection_task("kermit", "conn-1")
 
 

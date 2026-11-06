@@ -146,9 +146,7 @@ def test_with_query_token(collector):
     url = "https://host.example/team/repo.rss?limit=1"
     with configured(collector, token="t"):
         rewritten = collector._with_query_token(url)
-        assert rewritten.startswith(url.split("?")[0])
-        assert "limit=1" in rewritten
-        assert "token=t" in rewritten
+        assert rewritten == "https://host.example/team/repo.rss?limit=1&token=t"
     with configured(collector, token=""):
         assert collector._with_query_token(url) == url
 
@@ -211,7 +209,9 @@ def test_fetch_api_activities_pagination_limit_raises(collector):
                 max_pages=1,
                 limit=1,
             )
-    assert "pagination" in str(info.value)
+    assert str(info.value) == (
+        "Activity pagination limit reached; cursor retained for retry"
+    )
 
 
 def test_fetch_api_activities_status_error_hides_credentials(collector):
@@ -229,8 +229,7 @@ def test_fetch_api_activities_status_error_hides_credentials(collector):
             collector._fetch_api_activities(
                 base_url="https://host.example", owner="team", repo="repo"
             )
-    assert "fixture-secret" not in str(info.value)
-    assert "302" in str(info.value)
+    assert str(info.value) == "Collection failed: upstream returned HTTP 302"
 
 
 def test_store_api_activity_items_sorts_deduplicates_and_updates_cursor(collector):
@@ -294,7 +293,7 @@ def test_store_api_activity_items_sorts_deduplicates_and_updates_cursor(collecto
     assert cur.last_ts == datetime(2026, 10, 9, 12, 0, 0)
     assert cur.updated_at is not None
     db.add.assert_called_once_with(cur)
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
 
 
 def test_store_api_activity_items_label_and_content_summary(collector):
@@ -359,7 +358,7 @@ def test_repo_feed_api_success(collector):
     assert b"fixture-secret" not in store.call_args.kwargs["artifact_bytes"]
     cursor_obj = db.add.call_args_list[0].args[0]
     assert cursor_obj.meta["url"] == "https://host.example/team/repo.rss?token=REDACTED"
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
 
 
 def test_repo_feed_rss_fallback(collector):
@@ -388,7 +387,10 @@ def test_repo_feed_rss_fallback(collector):
     ):
         result = feed_fn(collector)(db, feed_url="https://host.example/team/repo.rss")
     assert result["mode"] == "rss_fallback"
-    assert result["api_error"]
+    assert (
+        result["api_error"]
+        == "Collection failed; check the input, credentials, upstream service and storage configuration"
+    )
     assert result["created_events"] == 1
     assert stored[0]["source"] == source(collector)
     assert stored[0]["artifact_kind"] == source(collector) + "_rss"
@@ -397,8 +399,8 @@ def test_repo_feed_rss_fallback(collector):
     assert stored[0]["actor"] == "alice"
     assert stored[0]["raw_pointer"][source(collector)]["guid"] == "g1"
     assert stored[0]["system"] == "host.example/team/repo"
-    db.rollback.assert_called_once()
-    db.commit.assert_called_once()
+    db.rollback.assert_called_once_with()
+    db.commit.assert_called_once_with()
 
 
 def test_repo_feed_failures_report_without_credentials(collector):
@@ -427,7 +429,10 @@ def test_repo_feed_cannot_infer_api_target(collector):
     with configured(collector), serving(collector, lambda request: httpx.Response(403)):
         result = feed_fn(collector)(db, feed_url="https://host.example/missing")
     assert result["mode"] == "failed"
-    assert "Could not infer" in result["api_error"]
+    assert result["api_error"] == (
+        "Could not infer base_url/owner/repo for API ingest. Provide "
+        f"KEEN_{collector.name.upper()}_BASE_URL or use a standard /owner/repo.rss URL."
+    )
 
 
 def test_repo_feed_uses_cursor_and_skips_seen_items(collector):
@@ -449,7 +454,7 @@ def test_repo_feed_uses_cursor_and_skips_seen_items(collector):
     assert result["cursor_last_ts"] == "2026-10-09T12:00:00"
     store.assert_not_called()
     db.add.assert_called_once_with(existing)
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
     assert existing.meta.get("url") is None
 
 
@@ -489,17 +494,24 @@ def test_discover_repositories_rejects_hostile_accounts(collector):
             ("users", ".."),
             ("users", "a" * 101),
         ]:
-            with pytest.raises(ValueError):
+            with pytest.raises(
+                ValueError, match=f"^Invalid {collector.label} account$"
+            ):
                 collector._discover_repositories("https://host.example", section, name)
 
 
 def test_discover_repositories_requires_safe_base_url(collector):
+    variable = "KEEN_" + collector.name.upper() + "_BASE_URL"
     with patch.object(gc, "is_safe_url", return_value=False):
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError, match=f"^Set {variable} to a safe HTTPS instance URL$"
+        ):
             collector._discover_repositories("http://host.example", "users", "team")
 
 
 def test_discover_repositories_response_validation(collector):
+    label = collector.label
+
     def non_dict_row(request):
         return httpx.Response(
             200,
@@ -507,7 +519,7 @@ def test_discover_repositories_response_validation(collector):
         )
 
     with serving(collector, non_dict_row):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=f"^Invalid {label} repository response$"):
             collector._discover_repositories("https://host.example", "users", "team")
 
     def other_owner(request):
@@ -516,7 +528,10 @@ def test_discover_repositories_response_validation(collector):
         )
 
     with serving(collector, other_owner):
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError,
+            match=f"^{label} returned a repository outside the requested owner$",
+        ):
             collector._discover_repositories("https://host.example", "users", "team")
 
     def invalid_name(request):
@@ -525,7 +540,7 @@ def test_discover_repositories_response_validation(collector):
         )
 
     with serving(collector, invalid_name):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=f"^Invalid {label} repository name$"):
             collector._discover_repositories("https://host.example", "users", "team")
 
     def repeats_page(request):
@@ -534,14 +549,18 @@ def test_discover_repositories_response_validation(collector):
         )
 
     with serving(collector, repeats_page):
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError, match=f"^{label} repeated a repository page; discovery stopped$"
+        ):
             collector._discover_repositories("https://host.example", "users", "team")
 
     def not_a_list(request):
         return httpx.Response(200, json={"repos": []})
 
     with serving(collector, not_a_list):
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError, match=f"^{label} repository response must be a list$"
+        ):
             collector._discover_repositories("https://host.example", "users", "team")
 
     def empty_page(request):
@@ -557,7 +576,9 @@ def test_discover_repositories_response_validation(collector):
         return httpx.Response(403)
 
     with serving(collector, status_error):
-        with pytest.raises(RuntimeError):
+        with pytest.raises(
+            RuntimeError, match="^Collection failed: upstream returned HTTP 403$"
+        ):
             collector._discover_repositories("https://host.example", "users", "team")
 
 
@@ -602,8 +623,14 @@ def test_ingest_all_discovers_and_deduplicates_feeds(collector):
         r.get("scope") == "organizations" and r.get("discovered_repositories") == 1
         for r in results
     )
-    assert ("https://host.example/team/repo-a.rss", "Team label") in feeds
-    assert ("https://other.example/dup.rss", None) in feeds
+    assert feeds == [
+        ("https://other.example/dup.rss", None),
+        ("https://host.example/team/repo-a.rss", "Team label"),
+    ]
+    assert feeds == [
+        ("https://other.example/dup.rss", None),
+        ("https://host.example/team/repo-a.rss", "Team label"),
+    ]
     assert len(feeds) == 2
 
 
@@ -643,16 +670,23 @@ def test_ingest_all_skips_and_empty_configuration(collector):
     db = MagicMock()
     with patch.object(gc.settings, prefix(collector) + "enabled", False):
         result = all_fn(collector)(db)
-        assert result[0]["skipped"]
-        assert "disabled" in result[0]["reason"]
+        assert result[0]["skipped"] is True
+        assert result[0]["reason"] == "Source type is disabled"
     with (
         configured(collector, enabled=True, config_path="fixture.yml", demo_mode=True),
         connections_env(collector),
         patch.object(gc, "load_document", return_value={}),
     ):
         results = all_fn(collector)(db)
-    assert results and results[0]["skipped"]
-    assert "configured" in results[0]["reason"]
+    assert [(r["skipped"], r["reason"]) for r in results] == [
+        (
+            True,
+            f"No {collector.label} inputs configured. Open Sources & evidence "
+            "mapping, select this source and choose Add input. Choose User, "
+            "Organisation or Feed, enter the account name or repository feed URL, "
+            "and save.",
+        )
+    ]
 
 
 def test_load_config(collector):
@@ -815,7 +849,10 @@ def test_ingest_all_reports_failed_discovery_and_skips_unusable_feeds(collector)
         results = all_fn(collector)(db)
     errors = [r for r in results if r.get("error")]
     assert [(r["scope"], r["account"]) for r in errors] == [("organizations", "team")]
-    assert errors[0]["error"].startswith("Collection failed")
+    assert (
+        errors[0]["error"]
+        == "Collection failed; check the input, credentials, upstream service and storage configuration"
+    )
     assert feeds == [
         ("https://host.example/a/b.rss", "A"),
         ("https://host.example/alice/tool.rss", None),
@@ -1070,7 +1107,7 @@ def test_an_activity_page_larger_than_requested_falls_back_to_the_feed(collector
         "storage configuration"
     )
     assert [kw["artifact_kind"] for kw in stored] == [source(collector) + "_rss"]
-    db.rollback.assert_called_once()
+    db.rollback.assert_called_once_with()
 
 
 def test_feed_items_out_of_order_leave_the_cursor_at_the_newest(collector):

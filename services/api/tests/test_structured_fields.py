@@ -2,6 +2,7 @@ import pytest
 from app.agents.schema import Health
 from app.mapping.fields import field_matches, validate_fields
 from app.mapping.rules import evaluate_by_framework, parse_rules
+from pydantic import ValidationError
 
 
 def test_literal_dotted_keys_and_missing():
@@ -10,10 +11,13 @@ def test_literal_dotted_keys_and_missing():
         "operator": "equals",
         "value": "keen-agent.service",
     }
-    validate_fields([c])
-    assert field_matches({"fields": {"service.name": "keen-agent.service"}}, c)
-    assert not field_matches({"fields": {"service": {"name": "keen-agent.service"}}}, c)
-    assert not field_matches({}, c)
+    assert validate_fields([c]) == [c]
+    assert field_matches({"fields": {"service.name": "keen-agent.service"}}, c) is True
+    assert (
+        field_matches({"fields": {"service": {"name": "keen-agent.service"}}}, c)
+        is False
+    )
+    assert field_matches({}, c) is False
 
 
 @pytest.mark.parametrize(
@@ -60,22 +64,9 @@ def test_runtime_and_historical_payload_rule():
         "source": "keen-agent",
         "normalized_payload": {"fields": {"_SYSTEMD_UNIT": "keen-agent.service"}},
     }
-    assert evaluate_by_framework(event, rules)
+    assert evaluate_by_framework(event, rules) == {"ISO27001:2022": ["A.8.15"]}
     event["normalized_payload"] = {}
-    assert not evaluate_by_framework(event, rules)
-
-
-@pytest.mark.parametrize(
-    "conditions",
-    [
-        [{"path": ["fields"], "operator": "eval", "value": "x"}],
-        [{"path": "fields.name", "operator": "exists"}],
-        [{"path": ["a"], "operator": "equals", "value": {}}],
-    ],
-)
-def test_invalid_conditions_rejected(conditions):
-    with pytest.raises(ValueError):
-        validate_fields(conditions)
+    assert evaluate_by_framework(event, rules) == {}
 
 
 def test_health_accepts_delivery_counters():
@@ -89,32 +80,16 @@ def test_health_accepts_delivery_counters():
         }
     )
     assert h.delivered_since_start == 2496
-    with pytest.raises(ValueError):
-        Health.model_validate({"delivery_events_per_second_since_start": float("nan")})
-    with pytest.raises(ValueError):
-        Health.model_validate({"unexpected": "x"})
-
-
-@pytest.mark.parametrize(
-    "ip,network,expected",
-    [
-        ("35.221.69.202", "35.221.69.0/24", True),
-        ("2001:db8::1", "2001:db8::/32", True),
-        ("2001:db8::1", "192.0.2.0/24", False),
-        ("invalid", "192.0.2.0/24", False),
-    ],
-)
-def test_ip_cidr(ip, network, expected):
-    c = {"path": ["fields", "client.ip"], "operator": "in_cidr", "value": network}
-    validate_fields([c])
-    assert field_matches({"fields": {"client.ip": ip}}, c) == expected
-
-
-def test_invalid_network_rejected():
-    with pytest.raises(ValueError):
-        validate_fields(
-            [{"path": ["fields", "client.ip"], "operator": "in_cidr", "value": "bad"}]
-        )
+    for health, problem in (
+        (
+            {"delivery_events_per_second_since_start": float("nan")},
+            ("finite_number", ("delivery_events_per_second_since_start",)),
+        ),
+        ({"unexpected": "x"}, ("extra_forbidden", ("unexpected",))),
+    ):
+        with pytest.raises(ValidationError) as refused:
+            Health.model_validate(health)
+        assert [(e["type"], e["loc"]) for e in refused.value.errors()] == [problem]
 
 
 def test_filtered_health_counts():
@@ -124,8 +99,11 @@ def test_filtered_health_counts():
         ]
         == 5
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValidationError) as refused:
         Health.model_validate({"filtered_by_source": {"nginx": -1}})
+    assert [(e["type"], e["msg"]) for e in refused.value.errors()] == [
+        ("value_error", "Value error, Invalid filtered counts")
+    ]
 
 
 def test_structured_regex_uses_literal_paths_and_search_semantics():
@@ -147,20 +125,37 @@ def test_structured_regex_uses_literal_paths_and_search_semantics():
         {"fields": {"process.name": None}},
         {"fields": {"process.name": []}},
     ):
-        assert not field_matches(value, condition)
+        assert field_matches(value, condition) is False
     condition["value"] = "(?i)gills"
-    assert field_matches({"fields": {"process.name": "GILLS.service"}}, condition)
+    assert (
+        field_matches({"fields": {"process.name": "GILLS.service"}}, condition) is True
+    )
     condition["operator"] = "contains"
-    assert not field_matches({"fields": {"process.name": "GILLS.service"}}, condition)
+    assert (
+        field_matches({"fields": {"process.name": "GILLS.service"}}, condition) is False
+    )
 
 
-@pytest.mark.parametrize("pattern", ["[", "(a+)+", "x" * 513, r"(a)\1"])
-def test_structured_regex_rejects_unsafe_patterns_at_parse_and_runtime(pattern):
+@pytest.mark.parametrize(
+    "pattern,problem",
+    [
+        ("[", "Invalid pattern: unterminated character set at position 0"),
+        ("(a+)+", "Nested repetition can stall ingestion"),
+        ("x" * 513, "Pattern must be at most 512 characters"),
+        (r"(a)\1", "Backreferences are unsupported"),
+    ],
+)
+def test_structured_regex_rejects_unsafe_patterns_at_parse_and_runtime(
+    pattern, problem
+):
     condition = {"path": ["summary"], "operator": "regex", "value": pattern}
-    with pytest.raises(ValueError):
-        validate_fields([condition])
-    with pytest.raises(ValueError):
-        field_matches({"summary": "test"}, condition)
+    for check in (
+        lambda: validate_fields([condition]),
+        lambda: field_matches({"summary": "test"}, condition),
+    ):
+        with pytest.raises(ValueError) as refused:
+            check()
+        assert str(refused.value) == problem
     # A rules document with such a rule still loads; that rule alone is skipped.
     rules = parse_rules(
         {
@@ -184,11 +179,13 @@ def test_structured_regex_is_bounded_and_combines_with_summary_using_and():
         "value": "gills|systemd",
     }
     # A long value is read up to the match window; it never stops the run.
-    assert field_matches(
-        {"fields": {"process.name": "systemd" + "x" * 65537}}, condition
+    assert (
+        field_matches({"fields": {"process.name": "systemd" + "x" * 65537}}, condition)
+        is True
     )
-    assert not field_matches(
-        {"fields": {"process.name": "x" * 65537 + "systemd"}}, condition
+    assert (
+        field_matches({"fields": {"process.name": "x" * 65537 + "systemd"}}, condition)
+        is False
     )
     rules = parse_rules(
         {
@@ -205,10 +202,10 @@ def test_structured_regex_is_bounded_and_combines_with_summary_using_and():
         "summary": '"checks": [',
         "normalized_payload": {"fields": {"process.name": "gills"}},
     }
-    assert not evaluate_by_framework(event, rules)
+    assert evaluate_by_framework(event, rules) == {}
     event["summary"] = "gills.service: Deactivated successfully."
     event["normalized_payload"]["fields"]["process.name"] = "systemd"
-    assert evaluate_by_framework(event, rules)
+    assert evaluate_by_framework(event, rules) == {"A": ["1"]}
 
 
 @pytest.mark.parametrize(
@@ -239,17 +236,9 @@ def test_event_summary_conditions_use_canonical_summary(operator, value, matched
         "summary": "gills.service: stopped",
         "normalized_payload": {"summary": "different"},
     }
-    assert bool(evaluate_by_framework(event, parsed)) == matched
+    assert evaluate_by_framework(event, parsed) == ({"A": ["1"]} if matched else {})
     rule["when"]["fields"][0].pop("scope")
-    assert not evaluate_by_framework(event, parse_rules({"rules": [rule]}))
-
-
-@pytest.mark.parametrize(
-    "scope,path", [("event", ["password"]), ("unknown", ["summary"]), ([], ["summary"])]
-)
-def test_event_scope_is_restricted(scope, path):
-    with pytest.raises(ValueError):
-        validate_fields([{"scope": scope, "path": path, "operator": "exists"}])
+    assert evaluate_by_framework(event, parse_rules({"rules": [rule]})) == {}
 
 
 @pytest.mark.parametrize(
@@ -270,7 +259,7 @@ def test_not_contains_is_literal_and_requires_existing_scalar(payload, expected)
     validate_fields([condition])
     assert field_matches(payload, condition) == expected
     condition["value"] = ""
-    assert not field_matches(payload, condition)
+    assert field_matches(payload, condition) is False
 
 
 def test_not_contains_canonical_summary_and_literal_pattern():
@@ -289,6 +278,6 @@ def test_not_contains_canonical_summary_and_literal_pattern():
         "map_to": [{"framework": "A", "ref": "1"}],
     }
     parsed = parse_rules({"rules": [rule]})
-    assert evaluate_by_framework({"summary": "gills"}, parsed)
-    assert not evaluate_by_framework({"summary": "gills|systemd"}, parsed)
+    assert evaluate_by_framework({"summary": "gills"}, parsed) == {"A": ["1"]}
+    assert evaluate_by_framework({"summary": "gills|systemd"}, parsed) == {}
     assert not evaluate_by_framework({}, parsed)

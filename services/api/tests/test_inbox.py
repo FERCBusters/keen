@@ -161,7 +161,11 @@ def test_attendees_of_a_new_audit_hear_about_it_except_its_creator(people):
     for account in ("manager", "stranger"):
         assert _items(app.client(who[account]))["items"] == []
     stranger = app.client(who["stranger"])
-    assert stranger.get(f"/v1/audits/{audit_id}").status_code == 403
+    refused = stranger.get(f"/v1/audits/{audit_id}")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Audit access required"},
+    )
     assert stranger.get("/v1/me/audits").json()["items"] == []
 
 
@@ -181,7 +185,7 @@ def test_someone_added_to_an_audit_under_way_hears_once(people):
     removed = manager.delete(
         f"/v1/audits/{audit_id}/attendees/{first}", headers=unsafe(manager)
     )
-    assert removed.status_code == 200, removed.text
+    assert (removed.status_code, removed.json()) == (200, {"ok": True})
     add(user_id=str(who["attendee"].id))
     add(user_id=str(who["manager"].id))
     assert _unread(attendee) == 1
@@ -287,8 +291,13 @@ def test_items_are_marked_read_one_at_a_time_or_all_at_once(people):
     assert _items(attendee, unread="true")["items"] == []
     assert len(_items(attendee)["items"]) == 3
     # Marking needs the session's CSRF token, like every change.
-    assert attendee.post("/v1/me/inbox/read-all").status_code == 403
-    assert app.client().get("/v1/me/inbox").status_code == 401
+    answer = attendee.post("/v1/me/inbox/read-all")
+    assert (answer.status_code, answer.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
+    answer = app.client().get("/v1/me/inbox")
+    assert (answer.status_code, answer.json()) == (401, {"detail": "Not authenticated"})
 
 
 def test_an_item_hides_while_its_record_is_gone_or_switched_off(people):
@@ -582,8 +591,13 @@ def test_people_on_a_meeting_read_it_without_isms_access(people):
         refused = stranger.get(target, params={"framework": FW})
         assert refused.status_code == 403, target
         assert refused.json()["detail"] == "isms.read permission required"
-    assert manager.get(f"/v1/isms/meetings/{uuid.uuid4()}").status_code == 404
-    assert stranger.get("/v1/isms/meetings").status_code == 403
+    answer = manager.get(f"/v1/isms/meetings/{uuid.uuid4()}")
+    assert (answer.status_code, answer.json()) == (404, {"detail": "Meeting not found"})
+    answer = stranger.get("/v1/isms/meetings")
+    assert (answer.status_code, answer.json()) == (
+        403,
+        {"detail": "isms.read permission required"},
+    )
     retired = app.db.get(User, who["attendee"].id)
     retired.is_active = False
     app.db.commit()

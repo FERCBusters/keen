@@ -24,6 +24,7 @@ from app.ingest.cloud.base import (
     Provider,
     ScopeResult,
     Unavailable,
+    agrees,
     api_timestamp,
     clip,
     guarded,
@@ -211,7 +212,7 @@ def administrators(api: Api) -> tuple[Check, list[Identity]]:
         CHECKS["identity.admins"],
         "info",
         f"{plural(len(found), 'user, group or service account', 'users, groups or service accounts')} "
-        "hold Owner or Organization Administrator",
+        f"{agrees(len(found), 'holds', 'hold')} Owner or Organization Administrator",
         [p.name for p in found],
     )
     return check, found

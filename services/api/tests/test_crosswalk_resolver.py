@@ -192,12 +192,21 @@ def test_links_carry_ids_rationale_and_provenance(catalogue):
     assert list(links) == sorted(
         links, key=lambda row: (str(row.target_control_id), str(row.source_control_id))
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="^Name the target framework, target controls or sources$",
+    ):
         crosswalk_links(db, enabled=None)
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match="^Name the target framework, target controls or sources$",
+    ):
         crosswalk_sources(db, enabled=None)
     # Remembered results cannot be changed by a reader.
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+        match="^'mappingproxy' object does not support item assignment$",
+    ):
         crosswalk_sources(db, enabled=None, target_framework="X0")[links[0][2]] = set()
 
 

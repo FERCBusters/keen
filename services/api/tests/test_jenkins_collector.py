@@ -75,7 +75,9 @@ def test_client_configuration_and_monitored_auth():
             with patch.object(
                 jk.settings, "jenkins_base_url", "https://jenkins.example"
             ):
-                with pytest.raises(ValueError):
+                with pytest.raises(
+                    ValueError, match="^Invalid or unsafe Jenkins base URL$"
+                ):
                     jk._client()
 
 
@@ -106,10 +108,14 @@ def test_ingest_job_uses_cursor_and_classifies_outcomes(db):
     assert [s["severity"] for s in stored] == [3, 4, 4, 3]
     assert result["created_events"] == 4
     assert result["cursor_last_ts"] == cursor.last_ts.isoformat()
-    assert stored[0]["summary"].startswith("[prod] jenkins deploy build #4 RUNNING")
-    assert stored[3]["summary"].startswith("[prod] jenkins deploy build #3 SUCCESS")
+    assert [s["summary"] for s in stored] == [
+        "[prod] jenkins deploy build #4 RUNNING",
+        "[prod] jenkins deploy build #1 FAILURE",
+        "[prod] jenkins deploy build #2 UNSTABLE",
+        "[prod] jenkins deploy build #3 SUCCESS",
+    ]
     assert all(s["system"] == "prod" for s in stored)
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
 
 
 def test_ingest_job_skips_seen_and_unknown_timestamp_builds(db):
@@ -133,8 +139,9 @@ def test_ingest_job_skips_seen_and_unknown_timestamp_builds(db):
             ),
         ):
             jk.ingest_jenkins_job(db, "deploy", None, "release")
-    assert len(stored) == 1
-    assert stored[0]["action"] == "release"
+    assert [
+        (s["raw_pointer"]["jenkins"]["build_number"], s["action"]) for s in stored
+    ] == [(2, "release")]
 
 
 def test_ingest_job_cursor_blocks_old_builds(db):
@@ -152,8 +159,8 @@ def test_ingest_job_cursor_blocks_old_builds(db):
             result = jk.ingest_jenkins_job(db, "deploy", None, None)
     store.assert_not_called()
     assert result["created_events"] == 0
-    assert result["cursor_last_ts"] is not None
-    db.commit.assert_called_once()
+    assert result["cursor_last_ts"] == "2026-10-10T00:00:00"
+    db.commit.assert_called_once_with()
 
 
 def _builds(db, body):
@@ -179,7 +186,7 @@ def test_ingest_job_skips_builds_other_than_objects(db):
     result, stored = _builds(db, body)
     assert result["created_events"] == 2
     assert [s["raw_pointer"]["jenkins"]["build_number"] for s in stored] == [0, 2]
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
 
 
 @pytest.mark.parametrize(
@@ -188,13 +195,14 @@ def test_ingest_job_skips_builds_other_than_objects(db):
 def test_ingest_job_reads_a_listing_of_another_shape_as_empty(db, body):
     result, stored = _builds(db, body)
     assert (result["created_events"], stored) == (0, [])
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
 
 
 def test_ingest_all_collections_and_error_paths(db):
     with patch.object(jk.settings, "jenkins_enabled", False):
-        results = jk.ingest_jenkins_all(db)
-        assert results[0]["skipped"] and results[0]["reason"]
+        assert jk.ingest_jenkins_all(db) == [
+            {"source": "jenkins", "skipped": True, "reason": "Source type is disabled"}
+        ]
 
     def job(db, name, label, kind):
         if name == "boom":
@@ -216,10 +224,21 @@ def test_ingest_all_collections_and_error_paths(db):
         patch.object(jk, "ingest_jenkins_job", side_effect=job),
     ):
         results = jk.ingest_jenkins_all(db)
-    assert results[0]["job"] == "deploy" and results[0]["created_events"] == 2
-    assert results[1]["job"] == "boom"
-    assert "Collection failed" in results[1]["error"]
-    db.rollback.assert_called_once()
+    # The failed job reports a fixed message; its exception text stays in the log.
+    connection = {
+        "connection_id": "env:jenkins",
+        "connection_name": "Environment default",
+    }
+    assert results == [
+        {"job": "deploy", "created_events": 2, **connection},
+        {
+            "job": "boom",
+            "error": "Collection failed; check the input, credentials, upstream "
+            "service and storage configuration",
+            **connection,
+        },
+    ]
+    db.rollback.assert_called_once_with()
 
     with (
         patch.object(jk.settings, "jenkins_enabled", True),
@@ -255,10 +274,12 @@ def test_cursor_creation_upserts_then_reads_the_row(db):
     }
     assert values["name"] == jk.namespace("jenkins:deploy")
     assert values["metadata"] == {}
-    assert "ON CONFLICT (name) DO NOTHING" in str(
-        statement.compile(dialect=postgresql.dialect())
+    assert str(statement.compile(dialect=postgresql.dialect())) == (
+        "INSERT INTO ingestion_cursors (id, name, last_ts, metadata, updated_at) "
+        "VALUES (%(id)s::UUID, %(name)s, %(last_ts)s, %(metadata)s::JSONB, "
+        "%(updated_at)s) ON CONFLICT (name) DO NOTHING"
     )
-    db.flush.assert_called_once()
+    db.flush.assert_called_once_with()
 
 
 def test_deduplicated_builds_count_for_nothing_but_advance_the_cursor(db):

@@ -84,31 +84,6 @@ def test_millisecond_timestamps_and_unix_seconds_are_read_as_utc():
         engine.timestamp("2026-01-01T12:00:00")
 
 
-@pytest.mark.parametrize(
-    "record,mapping,message",
-    [
-        ([RECORD], {}, "must be a JSON object"),
-        ({**RECORD, "id": ""}, {}, "identifier and summary must not be empty"),
-        ({**RECORD, "name": ""}, {}, "identifier and summary must not be empty"),
-        ({**RECORD, "id": None}, {}, "Required field id is missing at /id"),
-        (
-            {**RECORD, "link": "javascript:alert(1)"},
-            {"url": {"path": "/link"}},
-            "Source link must be HTTP or HTTPS",
-        ),
-        (
-            {**RECORD, "level": "inf"},
-            {"severity": {"path": "/level", "transform": "number"}},
-            "Numeric fields must be finite",
-        ),
-    ],
-    ids=["array", "empty-id", "empty-summary", "missing-id", "script-link", "infinite"],
-)
-def test_unusable_records_are_refused(record, mapping, message):
-    with pytest.raises(IntegrationError, match=message):
-        normalize(record, definition(**mapping))
-
-
 def test_optional_fields_absent_from_a_record_are_left_out():
     fields = normalize(
         RECORD,
@@ -283,6 +258,12 @@ GOOD_MEASURE = {"value": 99.5, "from": "2026-01-01", "to": "2026-01-31"}
 # below fails when a new one does not.
 UNUSABLE = [
     ("not-object", {}, "just text", "Each record must be a JSON object"),
+    (
+        "array",
+        {},
+        [{"id": 2, "created_at": "2026-01-01T12:00:00Z", "title": "x"}],
+        "Each record must be a JSON object",
+    ),
     (
         "missing-id",
         {},

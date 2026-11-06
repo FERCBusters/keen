@@ -84,19 +84,19 @@ def test_direct_and_group_permission_union_and_user_isolation(people):
     }
     assert get_effective_permission_codes(db, users["admin"]) == {"*"}
     assert get_effective_permission_codes(db, users["inactive"]) == set()
-    assert not has_permission(db, users["inactive"], "events.read")
-    assert not has_permission(db, users["reader"], "admin.secret")
-    assert not has_permission(db, users["admin"], "")
+    assert has_permission(db, users["inactive"], "events.read") is False
+    assert has_permission(db, users["reader"], "admin.secret") is False
+    assert has_permission(db, users["admin"], "") is False
 
 
 def test_any_permission_requires_an_active_holder_of_one_code(people):
     db, users = people
-    assert has_any_permission(db, users["reader"], "risk.read", "events.read")
-    assert not has_any_permission(db, users["reader"], "risk.read", "risk.manage")
-    assert has_any_permission(db, users["admin"], "risk.read")
-    assert not has_any_permission(db, users["inactive"], "events.read")
-    assert not has_any_permission(db, None, "events.read")
-    assert not has_any_permission(db, users["admin"])
+    assert has_any_permission(db, users["reader"], "risk.read", "events.read") is True
+    assert has_any_permission(db, users["reader"], "risk.read", "risk.manage") is False
+    assert has_any_permission(db, users["admin"], "risk.read") is True
+    assert has_any_permission(db, users["inactive"], "events.read") is False
+    assert has_any_permission(db, None, "events.read") is False
+    assert has_any_permission(db, users["admin"]) is False
 
 
 def test_stale_snapshot_recomputed_from_database(people, monkeypatch):
@@ -113,7 +113,7 @@ def test_stale_snapshot_recomputed_from_database(people, monkeypatch):
     ensure_session_authorization_current(db, user)
     assert user.effective_role == "normal"
     assert user.effective_permission_codes == {"events.read", "events.write"}
-    assert not has_permission(db, user, "admin.secret")
+    assert has_permission(db, user, "admin.secret") is False
     assert update.call_args.kwargs["authz_version"] == 2
 
 
@@ -153,8 +153,8 @@ def test_password_hashes_are_salted_and_verify_unicode():
     first = passwords.hash_password(password)
     second = passwords.hash_password(password)
     assert first != second and password not in first
-    assert passwords.verify_password(password, first)
-    assert not passwords.verify_password(password + "wrong", first)
+    assert passwords.verify_password(password, first) is True
+    assert passwords.verify_password(password + "wrong", first) is False
 
 
 @pytest.mark.parametrize(
@@ -169,12 +169,12 @@ def test_password_hashes_are_salted_and_verify_unicode():
     ],
 )
 def test_malformed_password_hash_fails_closed(raw):
-    assert not passwords.verify_password("password", raw)
+    assert passwords.verify_password("password", raw) is False
 
 
 @pytest.mark.parametrize("password", ["", "short", "1234567"])
 def test_short_password_rejected(password):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Password must be at least 8 characters$"):
         passwords.hash_password(password)
 
 
@@ -218,16 +218,16 @@ def test_audit_managers_hold_event_and_isms_reads_directly_or_by_group(people):
             "events.read",
             "isms.read",
         }
-        assert has_permission(db, user, "events.read")
-        assert has_permission(db, user, "isms.read")
+        assert has_permission(db, user, "events.read") is True
+        assert has_permission(db, user, "isms.read") is True
         # Reads only: nothing else comes with them.
         for code in ("isms.manage", "risk.read", "stories.read", "audits.read"):
-            assert not has_permission(db, user, code)
+            assert has_permission(db, user, code) is False
     assert get_effective_permission_codes(db, reader) == {"audits.read"}
-    assert not has_permission(db, reader, "events.read")
-    assert not has_permission(db, reader, "isms.read")
+    assert has_permission(db, reader, "events.read") is False
+    assert has_permission(db, reader, "isms.read") is False
     direct.is_active = False
-    assert not has_permission(db, direct, "events.read")
+    assert has_permission(db, direct, "events.read") is False
 
 
 def test_snapshots_resolve_implied_permissions_without_queries(people, monkeypatch):
@@ -241,9 +241,9 @@ def test_snapshots_resolve_implied_permissions_without_queries(people, monkeypat
     compute = Mock(side_effect=AssertionError("unexpected query"))
     monkeypatch.setattr(permissions, "compute_effective_role", compute)
     ensure_session_authorization_current(db, user)
-    assert has_permission(db, user, "events.read")
-    assert has_permission(db, user, "isms.read")
-    assert not has_permission(db, user, "isms.manage")
+    assert has_permission(db, user, "events.read") is True
+    assert has_permission(db, user, "isms.read") is True
+    assert has_permission(db, user, "isms.manage") is False
     assert get_effective_permission_codes(db, user) == {
         "audits.manage",
         "events.read",

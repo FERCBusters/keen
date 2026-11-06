@@ -35,7 +35,7 @@ class StorageTests(unittest.TestCase):
             p.parent.mkdir()
             p.write_bytes(b"evidence")
             s3.delete_stored_object("local://local/events/test")
-            self.assertFalse(p.exists())
+            self.assertIs(p.exists(), False)
             s3.delete_stored_object("local://local/events/test")  # idempotent
             with self.assertRaises(ValueError):
                 s3.delete_stored_object("local://local/../secret")
@@ -96,9 +96,9 @@ class WorkerLoopTests(unittest.TestCase):
             patch.object(r, "database_batch", side_effect=RuntimeError("lock lost")),
             patch.object(r, "storage_batch", return_value=True) as storage,
         ):
-            self.assertTrue(r.run_retention())
-        storage.assert_called_once()
-        session.commit.assert_called_once()
+            self.assertIs(r.run_retention(), True)
+        storage.assert_called_once_with()
+        session.commit.assert_called_once_with()
         (statement, params), _ = session.execute.call_args
         self.assertIn("evidence_purge_jobs", str(statement))
         self.assertEqual(
@@ -111,12 +111,12 @@ class WorkerLoopTests(unittest.TestCase):
             patch.object(r, "database_batch", return_value=False),
             patch.object(r, "storage_batch", return_value=False),
         ):
-            self.assertFalse(r.run_retention())
+            self.assertIs(r.run_retention(), False)
         with (
             patch.object(r, "database_batch", return_value=True),
             patch.object(r, "storage_batch", return_value=False),
         ):
-            self.assertTrue(r.run_retention())
+            self.assertIs(r.run_retention(), True)
 
     def test_storage_batch_yields_after_its_time_budget(self):
         from unittest.mock import MagicMock
@@ -125,7 +125,7 @@ class WorkerLoopTests(unittest.TestCase):
             patch.object(r.time, "monotonic", side_effect=[0.0, 10.5]),
             patch.object(r, "SessionLocal", MagicMock()) as sessions,
         ):
-            self.assertTrue(r.storage_batch())
+            self.assertIs(r.storage_batch(), True)
         sessions.assert_not_called()
 
 
@@ -474,7 +474,7 @@ class RetentionDatabaseTests(unittest.TestCase):
 
     def test_disabled_default(self):
         e = self.event(90)
-        self.assertFalse(r.database_batch())
+        self.assertIs(r.database_batch(), False)
         self.assertIn(str(e), self.left())
 
     def test_age_preserves_audit_and_new_events(self):
@@ -484,10 +484,10 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.sample(self.audit(), held)
         self.artifact(old)
         self.job("age", 30)
-        self.assertTrue(r.database_batch())
+        self.assertIs(r.database_batch(), True)
         self.assertEqual(self.left(), {str(held), str(new)})
         self.assertEqual(len(self.sql("SELECT * FROM evidence_object_cleanup")), 1)
-        self.assertFalse(r.database_batch())
+        self.assertIs(r.database_batch(), False)
 
     def test_count_keeps_newest_plus_audit_holds(self):
         self.event(90)
@@ -538,7 +538,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.job()
         r.database_batch()
         self.assertEqual(self.left(), {str(parent), str(child)})
-        self.assertFalse(self.sql("SELECT * FROM evidence_object_cleanup"))
+        self.assertEqual(self.sql("SELECT * FROM evidence_object_cleanup"), [])
 
     def test_storage_failure_retries_without_losing_intent(self):
         e = self.event()
@@ -558,8 +558,8 @@ class RetentionDatabaseTests(unittest.TestCase):
         )
         with patch.object(r, "delete_stored_object") as delete:
             r.storage_batch()
-            delete.assert_called_once()
-        self.assertFalse(self.sql("SELECT * FROM evidence_object_cleanup"))
+            delete.assert_called_once_with("local://local/test")
+        self.assertEqual(self.sql("SELECT * FROM evidence_object_cleanup"), [])
 
     def test_shared_storage_is_preserved(self):
         old = self.event(90)
@@ -587,7 +587,7 @@ class RetentionDatabaseTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 r.database_batch()
         self.assertIn(str(e), self.left())
-        self.assertFalse(self.sql("SELECT * FROM evidence_object_cleanup"))
+        self.assertEqual(self.sql("SELECT * FROM evidence_object_cleanup"), [])
 
     def test_measurement_sample_holds_origin_event(self):
         e = self.event()
@@ -663,8 +663,8 @@ class RetentionDatabaseTests(unittest.TestCase):
         with self.session() as db:
             one, created = r.enqueue(db, "all", None, False, "test")
             two, second_created = r.enqueue(db, "age", 5, True, "scheduler")
-            self.assertTrue(created)
-            self.assertFalse(second_created)
+            self.assertIs(created, True)
+            self.assertIs(second_created, False)
             self.assertEqual(one, two)
             db.commit()
         # New events are outside the first job's cutoff; create a fresh job.
@@ -674,10 +674,10 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.event()
         self.job()
         with patch.object(r, "BATCH_SIZE", 2):
-            self.assertTrue(r.database_batch())
+            self.assertIs(r.database_batch(), True)
             self.assertEqual(len(self.left()), 1)
-            self.assertTrue(r.database_batch())
-            self.assertFalse(r.database_batch())
+            self.assertIs(r.database_batch(), True)
+            self.assertIs(r.database_batch(), False)
 
 
 class PolicyTests(unittest.TestCase):

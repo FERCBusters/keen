@@ -66,11 +66,13 @@ def test_repository_identity_and_rss_detection():
         None,
         None,
     )
-    assert collector._is_probably_rss(
-        httpx.Response(200, text="  <rss><channel/></rss>")
+    assert (
+        collector._is_probably_rss(httpx.Response(200, text="  <rss><channel/></rss>"))
+        is True
     )
-    assert not collector._is_probably_rss(
-        httpx.Response(200, text="<html>Login</html>")
+    assert (
+        collector._is_probably_rss(httpx.Response(200, text="<html>Login</html>"))
+        is False
     )
 
 
@@ -128,10 +130,13 @@ def test_feeds_declaring_an_internal_dtd_subset_are_refused(declaration, title):
 def test_naive_timestamps_and_xml_content_types_are_accepted():
     naive = datetime(2026, 10, 9, 1)
     assert to_utc_naive(naive) is naive
-    assert collector._is_probably_rss(
-        httpx.Response(
-            200, headers={"content-type": "application/rss+xml"}, text="<html/>"
+    assert (
+        collector._is_probably_rss(
+            httpx.Response(
+                200, headers={"content-type": "application/rss+xml"}, text="<html/>"
+            )
         )
+        is True
     )
     namespaced = """<rss xmlns="urn:rss"><channel><item><title>x pushed</title>
       </item></channel></rss>"""

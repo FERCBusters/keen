@@ -23,6 +23,7 @@ from app.ingest.cloud.base import (
     Provider,
     ScopeResult,
     Unavailable,
+    agrees,
     api_timestamp,
     clip,
     guarded,
@@ -340,8 +341,8 @@ def keys(api: Scaleway, named: dict, now: datetime) -> Check:
         "credentials.key_age",
         label,
         "attention" if old else "met",
-        f"{plural(len(old), 'user or application', 'users or applications')} hold API "
-        f"keys older than {settings.cloud_key_age_days} days, of "
+        f"{plural(len(old), 'user or application', 'users or applications')} "
+        f"{agrees(len(old), 'holds', 'hold')} API keys older than {settings.cloud_key_age_days} days, of "
         f"{plural(len(found), 'live key')}",
         sorted(old),
         examined=len(found),

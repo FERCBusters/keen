@@ -396,7 +396,9 @@ def test_vendor_page_shows_posture_to_evidence_readers_only(keen, cloud):
     (found,) = provider["scopes"]
     assert (found["met"], found["judged"]) == (1, 2)
     checks = {c["key"]: c for c in found["checks"]}
-    assert checks["identity.mfa"]["subjects"] == [{"name": "bob", "risks": []}]
+    assert checks["identity.mfa"]["subjects"] == [
+        {"name": "bob", "risks": [], "treated": False}
+    ]
     assert checks["findings"]["status"] == "unknown"
     assert "not set up" in checks["findings"]["reason"]
     bob = next(i for i in found["identities"] if i["name"] == "bob")
@@ -470,12 +472,27 @@ def test_admin_runners_queue_a_provider_before_any_vendor_shows_it(
     assert reader.post(path, headers=unsafe(reader)).status_code == 403
     admin = keen.client(keen.user(role="admin"))
     assert admin.post(path).status_code == 403  # CSRF and Origin are required.
-    for bad in ("telepathy", "AWS", "aws%2Frun", "x" * 40):
+    for bad, status, detail in (
+        ("telepathy", 404, "Cloud provider not found"),
+        ("AWS", 404, "Cloud provider not found"),
+        # An encoded slash is refused as a request target before routing.
+        ("aws%2Frun", 400, "Invalid request target"),
+        (
+            "x" * 40,
+            422,
+            [
+                {
+                    "type": "string_too_long",
+                    "loc": ["path", "provider"],
+                    "msg": "String should have at most 32 characters",
+                }
+            ],
+        ),
+    ):
         response = admin.post(
             f"/v1/admin/ingest/cloud/{bad}/run", headers=unsafe(admin)
         )
-        # An encoded slash is refused as a request target before routing.
-        assert response.status_code in (400, 404, 422), (bad, response.status_code)
+        assert (response.status_code, response.json()) == (status, {"detail": detail})
     monkeypatch.setattr(settings, "linode_enabled", False)
     response = admin.post("/v1/admin/ingest/cloud/linode/run", headers=unsafe(admin))
     assert response.status_code == 409
@@ -860,7 +877,10 @@ def test_a_vendor_id_conflict_without_a_name_match_is_raised(keen, monkeypatch):
             None if model is IsmsVendor else real(model, key, **kw)
         ),
     )
-    with pytest.raises(IntegrityError):
+    with pytest.raises(
+        IntegrityError,
+        match='duplicate key value violates unique constraint "isms_vendors_pkey"',
+    ):
         runner.link_vendor(db, aws.PROVIDER, row)
 
 

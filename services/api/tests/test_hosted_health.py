@@ -72,7 +72,7 @@ def test_the_probe_runs_only_in_hosted_mode(probe, monkeypatch):
 
 
 def test_a_workspace_without_its_owner_is_not_ready(probe):
-    with pytest.raises(NoResultFound):
+    with pytest.raises(NoResultFound, match="^No row was found when one was required$"):
         hosted_health.main()
     assert probe.pings == []
 

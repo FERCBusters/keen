@@ -104,7 +104,8 @@ def test_a_request_labels_its_statements_and_reports_its_time(engine, capsys):
     client = TestClient(RequestLabelMiddleware(api))
     referer = "https://keen.example/events.html?q=secret*/ --"
     assert client.get("/v1/things/42", headers={"Referer": referer}).status_code == 200
-    assert client.get("/v1/broken").status_code == 503
+    refused = client.get("/v1/broken")
+    assert (refused.status_code, refused.json()) == (503, {"detail": "down"})
 
     labels = [LABEL.match(statement) for statement in engine.seen]
     assert [m[1] for m in labels] == ["req", "req"]

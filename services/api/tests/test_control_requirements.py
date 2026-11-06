@@ -109,10 +109,9 @@ def test_parts_switched_off_are_left_out_and_others_are_refused(lab):
     assert body["items"][str(controls["A.1"].id)]["policies"] == 0
     stranger = app.client(app.user("events.read"))
     refused = stranger.get("/v1/isms/control-requirements", params={"framework": "A"})
-    assert refused.status_code == 403
-    assert (
-        reader.get(
-            "/v1/isms/control-requirements", params={"framework": "A B"}
-        ).status_code
-        == 400
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "isms.read permission required"},
     )
+    answer = reader.get("/v1/isms/control-requirements", params={"framework": "A B"})
+    assert (answer.status_code, answer.json()) == (400, {"detail": "Invalid framework"})

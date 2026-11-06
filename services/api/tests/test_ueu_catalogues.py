@@ -80,16 +80,32 @@ def test_catalogues_are_listed_and_served_exactly_as_loaded(
 
 def test_catalogues_need_a_session_and_unknown_ones_are_not_found(keen):
     anonymous = keen.client()
-    assert anonymous.get("/v1/ueu/catalogues").status_code == 401
-    assert anonymous.get("/v1/ueu/catalogues/keen/2026.10").status_code == 401
+    refused = anonymous.get("/v1/ueu/catalogues")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
+    refused = anonymous.get("/v1/ueu/catalogues/keen/2026.10")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     client = keen.client(keen.user())
     for path in (
         "/v1/ueu/catalogues/keen/1999",
         "/v1/ueu/catalogues/missing/2026.10",
     ):
-        assert client.get(path).status_code == 404, path
+        refused = client.get(path)
+        assert (refused.status_code, refused.json()) == (
+            404,
+            {"detail": "Catalogue not found"},
+        )
     # An encoded traversal is refused as a request target before routing.
-    assert client.get("/v1/ueu/catalogues/..%2F..%2Fetc/passwd").status_code == 400
+    refused = client.get("/v1/ueu/catalogues/..%2F..%2Fetc/passwd")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid request target"},
+    )
 
 
 def test_loaded_catalogues_record_their_origin(tmp_path, monkeypatch):

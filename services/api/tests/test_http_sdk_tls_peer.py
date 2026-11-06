@@ -1,6 +1,7 @@
 """Real local TLS peers: SDKs must verify identity before sending credentials."""
 
 import json
+import re
 import ssl
 import threading
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,18 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+
+# What each client reports for a certificate it refuses, without the port or
+# OpenSSL source position that vary between runs.
+TLS_REFUSALS = {
+    ("wrong-name", "google"): "Hostname mismatch, certificate is not valid for "
+    "'localhost'",
+    ("wrong-name", "aws"): "hostname 'localhost' doesn't match 'wrong.example'",
+    ("untrusted", "google"): "certificate verify failed: self-signed certificate",
+    ("untrusted", "aws"): "certificate verify failed: self-signed certificate",
+    ("expired", "google"): "certificate verify failed: certificate has expired",
+    ("expired", "aws"): "certificate verify failed: certificate has expired",
+}
 
 
 @pytest.mark.parametrize("provider", ["google", "aws"])
@@ -97,13 +110,17 @@ def test_sdk_tls_rejects_before_authentication(tmp_path, monkeypatch, provider, 
             client = _cloudwatch_client("eu-west-1")
             request = client.describe_log_groups
         if case in {"wrong-name", "untrusted", "expired"}:
-            with pytest.raises((ssl.SSLError, SSLError)):
+            reason = TLS_REFUSALS[case, provider]
+            with pytest.raises((ssl.SSLError, SSLError), match=re.escape(reason)):
                 request()
             assert received == []
         elif case == "redirect" and provider == "aws":
             from botocore.exceptions import ClientError
 
-            with pytest.raises(ClientError):
+            with pytest.raises(
+                ClientError,
+                match=r"^An error occurred \(302\) when calling the DescribeLogGroups operation: $",
+            ):
                 request()
             assert len(received) == 1
         else:
@@ -117,10 +134,3 @@ def test_sdk_tls_rejects_before_authentication(tmp_path, monkeypatch, provider, 
         server.shutdown()
         server.server_close()
         thread.join(2)
-
-
-def test_google_rejects_plaintext_before_network():
-    with pytest.raises(ValueError, match="HTTPS"):
-        _HTTPSOnlyHttp().request(
-            "http://example.test", headers={"Authorization": "synthetic-secret"}
-        )

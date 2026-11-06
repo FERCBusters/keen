@@ -337,7 +337,8 @@ def test_an_ended_demo_answers_only_its_status(keen, monkeypatch):  # noqa: F811
         "consultation_url": "https://consult.example/",
         "expired": True,
     }
-    assert browser.get("/health").status_code == 200
+    answer = browser.get("/health")
+    assert (answer.status_code, answer.json()) == (200, {"ok": True, "service": "keen"})
     # Pages behind nginx's sign-in check are refused; everything else has gone.
     check = browser.get("/v1/auth/check")
     assert (check.status_code, check.json()) == (401, ENDED)

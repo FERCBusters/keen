@@ -116,4 +116,8 @@ def test_the_application_refuses_them_before_authentication(
     response = client.post(path, headers=unsafe(client))
     assert response.status_code == 400
     assert response.json() == {"detail": "Invalid request target"}
-    assert client.get(path).status_code == 400
+    refused = client.get(path)
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid request target"},
+    )

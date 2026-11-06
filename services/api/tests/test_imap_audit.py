@@ -1,5 +1,7 @@
 """Second-pass IMAP audit reproductions with synthetic secrets and server data."""
 
+import re
+
 import pytest
 from app.ingest.imap_support.mime import body_part, decode_body, structure
 from app.ingest.imap_support.worker import literal
@@ -35,6 +37,10 @@ def test_related_plaintext_resource_is_not_selected_as_the_message_body():
     assert part["section"] == "1" and part["content_type"] == "text/html"
 
 
+METADATA = "Unexpected IMAP literal metadata"
+MISMATCH = "IMAP literal identity or size mismatch"
+
+
 def test_literal_uid_must_belong_to_that_literal_not_another_response():
     class Peer:
         def uid(self, *args):
@@ -44,7 +50,7 @@ def test_literal_uid_must_belong_to_that_literal_not_another_response():
                 b"2 (UID 2 FLAGS ())",
             ]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Unexpected IMAP literal metadata$"):
         literal(Peer(), 2, "1", 100)
 
 
@@ -65,21 +71,23 @@ def test_literal_accepts_uid_before_or_after_its_own_body(prefix, suffix):
 
 
 @pytest.mark.parametrize(
-    "prefix,suffix",
+    "prefix,suffix,message",
     [
-        (b"1 (UID 2 BODY[2]<0> {3}", b")"),
-        (b"1 (UID 2 BODY[1]<10> {3}", b")"),
-        (b"1 (UID 2 BODY[1]<0> {4}", b")"),
-        (b"1 (UID 2 BODY[1]<0> {3}", b" UID 2)"),
-        (b"1 (UID 2 BODY[1]<0> {3}", b' FLAGS ("UID 2"))'),
+        (b"1 (UID 2 BODY[2]<0> {3}", b")", METADATA),
+        (b"1 (UID 2 BODY[1]<10> {3}", b")", METADATA),
+        (b"1 (UID 2 BODY[1]<0> {4}", b")", MISMATCH),
+        (b"1 (UID 2 BODY[1]<0> {3}", b" UID 2)", MISMATCH),
+        (b"1 (UID 2 BODY[1]<0> {3}", b' FLAGS ("UID 2"))', METADATA),
     ],
 )
-def test_literal_rejects_wrong_section_offset_size_and_duplicate_uid(prefix, suffix):
+def test_literal_rejects_wrong_section_offset_size_and_duplicate_uid(
+    prefix, suffix, message
+):
     class Peer:
         def uid(self, *args):
             return "OK", [(prefix, b"abc"), suffix]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=f"^{message}$"):
         literal(Peer(), 2, "1", 100)
 
 
@@ -87,7 +95,7 @@ def test_metadata_uid_cannot_be_supplied_by_a_quoted_mime_parameter():
     from app.ingest.imap_support.worker import metadata
 
     data = b'1 (UID 999 RFC822.SIZE 3 BODYSTRUCTURE ("TEXT" "PLAIN" ("NAME" "UID 2") NIL NIL "7BIT" 3 1))'
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^IMAP metadata UID mismatch$"):
         metadata(data, 2)
     size, tree = metadata(
         b'1 (BODYSTRUCTURE ("TEXT" "PLAIN" NIL NIL NIL "7BIT" 3 1) RFC822.SIZE 3 UID 2)',
@@ -123,15 +131,21 @@ def test_related_root_and_alternative_selection_preserve_valid_mail():
 
 
 @pytest.mark.parametrize(
-    "raw",
+    "raw, message",
     [
-        b'("TEXT" "PLAIN" ("NAME") NIL NIL "7BIT" 12 1)',
-        b'("TEXT" "PLAIN" NIL NIL NIL "7BIT" 12 1 NIL "ATTACHMENT")',
-        b'("TEXT" "PLAIN" NIL NIL NIL "7BIT" 12 1) trailing',
+        (b'("TEXT" "PLAIN" ("NAME") NIL NIL "7BIT" 12 1)', "Invalid MIME parameters"),
+        (
+            b'("TEXT" "PLAIN" NIL NIL NIL "7BIT" 12 1 NIL "ATTACHMENT")',
+            "Invalid MIME disposition",
+        ),
+        (
+            b'("TEXT" "PLAIN" NIL NIL NIL "7BIT" 12 1) trailing',
+            "Trailing IMAP structure data",
+        ),
     ],
 )
-def test_malformed_mime_attachment_metadata_fails_closed(raw):
-    with pytest.raises(ValueError):
+def test_malformed_mime_attachment_metadata_fails_closed(raw, message):
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
         body_part(structure(raw))
 
 

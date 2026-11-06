@@ -44,8 +44,8 @@ def test_catalogue_structure_and_provenance():
     sec = {x["ref"]: x for x in catalogues["HIPAA-SECURITY:2026"]["clauses"]}
     assert sec["164.308(a)(1)(ii)(A)"]["metadata"]["implementation"] == "required"
     assert sec["164.312(a)(2)(iii)"]["metadata"]["implementation"] == "addressable"
-    assert not sec["164.304"]["in_scope"]
-    assert sec["164.308(a)(1)(ii)(A)"]["in_scope"]
+    assert sec["164.304"]["in_scope"] is False
+    assert sec["164.308(a)(1)(ii)(A)"]["in_scope"] is True
     assert "Document why" in sec["164.306(d)(3)"]["metadata"]["description"]
 
 

@@ -268,6 +268,13 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
                 continue
             item = check.as_dict()
             old = before.get(item["key"]) or {}
+            item["attention"] = base.attention_record(
+                old.get("attention"),
+                item["status"],
+                item["subjects"],
+                item["subjects_total"],
+                now,
+            )
             if item["status"] == "unknown":
                 item["event_id"], item["observed_at"] = None, None
             elif (

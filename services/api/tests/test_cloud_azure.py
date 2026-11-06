@@ -624,9 +624,9 @@ def test_paging_links_to_another_host_never_receive_the_token():
     session.apis["graph"].http._transport = httpx.MockTransport(
         lambda r: evil(r) if r.url.host == "graph.microsoft.com" else api.handler(r)
     )
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         session.pages("graph", "/v1.0/users")
-    assert not any(r.url.host == "evil.example" for r in api.requests)
+    assert [r for r in api.requests if r.url.host == "evil.example"] == []
 
 
 def test_a_throttled_request_is_retried_once(monkeypatch):
@@ -636,7 +636,7 @@ def test_a_throttled_request_is_retried_once(monkeypatch):
     assert session.get("graph", path) == {"isEnabled": False}
     assert sum(1 for r in api.requests if r.url.path == path) == 2
     api = Api(status={("graph", path): [(429, {})]})
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         api.azure().get("graph", path)
 
 
@@ -803,6 +803,20 @@ def test_conditional_access_must_require_mfa_of_everyone(change, expected):
 # --- subscriptions ---------------------------------------------------------------
 
 
+def test_one_holder_takes_a_singular_verb(credentials):
+    data = default_data()
+    assignments = [key for key in data if key[1].endswith("/roleAssignments")]
+    assert len(assignments) == 2
+    for key in assignments:
+        data[key] = data[key][:1]
+    api = Api(data)
+    admins = by_key(az.tenant_result(api.azure()).checks)["identity.admins"]
+    assert admins.detail == "1 user, group or app holds privileged Entra roles"
+    result = az.subscription_result(api.azure(), SUB, "Production")
+    owners = by_key(result.checks)["identity.admins"]
+    assert owners.detail == "1 principal holds Owner or User Access Administrator"
+
+
 def test_subscription_checks(credentials):
     result = az.subscription_result(Api().azure(), SUB, "Production")
     assert result.kind == "subscription"
@@ -872,7 +886,7 @@ def test_subscriptions_must_belong_to_the_tenant(monkeypatch, credentials):
     assert az.subscriptions(Api(data).azure()) == [(SUB, "Production", "")]
     for bad in ("not-a-guid", f"{SUB},{SUB}"):
         monkeypatch.setattr(settings, "azure_subscriptions", bad)
-        with pytest.raises(Unavailable):
+        with pytest.raises(Unavailable, match="^not_configured$"):
             az.subscriptions(api)
 
 
@@ -900,7 +914,7 @@ def test_server_listings_are_bounded(monkeypatch, credentials):
     found = by_key(az.subscription_result(Api().azure(), SUB, "Production").checks)
     assert found["network.databases"].status == "unknown"
     monkeypatch.setattr(az, "MAX_PAGES", 1)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         Api().azure().pages("graph", "/v1.0/users")
 
 
@@ -931,7 +945,11 @@ def test_activity_reads_sign_ins_audits_and_the_activity_log(monkeypatch, creden
         for r in api.requests
         if r.url.path.endswith("/signIns")
     ]
-    assert filters[0].startswith("createdDateTime ge ")
+    since = now - timedelta(hours=6)
+    assert filters[0] == (
+        f"createdDateTime ge {since:%Y-%m-%dT%H:%M:%S}Z "
+        f"and createdDateTime lt {now:%Y-%m-%dT%H:%M:%S}Z"
+    )
 
 
 def test_activity_reports_truncation(monkeypatch, credentials):
@@ -998,7 +1016,7 @@ def test_paging_links_must_be_text():
             200, json={"value": [], "@odata.nextLink": {"href": "x"}}
         )
     )
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         session.pages("graph", "/v1.0/users")
 
 

@@ -180,7 +180,7 @@ def test_no_coroutine_blocks_the_event_loop():
     found = []
     for path in sorted(APP.rglob("*.py")):
         found += blocking_calls(path.read_text(), path.relative_to(APP).as_posix())
-    assert not found, (
+    assert found == [], (
         "These coroutines run synchronous database, Valkey, storage or broker "
         "work on the event loop; pass it to run_in_threadpool: "
         + "; ".join(f"{f}:{line} {fn} calls {call}" for f, fn, line, call in found)
@@ -241,7 +241,7 @@ def test_a_session_under_another_name_is_recognised():
         "    return session.query(Event).all()\n"
     )
     calls = [c for *_, c in blocking_calls(source, "routes/x.py")]
-    assert "session.query" in calls
+    assert calls == ["session.query"]
 
 
 def test_hand_offs_and_awaited_coroutines_pass():
@@ -319,7 +319,11 @@ def test_webhook_storage_and_authentication_run_off_the_event_loop(hook, monkeyp
     monkeypatch.setattr(main, "_authenticate", authenticated)
     client = hook.client()
     assert _deliver(client, b'{"alert": "synthetic"}').status_code == 200
-    assert client.get("/v1/me").status_code == 401
+    refused = client.get("/v1/me")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     assert seen == {"store": True, "authenticate": True}
 
 
@@ -339,7 +343,10 @@ def test_a_connections_byte_allowance_bounds_its_deliveries(hook, monkeypatch):
         content=b"{}",
         headers={"X-Monitor-Secret": "wrong", "Content-Type": "application/json"},
     )
-    assert wrong.status_code == 403
+    assert (wrong.status_code, wrong.json()) == (
+        403,
+        {"detail": "Invalid webhook secret"},
+    )
     # Another provider's secret on the same connection has its own allowance.
     pager = client.post(
         "/v1/webhooks/pager/alert",
@@ -375,7 +382,11 @@ def test_a_webhook_body_is_read_only_after_its_secret_and_allowances(hook, monke
         "/v1/webhooks/monitor/alert",
         "/v1/webhooks/isms/effectiveness-metrics/m",
     ):
-        assert client.post(path, content=b"{}").status_code == 503
+        refused = client.post(path, content=b"{}")
+        assert (refused.status_code, refused.json()) == (
+            503,
+            {"detail": "Webhook ingestion is disabled"},
+        )
     assert reads == []
     monkeypatch.setattr(settings, "webhooks_enabled", True)
     assert _deliver(client, b'{"x": 2}').status_code == 200
@@ -456,7 +467,10 @@ def test_forms_are_parsed_off_the_event_loop(monkeypatch):
         content=b"--x\r\nContent-Disposition: form-data\r\n\r\nno name\r\n--x--\r\n",
         headers={"Content-Type": "multipart/form-data; boundary=x"},
     )
-    assert broken.status_code == 400
+    assert (broken.status_code, broken.json()) == (
+        400,
+        {"detail": 'The Content-Disposition header field "name" must be provided.'},
+    )
 
 
 def test_every_body_route_uses_the_shared_route_class():

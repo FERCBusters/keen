@@ -73,7 +73,11 @@ def test_ceremonies_stop_while_password_sign_in_is_disabled(
             404,
             {"detail": "Password authentication is disabled"},
         )
-    assert client.get("/v1/auth/check").status_code == 401
+    refused_2 = client.get("/v1/auth/check")
+    assert (refused_2.status_code, refused_2.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     db = ceremony.keen.db
     assert db.query(MfaChallenge).filter_by(user_id=ceremony.user.id).count() == 1
     assert _fresh(db, ceremony.user).mfa_totp_last_step == -1
@@ -118,7 +122,11 @@ def test_a_spent_address_allowance_refuses_codes_before_the_accounts_own(
     assert store.get(f"keen:rl:mfa:user:{ceremony.user.id}") is None
     user = _fresh(ceremony.keen.db, ceremony.user)
     assert (user.mfa_code_failures, user.mfa_totp_last_step) == (0, -1)
-    assert client.get("/v1/auth/check").status_code == 401
+    refused_2 = client.get("/v1/auth/check")
+    assert (refused_2.status_code, refused_2.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 @pytest.mark.parametrize(

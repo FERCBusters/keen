@@ -196,7 +196,7 @@ def test_an_explicit_sign_out_reports_a_store_that_cannot_delete():
         def delete(self, key):
             raise ConnectionError("synthetic Valkey failure")
 
-    with pytest.raises(ConnectionError):
+    with pytest.raises(ConnectionError, match="^synthetic Valkey failure$"):
         revoke_session(Unavailable(), "session-id")
     assert delete_session(Unavailable(), "session-id") is None
 
@@ -257,8 +257,15 @@ def test_an_account_with_a_damaged_password_hash_cannot_sign_in(keen):  # noqa: 
         headers={"Origin": BASE},
     )
 
-    assert refused.status_code == 401
-    assert client.get("/v1/auth/check").status_code == 401
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid username or password"},
+    )
+    refused_2 = client.get("/v1/auth/check")
+    assert (refused_2.status_code, refused_2.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 # -- permission snapshots and roles -----------------------------------------
@@ -394,7 +401,11 @@ def test_an_untrusted_proxy_is_reported_once_when_two_requests_race(
 def test_control_characters_never_give_a_username_its_own_allowance(signin):
     user = signin.user()
     for variant in (f"{user.username}\x07", f"\x1b{user.username}", user.username):
-        assert signin.attempt(variant, "wrong-password").status_code == 401
+        refused = signin.attempt(variant, "wrong-password")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Invalid username or password"},
+        )
 
     locked = signin.attempt(user.username)
 

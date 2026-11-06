@@ -21,7 +21,7 @@ def test_defaults_and_parent_preferences():
     )
     assert not off.enabled("swot")
     assert not off.enabled("mitigator")
-    assert dict(off.configured)["swot"]
+    assert dict(off.configured)["swot"] is True
     restored = features.compile_state(2, {**dict(off.configured), "isms": True})
     assert restored.enabled("swot")
     assert not restored.enabled("objectives")
@@ -51,17 +51,30 @@ def test_admin_only_csrf_versions_and_preserved_settings(keen):
             == code
         )
     payload = {"version": 0, "changes": {"isms": False, "swot": True}}
-    assert admin.put("/v1/admin/features", json=payload).status_code == 403
+    refused = admin.put("/v1/admin/features", json=payload)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
     response = admin.put("/v1/admin/features", json=payload, headers=unsafe(admin))
     assert response.status_code == 200, response.text
     assert response.json()["configured"]["swot"] is True
     assert response.json()["enabled"]["swot"] is False
-    assert (
-        admin.put("/v1/admin/features", json=payload, headers=unsafe(admin)).status_code
-        == 409
+    refused = admin.put("/v1/admin/features", json=payload, headers=unsafe(admin))
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "Features changed in another session. Reload before saving."},
     )
-    assert admin.get("/v1/isms/swot").status_code == 404
-    assert user.get("/v1/isms/objectives").status_code == 404
+    refused = admin.get("/v1/isms/swot")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
+    refused = user.get("/v1/isms/objectives")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
     assert admin.get("/v1/me").json()["features"]["enabled"]["isms"] is False
     assert admin.get("/v1/admin/features").status_code == 200
     assert (
@@ -74,7 +87,11 @@ def test_admin_only_csrf_versions_and_preserved_settings(keen):
         headers=unsafe(admin),
     )
     assert response.json()["enabled"]["swot"] is True
-    assert admin.get("/v1/isms/swot").status_code == 200
+    answer = admin.get("/v1/isms/swot")
+    assert (answer.status_code, answer.json()) == (
+        200,
+        {"items": [], "total": 0, "limit": 100, "offset": 0},
+    )
 
 
 @pytest.mark.parametrize(
@@ -110,8 +127,10 @@ def test_disabled_routes_refuse_even_admins(keen, changes, path, method):
         == 200
     )
     response = client.request(method, path, headers=unsafe(client))
-    assert response.status_code == 404, response.text
-    assert "disabled" in response.text
+    assert (response.status_code, response.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
 
 
 def test_revision_cache_invalidates_between_sessions(contract_db):
@@ -186,9 +205,19 @@ def test_sampling_and_worker_paths_obey_features(keen):
             db=keen.db,
             user=user,
         )
-    assert rejected.value.status_code == 404
-    assert materialize_due_scheduled_audits(keen.db)["enabled"] is False
-    assert materialize_missing_monthly_zero_metrics(keen.db)["enabled"] is False
+    assert (rejected.value.status_code, rejected.value.detail) == (
+        404,
+        "This feature is disabled by an administrator.",
+    )
+    assert materialize_due_scheduled_audits(keen.db) == {
+        "enabled": False,
+        "created": [],
+        "skipped_past": [],
+    }
+    assert materialize_missing_monthly_zero_metrics(keen.db) == {
+        "enabled": False,
+        "created": 0,
+    }
 
 
 def test_disabled_entity_cannot_be_sampled_or_linked(keen):
@@ -197,10 +226,18 @@ def test_disabled_entity_cannot_be_sampled_or_linked(keen):
 
     user = keen.user(role="admin")
     features.update(keen.db, user, 0, {"assets": False})
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError) as refused:
         require_sample_source_access(keen.db, user, "isms_asset", None)
-    with pytest.raises(DomainError):
+    assert (refused.value.status_code, refused.value.detail) == (
+        404,
+        "This feature is disabled by an administrator.",
+    )
+    with pytest.raises(DomainError) as refused:
         _target(keen.db, user, "asset", None)
+    assert (refused.value.status_code, refused.value.detail) == (
+        404,
+        "Related feature is disabled",
+    )
     assert _target(keen.db, user, "asset", None, required=False) is None
 
 
@@ -212,7 +249,12 @@ def test_invalid_settings_do_not_write(keen):
             json={"version": 0, "changes": changes},
             headers=unsafe(client),
         )
-        assert response.status_code == 422
+        assert (response.status_code, response.json()) == (
+            422,
+            {
+                "detail": "Supply a configuration version and known boolean feature settings."
+            },
+        )
     assert keen.db.get(ManagedConfiguration, "features") is None
     assert (
         keen.db.query(ManagedConfigurationRevision).filter_by(name="features").count()
@@ -306,10 +348,23 @@ def test_every_router_has_an_availability_decision():
             if isinstance(route, APIRoute):
                 owner = route.endpoint.__module__.removeprefix("app.api.routes.")
                 if owner.startswith("isms."):
-                    assert owner.split(".")[-1] in set(ISMS_OWNERS) | {
+                    assert set(ISMS_OWNERS) | {
                         "overview",
                         "personal",
                         "relationships",
+                    } == {
+                        "swot",
+                        "assets",
+                        "personal",
+                        "relationships",
+                        "effectiveness",
+                        "meetings",
+                        "business_processes",
+                        "objectives",
+                        "documents",
+                        "organisation",
+                        "access_control",
+                        "overview",
                     }
                     assert "isms" in requirements(route)
                 else:
@@ -340,5 +395,7 @@ def test_normalised_entity_route_cannot_bypass_disabled_child(keen):
         response = client.get(
             f"/v1/isms/{entity}/00000000-0000-0000-0000-000000000001/changelog"
         )
-        assert response.status_code == 404
-        assert "disabled" in response.text
+        assert (response.status_code, response.json()) == (
+            404,
+            {"detail": "This feature is disabled by an administrator."},
+        )

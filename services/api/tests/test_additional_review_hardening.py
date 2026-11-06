@@ -28,7 +28,10 @@ def test_oversized_report_does_not_write_storage_or_metadata(
         f"/v1/audits/{ids.audit}/report",
         files={"file": ("report.txt", b"synthetic oversized report", "text/plain")},
     )
-    assert response.status_code == 413
+    assert (response.status_code, response.json()) == (
+        413,
+        {"detail": "Final report is too large"},
+    )
     store.assert_not_called()
     from app.db.models import Audit
 
@@ -124,4 +127,6 @@ def test_report_at_limit_is_stored_and_remains_downloadable(
     download = client.get(f"/v1/audits/{ids.audit}/report")
     assert download.status_code == 200
     assert download.content == b"12345678"
-    assert "attachment;" in download.headers["Content-Disposition"]
+    assert download.headers["Content-Disposition"] == (
+        "attachment; filename=\"report.TXT\"; filename*=UTF-8''report.TXT"
+    )

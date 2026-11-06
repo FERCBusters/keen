@@ -4,12 +4,14 @@ against failing checks.
 A Vendor shows each cloud provider linked to it: every scope's latest checks
 and the identities the vendor lists, the provider's recent activity, and the
 risks recorded against a check or one subject within it. An accepted risk
-shows its check or subject as Risk accepted until the acceptance lapses.
+shows its check or subject as Risk accepted until the acceptance lapses, and a
+risk closed after the failure began shows it as Risk treated until the check
+fails for a resource it did not list then, or fails again after passing.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from pydantic import Field
 from sqlalchemy import func
@@ -115,26 +117,44 @@ def _accepted(risks) -> bool:
     return any(r["accepted"] for r in risks or [])
 
 
+def _since(value) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
+
+
 def _scope_out(provider, scope, links, people) -> dict:
     checks = []
     for check in scope.checks or []:
         key = check.get("key")
-        risks = links.get((provider.key, scope.scope_key, key, ""), [])
-        subjects = [
-            {
-                "name": name,
-                "risks": links.get((provider.key, scope.scope_key, key, name), []),
-            }
-            for name in check.get("subjects") or []
-        ]
         status = check.get("status")
+        # When the failure began, and each listed resource's; a result stored
+        # before KEEN kept these has no start, so no closed risk treats it.
+        record = (check.get("attention") or {}) if status == "attention" else {}
+        risks = links.get((provider.key, scope.scope_key, key, ""), [])
+        treated = posture_risks.settle(risks, _since(record.get("since")))
+        subjects = []
+        for name in check.get("subjects") or []:
+            subject_risks = links.get((provider.key, scope.scope_key, key, name), [])
+            subjects.append(
+                {
+                    "name": name,
+                    "risks": subject_risks,
+                    "treated": posture_risks.settle(
+                        subject_risks,
+                        _since((record.get("subjects") or {}).get(name)),
+                    ),
+                }
+            )
+        every = bool(subjects) and check.get("subjects_total") == len(subjects)
         accepted = _accepted(risks) or (
-            subjects
-            and check.get("subjects_total") == len(subjects)
-            and all(_accepted(s["risks"]) for s in subjects)
+            every and all(_accepted(s["risks"]) for s in subjects)
+        )
+        treated = treated or (
+            every and all(_accepted(s["risks"]) or s["treated"] for s in subjects)
         )
         if status == "attention" and accepted:
             status = "accepted"
+        elif status == "attention" and treated:
+            status = "treated"
         checks.append(
             {
                 "key": key,
@@ -153,7 +173,9 @@ def _scope_out(provider, scope, links, people) -> dict:
     for identity in scope.identities or []:
         email = str(identity.get("email") or "").lower()
         identities.append({**identity, "person": people.get(email) if email else None})
-    judged = [c for c in checks if c["status"] in ("met", "attention", "accepted")]
+    judged = [
+        c for c in checks if c["status"] in ("met", "attention", "accepted", "treated")
+    ]
     return {
         "key": scope.scope_key,
         "label": scope.label,

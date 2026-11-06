@@ -64,4 +64,8 @@ def test_the_statement_shows_clause_links_and_their_applicability(keen):
         "8.1": {str(logging.id): "applicable", str(backups.id): "applicable"},
         "9.1": {str(logging.id): "partially_applicable"},
     }
-    assert keen.client().get("/v1/statement-of-applicability").status_code == 401
+    refused = keen.client().get("/v1/statement-of-applicability")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )

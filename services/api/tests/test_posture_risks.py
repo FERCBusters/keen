@@ -19,6 +19,7 @@ from app.db.models import (
     RiskControlLink,
 )
 from app.services import posture_risks
+from app.services import risks as risk_service
 from cryptography.fernet import Fernet
 
 from tests.test_assembled_authority_regressions import keen as keen
@@ -179,6 +180,8 @@ def test_recorded_risk_is_linked_and_its_acceptance_lapses(keen):
             "accepted": True,
             "acceptance_expired": False,
             "due": (today + timedelta(days=30)).isoformat(),
+            "closed": False,
+            "treated": False,
         }
     ]
 
@@ -198,11 +201,14 @@ def test_recorded_risk_is_linked_and_its_acceptance_lapses(keen):
     _, found = check(client, person)
     assert found["status"] == "attention"
     assert found["risks"][0]["acceptance_expired"] is True
-    # Closing an accepted risk also ends the acceptance.
+    # Closing an accepted risk ends the acceptance. This failure was stored
+    # without a start date, so the closed risk does not treat it either.
     risk.treatment_due_at = today + timedelta(days=5)
-    risk.treatment_status = "closed"
+    risk_service.set_treatment_status(risk, "closed")
     keen.db.commit()
-    assert check(client, person)[1]["status"] == "attention"
+    _, found = check(client, person)
+    assert found["status"] == "attention"
+    assert (found["risks"][0]["accepted"], found["risks"][0]["closed"]) == (False, True)
 
 
 def test_reassigning_a_workstation_detaches_its_recorded_risks(keen):
@@ -260,7 +266,11 @@ def test_risk_recording_permissions_and_title_visibility(keen):
     admin, client, person, agent = person_with_workstation(keen)
     observe(keen, agent)
     path = f"/v1/isms/people/{person.id}/workstation-posture/risks"
-    assert keen.client().post(path, json=body(agent)).status_code in (401, 403)
+    refused = keen.client().post(path, json=body(agent))
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     for codes in (
         ("isms.read", "events.read"),
         ("risk.manage",),

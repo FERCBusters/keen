@@ -131,17 +131,26 @@ def test_unknown_catalogues_get_structural_checks_only():
 
 
 def test_oversized_and_non_canonical_texts_are_refused():
-    with pytest.raises(EnvelopeError) as caught:
+    with pytest.raises(
+        EnvelopeError, match="^UEU_SCHEMA_VALIDATION_FAILED: envelope exceeds 64 KiB$"
+    ) as caught:
         envelope.validate("x" * (envelope.MAX_ENVELOPE_BYTES + 1))
     assert caught.value.code == "UEU_SCHEMA_VALIDATION_FAILED"
     # Within the character limit but over it in UTF-8 bytes.
     wide = jcs.canonical(["é" * 40000]).decode()
-    with pytest.raises(EnvelopeError):
+    with pytest.raises(
+        EnvelopeError, match="^UEU_SCHEMA_VALIDATION_FAILED: envelope exceeds 64 KiB$"
+    ):
         envelope.validate(wide)
-    with pytest.raises(EnvelopeError) as caught:
+    with pytest.raises(
+        EnvelopeError, match="^UEU_CANONICALISATION_FAILED: not in canonical form$"
+    ) as caught:
         envelope.validate(json.dumps(observation(), indent=1))
     assert caught.value.code == "UEU_CANONICALISATION_FAILED"
-    with pytest.raises(EnvelopeError) as caught:
+    with pytest.raises(
+        EnvelopeError,
+        match="^UEU_SCHEMA_VALIDATION_FAILED: envelope must be an object$",
+    ) as caught:
         envelope.validate("[]")
     assert "must be an object" in caught.value.detail
 
@@ -319,44 +328,95 @@ def catalogue_doc(**event) -> dict:
 
 
 @pytest.mark.parametrize(
-    "doc",
+    "doc,problem",
     [
-        ["not", "an", "object"],
-        {**catalogue_doc(), "extra": 1},
-        {**catalogue_doc(), "catalogue": {"id": "Acme", "version": "1"}},
-        {**catalogue_doc(), "catalogue": {"id": "acme", "version": 1}},
-        {**catalogue_doc(), "event_types": {"Bad": {}}},
-        {**catalogue_doc(), "event_types": {"acme.widget.observed": "x"}},
-        {**catalogue_doc(), "event_types": {}},
-        catalogue_doc(colour="red"),
-        catalogue_doc(**{"class": "measurement"}),
-        catalogue_doc(subject="sometimes"),
-        catalogue_doc(prohibited="password"),
-        catalogue_doc(prohibited=[1]),
-        catalogue_doc(summary="s" * 257),
-        catalogue_doc(object_type="Widget"),
-        catalogue_doc(additional_facts="anything"),
-        catalogue_doc(facts=["enabled"]),
-        catalogue_doc(facts={"Bad Name": {"type": "boolean"}}),
-        catalogue_doc(facts={"enabled": "boolean"}),
-        catalogue_doc(facts={"enabled": {"type": "boolean", "default": True}}),
-        catalogue_doc(facts={"enabled": {"type": "float"}}),
-        catalogue_doc(
-            facts={"enabled": {"type": "boolean", "classification": "secret"}}
+        (["not", "an", "object"], "unexpected catalogue members"),
+        ({**catalogue_doc(), "extra": 1}, "unexpected catalogue members"),
+        (
+            {**catalogue_doc(), "catalogue": {"id": "Acme", "version": "1"}},
+            "catalogue needs a valid id and version",
+        ),
+        (
+            {**catalogue_doc(), "catalogue": {"id": "acme", "version": 1}},
+            "catalogue needs a valid id and version",
+        ),
+        ({**catalogue_doc(), "event_types": {"Bad": {}}}, "invalid event type 'Bad'"),
+        (
+            {**catalogue_doc(), "event_types": {"acme.widget.observed": "x"}},
+            "invalid event type 'acme.widget.observed'",
+        ),
+        ({**catalogue_doc(), "event_types": {}}, "catalogue has no event types"),
+        (catalogue_doc(colour="red"), "acme.widget.observed: unknown property"),
+        (
+            catalogue_doc(**{"class": "measurement"}),
+            "acme.widget.observed: class must be observation or event",
+        ),
+        (
+            catalogue_doc(subject="sometimes"),
+            "acme.widget.observed: subject and payload need a policy",
+        ),
+        (
+            catalogue_doc(prohibited="password"),
+            "acme.widget.observed: prohibited must be a list of names",
+        ),
+        (
+            catalogue_doc(prohibited=[1]),
+            "acme.widget.observed: prohibited must be a list of names",
+        ),
+        (
+            catalogue_doc(summary="s" * 257),
+            "acme.widget.observed: summary template too long",
+        ),
+        (
+            catalogue_doc(object_type="Widget"),
+            "acme.widget.observed: invalid object type",
+        ),
+        (
+            catalogue_doc(additional_facts="anything"),
+            "acme.widget.observed: unknown additional field policy",
+        ),
+        (
+            catalogue_doc(facts=["enabled"]),
+            "acme.widget.observed: fields must be an object",
+        ),
+        (
+            catalogue_doc(facts={"Bad Name": {"type": "boolean"}}),
+            "acme.widget.observed: invalid field 'Bad Name'",
+        ),
+        (
+            catalogue_doc(facts={"enabled": "boolean"}),
+            "acme.widget.observed: invalid field 'enabled'",
+        ),
+        (
+            catalogue_doc(facts={"enabled": {"type": "boolean", "default": True}}),
+            "acme.widget.observed.enabled: unknown field property",
+        ),
+        (
+            catalogue_doc(facts={"enabled": {"type": "float"}}),
+            "acme.widget.observed.enabled: unknown type",
+        ),
+        (
+            catalogue_doc(
+                facts={"enabled": {"type": "boolean", "classification": "secret"}}
+            ),
+            "acme.widget.observed.enabled: classification cannot be sent",
         ),
     ],
 )
-def test_malformed_catalogues_are_refused(doc):
-    with pytest.raises(CatalogueError):
+def test_malformed_catalogues_are_refused(doc, problem):
+    with pytest.raises(CatalogueError) as refused:
         catalogues.parse_catalogue(json.dumps(doc).encode())
+    assert str(refused.value) == problem
 
 
 def test_oversized_and_duplicate_catalogues_are_refused(tmp_path):
-    with pytest.raises(CatalogueError):
+    with pytest.raises(CatalogueError, match="^catalogue too large$"):
         catalogues.parse_catalogue(b" " * (catalogues.MAX_CATALOGUE_BYTES + 1))
     keen = catalogues.keen().content
     (tmp_path / "copy.json").write_bytes(keen)
-    with pytest.raises(CatalogueError):
+    with pytest.raises(
+        CatalogueError, match=r"^catalogue keen@2026\.11 is defined twice$"
+    ):
         catalogues._load.__wrapped__(str(tmp_path))
 
 
@@ -403,38 +463,62 @@ def test_field_checks_name_the_failure():
 # --- canonical JSON --------------------------------------------------------------
 
 
+RANGE = "integer outside the exact range"
+
+
 @pytest.mark.parametrize(
-    "data",
+    "data,problem",
     [
-        b"\xff\xfe",
-        "[" * 100000 + "]" * 100000,
-        '{"a": 1}',
-        "1.5",
-        "NaN",
-        "not json",
-        '{"a":1,"a":2}',
+        (b"\xff\xfe", "invalid UTF-8"),
+        ("[" * 100000 + "]" * 100000, "nesting too deep"),
+        ('{"a": 1}', "not in canonical form"),
+        ('{"b":1, "a":2}', "not in canonical form"),
+        ("1.5", "only integers are allowed"),
+        ('{"a":1.5}', "only integers are allowed"),
+        ("NaN", "NaN and Infinity are not JSON"),
+        ('{"a":NaN}', "NaN and Infinity are not JSON"),
+        ("not json", "invalid JSON"),
+        ('{"a":1,"a":2}', "duplicate member name"),
+        ('{"a":"\\ud800"}', "lone surrogate"),
+        ('{"a":9007199254740992}', RANGE),
+        # Longer than Python converts (4,300 digits), and than the exact range.
+        ('{"a":' + "1" * 5000 + "}", RANGE),
+        ('{"a":-' + "9" * 17 + "}", RANGE),
     ],
 )
-def test_strict_parsing_refuses(data):
-    with pytest.raises(jcs.CanonicalError):
+def test_strict_parsing_refuses(data, problem):
+    with pytest.raises(jcs.CanonicalError) as refused:
         jcs.parse_canonical(data) if isinstance(data, str) else jcs.parse(data)
+    assert str(refused.value) == problem
 
 
 @pytest.mark.parametrize(
-    "value",
+    "value,problem",
     [
-        2**53,
-        1.5,
-        {1: "a"},
-        {"\ud800": 1},
-        "\ud800",
-        json.loads("[" * 34 + "]" * 34),
-        object(),
+        (2**53, RANGE),
+        (1.5, "unsupported value"),
+        ({1: "a"}, "member names must be strings"),
+        ({"\ud800": 1}, "lone surrogate"),
+        ("\ud800", "lone surrogate"),
+        (json.loads("[" * 34 + "]" * 34), "nesting exceeds 32 levels"),
+        (object(), "unsupported value"),
     ],
 )
-def test_values_outside_the_profile_have_no_canonical_form(value):
-    with pytest.raises(jcs.CanonicalError):
+def test_values_outside_the_profile_have_no_canonical_form(value, problem):
+    with pytest.raises(jcs.CanonicalError) as refused:
         jcs.canonical(value)
+    assert str(refused.value) == problem
+
+
+def test_canonical_ordering_and_escapes_follow_rfc_8785():
+    value = {"\u20ac": 1, "\U0001f600": 2, 'a\u0001\n"': "\u2028\x7f", "": None}
+    # U+20AC sorts before U+1F600, whose first UTF-16 code unit is 0xD83D.
+    assert (
+        jcs.canonical(value)
+        == (
+            '{"":null,"a\\u0001\\n\\"":"\u2028\x7f","\u20ac":1,"\U0001f600":2}'
+        ).encode()
+    )
 
 
 def test_canonical_form_of_profile_values():
@@ -443,5 +527,5 @@ def test_canonical_form_of_profile_values():
         == '[true,false,null,-3,"é"]'.encode()
     )
     assert jcs.parse(b'{"b":1,"a":[2]}') == {"b": 1, "a": [2]}
-    with pytest.raises(jcs.CanonicalError):
+    with pytest.raises(jcs.CanonicalError, match="^lone surrogate$"):
         jcs.parse_canonical("\ud800")

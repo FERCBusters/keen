@@ -98,7 +98,9 @@ def test_no_username_or_unverified_local_address(db, user, email):
     user.role = "admin"
     user.mfa_enabled = True
     db.commit()
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        HTTPException, match="^403: No active Keen account matches this SSO identity$"
+    ):
         link(db, email)
     assert db.query(UserIdentity).count() == 0
 
@@ -107,7 +109,9 @@ def test_no_username_or_unverified_local_address(db, user, email):
 def test_provider_verification_required(db, user, verified):
     db.add(UserSsoEmail(email=user.email, user_id=user.id))
     db.commit()
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        HTTPException, match="^403: No active Keen account matches this SSO identity$"
+    ):
         link(db, user.email, verified)
 
 
@@ -148,7 +152,10 @@ def test_other_browser_or_provider_rejected_before_exchange(
     oidc.create_login_state(db, next_url="/", state=state)
     exchange = AsyncMock()
     monkeypatch.setattr(oidc, "_handle_oidc_callback", exchange)
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        HTTPException,
+        match="^400: SSO browser verification failed; start sign-in again$",
+    ):
         asyncio.run(
             oidc.handle_callback(
                 req(
@@ -178,7 +185,7 @@ def test_correct_browser_single_use_and_expiry(db, user, monkeypatch):
     monkeypatch.setattr(oidc, "_handle_oidc_callback", exchange)
     r = req(cookie=f"{oidc.sso_binding_cookie()}=secret", query=f"code=c&state={state}")
     assert asyncio.run(oidc.handle_callback(r, db, "google"))[0].id == user.id
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(HTTPException, match="^400: SSO state missing or expired$"):
         asyncio.run(oidc.handle_callback(r, db, "google"))
     row = oidc.create_login_state(db, next_url="/")
     state = row.state
@@ -214,7 +221,7 @@ def test_event_questions_and_owner_listing(db, user):
         EventQuestionPost(thread_id=thread.id, author_user_id=user.id, body="secret")
     )
     db.commit()
-    with pytest.raises((HTTPException, DomainError)) as e:
+    with pytest.raises(DomainError, match=r"^events\.read permission required$") as e:
         questions.list_event_questions(str(ev.id), req(user), db)
     assert e.value.status_code == 403
     assert "private" not in str(questions.my_questions_list(req(user), db))
@@ -296,21 +303,25 @@ def test_ownership_confirmation_replay_and_removal(db, user, mail):
         db.get(SsoEmailChallenge, sso_emails_operations.digest(token))
         and db.query(UserSsoEmail).count() == 0
     )
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        HTTPException, match="^403: No active Keen account matches this SSO identity$"
+    ):
         link(db, "alias@example.org")
     other = User(username="other", password_hash="synthetic", is_active=True)
     db.add(other)
     db.commit()
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(DomainError, match="^Verification link is invalid or expired$"):
         confirm(db, other, token)
     confirm(db, user, token)
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(DomainError, match="^Verification link is invalid or expired$"):
         confirm(db, user, token)
     assert link(db, "alias@example.org").id == user.id
     sso_emails.remove_address(
         sso_emails.Address(email="alias@example.org"), req(user), user, db
     )
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        HTTPException, match="^403: No active Keen account matches this SSO identity$"
+    ):
         link(db, "alias@example.org", subject="new")
     assert link(db, "alias@example.org").id == user.id
 
@@ -328,7 +339,7 @@ def test_invalidated_email_proofs(db, user, mail, change):
     if change == "replace":
         send(db, user, mail)
     db.commit()
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(DomainError, match="^Verification link is invalid or expired$"):
         confirm(db, user, token)
 
 
@@ -337,7 +348,10 @@ def test_verification_links_need_an_https_public_origin(db, user, mail, monkeypa
     assert "\nhttps://keen.example/sso-email.html#token=" in mail[-1]["body"]
 
     monkeypatch.setattr(settings, "public_base_url", "http://keen.example")
-    with pytest.raises((HTTPException, DomainError)) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^An HTTPS KEEN_PUBLIC_BASE_URL is required for verification emails$",
+    ) as refused:
         send(db, user, mail)
 
     assert refused.value.status_code == 503
@@ -361,7 +375,9 @@ def test_conflict(db, user, mail):
     token = send(db, user, mail)
     db.add(UserSsoEmail(email="alias@example.org", user_id=other.id))
     db.commit()
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        DomainError, match="^This address cannot be linked to this account$"
+    ):
         confirm(db, user, token)
 
 
@@ -369,7 +385,10 @@ def test_smtp_failure(db, user, mail, monkeypatch):
     from app.db.models import SecurityNotification
 
     monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: False)
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        DomainError,
+        match="^SMTP must be configured before verifying SSO email addresses$",
+    ):
         send(db, user, mail)
     assert db.query(SecurityNotification).count() == 0
     monkeypatch.setattr(sso_emails_operations.mailer, "smtp_configured", lambda: True)
@@ -401,7 +420,10 @@ def test_recent_login(user, monkeypatch, age, identity, allowed):
     if allowed:
         sso_emails_operations.recent_signin(req(user), user)
     else:
-        with pytest.raises((HTTPException, DomainError)):
+        with pytest.raises(
+            DomainError,
+            match="^Sign out and sign in again, then manage SSO email addresses within five minutes$",
+        ):
             sso_emails_operations.recent_signin(req(user), user)
 
 
@@ -428,20 +450,31 @@ def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatc
     try:
         client = TestClient(main.app, raise_server_exceptions=False)
         payload = {"token": "not-a-real-token-123456789"}
-        assert client.post("/v1/me/sso-emails/confirm", json=payload).status_code == 401
+        refused = client.post("/v1/me/sso-emails/confirm", json=payload)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         monkeypatch.setattr(
             main,
             "get_current_user_from_request",
             lambda request, session: session.get(User, uid),
         )
-        assert client.post("/v1/me/sso-emails/confirm", json=payload).status_code == 403
+        refused = client.post("/v1/me/sso-emails/confirm", json=payload)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "CSRF token missing or invalid"},
+        )
         client.cookies.set(csrf_cookie_name(), "csrf-test")
         response = client.post(
             "/v1/me/sso-emails/confirm",
             json=payload,
             headers={csrf_header_name(): "csrf-test"},
         )
-        assert response.status_code == 400, response.text
+        assert (response.status_code, response.json()) == (
+            400,
+            {"detail": "Verification link is invalid or expired"},
+        )
     finally:
         main.app.dependency_overrides.pop(get_db, None)
 
@@ -451,7 +484,7 @@ def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatc
     ["plain-address", "two@at@example.org", "a b@example.org", '"quoted"@example.org'],
 )
 def test_malformed_sso_addresses_are_refused_before_any_write(db, user, mail, email):
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(DomainError, match="^Invalid email address$") as refused:
         send(db, user, mail, email)
     assert refused.value.status_code == 400
     assert mail == [] and db.query(SsoEmailChallenge).count() == 0
@@ -460,10 +493,10 @@ def test_malformed_sso_addresses_are_refused_before_any_write(db, user, mail, em
 def test_inactive_accounts_cannot_manage_sso_addresses(db, user, mail):
     user.is_active = False
     db.commit()
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(DomainError, match="^Account is inactive$") as refused:
         send(db, user, mail)
     assert refused.value.status_code == 403
-    with pytest.raises(DomainError) as removal:
+    with pytest.raises(DomainError, match="^Account is inactive$") as removal:
         sso_emails.remove_address(
             sso_emails.Address(email="alias@example.org"), req(user), user, db
         )
@@ -480,7 +513,10 @@ def test_recent_signin_treats_unusable_sessions_as_stale(user, monkeypatch, sess
     # as a recent sign-in.
     monkeypatch.setattr(sso_emails_operations, "get_valkey", lambda: None)
     monkeypatch.setattr(sso_emails_operations, "get_session", lambda *a: session)
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^Sign out and sign in again, then manage SSO email addresses within five minutes$",
+    ) as refused:
         sso_emails_operations.recent_signin("sid", user)
     assert refused.value.status_code == 403
 
@@ -494,7 +530,9 @@ def test_verification_requests_are_rate_limited_per_account(user, monkeypatch):
     monkeypatch.setattr(sso_emails_operations, "get_valkey", lambda: store)
     for _ in range(5):
         sso_emails_operations.limit(user)
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match="^Too many verification requests; try again later$"
+    ) as refused:
         sso_emails_operations.limit(user)
     assert refused.value.status_code == 429
     other = User(username="other", password_hash="synthetic", is_active=True)
@@ -516,7 +554,10 @@ def test_an_account_holds_at_most_ten_sso_addresses(db, user, mail):
     for index in range(10):
         db.add(UserSsoEmail(email=f"alias{index}@example.org", user_id=user.id))
     db.commit()
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^Remove an address before adding more than ten SSO email addresses$",
+    ) as refused:
         send(db, user, mail, "eleventh@example.org")
     assert refused.value.status_code == 400
     assert mail == [] and db.query(SsoEmailChallenge).count() == 0
@@ -556,7 +597,9 @@ def test_a_concurrent_claim_of_the_address_is_reported_as_a_conflict(
 
     monkeypatch.setattr(db, "commit", failing_commit)
     monkeypatch.setattr(db, "rollback", rollback)
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match="^This address cannot be linked to this account$"
+    ) as refused:
         confirm(db, user, token)
     assert refused.value.status_code == 409
     assert "duplicate" not in refused.value.detail

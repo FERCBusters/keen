@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -118,7 +119,7 @@ def test_pages_same_timestamp_redaction_dedup_and_connection_isolation(
                 input_config(page_size=1, initial_lookback_minutes=1),
                 time.monotonic() + 120,
             )
-        assert result["caught_up"]
+        assert result["caught_up"] is True
         assert calls[2][2]["search_after"] == [1]
         assert calls[2][2]["pit"]["id"] == "pit-next"
         assert calls[-1][0] == "DELETE" and calls[-1][2] == {"id": "pit-next"}
@@ -144,19 +145,36 @@ def test_pages_same_timestamp_redaction_dedup_and_connection_isolation(
 
 
 @pytest.mark.parametrize(
-    "failure",
+    "failure, message",
     [
-        page([], timed_out=True),
-        page([], _shards={"failed": 1}),
-        page([], terminated_early=True),
-        {},
-        httpx.ReadTimeout("sensitive upstream diagnostic"),
+        (
+            page([], timed_out=True),
+            "Elasticsearch returned incomplete results; the window will be retried",
+        ),
+        (
+            page([], _shards={"failed": 1}),
+            "Elasticsearch returned incomplete results; the window will be retried",
+        ),
+        (
+            page([], terminated_early=True),
+            "Elasticsearch returned incomplete results; the window will be retried",
+        ),
+        ({}, "Elasticsearch returned an invalid search page"),
+        (
+            httpx.ReadTimeout("sensitive upstream diagnostic"),
+            "sensitive upstream diagnostic",
+        ),
     ],
 )
-def test_incomplete_window_keeps_cursor_and_closes_pit(contract_db, storage, failure):
+def test_incomplete_window_keeps_cursor_and_closes_pit(
+    contract_db, storage, failure, message
+):
     calls = []
     with scoped(), mock_client([failure], calls) as client:
-        with pytest.raises((es.ElasticsearchInputError, httpx.ReadTimeout)):
+        with pytest.raises(
+            (es.ElasticsearchInputError, httpx.ReadTimeout),
+            match="^" + re.escape(message) + "$",
+        ):
             es.ingest_elasticsearch_once(
                 contract_db, client, input_config(), time.monotonic() + 120
             )
@@ -207,23 +225,49 @@ def test_empty_window_advances_and_next_run_overlaps(contract_db, storage):
 
 
 @pytest.mark.parametrize(
-    "values",
+    "values, message",
     [
-        {"index_pattern": "../_security"},
-        {"index_pattern": "https://evil.example"},
-        {"index_pattern": "logs-*?x=y"},
-        {"index_pattern": "logs-*#secret"},
-        {"index_pattern": "_all"},
-        {"timestamp_field": "*"},
-        {"page_size": 1001},
-        {"max_pages": 0},
-        {"overlap_minutes": 60, "window_minutes": 60},
-        {"initial_lookback_minutes": True},
-        {"query": "x" * 4097},
+        (
+            {"index_pattern": "../_security"},
+            "Use comma-separated index patterns with lowercase names and optional * wildcards",
+        ),
+        (
+            {"index_pattern": "https://evil.example"},
+            "Use comma-separated index patterns with lowercase names and optional * wildcards",
+        ),
+        (
+            {"index_pattern": "logs-*?x=y"},
+            "Use comma-separated index patterns with lowercase names and optional * wildcards",
+        ),
+        (
+            {"index_pattern": "logs-*#secret"},
+            "Use comma-separated index patterns with lowercase names and optional * wildcards",
+        ),
+        (
+            {"index_pattern": "_all"},
+            "Use comma-separated index patterns with lowercase names and optional * wildcards",
+        ),
+        (
+            {"timestamp_field": "*"},
+            "Field mappings must be simple field names or dotted paths",
+        ),
+        ({"page_size": 1001}, "page_size must be an integer between 1 and 1000"),
+        ({"max_pages": 0}, "max_pages must be an integer between 1 and 100"),
+        (
+            {"overlap_minutes": 60, "window_minutes": 60},
+            "Window minutes must exceed overlap minutes",
+        ),
+        (
+            {"initial_lookback_minutes": True},
+            "initial_lookback_minutes must be an integer between 1 and 43200",
+        ),
+        ({"query": "x" * 4097}, "Query text must be at most 4096 characters"),
     ],
 )
-def test_input_validation(values):
-    with pytest.raises(es.ElasticsearchInputError):
+def test_input_validation(values, message):
+    with pytest.raises(
+        es.ElasticsearchInputError, match="^" + re.escape(message) + "$"
+    ):
         input_config(**values)
 
 
@@ -246,10 +290,17 @@ def test_auth_transport_and_no_environment_secret_inheritance(monkeypatch):
     with scoped(credentials={"api_key": "encoded-key"}), es._client() as client:
         assert client.headers["Authorization"] == "ApiKey encoded-key"
     with scoped(credentials={"api_key": "encoded-key", "password": "secret"}):
-        with pytest.raises(es.ElasticsearchInputError):
+        with pytest.raises(
+            es.ElasticsearchInputError,
+            match="^Choose either an API key or username and password$",
+        ):
             es._client()
     with scoped(configuration={"base_url": "http://elastic.example"}):
-        with pytest.raises(es.ElasticsearchInputError):
+        with pytest.raises(
+            es.ElasticsearchInputError,
+            match="^Use an HTTPS Elasticsearch endpoint without embedded "
+            "credentials, query or fragment$",
+        ):
             es._client()
 
 
@@ -274,25 +325,34 @@ def test_connection_api_validation_and_type_metadata(contract_db, monkeypatch):
     assert entry["credential_fields"] == ["password", "api_key"]
 
 
+TIMESTAMP_REFUSAL = "The timestamp field must contain a single valid date"
+
+
 @pytest.mark.parametrize(
-    "bad_hit",
+    "bad_hit,message",
     [
-        hit(fields={}),
-        hit(fields={"@timestamp": ["not-a-date"]}),
-        hit(_source=None),
-        hit(
-            _source={"host": {"name": "x" * 500}, "message": "Long host"},
-            fields={"@timestamp": ["2026-10-11T00:00:00Z"]},
+        (hit(fields={}), TIMESTAMP_REFUSAL),
+        (hit(fields={"@timestamp": ["not-a-date"]}), TIMESTAMP_REFUSAL),
+        (
+            hit(_source=None),
+            "Elasticsearch must return document IDs, index names and enabled "
+            "_source data",
+        ),
+        (
+            hit(
+                _source={"host": {"name": "x" * 500}, "message": "Long host"},
+                fields={"@timestamp": ["2026-10-11T00:00:00Z"]},
+            ),
+            None,
         ),
     ],
 )
-def test_document_validation_and_database_field_bounds(contract_db, storage, bad_hit):
+def test_document_validation_and_database_field_bounds(
+    contract_db, storage, bad_hit, message
+):
     calls = []
     with scoped(), mock_client([page([bad_hit])], calls) as client:
-        if (
-            isinstance(bad_hit.get("_source"), dict)
-            and bad_hit["_source"].get("message") == "Long host"
-        ):
+        if message is None:
             es.ingest_elasticsearch_once(
                 contract_db,
                 client,
@@ -301,7 +361,9 @@ def test_document_validation_and_database_field_bounds(contract_db, storage, bad
             )
             assert len(contract_db.query(Event).one().system) == 128
         else:
-            with pytest.raises(es.ElasticsearchInputError):
+            with pytest.raises(
+                es.ElasticsearchInputError, match="^" + re.escape(message) + "$"
+            ):
                 es.ingest_elasticsearch_once(
                     contract_db, client, input_config(), time.monotonic() + 120
                 )
@@ -322,7 +384,7 @@ def test_connection_rejects_http_and_secret_field_in_inputs():
             )
         )
     assert error.value.status_code == 422
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises((HTTPException, DomainError)) as refused:
         validate(
             ConnectionInput(
                 source="elasticsearch",
@@ -339,6 +401,10 @@ def test_connection_rejects_http_and_secret_field_in_inputs():
                 },
             )
         )
+    assert (refused.value.status_code, refused.value.detail) == (
+        400,
+        "Move credential queries.password into a server environment variable",
+    )
 
 
 class Elastic:

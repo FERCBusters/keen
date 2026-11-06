@@ -100,7 +100,11 @@ def test_party_routes_follow_the_read_and_manage_permissions(parties):
     nobody = app.client(app.user())
     risk_reader = app.client(app.user("risk.read"))
     for path in reads:
-        assert anonymous.get(path).status_code == 401, path
+        refused = anonymous.get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         _send(nobody, "GET", path, status=403, framework="A")
         parties.read("GET", path, framework="A")
         _send(risk_reader, "GET", path, framework="A")

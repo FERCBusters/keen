@@ -96,7 +96,7 @@ def test_a_download_returns_the_stored_bytes_and_checksum(store):
     assert response.content == body
     assert response.headers["x-artifact-sha256"] == hashlib.sha256(body).hexdigest()
     assert response.headers["content-disposition"].startswith("attachment;")
-    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["content-type"] == "application/json"
 
 
 def test_downloads_need_events_read_and_an_existing_object(store, tmp_path):
@@ -188,7 +188,11 @@ def test_diary_artefacts_follow_the_record_they_describe(store):
 
     hidden = download(store.reader, row)
     assert (hidden.status_code, hidden.json()["detail"]) == (404, "Artifact not found")
-    assert store.reader.get(f"/v1/artifacts/{row.id}/preview").status_code == 404
+    refused = store.reader.get(f"/v1/artifacts/{row.id}/preview")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Artifact not found"},
+    )
     assert download(risk_reader, row).status_code == 200
 
 

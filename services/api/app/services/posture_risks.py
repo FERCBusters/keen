@@ -1,16 +1,19 @@
-"""Risks recorded against posture results, and the acceptances they carry.
+"""Risks recorded against posture results, and how they settle a failure.
 
 A failing posture result can be recorded as a risk: a workstation check, a
 cloud check, or one identity within a cloud check. While a linked risk's
 treatment is Accept, it is not closed and its treatment due date has not
-passed, the result reads as Risk accepted. The evidence itself never changes;
-acceptance is KEEN's judgement beside it, and it lapses on its own.
+passed, the result reads as Risk accepted. A linked risk that closed after the
+result's current failure began reads as Risk treated. KEEN records when each
+failure began by its own clock, so a result that fails again after passing,
+or fails for more resources, needs attention again. The evidence itself never
+changes; acceptance and treatment are KEEN's judgement beside it.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -76,7 +79,11 @@ def is_accepted(risk: Risk, today: date) -> bool:
 
 
 def linked(db: Session, origin: str, origin_keys, *, titles: bool) -> dict:
-    """Risks linked to results, keyed by (origin key, scope, check, subject)."""
+    """Risks linked to results, keyed by (origin key, scope, check, subject).
+
+    Each list goes through ``settle`` before it is shown, which replaces the
+    closing time with whether the risk treats the result's current failure.
+    """
     keys = sorted({str(k) for k in origin_keys})
     if origin not in ORIGINS or not keys:
         return {}
@@ -104,9 +111,43 @@ def linked(db: Session, origin: str, origin_keys, *, titles: bool) -> dict:
                 "due": risk.treatment_due_at.isoformat()
                 if risk.treatment_due_at
                 else None,
+                "closed": risk.treatment_status == "closed",
+                "closed_at": risk.closed_at
+                if risk.treatment_status == "closed"
+                else None,
             }
         )
     return out
+
+
+def settle(risks: list[dict], since: datetime | None) -> bool:
+    """Mark which linked risks treat a failure that began at ``since``.
+
+    A closed risk treats a failure that began before it closed. A result that
+    is not failing, or whose failure has no recorded start, has none treated.
+    Returns whether any risk treats it.
+    """
+    treated = False
+    for risk in risks:
+        closed_at = risk.pop("closed_at")
+        risk["treated"] = (
+            since is not None and closed_at is not None and closed_at >= since
+        )
+        treated = treated or risk["treated"]
+    return treated
+
+
+def failing_since(previous: datetime | None, status: str, now: datetime):
+    """When a result's current failure began, carried from one reading to the next.
+
+    A result KEEN could not establish keeps what it had; a result that is not
+    failing has no failure to date.
+    """
+    if status == "unknown":
+        return previous
+    if status != "attention":
+        return None
+    return previous or now
 
 
 def unlink(db: Session, origin: str, origin_key: str) -> None:

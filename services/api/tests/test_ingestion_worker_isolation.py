@@ -1,6 +1,7 @@
 """Queue routing, manual-run authority and deployment isolation contracts."""
 
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -70,7 +71,9 @@ def test_every_ingest_http_task_ends_after_its_collection_budgets():
     # The longest per-connection run Risk Ledger accepts, plus one request in
     # flight, finishes before a built-in collection task is stopped.
     validate_config({"max_run_seconds": 1800})
-    with pytest.raises(RiskLedgerError):
+    with pytest.raises(
+        RiskLedgerError, match="^max_run_seconds must be between 30 and 1800$"
+    ):
         validate_config({"max_run_seconds": 1801})
     assert tasks.ingest_riskledger_all_task.soft_time_limit > (
         1800 + http.MAX_RESPONSE_SECONDS
@@ -103,39 +106,70 @@ def test_admin_runner_queues_without_collecting(keen, monkeypatch, source):
         f"/v1/admin/ingest/{source}/run", json={}, headers=unsafe(client)
     )
     assert response.status_code == 202, response.text
-    assert response.json()["queued"]
+    assert response.json()["queued"] is True
     dispatch.assert_called_once_with(expires=300)
 
 
-@pytest.mark.parametrize("role", [None, "normal"])
-def test_runner_denies_unprivileged_callers(keen, monkeypatch, role):
+# Each collection runner's queueing task: the HTTP pollers share one route,
+# IMAP has its own.
+RUNNERS = {"rss": "ingest_rss_all_task", "imap": "dispatch_imap_task"}
+
+
+@pytest.mark.parametrize("source", RUNNERS)
+@pytest.mark.parametrize(
+    "role,refusal",
+    [(None, (401, "Not authenticated")), ("normal", (403, "Admin role required"))],
+)
+def test_runners_refuse_unprivileged_callers_without_queueing(
+    keen, monkeypatch, source, role, refusal
+):
     dispatch = Mock()
-    monkeypatch.setattr(tasks.ingest_rss_all_task, "apply_async", dispatch)
+    monkeypatch.setattr(getattr(tasks, RUNNERS[source]), "apply_async", dispatch)
     client = keen.client(keen.user(role=role) if role else None)
     response = client.post(
-        "/v1/admin/ingest/rss/run", json={}, headers=unsafe(client) if role else {}
+        f"/v1/admin/ingest/{source}/run",
+        json={},
+        headers=unsafe(client) if role else {},
     )
-    assert response.status_code in (401, 403)
+    status, detail = refusal
+    assert (response.status_code, response.json()) == (status, {"detail": detail})
     dispatch.assert_not_called()
 
 
-@pytest.mark.parametrize("state", ["csrf", "disabled", "paused"])
-def test_runner_rejects_without_enqueuing(keen, monkeypatch, state):
+@pytest.mark.parametrize(
+    "source,state,refusal",
+    [
+        ("rss", "csrf", (403, "CSRF token missing or invalid")),
+        ("rss", "disabled", (409, "Source type is disabled")),
+        ("rss", "paused", (409, "Ingestion is paused")),
+        ("imap", "disabled", (409, "IMAP collection is disabled")),
+        ("imap", "demo", (409, "IMAP collection is disabled")),
+        ("imap", "paused", (409, "IMAP ingestion is paused")),
+    ],
+)
+def test_runners_refuse_unavailable_collection_without_queueing(
+    keen, monkeypatch, source, state, refusal
+):
     from app.db.models import SourceIngestionState
 
-    monkeypatch.setattr(settings, "rss_enabled", state != "disabled")
+    monkeypatch.setattr(settings, f"{source}_enabled", state != "disabled")
     if state == "paused":
-        keen.db.add(SourceIngestionState(source="rss", paused=True))
+        keen.db.add(SourceIngestionState(source=source, paused=True))
         keen.db.commit()
+    monkeypatch.setattr(
+        settings, "demo_expires_at", datetime.now(timezone.utc) + timedelta(hours=1)
+    )
+    monkeypatch.setattr(settings, "demo_mode", state == "demo")
     dispatch = Mock()
-    monkeypatch.setattr(tasks.ingest_rss_all_task, "apply_async", dispatch)
+    monkeypatch.setattr(getattr(tasks, RUNNERS[source]), "apply_async", dispatch)
     client = keen.client(keen.user(role="admin"))
     response = client.post(
-        "/v1/admin/ingest/rss/run",
+        f"/v1/admin/ingest/{source}/run",
         json={},
         headers={} if state == "csrf" else unsafe(client),
     )
-    assert response.status_code == (403 if state == "csrf" else 409)
+    status, detail = refusal
+    assert (response.status_code, response.json()) == (status, {"detail": detail})
     dispatch.assert_not_called()
 
 
@@ -212,5 +246,8 @@ def test_event_counter_refresh_interval_follows_the_cache_ttl(
 @pytest.mark.parametrize("configured", ["many", ""])
 def test_a_non_integer_cache_ttl_is_refused_at_start_up(configured):
     # Settings validation rejects the value before any worker schedule reads it.
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as refused:
         type(settings)(aggregate_cache_ttl_seconds=configured)
+    assert [(e["type"], e["loc"]) for e in refused.value.errors()] == [
+        ("int_parsing", ("aggregate_cache_ttl_seconds",))
+    ]

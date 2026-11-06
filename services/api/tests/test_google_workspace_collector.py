@@ -57,7 +57,7 @@ def test_cursor_name_stable_and_independent():
     stream = {"name": "Admin Stream", "application": " admin ", "user_key": "ALL"}
     first = gws._cursor_name(stream)
     again = gws._cursor_name(dict(stream))
-    assert first.startswith("gws:admin-stream:")
+    assert first == "gws:admin-stream:4b6ea10c79e2"
     assert first == again
     assert gws._cursor_name({"name": "  "}) == gws._cursor_name({"name": ""})
     assert gws._cursor_name({"application": "login"}) != gws._cursor_name(
@@ -97,7 +97,7 @@ def test_outcome_and_summary():
     summary = gws._summarize_activity(
         "login", ["a", "b", "c", "d"], "ops", "TARGET", "ip"
     )
-    assert summary.startswith("Google Workspace login: a, b, c…")
+    assert summary == "Google Workspace login: a, b, c… target=TARGET by ops ip=ip"
     assert "target=TARGET" in summary and "by ops" in summary and "ip=ip" in summary
     assert len(summary) <= 240
     assert gws._summarize_activity("", [], None, None, None).startswith(
@@ -126,7 +126,10 @@ def test_load_credentials_sources(monkeypatch):
         patch.object(gws.settings, "google_workspace_sa_keyfile", None),
         patch.object(gws.settings, "google_workspace_sa_json_b64", None),
         patch.object(gws.settings, "google_workspace_sa_json", None),
-        pytest.raises(RuntimeError),
+        pytest.raises(
+            RuntimeError,
+            match="^Google Workspace service-account credentials are missing$",
+        ),
     ):
         gws._load_credentials("")
     captured = {}
@@ -151,33 +154,48 @@ def test_load_credentials_sources(monkeypatch):
         assert captured["scopes"] == gws.SCOPES
         fake_creds.with_subject.assert_called_once_with("admin@example.com")
 
-    invalid = dict(info, token_uri="http://insecure")
-    for setting in (
-        json.dumps(invalid),
-        base64.b64encode(json.dumps(invalid).encode()).decode(),
-    ):
+    invalid = json.dumps(dict(info, token_uri="http://insecure"))
+    for raw, encoded in ((invalid, None), (None, base64.b64encode(invalid.encode()))):
         with (
             patch.object(gws.settings, "google_workspace_sa_keyfile", None),
-            patch.object(gws.settings, "google_workspace_sa_json", setting),
+            patch.object(gws.settings, "google_workspace_sa_json", raw),
+            patch.object(
+                gws.settings,
+                "google_workspace_sa_json_b64",
+                encoded.decode() if encoded else None,
+            ),
         ):
-            with pytest.raises(ValueError):
+            with pytest.raises(
+                ValueError,
+                match="^Google Workspace token endpoint must use HTTPS without "
+                "embedded credentials or a fragment$",
+            ):
                 gws._load_credentials("")
 
 
-def test_https_only_transport_rejects_insecure(tmp_path):
+def test_https_only_transport_rejects_insecure():
     http = gws._HTTPSOnlyHttp()
-    for uri in [
-        "http://insecure.example",
-        "example.com/reports",
-        "https://user:pass@example.com",
-        "https://example.com/#fragment",
-    ]:
-        with pytest.raises(ValueError):
-            http.request(uri)
     with patch.object(gws.httplib2.Http, "request", return_value="response") as req:
+        for uri in [
+            "http://insecure.example",
+            "example.com/reports",
+            "https://user:pass@example.com",
+            "https://example.com/#fragment",
+        ]:
+            # Refused before any connection, so a credential header goes nowhere.
+            with pytest.raises(
+                ValueError, match="^Google Workspace requests require HTTPS$"
+            ):
+                http.request(uri, headers={"Authorization": "synthetic-secret"})
+        assert req.call_args_list == []
         assert http.request("https://www.googleapis.com/x") == "response"
-        assert req.call_count == 1
-    assert http.follow_redirects is False
+        req.assert_called_once_with("https://www.googleapis.com/x")
+    assert (
+        http.follow_redirects,
+        http.follow_all_redirects,
+        http.disable_ssl_certificate_validation,
+        http.proxy_info,
+    ) == (False, False, False, None)
 
 
 def test_iter_activities_follows_pagination():
@@ -296,7 +314,7 @@ def test_stream_ingests_and_updates_cursor(db):
     assert b"target=victim@example.com" in call["artifact_bytes"] or True
     cursor = db.add.call_args_list[1].args[0]
     assert cursor.last_ts == datetime(2026, 10, 9, 12)
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
     assert result["fetched_items"] == 1
     assert result["cursor_last_ts"] == "2026-10-09T12:00:00"
 
@@ -324,7 +342,7 @@ def test_stream_event_filter_and_outcome_overrides(db):
             },
             {},
         )
-    assert result["ok"]
+    assert result["ok"] is True
     assert stored[0]["outcome"] == "warning"
     assert stored[0]["severity"] == 9
     call = service.activities.return_value.list.call_args.kwargs
@@ -362,7 +380,12 @@ def test_stream_http_error_returns_report(db):
         db, service, {"application": "login"}, {}
     )
     assert result["ok"] is False
-    assert "error" in result
+    assert result == {
+        "ok": False,
+        "name": "login",
+        "application": "login",
+        "error": "Collection failed; check the input, credentials, upstream service and storage configuration",
+    }
     assert result["application"] == "login"
 
 
@@ -391,7 +414,10 @@ def test_all_orchestrates_streams_and_failure_reporting(db):
     ):
         results = gws.ingest_google_workspace_all(db)
     assert results[0]["ok"] is False
-    assert "impersonation" in results[0]["error"]
+    assert results[0]["error"] == (
+        "Missing impersonation email. Set GOOGLE_WORKSPACE_IMPERSONATE or "
+        "config: impersonate"
+    )
 
     with (
         patch.object(gws.settings, "google_workspace_enabled", True),
@@ -449,7 +475,7 @@ def test_all_reports_stream_failures(db):
     assert len(results) >= 1 and any(
         r.get("ok") is False and r.get("error") for r in results
     )
-    db.rollback.assert_called_once()
+    db.rollback.assert_called_once_with()
 
 
 def test_load_config():

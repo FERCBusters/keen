@@ -42,7 +42,7 @@ def test_cached_result_only_calls_factory_on_miss(redis):
     factory = Mock(return_value={"items": [1, 2]})
     assert cache.cached_json("events", {}, factory) == {"items": [1, 2]}
     assert cache.cached_json("events", {}, factory) == {"items": [1, 2]}
-    factory.assert_called_once()
+    factory.assert_called_once_with()
     assert 0 < redis.ttl(cache.make_cache_key("events", {})) <= 60
 
 

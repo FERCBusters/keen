@@ -29,32 +29,53 @@ def test_swot_permissions_csrf_validation_and_history(keen):
     reader = keen.client(keen.user("isms.read"))
     denied = keen.client(keen.user())
     anon = keen.client()
-    assert anon.get("/v1/isms/swot").status_code == 401
-    assert denied.get("/v1/isms/swot").status_code == 403
-    assert (
-        reader.post(
-            "/v1/isms/swot", json={"title": "blocked"}, headers=unsafe(reader)
-        ).status_code
-        == 403
+    refused = anon.get("/v1/isms/swot")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
     )
-    assert manager.post("/v1/isms/swot", json={"title": "blocked"}).status_code == 403
-    assert (
-        manager.post(
-            "/v1/isms/swot",
-            json={"title": "blocked"},
-            headers={**unsafe(manager), "Origin": "https://evil.example"},
-        ).status_code
-        == 403
+    refused = denied.get("/v1/isms/swot")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "isms.read permission required"},
+    )
+    refused = reader.post(
+        "/v1/isms/swot", json={"title": "blocked"}, headers=unsafe(reader)
+    )
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "isms.manage permission required"},
+    )
+    refused = manager.post("/v1/isms/swot", json={"title": "blocked"})
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
+    refused = manager.post(
+        "/v1/isms/swot",
+        json={"title": "blocked"},
+        headers={**unsafe(manager), "Origin": "https://evil.example"},
+    )
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
     )
     assert keen.db.query(IsmsSwot).count() == 0
-    for value in [0, 6, True, "3"]:
-        assert (
-            manager.post(
-                "/v1/isms/swot",
-                json={"title": "bad", "significance": value},
-                headers=unsafe(manager),
-            ).status_code
-            == 422
+    for value, problem in [
+        (0, ("greater_than_equal", "Input should be greater than or equal to 1")),
+        (6, ("less_than_equal", "Input should be less than or equal to 5")),
+        (True, ("int_type", "Input should be a valid integer")),
+        ("3", ("int_type", "Input should be a valid integer")),
+    ]:
+        refused = manager.post(
+            "/v1/isms/swot",
+            json={"title": "bad", "significance": value},
+            headers=unsafe(manager),
+        )
+        kind, msg = problem
+        assert (refused.status_code, refused.json()) == (
+            422,
+            {"detail": [{"type": kind, "loc": ["body", "significance"], "msg": msg}]},
         )
     root = create(manager, title="<img src=x onerror=alert(1)>", significance=5)
     assert reader.get("/v1/isms/swot/" + root["id"]).json()["title"] == root["title"]
@@ -69,41 +90,43 @@ def test_swot_permissions_csrf_validation_and_history(keen):
         ).status_code
         == 200
     )
-    assert (
-        manager.patch(
-            path,
-            json={"status": "completed", "expected_version": 1},
-            headers=unsafe(manager),
-        ).status_code
-        == 409
+    refused = manager.patch(
+        path,
+        json={"status": "completed", "expected_version": 1},
+        headers=unsafe(manager),
     )
-    assert (
-        manager.patch(
-            path, json={"kind": None, "expected_version": 2}, headers=unsafe(manager)
-        ).status_code
-        == 400
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "This SWOT item changed. Reload before saving."},
     )
-    assert (
-        manager.patch(
-            path,
-            json={
-                "start_date": "2026-10-20",
-                "target_date": "2026-10-01",
-                "expected_version": 2,
-            },
-            headers=unsafe(manager),
-        ).status_code
-        == 400
+    refused = manager.patch(
+        path, json={"kind": None, "expected_version": 2}, headers=unsafe(manager)
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "kind cannot be empty"},
+    )
+    refused = manager.patch(
+        path,
+        json={
+            "start_date": "2026-10-20",
+            "target_date": "2026-10-01",
+            "expected_version": 2,
+        },
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Target date must be on or after start date"},
     )
     assert reader.get(path).json()["status"] == "planned"
     assert (
         keen.db.query(EntityChangelog).filter_by(entity_type="isms_swot").count() == 2
     )
-    assert (
-        manager.delete(
-            path + "?expected_version=1", headers=unsafe(manager)
-        ).status_code
-        == 409
+    refused = manager.delete(path + "?expected_version=1", headers=unsafe(manager))
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "This SWOT item changed. Reload before saving."},
     )
     assert (
         manager.delete(
@@ -118,18 +141,25 @@ def test_swot_hierarchy_cycles_quadrants_and_delete(keen):
     root = create(client)
     child = create(client, title="Supply chain", parent_id=root["id"])
     path = "/v1/isms/swot/" + root["id"]
-    for payload in [
-        {"parent_id": child["id"]},
-        {"parent_id": root["id"]},
-        {"kind": "strength"},
+    for payload, detail in [
+        (
+            {"parent_id": child["id"]},
+            "Hierarchy must be acyclic and at most 12 levels deep",
+        ),
+        (
+            {"parent_id": root["id"]},
+            "Hierarchy must be acyclic and at most 12 levels deep",
+        ),
+        ({"kind": "strength"}, "Move children before changing quadrant"),
     ]:
         result = client.patch(
             path, json={**payload, "expected_version": 1}, headers=unsafe(client)
         )
-        assert result.status_code == 400, result.text
-    assert (
-        client.delete(path + "?expected_version=1", headers=unsafe(client)).status_code
-        == 409
+        assert (result.status_code, result.json()) == (400, {"detail": detail})
+    refused = client.delete(path + "?expected_version=1", headers=unsafe(client))
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "Move child items and remove audit scopes before deleting"},
     )
     for depth in range(2, 12):
         child = create(client, title=f"Level {depth + 1}", parent_id=child["id"])
@@ -138,7 +168,10 @@ def test_swot_hierarchy_cycles_quadrants_and_delete(keen):
         json={"title": "Too deep", "kind": "threat", "parent_id": child["id"]},
         headers=unsafe(client),
     )
-    assert result.status_code == 400, result.text
+    assert (result.status_code, result.json()) == (
+        400,
+        {"detail": "Hierarchy must be acyclic and at most 12 levels deep"},
+    )
 
 
 def test_links_require_target_access_and_do_not_leak_in_history(keen):
@@ -165,13 +198,17 @@ def test_links_require_target_access_and_do_not_leak_in_history(keen):
         },
         headers=unsafe(manager),
     )
-    assert rejected.status_code == 404
+    assert (rejected.status_code, rejected.json()) == (
+        404,
+        {"detail": "Related item not available"},
+    )
     assert keen.db.query(IsmsSwot).count() == 1
     body = {"target_type": "risk", "target_id": str(risk.id), "expected_version": 1}
     path = "/v1/isms/swot/" + root["id"]
-    assert (
-        manager.post(path + "/links", json=body, headers=unsafe(manager)).status_code
-        == 404
+    refused = manager.post(path + "/links", json=body, headers=unsafe(manager))
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Related item not available"},
     )
     assert keen.db.query(IsmsSwotLink).count() == 0
     assert (
@@ -179,9 +216,10 @@ def test_links_require_target_access_and_do_not_leak_in_history(keen):
     )
     assert len(admin.get(path).json()["links"]) == 1
     assert manager.get(path).json()["links"] == []
-    assert (
-        manager.get(f"/v1/isms/swot?target_type=risk&target_id={risk.id}").status_code
-        == 404
+    refused = manager.get(f"/v1/isms/swot?target_type=risk&target_id={risk.id}")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Related item not available"},
     )
     assert manager.get("/v1/isms/swot-choices/risk").json()["items"] == []
     history = manager.get(path + "/changelog").text
@@ -201,10 +239,15 @@ def test_swot_questions_and_audit_scope_permissions(without_implied_permissions,
     root = create(client)
     denied = keen.client(keen.user("question.create", "audits.manage"))
     qpath = f"/v1/questions/entities/isms_swot/{root['id']}"
-    assert denied.get(qpath).status_code == 403
-    assert (
-        denied.post(qpath, json={"body": "blocked"}, headers=unsafe(denied)).status_code
-        == 403
+    refused = denied.get(qpath)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "ISMS access required"},
+    )
+    refused = denied.post(qpath, json={"body": "blocked"}, headers=unsafe(denied))
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "ISMS access required"},
     )
     result = client.post(
         qpath, json={"body": "How do we test continuity?"}, headers=unsafe(client)
@@ -224,15 +267,22 @@ def test_swot_questions_and_audit_scope_permissions(without_implied_permissions,
     keen.db.commit()
     scope = f"/v1/audits/{audit.id}/scope"
     payload = {"swot_ids": [root["id"]]}
-    assert denied.put(scope, json=payload, headers=unsafe(denied)).status_code == 403
+    refused = denied.put(scope, json=payload, headers=unsafe(denied))
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {
+            "detail": "Only the audit creator or an audit administrator can edit this audit"
+        },
+    )
     result = client.put(scope, json=payload, headers=unsafe(client))
     assert result.status_code == 200, result.text
     assert result.json()["scoped_swot"][0]["id"] == root["id"]
-    assert (
-        client.delete(
-            f"/v1/isms/swot/{root['id']}?expected_version=1", headers=unsafe(client)
-        ).status_code
-        == 409
+    refused = client.delete(
+        f"/v1/isms/swot/{root['id']}?expected_version=1", headers=unsafe(client)
+    )
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "Move child items and remove audit scopes before deleting"},
     )
     # An unrelated scope edit preserves explicit SWOT scope.
     assert (
@@ -243,9 +293,12 @@ def test_swot_questions_and_audit_scope_permissions(without_implied_permissions,
     )
     audit.status = "completed"
     keen.db.commit()
-    assert (
-        client.put(scope, json={"swot_ids": []}, headers=unsafe(client)).status_code
-        == 409
+    refused = client.put(scope, json={"swot_ids": []}, headers=unsafe(client))
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {
+            "detail": "This audit is completed and cannot be modified. Change its status back to Open or In progress before editing it."
+        },
     )
 
 
@@ -293,13 +346,14 @@ def test_framework_mappings_sampling_and_objective_dates(keen):
         == item["id"]
     )
     before = keen.db.query(IsmsSwot).count()
-    assert (
-        client.post(
-            "/v1/isms/swot?framework=swot-test",
-            json={"title": "Rejected", "controls": ["missing"]},
-            headers=unsafe(client),
-        ).status_code
-        == 400
+    refused = client.post(
+        "/v1/isms/swot?framework=swot-test",
+        json={"title": "Rejected", "controls": ["missing"]},
+        headers=unsafe(client),
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Unknown control: missing"},
     )
     assert keen.db.query(IsmsSwot).count() == before
     audit = client.post(
@@ -314,17 +368,20 @@ def test_framework_mappings_sampling_and_objective_dates(keen):
     )
     assert sample.status_code == 200, sample.text
     assert keen.db.query(AuditEvidence).count() == 1
-    for dates in [
-        {"start_date": "2026-11-01", "completion_target_date": "2026-10-01"},
-        {"completion_target_date": "Quarterly"},
-        {"completion_target_date": "20261101"},
+    for dates, detail in [
+        (
+            {"start_date": "2026-11-01", "completion_target_date": "2026-10-01"},
+            "Target date must be on or after start date",
+        ),
+        ({"completion_target_date": "Quarterly"}, "Target date must use YYYY-MM-DD"),
+        ({"completion_target_date": "20261101"}, "Target date must use YYYY-MM-DD"),
     ]:
         result = client.post(
             "/v1/isms/objectives",
             json={"requirement": "R", "goal": "G", **dates},
             headers=unsafe(client),
         )
-        assert result.status_code == 400, result.text
+        assert (result.status_code, result.json()) == (400, {"detail": detail})
     result = client.post(
         "/v1/isms/objectives",
         json={
@@ -397,13 +454,18 @@ def test_swot_mapping_ids_are_framework_scoped_and_preserve_other_frameworks(kee
     )
     assert response.status_code == 200, response.text
     version = response.json()["version"]
-    for field in ("controls", "clauses"):
+    for field, kind in (("controls", "control"), ("clauses", "clause")):
+        foreign = records["swot-b"][field]
         response = client.patch(
             path + "?framework=swot-a",
-            json={field: records["swot-b"][field], "expected_version": version},
+            json={field: foreign, "expected_version": version},
             headers=unsafe(client),
         )
-        assert response.status_code == 400, response.text
+        # Another framework's identifiers are unknown in this one.
+        assert (response.status_code, response.json()) == (
+            400,
+            {"detail": f"Unknown {kind}: {foreign[0]}"},
+        )
     for namespace in records:
         current = client.get(path + "?framework=" + namespace).json()
         assert current["version"] == version
@@ -436,16 +498,20 @@ def test_draft_relationships_create_atomically_and_deduplicate(keen):
     link = {"target_type": "objective", "target_id": str(objective.id)}
     invalid = {"target_type": "risk", "target_id": str(uuid4())}
     before_history = keen.db.query(EntityChangelog).count()
-    for extra in [
-        {"links": [link, invalid]},
-        {"links": [link], "controls": ["missing-control"]},
+    for extra, status, detail in [
+        ({"links": [link, invalid]}, 404, "Related item not available"),
+        (
+            {"links": [link], "controls": ["missing-control"]},
+            400,
+            "Unknown control: missing-control",
+        ),
     ]:
         response = client.post(
             "/v1/isms/swot",
             json={"title": "Atomic draft", **extra},
             headers=unsafe(client),
         )
-        assert response.status_code in (400, 404), response.text
+        assert (response.status_code, response.json()) == (status, {"detail": detail})
         keen.db.expire_all()
         assert keen.db.query(IsmsSwot).count() == 0
         assert keen.db.query(IsmsSwotLink).count() == 0
@@ -459,7 +525,10 @@ def test_draft_relationships_create_atomically_and_deduplicate(keen):
         json={"expected_version": 1, "links": []},
         headers=unsafe(client),
     )
-    assert response.status_code == 400
+    assert (response.status_code, response.json()) == (
+        400,
+        {"detail": "Use relationship actions for an existing SWOT item"},
+    )
     assert keen.db.query(IsmsSwotLink).count() == 1
     history = client.get(f"/v1/isms/swot/{created['id']}/changelog").text
     assert str(objective.id) not in history
@@ -481,14 +550,28 @@ def test_draft_relationships_obey_disabled_features_and_payload_bound(keen):
         json={"title": "Too many", "links": [link] * 201},
         headers=unsafe(client),
     )
-    assert response.status_code == 422
+    assert (response.status_code, response.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "too_long",
+                    "loc": ["body", "links"],
+                    "msg": "List should have at most 200 items after validation, not 201",
+                }
+            ]
+        },
+    )
     update(keen.db, admin, 0, {"objectives": False})
     response = client.post(
         "/v1/isms/swot",
         json={"title": "Disabled", "links": [link]},
         headers=unsafe(client),
     )
-    assert response.status_code == 404
+    assert (response.status_code, response.json()) == (
+        404,
+        {"detail": "Related feature is disabled"},
+    )
     assert keen.db.query(IsmsSwot).count() == 0
     assert keen.db.query(IsmsSwotLink).count() == 0
 
@@ -515,7 +598,11 @@ def test_soa_swot_framework_scope_permissions_and_feature_gate(keen):
         )
         assert response.status_code == 200, response.text
     path = "/v1/statement-of-applicability?framework=soa-test"
-    assert keen.client().get(path).status_code == 401
+    refused = keen.client().get(path)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     assert len(reader.get(path).json()["swot_items"]) == 2
     assert (
         reader.get("/v1/statement-of-applicability?framework=other").json()[
@@ -554,18 +641,52 @@ def test_a_relationship_is_removed_only_at_the_current_version(keen):
 
     # Readers, requests without the token and stale or missing versions are
     # refused, and the relationship stays.
-    assert remove(reader, item["version"]).status_code == 403
-    assert remove(manager, item["version"], headers={}).status_code == 403
-    assert remove(manager).status_code == 422
+    refused = remove(reader, item["version"])
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "isms.manage permission required"},
+    )
+    refused = remove(manager, item["version"], headers={})
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
+    refused = remove(manager)
+    assert (refused.status_code, refused.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "missing",
+                    "loc": ["query", "expected_version"],
+                    "msg": "Field required",
+                }
+            ]
+        },
+    )
     stale = remove(manager, item["version"] + 1)
-    assert stale.status_code == 409
+    assert (stale.status_code, stale.json()) == (
+        409,
+        {"detail": "This SWOT item changed. Reload before saving."},
+    )
     assert keen.db.query(IsmsSwotLink).count() == 1
     unknown = manager.delete(
         f"/v1/isms/swot/{item['id']}/links/control/{objective.id}",
         params={"expected_version": item["version"]},
         headers=unsafe(manager),
     )
-    assert unknown.status_code == 422
+    assert (unknown.status_code, unknown.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "literal_error",
+                    "loc": ["path", "target_type"],
+                    "msg": "Input should be 'objective', 'document', 'asset', 'person', 'vendor' or 'risk'",
+                }
+            ]
+        },
+    )
 
     removed = remove(manager, item["version"])
 
@@ -594,8 +715,13 @@ def test_list_filters_reject_unknown_values_and_narrow_results(keen):
     manager = keen.client(keen.user("isms.manage", "isms.read"))
     root = create(manager, title="Ageing firewall", description="Patch backlog")
     child = create(manager, title="Vendor exit", parent_id=root["id"], status="planned")
-    assert manager.get("/v1/isms/swot?kind=hazard").status_code == 400
-    assert manager.get("/v1/isms/swot?status=finished").status_code == 400
+    refused = manager.get("/v1/isms/swot?kind=hazard")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Unknown SWOT type"},
+    )
+    refused = manager.get("/v1/isms/swot?status=finished")
+    assert (refused.status_code, refused.json()) == (400, {"detail": "Unknown status"})
     assert manager.get("/v1/isms/swot?status=planned").json()["total"] == 1
     assert [
         i["id"] for i in manager.get("/v1/isms/swot?status=planned").json()["items"]
@@ -605,8 +731,16 @@ def test_list_filters_reject_unknown_values_and_narrow_results(keen):
     assert manager.get("/v1/isms/swot?q=nothing-matches").json()["total"] == 0
     listed = manager.get(f"/v1/isms/swot?parent_id={root['id']}").json()
     assert [i["id"] for i in listed["items"]] == [child["id"]]
-    assert manager.get("/v1/isms/swot?target_type=objective").status_code == 400
-    assert manager.get(f"/v1/isms/swot?target_id={root['id']}").status_code == 400
+    refused = manager.get("/v1/isms/swot?target_type=objective")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Choose a relationship type and item"},
+    )
+    refused = manager.get(f"/v1/isms/swot?target_id={root['id']}")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Choose a relationship type and item"},
+    )
 
 
 def test_control_filter_applies_without_a_clause_filter(keen):
@@ -646,15 +780,21 @@ def test_blank_title_unknown_owner_and_foreign_parent_are_refused(keen):
     inactive.is_active = False
     keen.db.commit()
     strength = create(client, title="Strong team", kind="strength")
-    for payload in [
-        {"title": "   "},
-        {"title": "Owned", "owner_user_id": str(uuid4())},
-        {"title": "Owned", "owner_user_id": str(inactive.id)},
-        {"title": "Orphan", "parent_id": str(uuid4())},
-        {"title": "Wrong quadrant", "kind": "threat", "parent_id": strength["id"]},
+    for payload, detail in [
+        ({"title": "   "}, "Title is required"),
+        ({"title": "Owned", "owner_user_id": str(uuid4())}, "Unknown active owner"),
+        ({"title": "Owned", "owner_user_id": str(inactive.id)}, "Unknown active owner"),
+        (
+            {"title": "Orphan", "parent_id": str(uuid4())},
+            "Parent must be in the same SWOT quadrant",
+        ),
+        (
+            {"title": "Wrong quadrant", "kind": "threat", "parent_id": strength["id"]},
+            "Parent must be in the same SWOT quadrant",
+        ),
     ]:
         response = client.post("/v1/isms/swot", json=payload, headers=unsafe(client))
-        assert response.status_code == 400, response.text
+        assert (response.status_code, response.json()) == (400, {"detail": detail})
     assert keen.db.query(IsmsSwot).count() == 1
     owner = keen.user()
     owned = create(client, title="Owned", owner_user_id=str(owner.id))

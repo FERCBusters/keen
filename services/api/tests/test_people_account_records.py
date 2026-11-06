@@ -55,7 +55,10 @@ def test_a_record_for_an_account_that_no_longer_exists_is_refused(contract_db):
     contract_db.add(kept)
     contract_db.flush()
 
-    with pytest.raises(IntegrityError):
+    with pytest.raises(
+        IntegrityError,
+        match='violates foreign key constraint "isms_people_user_id_fkey"',
+    ):
         ensure_person_for_user(contract_db, gone)
 
     # Only the failed insert is undone; the caller's transaction carries on.

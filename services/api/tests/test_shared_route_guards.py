@@ -62,7 +62,11 @@ def _call(client, method, path):
 
 @pytest.mark.parametrize("method,path", EVIDENCE_ROUTES)
 def test_evidence_routes_require_events_read(keen, method, path):  # noqa: F811
-    assert _call(keen.client(), method, path).status_code == 401
+    refused = _call(keen.client(), method, path)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     plain = keen.client(keen.user())
     response = _call(plain, method, path)
     assert response.status_code == 403, response.text
@@ -75,6 +79,10 @@ def test_evidence_routes_require_events_read(keen, method, path):  # noqa: F811
 
 @pytest.mark.parametrize("method,path", QUESTION_ROUTES)
 def test_question_routes_require_a_signed_in_user(keen, method, path):  # noqa: F811
-    assert _call(keen.client(), method, path).status_code == 401
+    refused = _call(keen.client(), method, path)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     response = _call(keen.client(keen.user()), method, path)
     assert response.status_code != 401, response.text

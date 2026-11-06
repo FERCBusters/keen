@@ -237,11 +237,16 @@ def test_only_administrators_reach_integrations(api, monkeypatch):
     ]
     for method, path in requests:
         url = "/v1/admin/integrations" + path
-        assert (
-            reader.request(method, url, json={}, headers=unsafe(reader)).status_code
-            == 403
+        answer = reader.request(method, url, json={}, headers=unsafe(reader))
+        assert (answer.status_code, answer.json()) == (
+            403,
+            {"detail": "Admin role required"},
         )
-        assert anonymous.request(method, url, json={}).status_code == 401
+        answer = anonymous.request(method, url, json={})
+        assert (answer.status_code, answer.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
     # Administrator writes still need the CSRF token.
     body = {"name": "x", "connection_id": api.connection["id"], "definition": {}}
     refused = api.admin.post("/v1/admin/integrations/collectors", json=body)
@@ -258,6 +263,10 @@ def test_only_administrators_reach_integrations(api, monkeypatch):
 
 
 CONNECTION = {"name": "Checks", "base_url": "https://checks.example"}
+REDIRECT_REFUSAL = (
+    "Supply a new credential when changing the connection base URL, "
+    "credential header or parameter, or OAuth token path"
+)
 
 
 @pytest.mark.parametrize(
@@ -327,7 +336,6 @@ def test_saved_credentials_never_follow_an_edit_elsewhere(api, monkeypatch):
         body = {**current, **changes, "version": version}
         return api.call("PUT", f"/connections/{key}", body, status)
 
-    redirect = "Supply a new credential when changing the connection base URL"
     for changes in (
         {"base_url": "https://collector.attacker.example"},
         {"base_url": "https://checks.example:8443"},
@@ -336,7 +344,7 @@ def test_saved_credentials_never_follow_an_edit_elsewhere(api, monkeypatch):
         {"base_url": "https://checks.example/Tenants"},
         {"auth_name": "X-Other"},
     ):
-        assert edit(422, **changes)["detail"].startswith(redirect)
+        assert edit(422, **changes)["detail"] == REDIRECT_REFUSAL
     assert edit(422, auth_kind="bearer")["detail"] == (
         "Supply a new credential when changing authentication type"
     )
@@ -359,9 +367,9 @@ def test_saved_credentials_never_follow_an_edit_elsewhere(api, monkeypatch):
     assert stale["detail"] == "This item changed. Reload before saving."
 
 
-def test_a_new_base_path_needs_the_oauth_secret_again(api, monkeypatch):
-    # The token request goes to base URL + token path, so a path change on
-    # the same origin would post the saved client secret somewhere else.
+def test_a_new_base_or_token_path_needs_the_oauth_secret_again(api, monkeypatch):
+    # The token request goes to base URL + token path, so a change to either
+    # path on the same origin would post the saved client secret somewhere else.
     monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
     body = {
         "name": "Gateway tenant A",
@@ -372,12 +380,18 @@ def test_a_new_base_path_needs_the_oauth_secret_again(api, monkeypatch):
     }
     saved = api.call("POST", "/connections", {**body, "secret": "synthetic-a"})
     moved = {**body, "base_url": "https://gateway.example/tenants/b", "version": 1}
+    echoed = {**body, "auth_options": {"token_path": "/echo"}, "version": 1}
 
-    refused = api.call("PUT", f"/connections/{saved['id']}", moved, 422)
-    assert refused["detail"].startswith("Supply a new credential")
+    for edit in (moved, echoed):
+        refused = api.call("PUT", f"/connections/{saved['id']}", edit, 422)
+        assert refused["detail"] == REDIRECT_REFUSAL
     connection = api.keen.db.get(IntegrationConnection, saved["id"])
     api.keen.db.refresh(connection)
-    assert connection.base_url == "https://gateway.example/tenants/a"
+    assert (connection.base_url, connection.auth_options, connection.version) == (
+        "https://gateway.example/tenants/a",
+        {"token_path": "/oauth/token"},
+        1,
+    )
 
     sent = []
     monkeypatch.setattr(
@@ -445,7 +459,10 @@ def test_rollback_pause_resume_and_cursor_reset(api):
     row.failures, row.cursor = 3, "2026-01-01T00:00:00+00:00"
     api.keen.db.commit()
     exhausted = api.call("POST", f"/collectors/{key}/run", {"version": 3}, 409)
-    assert exhausted["detail"].startswith("Review the failure and explicitly resume")
+    assert (
+        exhausted["detail"]
+        == "Review the failure and explicitly resume before collecting again"
+    )
     resumed = api.call("POST", f"/collectors/{key}/resume", {"version": 3})
     assert (resumed["enabled"], resumed["failures"]) == (True, 0)
     reset = api.call("POST", f"/collectors/{key}/reset-cursor", {"version": 3})

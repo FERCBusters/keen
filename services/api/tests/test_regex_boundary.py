@@ -296,7 +296,10 @@ def test_the_scan_checks_follow_the_engines_memory(pattern, unit, refused):
     peak = _peak(lambda: compiled.match(text))
     if refused:
         assert peak > 2 * MIB
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError,
+            match=r"^Repeat a group, capture or alternatives possessively \(\*\+, \+\+ or \{m,n\}\+\), or at most 1024 times in all: matching keeps state for every repetition$",
+        ):
             check_scan_pattern(pattern)
     else:
         assert peak < MIB // 4

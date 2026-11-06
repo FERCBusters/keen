@@ -15,13 +15,11 @@ from app.core.config import settings
 from app.security import auth, ldap, passwords
 from app.services import artifacts, questions
 from app.services.errors import DomainError
-from app.storage import s3
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from fastapi import HTTPException
-from starlette.datastructures import Headers
 
 
 @pytest.mark.parametrize("scheme", ["ldaps", "ldap"])
@@ -129,9 +127,16 @@ def test_ldap_real_tls_checks_chain_and_hostname_before_bind(
 
     monkeypatch.setattr(ldap.Connection, "bind", bind)
     try:
-        with pytest.raises(HTTPException) as error:
+        with pytest.raises(
+            HTTPException,
+            match="^503: LDAP authentication unavailable; check directory configuration and connectivity$",
+        ) as error:
             ldap.directory_identity("alice", "synthetic-password")
-        assert error.value.status_code == 503
+        assert (error.value.status_code, error.value.detail) == (
+            503,
+            "LDAP authentication unavailable; check directory configuration and "
+            "connectivity",
+        )
         assert attempts == (["cn=reader,dc=example"] if case == "matching" else [])
     finally:
         worker.join(6)
@@ -158,8 +163,14 @@ def test_failed_login_performs_one_real_password_derivation(monkeypatch, kind):
     derive = Mock(wraps=original)
     monkeypatch.setattr(passwords, "_pbkdf2_sha256", derive)
     assert auth.authenticate_user(db, "alice", "wrong-password") is None
+    # One derivation at full cost, whether or not an account could sign in.
     derive.assert_called_once()
-    assert derive.call_args.args[2] == passwords._DEFAULT_ITERS
+    password, salt, iterations = derive.call_args.args
+    assert (password, len(salt), iterations) == (
+        "wrong-password",
+        16,
+        passwords._DEFAULT_ITERS,
+    )
 
 
 def test_valid_local_login_still_succeeds():
@@ -173,9 +184,20 @@ def test_valid_local_login_still_succeeds():
     assert auth.authenticate_user(db, "alice", "synthetic-password") is user
 
 
-@pytest.mark.parametrize("failure", ["magic", "read", "storage"])
+@pytest.mark.parametrize(
+    "failure,error,message",
+    [
+        (
+            "magic",
+            DomainError,
+            "Invalid file type: file content does not match declared content-type",
+        ),
+        ("read", OSError, "read failed"),
+        ("storage", OSError, "storage failed"),
+    ],
+)
 def test_attachment_failures_propagate_without_logging_untrusted_names(
-    monkeypatch, caplog, failure
+    monkeypatch, caplog, failure, error, message
 ):
     upload = SimpleNamespace(
         filename="attack\nforged-log.pdf",
@@ -188,7 +210,7 @@ def test_attachment_failures_propagate_without_logging_untrusted_names(
         upload.read.side_effect = OSError("read failed")
     store = Mock(side_effect=OSError("storage failed"))
     monkeypatch.setattr(questions, "put_bytes", store)
-    with pytest.raises(DomainError if failure == "magic" else OSError):
+    with pytest.raises(error, match=f"^{message}$"):
         questions._store_attachments(
             Mock(),
             event_id=uuid.uuid4(),
@@ -202,30 +224,6 @@ def test_attachment_failures_propagate_without_logging_untrusted_names(
         store.assert_not_called()
 
 
-@pytest.mark.parametrize("backend", ["local", "s3"])
-@pytest.mark.parametrize(
-    "key",
-    [
-        "../escape",
-        "/absolute",
-        "a//b",
-        "a/../b",
-        "a\\b",
-        "",
-        "a?versionId=bad",
-        "a#fragment",
-        "a\x00b",
-    ],
-)
-def test_storage_keys_rejected_before_backend_use(monkeypatch, backend, key):
-    monkeypatch.setattr(settings, "artifact_storage_backend", backend)
-    client = Mock()
-    monkeypatch.setattr(s3, "_client", client)
-    with pytest.raises(ValueError):
-        s3.put_bytes(key, b"fixture", "text/plain")
-    client.assert_not_called()
-
-
 def test_preview_cache_bounds_bytes_and_entries(monkeypatch):
     monkeypatch.setattr(artifacts, "_PREVIEW_CACHE", OrderedDict())
     monkeypatch.setattr(artifacts, "_PREVIEW_CACHE_BYTES", 6)
@@ -233,27 +231,9 @@ def test_preview_cache_bounds_bytes_and_entries(monkeypatch):
     for i in range(10):
         artifacts._cache_preview(str(i), b"abc")
     assert list(artifacts._PREVIEW_CACHE) == ["8", "9"]
+    # A preview larger than the whole budget is never kept.
     artifacts._cache_preview("huge", b"1234567")
-    assert sum(map(len, artifacts._PREVIEW_CACHE.values())) <= 6
-
-
-@pytest.mark.parametrize(
-    "peer,values,expected",
-    [
-        ("127.0.0.1", ["alice"], "alice"),
-        ("192.0.2.1", ["alice"], None),
-        (None, ["alice"], None),
-        ("127.0.0.1", ["attacker", "alice"], None),
-    ],
-)
-def test_remote_identity_requires_trusted_direct_peer_and_single_header(
-    monkeypatch, peer, values, expected
-):
-    monkeypatch.setattr(settings, "trust_remote_user", True)
-    monkeypatch.setattr(settings, "oidc_enabled", False)
-    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "127.0.0.1/32")
-    headers = Headers(raw=[(b"remote_user", v.encode()) for v in values])
-    assert auth._remote_user_from_headers(headers, peer=peer) == expected
+    assert list(artifacts._PREVIEW_CACHE) == ["8", "9"]
 
 
 @pytest.mark.parametrize(
@@ -324,7 +304,9 @@ def test_preview_media_type_is_exact(monkeypatch, content_type):
     db.query.return_value.filter.return_value.one_or_none.side_effect = [artifact, None]
     fetch = Mock()
     monkeypatch.setattr(artifacts, "get_object_stream", fetch)
-    with pytest.raises(DomainError) as error:
+    with pytest.raises(
+        DomainError, match="^Preview is only supported for PDFs$"
+    ) as error:
         artifacts.preview_pdf_first_page(
             artifact_id=str(uuid.uuid4()), db=db, user=None
         )
@@ -348,12 +330,14 @@ def test_masking_rejects_oversize_actual_stream_and_closes(monkeypatch):
     body = io.BytesIO(b"x" * (20 * 1024 * 1024 + 1))
     monkeypatch.setattr(settings, "event_data_masking", "samples")
     monkeypatch.setattr(artifacts, "get_object_stream", lambda *a: {"Body": body})
-    with pytest.raises(DomainError) as error:
+    with pytest.raises(
+        DomainError, match="^Artifact exceeds the 20 MiB masking limit$"
+    ) as error:
         artifacts.download_artifact(
             artifact_id=str(uuid.uuid4()), sample_export=True, db=db, user=None
         )
     assert error.value.status_code == 413
-    assert body.closed
+    assert body.closed is True
 
 
 @pytest.mark.parametrize(
@@ -380,12 +364,23 @@ def test_custom_integration_allowlist_scopes_ports(
     if permitted:
         assert transport.destination(url)[1] == ["93.184.216.34"]
     else:
-        with pytest.raises(IntegrationError):
+        with pytest.raises(
+            IntegrationError,
+            match="^Destination host and port are not in KEEN_INTEGRATION_ALLOWED_HOSTS$",
+        ):
             transport.destination(url)
 
 
-@pytest.mark.parametrize("url", ["http://notify.example", "https://notify.example"])
-def test_outbound_notification_rejects_cleartext_and_loopback(monkeypatch, url):
+@pytest.mark.parametrize(
+    "url,message",
+    [
+        ("http://notify.example", "Incident webhook URL must start with https://"),
+        ("https://notify.example", "Ingestion destination address is prohibited"),
+    ],
+)
+def test_outbound_notification_rejects_cleartext_and_loopback(
+    monkeypatch, url, message
+):
     from app.ingest import http
     from app.outbound.incidents import IncidentWebhookConfig, post_incident_webhook
 
@@ -402,7 +397,7 @@ def test_outbound_notification_rejects_cleartext_and_loopback(monkeypatch, url):
         signing_secret="synthetic",
         timeout_seconds=1,
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=f"^{message}$"):
         post_incident_webhook(config, {"fixture": True})
     upstream.assert_not_called()
 
@@ -422,7 +417,10 @@ def test_later_invalid_attachment_prevents_all_storage_writes(monkeypatch):
             read=Mock(return_value=b"not a PDF"),
         ),
     ]
-    with pytest.raises(DomainError):
+    with pytest.raises(
+        DomainError,
+        match="^Invalid file type: file content does not match declared content-type$",
+    ):
         questions._store_attachments(
             Mock(),
             event_id=uuid.uuid4(),

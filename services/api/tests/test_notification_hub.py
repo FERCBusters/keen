@@ -96,7 +96,7 @@ def test_bus_publish_and_fallback_behaviour():
         failing = MagicMock()
         failing.publish = AsyncMock(side_effect=RuntimeError("down"))
         with patch.object(bus2, "_pub_client", return_value=failing):
-            with pytest.raises(RuntimeError):
+            with pytest.raises(RuntimeError, match="^down$"):
                 await bus2.publish({"type": "x"})
             fallback = MagicMock()
             fallback.broadcast_user = AsyncMock()

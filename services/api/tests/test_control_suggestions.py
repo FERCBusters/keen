@@ -249,9 +249,15 @@ def test_endpoint_scope_live_edits_and_disabled_framework(db):
     db.commit()
     with pytest.raises((HTTPException, DomainError)) as error:
         routes.suggest_controls(payload, db)
-    assert error.value.status_code == 400
+    assert (error.value.status_code, error.value.detail) == (
+        400,
+        "Choose an enabled framework for control suggestions",
+    )
 
 
 def test_bounded_input():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as refused:
         routes.ControlSuggestionInput(framework="CUSTOM", description="x" * 4001)
+    assert [(e["type"], e["loc"]) for e in refused.value.errors()] == [
+        ("string_too_long", ("description",))
+    ]

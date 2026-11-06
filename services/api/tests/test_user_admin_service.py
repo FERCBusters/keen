@@ -67,7 +67,7 @@ def test_every_operation_requires_an_administrator(people, operation, actor):
     db, target, reader = people
     context = ChangeContext(actor=reader if actor == "normal user" else None)
 
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(DomainError, match="^Admin role required$") as refused:
         _operations(target.id)[operation](context, db)
 
     assert refused.value.status_code == 403

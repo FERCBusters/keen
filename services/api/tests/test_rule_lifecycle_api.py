@@ -415,7 +415,10 @@ def test_stale_review_pages_through_every_mapping_without_overlap(lab):
 def test_stale_mapping_maintenance_requires_an_administrator(keen, lab, stale):  # noqa: F811 - fixture imported above
     reader = keen.client(keen.user(*BROAD_PERMISSIONS))
     review = reader.get("/v1/admin/stale-rule-mappings", params={"source": "ci"})
-    assert review.status_code == 403
+    assert (review.status_code, review.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
     before = lab.mapping_ids()
 
     assert _prune(lab, [stale.no_longer_matches.id], client=reader).status_code == 403
@@ -540,7 +543,11 @@ def test_unknown_backfill_jobs_are_reported_without_side_effects(lab):
     malformed = _cancel(lab, "not-a-uuid")
     assert malformed.status_code == 400
     assert malformed.json()["detail"] == "Invalid job ID"
-    assert _cancel(lab, uuid.uuid4()).status_code == 404
+    refused = _cancel(lab, uuid.uuid4())
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Backfill not found"},
+    )
 
 
 def test_backfill_controls_require_an_administrator(keen, lab):  # noqa: F811 - fixture imported above
@@ -549,10 +556,26 @@ def test_backfill_controls_require_an_administrator(keen, lab):  # noqa: F811 - 
     job_id = _start(lab).json()["backfill"]["id"]
     reader = keen.client(keen.user(*BROAD_PERMISSIONS))
 
-    assert reader.get(f"/v1/admin/rule-backfills/{job_id}").status_code == 403
-    assert reader.get("/v1/admin/rule-backfills").status_code == 403
-    assert _cancel(lab, job_id, client=reader).status_code == 403
-    assert _start(lab, client=reader).status_code == 403
+    refused = reader.get(f"/v1/admin/rule-backfills/{job_id}")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
+    refused = reader.get("/v1/admin/rule-backfills")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
+    refused = _cancel(lab, job_id, client=reader)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
+    refused = _start(lab, client=reader)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
 
     lab.db.expire_all()
     assert lab.db.get(RuleBackfillJob, uuid.UUID(job_id)).status == "queued"
@@ -670,7 +693,11 @@ def test_deleting_a_rule_needs_the_current_version_and_stops_future_mapping(lab)
     lab.put(_rule("rollbacks", action="rollback", refs=("A.2",)))
     current = lab.version()
 
-    assert _delete(lab, "deploys", current - 1).status_code == 409
+    refused = _delete(lab, "deploys", current - 1)
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "Configuration changed in another session. Reload before saving."},
+    )
     missing = _delete(lab, "missing", current)
     assert missing.status_code == 404
     assert missing.json()["detail"] == "Rule not found"
@@ -706,7 +733,11 @@ def test_restoring_a_rules_revision_replaces_the_document_once_versions_agree(la
         )
 
     assert revisions() == [current, first]
-    assert restore(first, current - 1).status_code == 409
+    refused = restore(first, current - 1)
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "Configuration changed in another session. Reload before saving."},
+    )
     assert lab.rule_ids() == ["deploys", "rollbacks"]
 
     restored = restore(first, current)
@@ -722,7 +753,10 @@ def test_restoring_a_rules_revision_replaces_the_document_once_versions_agree(la
     assert unknown.status_code == 404
     assert unknown.json()["detail"] == "Unknown configuration"
     listing = lab.admin.get("/v1/admin/configuration-revisions/no-such-configuration")
-    assert listing.status_code == 404
+    assert (listing.status_code, listing.json()) == (
+        404,
+        {"detail": "Unknown configuration"},
+    )
     assert lab.version() == current + 1
 
 
@@ -754,7 +788,11 @@ def test_rule_export_is_scoped_to_one_source(lab):
     assert everything.headers["content-disposition"] == (
         'attachment; filename="keen-rules-all.yaml"'
     )
-    assert _export(lab, "x" * 257).status_code == 400
+    refused = _export(lab, "x" * 257)
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Source is too long"},
+    )
 
 
 def test_rule_export_filename_cannot_carry_header_or_path_syntax(lab):
@@ -926,8 +964,16 @@ def test_rule_insights_follow_each_saved_version_for_administrators_only(
     }
 
     reader = keen.client(keen.user(*BROAD_PERMISSIONS))
-    assert reader.get("/v1/admin/mapping-rules/insights").status_code == 403
-    assert keen.client().get("/v1/admin/mapping-rules/insights").status_code == 401
+    refused = reader.get("/v1/admin/mapping-rules/insights")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
+    refused = keen.client().get("/v1/admin/mapping-rules/insights")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     for days, code in (("3", 400), ("many", 422)):
         response = lab.admin.get(
             "/v1/admin/mapping-rules/insights", params={"days": days}

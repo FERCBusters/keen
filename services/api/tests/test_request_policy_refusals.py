@@ -111,7 +111,10 @@ def test_long_request_details_are_clipped_in_the_audit_trail(keen):  # noqa: F81
         headers={"User-Agent": "u" * 300, "Referer": referer},
     )
 
-    assert response.status_code == 403
+    assert (response.status_code, response.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
     keen.db.expire_all()
     (row,) = keen.db.query(AuditLog).filter_by(path="/v1/users").all()
     assert (row.username, row.status_code) == (user.username, 403)

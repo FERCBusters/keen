@@ -138,7 +138,10 @@ def test_cloudwatch_client_endpoint_validation():
         fake = fake_boto_client(endpoint)
         try:
             with fake["factory"], configured():
-                with pytest.raises(ValueError):
+                with pytest.raises(
+                    ValueError,
+                    match="^CloudWatch endpoint must use HTTPS without embedded credentials or a fragment$",
+                ):
                     cl._cloudwatch_client("r1")
         finally:
             pass
@@ -210,8 +213,8 @@ def test_once_streams_events_and_paginates(db):
     assert result["pages"] == 2
     assert result["log_group"] == "/prod/app"
     assert result["region"] == "ap-southeast-2"
-    assert cursor.last_ts is not None
-    db.commit.assert_called_once()
+    assert cursor.last_ts == datetime(2025, 10, 9, 8, 53, 29, tzinfo=timezone.utc)
+    db.commit.assert_called_once_with()
     db.rollback.assert_not_called()
     assert calls[0]["logGroupName"] == "/prod/app"
     assert calls[0]["filterPattern"] == "ERROR"
@@ -226,7 +229,7 @@ def test_once_streams_events_and_paginates(db):
     # The run commits once, with its cursor, rather than per event.
     assert {e["commit"] for e in stored} == {False}
     assert all(e["timestamp"].tzinfo is None for e in stored)
-    assert result["cursor_last_ts"].startswith("2025-10-09T")
+    assert result["cursor_last_ts"] == "2025-10-09T08:53:29+00:00"
 
 
 def test_events_without_an_aws_event_id_keep_distinct_identities(db):
@@ -296,10 +299,8 @@ def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):
     assert result["created_events"] == 0
     assert result["created_artifacts"] == 0
     assert result["created_mappings"] == 0
-    assert result["cursor_last_ts"].startswith(
-        datetime.fromtimestamp(MS / 1000, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-    )
-    db.commit.assert_called_once()
+    assert result["cursor_last_ts"] == "2025-10-09T08:53:20+00:00"
+    db.commit.assert_called_once_with()
 
 
 def test_once_repeated_token_stops(db):
@@ -315,7 +316,7 @@ def test_once_repeated_token_stops(db):
             db, "name", {"log_group": "g"}, {"max_pages": 50}
         )
     assert result["pages"] == 1
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
 
 
 def test_once_stream_names_must_be_a_list(db):
@@ -473,7 +474,7 @@ def test_once_continues_from_a_naive_cursor_with_overlap(db):
     expected = datetime(2026, 10, 9, 11, 59, 30, tzinfo=timezone.utc)
     assert captured["startTime"] == int(expected.timestamp() * 1000)
     assert result["start"] == expected.isoformat()
-    assert cursor.last_ts.tzinfo is not None
+    assert cursor.last_ts == datetime(2026, 10, 9, 12, tzinfo=timezone.utc)
 
 
 def test_unresolved_or_conflicting_mappings_are_not_counted(db):
@@ -532,4 +533,4 @@ def test_paging_stops_at_the_page_limit_with_the_cursor_at_the_newest_event(db):
     assert calls[1]["nextToken"] == "tok-1"
     assert [event["external_id"] for event in stored] == ["ev1", "ev2"]
     assert cursor.last_ts == datetime.fromtimestamp((MS + 2000) / 1000, tz=timezone.utc)
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()

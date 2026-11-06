@@ -64,8 +64,8 @@ class HomeLogicTests(unittest.TestCase):
             (float("nan"), 5, "lt", "", ""),
             (5, float("inf"), "lt", "", ""),
         ]:
-            self.assertFalse(
-                home_operations.outside_threshold(value, target, op, u, tu)
+            self.assertIs(
+                home_operations.outside_threshold(value, target, op, u, tu), False
             )
 
     def test_hierarchy_and_numeric_sort(self):
@@ -212,7 +212,7 @@ class HomeDatabaseTests(unittest.TestCase):
         )
         tree = home.home_controls(self.fw, "", self.db, self.user)
         self.assertEqual([x["id"] for x in tree["groups"]], ["A", "B"])
-        self.assertFalse(tree["items"])
+        self.assertEqual(tree["items"], [])
 
     def test_no_permissions_exposes_structure_only(self):
         self.role.return_value = "normal"

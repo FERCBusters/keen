@@ -3,6 +3,7 @@
 The SMTP classes are replaced at their owning module, so no network is used.
 """
 
+import re
 import ssl
 from datetime import date
 
@@ -95,7 +96,7 @@ def test_starttls_precedes_login_and_sending(smtp, monkeypatch):
     assert names == ["ehlo", "starttls", "ehlo", "login", "send", "quit"]
     # The one address is the envelope recipient, never the parsed To header.
     assert client.recipients == ["auditor@example.test"]
-    assert isinstance(client.calls[1][1], ssl.SSLContext)
+    assert type(client.calls[1][1]) is ssl.SSLContext
     assert client.calls[1][1].verify_mode == ssl.CERT_REQUIRED
     assert client.calls[1][1].check_hostname is True
     (message,) = client.messages
@@ -168,13 +169,26 @@ def test_audit_invites_are_all_day_escaped_and_folded():
     assert ics.endswith("\r\n")
     unfolded = ics.replace("\r\n ", "")
     lines = unfolded.split("\r\n")
-    assert "DTSTART;VALUE=DATE:20260410" in lines
-    assert "DTEND;VALUE=DATE:20260413" in lines  # all-day end is exclusive
-    assert "SUMMARY:Review\\; scope\\, " in lines
-    assert "UID:keen-audit--1@keen" in lines
-    assert "URL:https://keen.example/audit.html?id=1" in lines
-    description = next(line for line in lines if line.startswith("DESCRIPTION:"))
-    assert description.startswith("DESCRIPTION:External audit for A.")
+    # The stamp is the time the invite was written.
+    assert re.fullmatch(r"DTSTAMP:\d{8}T\d{6}Z", lines[7])
+    assert lines[:7] + lines[8:] == [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keen//Audit Schedule//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        "UID:keen-audit--1@keen",
+        "DTSTART;VALUE=DATE:20260410",
+        "DTEND;VALUE=DATE:20260413",  # all-day end is exclusive
+        "SUMMARY:Review\\; scope\\, ",
+        "DESCRIPTION:External audit for A. Open audit: "
+        "https://keen.example/audit.html?id=1",
+        "URL:https://keen.example/audit.html?id=1",
+        "END:VEVENT",
+        "END:VCALENDAR",
+        "",
+    ]
     assert all(len(line.encode()) <= 75 for line in ics.split("\r\n"))
 
 
@@ -226,9 +240,23 @@ def test_scheduled_audit_emails_attach_a_calendar_invite(smtp):
     (message,) = smtp.instances[0].messages
     assert message["Subject"] == "Keen Alerts: Audit scheduled - Access review"
     body = message.get_body(preferencelist=("plain",)).get_content()
-    assert body.startswith("Hello there,")
-    assert "Scheduled end date: 2026-04-11" in body
-    assert "Open audit: https://keen.example/audit.html?id=1" in body
+    assert body == (
+        "Hello there,\n"
+        "\n"
+        "A scheduled audit has been created in Keen. An .ics calendar file is "
+        "attached so you can add it to your calendar.\n"
+        "\n"
+        "Audit: Access review\n"
+        "Type: Internal\n"
+        "Framework: A\n"
+        "Scheduled start date: 2026-04-10\n"
+        "Scheduled end date: 2026-04-11\n"
+        "\n"
+        "Open audit: https://keen.example/audit.html?id=1\n"
+        "\n"
+        "You are receiving this email because you were listed as an attendee on "
+        "the scheduled audit template.\n"
+    )
     (invite,) = list(message.iter_attachments())
     assert invite.get_filename() == "keen-audit.ics"
     assert invite.get_content_type() == "text/calendar"

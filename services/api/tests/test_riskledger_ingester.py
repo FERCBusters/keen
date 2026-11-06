@@ -261,21 +261,34 @@ def test_collector_identity_and_registration(db, records):
 
 
 @pytest.mark.parametrize(
-    "cfg",
+    "cfg,problem",
     [
-        {"organizations": [{"org": "../../secrets"}]},
-        {"organizations": [{"org": "*"}, {"org": ORG}]},
-        {"control_ids": ["https://other.example"]},
-        {"page_size": True},
-        {"max_pages": 0},
-        {"import_suppliers": "false"},
-        {"framework_level_ids": ["no"]},
-        {"max_run_seconds": 1},
+        (
+            {"organizations": [{"org": "../../secrets"}]},
+            "Risk Ledger requires a valid UUID identifier",
+        ),
+        (
+            {"organizations": [{"org": "*"}, {"org": ORG}]},
+            "Configure one Risk Ledger organisation per API key",
+        ),
+        (
+            {"control_ids": ["https://other.example"]},
+            "Risk Ledger requires a valid UUID identifier",
+        ),
+        ({"page_size": True}, "page_size must be between 1 and 100"),
+        ({"max_pages": 0}, "max_pages must be between 1 and 1000"),
+        ({"import_suppliers": "false"}, "import_suppliers must be true or false"),
+        (
+            {"framework_level_ids": ["no"]},
+            "Risk Ledger requires a valid UUID identifier",
+        ),
+        ({"max_run_seconds": 1}, "max_run_seconds must be between 30 and 1800"),
     ],
 )
-def test_invalid_config(cfg):
-    with pytest.raises(rl.RiskLedgerError):
+def test_invalid_config(cfg, problem):
+    with pytest.raises(rl.RiskLedgerError) as refused:
         rl.validate_config(cfg)
+    assert str(refused.value) == problem
 
 
 def test_post_supplier_pagination_and_get_risks():

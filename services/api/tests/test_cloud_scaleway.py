@@ -380,10 +380,15 @@ def test_collect_reads_the_organisation(use):
     assert checks["identity.inactive"].subjects == ["idle@example.org"]
     # Managed keys are left out; the old key belongs to an application.
     assert checks["credentials.key_age"].subjects == ["application/terraform"]
-    assert "of 2 live keys" in checks["credentials.key_age"].detail
+    assert checks["credentials.key_age"].detail == (
+        "1 user or application holds API keys older than 90 days, of 2 live keys"
+    )
     # The web group's earlier drop rule wins; the unused group is skipped.
     assert checks["network.admin_ports"].subjects == ["fr-par-1/legacy"]
-    assert checks["network.admin_ports"].detail.startswith("1 of 2 security groups")
+    assert (
+        checks["network.admin_ports"].detail
+        == "1 of 2 security groups in use let SSH or RDP in from anywhere"
+    )
     assert checks["network.databases"].subjects == ["fr-par/analytics"]
     assert checks["resilience.backups"].subjects == ["fr-par/orders"]
     assert checks["kubernetes.control_plane"].subjects == [
@@ -410,7 +415,10 @@ def test_saml_only_sign_in_leaves_mfa_to_the_identity_provider(use):
     checks = by_key(scope.checks)
     for key in ("identity.mfa", "identity.admin_mfa"):
         assert checks[key].status == "info"
-        assert "identity provider" in checks[key].detail
+        assert checks[key].detail == (
+            "Members sign in through SAML single sign-on, where the identity "
+            "provider applies MFA"
+        )
 
 
 def test_a_refused_read_marks_only_its_checks(use):
@@ -511,7 +519,7 @@ def test_activity_reports_truncation(use, monkeypatch):
 def test_times_identifiers_and_addresses_are_read_strictly():
     assert parse_time("yesterday") is None
     assert parse_time("2026-01-02T03:04:05") == datetime(2026, 1, 2, 3, 4, 5)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         scw._uuid("../iam")
     assert scw.everywhere("not-a-range") is False
     udp = {

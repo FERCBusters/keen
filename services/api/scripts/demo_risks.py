@@ -5,7 +5,7 @@ application derives them. Control links name explicit references per
 framework; a framework the run does not seed is left out.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from app.db.models import (
     InterestedParty,
@@ -392,6 +392,10 @@ def seed_risks(seeder, assets, org_nodes):
                 **seeder.risk_ratings(*spec["ratings"]),
                 "treatment_strategy": spec["strategy"],
                 "treatment_status": spec["status"],
+                # Closed demo risks closed as the demo begins.
+                "closed_at": datetime.combine(seeder.seed_date, datetime.min.time())
+                if spec["status"] == "closed"
+                else None,
                 "treatment_plan": spec["plan"],
                 "treatment_due_at": None
                 if due is None

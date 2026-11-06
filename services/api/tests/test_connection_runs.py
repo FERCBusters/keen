@@ -120,18 +120,24 @@ LOCKS = {
 @pytest.mark.parametrize("lock", LOCKS.values(), ids=LOCKS.keys())
 def test_a_lock_whose_session_is_lost_is_released_and_the_loss_reported(pg, lock):
     before = _holders(pg)
-    with pytest.raises(OperationalError):
+    with pytest.raises(OperationalError) as lost:
         with lock(pg) as acquired:
             assert acquired is True
             holder, key = _advisory_holder(pg, before)
             # The database ends the lock's session, as a restart or an
             # administrator would, before the run releases the lock.
-            assert pg.execute(
-                text("SELECT pg_terminate_backend(:pid, 5000)"), {"pid": holder}
-            ).scalar()
+            assert (
+                pg.execute(
+                    text("SELECT pg_terminate_backend(:pid, 5000)"), {"pid": holder}
+                ).scalar()
+                is True
+            )
 
+    # The release reached a closed connection, and that loss is reported.
+    assert lost.value.connection_invalidated is True
+    assert str(lost.value.orig).startswith("server closed the connection unexpectedly")
     # The lock ended with its session, so another run takes it.
-    assert _taken_by_another_session(pg.get_bind().engine, key)
+    assert _taken_by_another_session(pg.get_bind().engine, key) is True
 
 
 @contextmanager
@@ -161,7 +167,7 @@ def test_a_lock_that_cannot_be_released_never_outlives_its_handle(pg, lock):
 
     # The handle is discarded rather than pooled with the lock still held, so
     # its session ends and the lock with it.
-    assert _taken_by_another_session(engine, key)
+    assert _taken_by_another_session(engine, key) is True
 
 
 def test_an_environment_imap_default_never_runs(monkeypatch):

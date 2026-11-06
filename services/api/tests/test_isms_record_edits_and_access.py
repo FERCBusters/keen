@@ -263,4 +263,8 @@ def test_the_swot_structure_lock_is_taken_on_postgresql_only(contract_db):
         engine.dispose()
     if contract_db.get_bind().dialect.name == "postgresql":
         _, statements = statements_of(contract_db, lambda: _lock(contract_db))
-        assert "SELECT pg_advisory_xact_lock(724103610)" in statements
+        assert statements == [
+            "SAVEPOINT sa_savepoint_1",
+            "SELECT pg_advisory_xact_lock_shared(%(key)s)",
+            "SELECT pg_advisory_xact_lock(724103610)",
+        ]

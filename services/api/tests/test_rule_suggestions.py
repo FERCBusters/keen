@@ -593,7 +593,9 @@ def test_a_disabled_evidence_feature_or_missing_framework_stops_a_run(db, monkey
     )
     assert refresh(db) == {"status": "disabled"}
     assert suggestions.suggestion_summary(db=db) == {"open_count": 0}
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match=r"^This feature is disabled by an administrator\.$"
+    ) as refused:
         suggestions.request_refresh(db=db)
     assert refused.value.status_code == 404
     monkeypatch.undo()
@@ -701,7 +703,9 @@ def test_the_list_shows_live_samples_and_hides_suggestions_mapped_since(db, admi
     (left,) = suggestions.list_suggestions(db=db)["items"]
     assert left["samples"] == []
 
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match="^Status must be open, dismissed or applied$"
+    ) as refused:
         suggestions.list_suggestions(status="maybe", db=db)
     assert refused.value.status_code == 400
 
@@ -730,7 +734,9 @@ def test_dismissing_and_restoring_record_who_decided(db, admin):
     restored = status("open")
     assert (restored["status"], restored["decided_by"]) == ("open", None)
 
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match="^Save the rule before marking the suggestion as created$"
+    ) as refused:
         status("applied", rule_id="missing")
     assert refused.value.status_code == 409
     save_rules(db, rule("edited", source="github"))
@@ -740,7 +746,7 @@ def test_dismissing_and_restoring_record_who_decided(db, admin):
             status(value, rule_id="edited")
         assert refused.value.status_code == 409
     for missing in ("nope", str(uuid.uuid4())):
-        with pytest.raises(DomainError) as refused:
+        with pytest.raises(DomainError, match="^Suggestion not found$") as refused:
             suggestions.set_suggestion_status(
                 suggestion_id=missing,
                 payload=SuggestionStatusInput(status="dismissed"),
@@ -762,7 +768,10 @@ def test_creating_a_suggestion_saves_the_rule_and_maps_past_events(
     save_rules(db, rule("suggested_github_pull_request_event", source="other"))
     version = db.get(ManagedConfiguration, "rules").version
 
-    with pytest.raises(DomainError) as stale:
+    with pytest.raises(
+        DomainError,
+        match=r"^Configuration changed in another session\. Reload before saving\.$",
+    ) as stale:
         suggestions.apply_suggestion(
             suggestion_id=str(row.id),
             payload=SuggestionApplyInput(version=version - 1),
@@ -795,7 +804,9 @@ def test_creating_a_suggestion_saves_the_rule_and_maps_past_events(
     assert result["suggestion"]["rule_id"] == "suggested_github_pull_request_event_2"
     assert result["suggestion"]["decided_by"] == "suggester"
 
-    with pytest.raises(DomainError) as decided:
+    with pytest.raises(
+        DomainError, match="^This suggestion has already been decided$"
+    ) as decided:
         suggestions.apply_suggestion(
             suggestion_id=str(row.id),
             payload=SuggestionApplyInput(version=version + 1),
@@ -821,11 +832,34 @@ def test_creating_a_suggestion_can_choose_among_its_candidates(db, admin, monkey
     candidates = [c["ref"] for c in row.controls]
     assert candidates == ["CM-1", "LG-1"]
 
-    for too_long in (["CM-1"] * (suggestions.MAX_CANDIDATES + 1), ["x" * 65]):
-        with pytest.raises(ValidationError):
+    for too_long, error in (
+        (
+            ["CM-1"] * (suggestions.MAX_CANDIDATES + 1),
+            (
+                "too_long",
+                ("refs",),
+                f"List should have at most {suggestions.MAX_CANDIDATES} items "
+                f"after validation, not {suggestions.MAX_CANDIDATES + 1}",
+            ),
+        ),
+        (
+            ["x" * 65],
+            (
+                "string_too_long",
+                ("refs", 0),
+                "String should have at most 64 characters",
+            ),
+        ),
+    ):
+        with pytest.raises(ValidationError) as refused:
             SuggestionApplyInput(version=0, refs=too_long)
+        assert [(e["type"], e["loc"], e["msg"]) for e in refused.value.errors()] == [
+            error
+        ]
     for refs in ([], ["ZZ-9"], [candidates[0], "ZZ-9"]):
-        with pytest.raises(DomainError) as refused:
+        with pytest.raises(
+            DomainError, match="^Choose at least one of the suggested controls$"
+        ) as refused:
             suggestions.apply_suggestion(
                 suggestion_id=str(row.id),
                 payload=SuggestionApplyInput(version=0, refs=refs),
@@ -854,7 +888,9 @@ def test_a_suggestion_whose_control_was_removed_is_refused_and_stays_open(db, ad
     )
     db.flush()
 
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match="^Unknown control: fw-suggestions / CM-1$"
+    ) as refused:
         suggestions.apply_suggestion(
             suggestion_id=str(row.id),
             payload=SuggestionApplyInput(version=0),
@@ -906,7 +942,10 @@ def test_checking_now_queues_one_run_at_a_time(db, monkeypatch):
         raise ConnectionError("broker down")
 
     monkeypatch.setattr(tasks.rule_suggestions_task, "apply_async", unreachable)
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^The background worker could not be reached; try again shortly$",
+    ) as refused:
         suggestions.request_refresh(db=db)
     assert refused.value.status_code == 503
     # The request is forgotten, so the next one is queued.
@@ -916,7 +955,10 @@ def test_checking_now_queues_one_run_at_a_time(db, monkeypatch):
         raise ConnectionError("cache down")
 
     store.delete = lost
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^The background worker could not be reached; try again shortly$",
+    ) as refused:
         suggestions.request_refresh(db=db)
     assert refused.value.status_code == 503
     store.keys.clear()
@@ -982,12 +1024,13 @@ def test_suggestion_routes_are_for_administrators(keen, monkeypatch):  # noqa: F
     version = admin.get("/v1/admin/mapping-rules").json()["version"]
 
     # Unsafe methods need the CSRF header, like every administrator write.
-    assert (
-        admin.post(
-            f"/v1/admin/rule-suggestions/{item['id']}/status",
-            json={"status": "dismissed"},
-        ).status_code
-        == 403
+    refused = admin.post(
+        f"/v1/admin/rule-suggestions/{item['id']}/status",
+        json={"status": "dismissed"},
+    )
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
     )
     response = admin.post(
         f"/v1/admin/rule-suggestions/{item['id']}/status",
@@ -1027,8 +1070,16 @@ def test_suggestion_routes_are_for_administrators(keen, monkeypatch):  # noqa: F
         ("post", f"/v1/admin/rule-suggestions/{item['id']}/status"),
     ):
         kwargs = {"json": {}, "headers": unsafe(reader)} if method == "post" else {}
-        assert getattr(reader, method)(path, **kwargs).status_code == 403
-    assert keen.client().get("/v1/admin/rule-suggestions").status_code == 401
+        refused = getattr(reader, method)(path, **kwargs)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Admin role required"},
+        )
+    refused = keen.client().get("/v1/admin/rule-suggestions")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 def test_the_home_page_points_administrators_at_suggestions(keen):  # noqa: F811

@@ -6,6 +6,7 @@ books and tags) while keeping every response offline and bounded.
 
 import contextlib
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -147,6 +148,8 @@ def test_timestamp_parsing_and_formatting():
     assert bs._parse_bookstack_ts("2026-10-09T12:30:00") == datetime(
         2026, 10, 9, 12, 30
     )
+    # An offset is converted to the naive UTC instant Keen stores.
+    assert bs._parse_bookstack_ts("2026-01-01T11:00:00+11:00") == datetime(2026, 1, 1)
     for value in (None, "", "   ", 99, "not a date"):
         assert bs._parse_bookstack_ts(value) is None
     assert bs._to_iso_z(datetime(2026, 10, 9, 12, 30)) == "2026-10-09T12:30:00Z"
@@ -174,14 +177,16 @@ def test_client_configuration(env):
     assert captured["headers"]["Authorization"] == "Token fixture-id:fixture-secret"
     assert captured["verify"] is True
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Missing KEEN_BOOKSTACK_BASE_URL$"):
         with (
             patch.object(bs.settings, "bookstack_base_url", ""),
             patch.object(bs.settings, "bookstack_token_id", "tid"),
             patch.object(bs.settings, "bookstack_token_secret", "s"),
         ):
             bs._client()
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="^Missing BOOKSTACK_TOKEN_ID/BOOKSTACK_TOKEN_SECRET$"
+    ):
         with (
             patch.object(bs.settings, "bookstack_base_url", "https://docs.example.com"),
             patch.object(bs.settings, "bookstack_token_id", "tid"),
@@ -189,7 +194,7 @@ def test_client_configuration(env):
             patch.object(bs, "is_safe_url", return_value=True),
         ):
             bs._client()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Invalid or unsafe BookStack base URL$"):
         with (
             patch.object(bs.settings, "bookstack_base_url", "https://docs.example.com"),
             patch.object(bs, "is_safe_url", return_value=False),
@@ -266,7 +271,7 @@ def test_html_stripping_and_previews():
 
     text, source = bs._make_preview(PAGE_FULL_MARKDOWN, 500)
     assert source == "markdown"
-    assert text.startswith("# Mk heading")
+    assert text == "# Mk heading\n\nplain line"
     text, source = bs._make_preview(PAGE_FULL, 500)
     assert source == "html"
     assert "shall be approved" in text
@@ -503,52 +508,51 @@ def test_parse_page_mappings_variants():
     assert book_names[0].match_book_slug == "hr-docs"
 
 
-def test_page_mapping_matches():
-    mapping = bs._parse_page_mappings(
-        {
-            "page_mappings": [
-                {
-                    "match": {"book_slug": "isms", "slug": "access-control-policy"},
-                    "map_to": ["A.9"],
-                }
-            ]
-        }
-    )[0]
-    assert mapping.matches(PAGE_LIST_ITEM, PAGE_FULL) is True
-    # A different book scope fails the match.
-    other = bs._parse_page_mappings(
-        {"page_mappings": [{"match": {"book_id": 8}, "map_to": ["A.1"]}]}
-    )[0]
-    assert other.matches(PAGE_LIST_ITEM, PAGE_FULL) is False
-    title_mapping = bs._parse_page_mappings(
-        {
-            "page_mappings": [
-                {"match": {"title": "ACCESS CONTROL POLICY"}, "map_to": ["A.1"]}
-            ]
-        }
-    )[0]
-    assert title_mapping.matches(PAGE_LIST_ITEM, PAGE_FULL) is True
-    regex_mapping = bs._parse_page_mappings(
-        {"page_mappings": [{"match": {"slug_regex": "^hr-docs-"}, "map_to": ["A.1"]}]}
-    )[0]
-    hr_page = dict(PAGE_LIST_ITEM, slug="policies", book_slug="hr-docs")
-    # Combined slug hr-docs-policies matches the composer prefix rule.
-    assert regex_mapping.matches(hr_page, {"book_slug": "hr-docs"}) is True
-    exact = bs._parse_page_mappings(
-        {"page_mappings": [{"match": {"id": 11}, "map_to": ["A.1"]}]}
-    )[0]
-    assert exact.matches(PAGE_LIST_ITEM, PAGE_FULL) is True
-    missing = bs._parse_page_mappings(
-        {"page_mappings": [{"match": {"id": 12}, "map_to": ["A.1"]}]}
-    )[0]
-    assert missing.matches(PAGE_LIST_ITEM, PAGE_FULL) is False
-    prefix = bs._parse_page_mappings(
-        {"page_mappings": [{"match": {"slug": "hr-docs-policies"}, "map_to": ["A.1"]}]}
-    )[0]
-    assert prefix.matches(hr_page, {}) is True
-    # Missing page criteria combine as an all-pass mapping.
-    catch_all = bs._parse_page_mappings({"page_mappings": [{"map_to": ["A.1"]}]})[0]
-    assert catch_all.matches({}, {}) is True
+HR_PAGE = dict(PAGE_LIST_ITEM, slug="policies", book_slug="hr-docs")
+
+
+@pytest.mark.parametrize(
+    "match,listed,full,expected",
+    [
+        ({"book_slug": "isms", "slug": "access-control-policy"}, None, None, True),
+        # A different book scope fails the match.
+        ({"book_id": 8}, None, None, False),
+        (
+            {"book": {"id": 7}, "slug": "policy"},
+            {"book_id": 8, "slug": "policy"},
+            {},
+            False,
+        ),
+        (
+            {"book": {"slug": "isms"}, "slug": "policy"},
+            {"book_slug": "isms", "slug": "policy"},
+            {},
+            True,
+        ),
+        ({"title": "ACCESS CONTROL POLICY"}, None, None, True),
+        ({"title": "Policy"}, {"name": "POLICY"}, {}, True),
+        ({"title_regex": "^Policy"}, {"name": "Guide"}, {}, False),
+        # The combined slug hr-docs-policies matches the composer prefix rule.
+        ({"slug_regex": "^hr-docs-"}, HR_PAGE, {"book_slug": "hr-docs"}, True),
+        ({"slug_regex": "^sec-"}, {"slug": "sec-policy"}, {}, True),
+        ({"slug_regex": "^sec-"}, {"slug": "other"}, {}, False),
+        ({"slug": "hr-docs-policies"}, HR_PAGE, {}, True),
+        ({"slug": "security"}, {"slug": "SECURITY"}, {}, True),
+        ({"slug": "security"}, {"slug": "other"}, {}, False),
+        ({"id": 11}, None, None, True),
+        ({"id": 12}, None, None, False),
+        # Missing page criteria combine as an all-pass mapping.
+        (None, {}, {}, True),
+    ],
+)
+def test_page_mapping_matches(match, listed, full, expected):
+    entry = (
+        {"map_to": ["A.1"]} if match is None else {"match": match, "map_to": ["A.1"]}
+    )
+    (mapping,) = bs._parse_page_mappings({"page_mappings": [entry]})
+    listed = PAGE_LIST_ITEM if listed is None else listed
+    full = PAGE_FULL if full is None else full
+    assert mapping.matches(listed, full) is expected
 
 
 def test_ensure_and_add_mappings(db):
@@ -571,7 +575,7 @@ def test_ensure_and_add_mappings(db):
         rationale="test rationale",
     )
     assert created == 2
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
     added_kinds = [type(call.args[0]).__name__ for call in db.add.call_args_list]
     assert added_kinds.count("Mapping") == 2
     assert added_kinds.count("ControlItem") == 1
@@ -646,7 +650,7 @@ def test_apply_bookstack_config_mappings(db):
     ):
         assert bs.apply_bookstack_config_mappings(db, ev) == 1
     mapping.matches.assert_called_once()
-    db.commit.assert_called_once()
+    db.commit.assert_called_once_with()
 
 
 def connections_env():
@@ -795,8 +799,14 @@ def test_ingest_all_stores_page_events_and_config_mappings(db, env):
     assert snapshot["page"]["url_slug"].endswith(
         "/books/isms/page/access-control-policy"
     )
-    assert policy_page["artifact_key"].startswith("bookstack/ISMS-docs/")
-    assert policy_page["artifact_key"].endswith("11.json")
+    assert (
+        policy_page["artifact_key"]
+        == "bookstack/ISMS-docs/2026-10-09/isms-access-control-policy-11.json"
+    )
+    assert (
+        policy_page["artifact_key"]
+        == "bookstack/ISMS-docs/2026-10-09/isms-access-control-policy-11.json"
+    )
     assert snapshot["page"]["url_slug"].endswith(
         "/books/isms/page/access-control-policy"
     )
@@ -834,7 +844,7 @@ def test_ingest_all_capture_full_content_mode(db, env):
     assert results[0]["created"] == 1
     payload = json.loads(stored_calls[0]["artifact_bytes"].decode())
     # Full capture keeps every body representation in the stored snapshot.
-    assert payload["page"]["markdown"].startswith("# Mk heading")
+    assert payload["page"]["markdown"] == "# Mk heading\n\nplain line"
     assert payload["page"]["html"] is None  # detail omitted html for this page
     assert stored_calls[0]["artifact_kind"] == "bookstack_page"
 
@@ -1273,7 +1283,7 @@ def test_cursor_is_reused_when_present_and_created_once_when_absent(db):
     assert isinstance(created, bs.IngestionCursor)
     assert created.last_ts is None and created.meta == {}
     db.add.assert_called_once_with(created)
-    db.flush.assert_called_once()
+    db.flush.assert_called_once_with()
 
 
 def test_system_info_is_empty_when_the_endpoint_fails_or_is_malformed():
@@ -1447,7 +1457,9 @@ def test_preview_text_is_empty_when_tag_stripping_times_out():
     slow.sub.side_effect = TimeoutError()
     with patch.object(bs, "_TAG_RE", slow):
         assert bs._strip_html_to_text("<p>text</p>") == ""
-    slow.sub.assert_called_once()
+    slow.sub.assert_called_once_with(
+        " ", "<p>text</p>", timeout=0.025, concurrent=False
+    )
 
 
 @pytest.mark.parametrize(
@@ -1471,35 +1483,44 @@ def test_book_scope_reads_one_or_several_books(cfg, expected):
 
 
 @pytest.mark.parametrize(
-    "cfg",
+    "cfg, message",
     [
-        {"book": {"id": "isms"}},
-        {"book": {"id": 0, "slug": "isms"}},
-        {"book": {"id": True}},
-        {"book": {"id": 7.5}},
-        {"book": {"slug": "  "}},
-        {"book": 7},
-        {"book_id": "seven"},
-        {"books": "isms"},
-        {"books": [{"id": "x"}]},
-        {"books": [{"slug": ""}]},
-        {"books": ["isms", None]},
-        {"books": [""]},
+        ({"book": {"id": "isms"}}, "BookStack book id must be a positive whole number"),
+        (
+            {"book": {"id": 0, "slug": "isms"}},
+            "BookStack book id must be a positive whole number",
+        ),
+        ({"book": {"id": True}}, "BookStack book id must be a positive whole number"),
+        ({"book": {"id": 7.5}}, "BookStack book id must be a positive whole number"),
+        ({"book": {"slug": "  "}}, "BookStack book slug must not be blank"),
+        ({"book": 7}, "BookStack `book` must be a mapping with an id or slug"),
+        ({"book_id": "seven"}, "BookStack book id must be a positive whole number"),
+        ({"books": "isms"}, "BookStack `books` must be a list of one or more books"),
+        ({"books": [{"id": "x"}]}, "BookStack book id must be a positive whole number"),
+        ({"books": [{"slug": ""}]}, "BookStack book slug must not be blank"),
+        ({"books": ["isms", None]}, "Each BookStack book needs an id or slug"),
+        ({"books": [""]}, "BookStack book slug must not be blank"),
         # An entry naming neither an id nor a slug, only a display name.
-        {"books": [{"name": "ISMS"}]},
+        ({"books": [{"name": "ISMS"}]}, "Each BookStack book needs an id or slug"),
         # Blank or empty values name no book, so they are refused as well.
-        {"book": {}},
-        {"book_id": ""},
-        {"book_slug": "  "},
-        {"books": []},
-        {"books": [{"id": 8, "slug": " "}]},
-        {"book": {"id": float("inf")}},
-        {"book": {"id": float("nan")}},
+        ({"book": {}}, "BookStack `book` needs an id or slug"),
+        ({"book_id": ""}, "BookStack book id must be a positive whole number"),
+        ({"book_slug": "  "}, "BookStack book slug must not be blank"),
+        ({"books": []}, "BookStack `books` must be a list of one or more books"),
+        ({"books": [{"id": 8, "slug": " "}]}, "BookStack book slug must not be blank"),
+        (
+            {"book": {"id": float("inf")}},
+            "BookStack book id must be a positive whole number",
+        ),
+        (
+            {"book": {"id": float("nan")}},
+            "BookStack book id must be a positive whole number",
+        ),
     ],
 )
-def test_an_unusable_book_scope_is_refused(cfg):
+def test_an_unusable_book_scope_is_refused(cfg, message):
     # A mistyped book must never widen collection to every book.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
         bs.book_scope(cfg)
 
 
@@ -1522,7 +1543,12 @@ def test_an_unusable_book_scope_fails_the_run_without_listing_pages(db, env):
         total.enter_context(patch.object(bs, "store_event_with_artifact", store))
         results = bs.ingest_bookstack_all(db)
 
-    assert "error" in results[0]
+    assert results[0] == {
+        "connection_id": "env:bookstack",
+        "connection_name": "Environment default",
+        "source": "bookstack",
+        "error": "Connection ingestion failed",
+    }
     assert not [r for r in api.requests if r.url.path == "/api/pages"]
     assert stored == []
 
@@ -1532,7 +1558,7 @@ def test_saving_an_unusable_book_scope_is_refused():
     with pytest.raises(DomainError) as refused:
         _validate_connector("bookstack", {"books": [{"id": "isms"}]})
     assert refused.value.status_code == 400
-    assert "positive whole number" in refused.value.detail
+    assert refused.value.detail == "BookStack book id must be a positive whole number"
 
 
 def window_listings(run):

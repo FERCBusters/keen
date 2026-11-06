@@ -315,7 +315,7 @@ def test_mail_failures_are_logged_without_stopping_creation(contract_db, monkeyp
     db.commit()
     result = schedules.materialize_due_scheduled_audits(db, today=TODAY)
     assert result["created"][0]["emails_sent"] == 0
-    assert log.exception.called
+    assert log.exception.called is True
 
 
 def test_no_mail_is_attempted_without_smtp(contract_db, monkeypatch):
@@ -331,7 +331,7 @@ def test_no_mail_is_attempted_without_smtp(contract_db, monkeypatch):
     db.commit()
     result = schedules.materialize_due_scheduled_audits(db, today=TODAY)
     assert result["created"][0]["emails_sent"] == 0
-    assert not send.called
+    assert send.called is False
 
 
 def test_scheduling_can_be_switched_off(contract_db, mailer):

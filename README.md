@@ -99,7 +99,7 @@ Supported sources include GitHub, GitLab, Forgejo, Gitea, Jenkins, Loki, Elastic
 
 Keen Agent also supports being run on Linux, Mac and Windows workstations in the background, wherein it sends attestations as to correct security posture (workstation antivirus, disk encryption, screen locks, automatic updates, and so on). This works over over OTLP/HTTP JSON formats. Keen verifies every request, batch signature, envelope and chain position, checks typed fields against the event catalogue, records any redaction in a custody record and keeps each envelope's provenance.
 
-A check that needs attention can be recorded as a risk against the workstation's asset, and an accepted risk marks the check as accepted until its review date.
+A check that needs attention can be recorded as a risk against the workstation's asset. An accepted risk marks the check as accepted until its review date, and a closed risk marks it as treated until it fails in a way the risk predates.
 
 See more about Keen Agent and how to install it on workstations at https://keen.cloud/agent
 

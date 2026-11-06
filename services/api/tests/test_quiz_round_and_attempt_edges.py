@@ -72,7 +72,10 @@ def test_a_start_that_fails_for_another_reason_saves_no_attempt(world):  # noqa:
     db.execute(text("DELETE FROM quiz_questions WHERE id = :id"), {"id": first.id})
     db.commit()
 
-    with pytest.raises(IntegrityError):
+    with pytest.raises(
+        IntegrityError,
+        match='violates foreign key constraint "quiz_answers_question_id_fkey"',
+    ):
         attempts_service.start_attempt(
             round_id=uuid.UUID(round_["id"]), db=db, user=ada.user
         )

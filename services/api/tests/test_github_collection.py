@@ -5,6 +5,7 @@ endpoints, send credentials, follow cursors and store events through the
 same code that runs in production.
 """
 
+import base64
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -157,7 +158,7 @@ def test_org_events_store_new_events_once_in_order_with_provenance(gh):
         "bob",
         "PushEvent",
     )
-    assert newest.summary.startswith("[Acme] ")
+    assert newest.summary == "[Acme] GitHub push 1 commit(s) to acme/api (main) by bob"
     assert newest.raw_pointer["github"] == {
         "endpoint": "org_events",
         "mode": "org",
@@ -187,9 +188,10 @@ def test_failed_org_event_requests_store_nothing_and_keep_the_cursor(gh, status)
         status, json={"message": "nope"}
     )
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(httpx.HTTPStatusError) as failed:
         github.ingest_github_org_events(gh.db, "acme")
     gh.db.rollback()
+    assert failed.value.response.status_code == status
 
     assert gh.events() == []
     assert gh.cursor("github:org-events:acme:auto").last_ts == datetime(2026, 3, 2)
@@ -271,32 +273,36 @@ def _atom(*entries):
 PRIVATE_FEED = f"https://github.com/organizations/acme/alice.private.atom?token={TOKEN}"
 
 
+OTHER_ORIGIN = "Feed credentials may only be sent to the connection endpoint origin"
+NOT_HTTPS = "Use an HTTPS feed and connection endpoint"
+
+
 @pytest.mark.parametrize(
-    "base,feed,allowed",
+    "base,feed,refusal",
     [
         (
             "https://api.github.com",
             "https://github.com/organizations/acme/alice.atom",
-            True,
+            None,
         ),
-        ("https://api.github.com", "https://attacker.example/acme.atom", False),
+        ("https://api.github.com", "https://attacker.example/acme.atom", OTHER_ORIGIN),
         (
             "https://api.github.com",
             "https://github.com.attacker.example/acme.atom",
-            False,
+            OTHER_ORIGIN,
         ),
         (
             "https://api.github.com",
             "http://github.com/organizations/acme/alice.atom",
-            False,
+            NOT_HTTPS,
         ),
-        ("https://api.github.com", "https://user:pass@github.com/acme.atom", False),
-        ("https://ghe.example/api/v3", "https://ghe.example/acme.atom", True),
-        ("https://ghe.example/api/v3", "https://github.com/acme.atom", False),
+        ("https://api.github.com", "https://user:pass@github.com/acme.atom", NOT_HTTPS),
+        ("https://ghe.example/api/v3", "https://ghe.example/acme.atom", None),
+        ("https://ghe.example/api/v3", "https://github.com/acme.atom", OTHER_ORIGIN),
     ],
 )
 def test_feed_credentials_are_sent_only_to_the_github_origin(
-    gh, monkeypatch, base, feed, allowed
+    gh, monkeypatch, base, feed, refusal
 ):
     monkeypatch.setattr(settings, "github_base_url", base)
     monkeypatch.setattr(settings, "github_token", TOKEN)
@@ -304,12 +310,14 @@ def test_feed_credentials_are_sent_only_to_the_github_origin(
     host = httpx.URL(feed).host
     gh.fake.routes[(host, httpx.URL(feed).path)] = httpx.Response(200, text=_atom())
 
-    if allowed:
+    if refusal is None:
         github.ingest_github_atom_feed(gh.db, feed)
         (request,) = gh.fake.requests
-        assert request.headers["authorization"].startswith("Basic ")
+        assert request.headers["authorization"] == (
+            "Basic " + base64.b64encode(f"alice:{TOKEN}".encode()).decode()
+        )
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=f"^{refusal}$"):
             github.ingest_github_atom_feed(gh.db, feed)
         # Refused before any connection, so the credentials went nowhere.
         assert gh.fake.requests == []
@@ -332,8 +340,12 @@ def test_a_feed_redirect_is_not_followed(gh, monkeypatch):
         httpx.Response(302, headers={"location": "https://attacker.example/steal"})
     )
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(httpx.HTTPStatusError) as refused:
         github.ingest_github_atom_feed(gh.db, PRIVATE_FEED)
+    assert (
+        refused.value.response.status_code,
+        refused.value.response.headers["location"],
+    ) == (302, "https://attacker.example/steal")
 
     assert [r.url.host for r in gh.fake.requests] == ["github.com"]
 
@@ -430,7 +442,10 @@ def test_hostile_feed_documents_store_nothing(gh, document):
     feed = "https://feeds.example/acme.atom"
     gh.fake.routes[("feeds.example", "/acme.atom")] = httpx.Response(200, text=document)
 
-    with pytest.raises(SyntaxError):  # xml.etree.ElementTree.ParseError
+    with pytest.raises(
+        SyntaxError,
+        match="^XML documents with an internal DTD subset are refused$",
+    ):  # xml.etree.ElementTree.ParseError
         github.ingest_github_atom_feed(gh.db, feed)
     gh.db.rollback()
 
@@ -484,7 +499,10 @@ def test_one_failing_stage_never_stops_the_others(gh, monkeypatch):
     } in results
     assert sorted(e.external_id for e in gh.events()) == ["10", "20"]
     feed_error = next(r for r in results if "feed" in r)
-    assert feed_error["error"].startswith("Collection failed")
+    assert (
+        feed_error["error"]
+        == "Collection failed; check the input, credentials, upstream service and storage configuration"
+    )
     assert TOKEN not in feed_error["error"]
 
 
@@ -666,9 +684,13 @@ def test_a_failed_page_keeps_the_pages_before_it(audit):
     log = audit.serve([_audit(n, start + timedelta(seconds=n)) for n in range(150)])
     log.fail_after = "100"
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(httpx.HTTPStatusError) as failed:
         github.ingest_github_org_auditlog(audit.db, "acme")
     audit.db.rollback()
+    assert (
+        failed.value.response.status_code,
+        failed.value.request.url.params["after"],
+    ) == (500, "100")
 
     assert len(audit.events()) == 100
     assert audit.cursor("github:audit:acme").last_ts == start + timedelta(seconds=99)

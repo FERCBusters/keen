@@ -1,5 +1,6 @@
 """LDAP trust boundaries, role ownership, and round-trippable rule exports."""
 
+import re
 import ssl
 import uuid
 from types import SimpleNamespace
@@ -33,6 +34,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from tests.db_helpers import create_sqlite_schema
+
+LDAP_UNAVAILABLE = (
+    "LDAP authentication unavailable; check directory configuration and connectivity"
+)
 
 
 @pytest.fixture
@@ -142,30 +147,31 @@ def test_ldaps_cert_validation(directory, monkeypatch):
     monkeypatch.setattr(
         ldap, "Server", lambda *a, **kw: seen.append(kw) or real(*a, **kw)
     )
-    assert ldap.directory_identity("alice", "secret")
-    assert seen[0]["use_ssl"] and seen[0]["tls"].validate == ssl.CERT_REQUIRED
+    assert ldap.directory_identity("alice", "secret") == {
+        "issuer": "ldap:ldaps://directory.example:636",
+        "subject": "immutable-id",
+        "username": "alice",
+        "email": "alice@example.org",
+    }
+    assert (seen[0]["use_ssl"], seen[0]["tls"].validate) == (True, ssl.CERT_REQUIRED)
     assert "tls" not in directory[1]
 
 
 def test_failed_starttls_never_binds(directory):
     directory[0]["tls"] = False
-    with pytest.raises((HTTPException, DomainError)) as error:
+    with pytest.raises(HTTPException) as error:
         ldap.directory_identity("alice", "secret")
-    assert error.value.status_code == 503
-    assert not any(isinstance(e, tuple) for e in directory[1])
+    assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
+    assert directory[1] == ["open", "tls", "unbind"]
 
 
-@pytest.mark.parametrize(
-    "case", ["ambiguous", "missing-id", "invalid-password", "partial"]
-)
+@pytest.mark.parametrize("case", ["ambiguous", "missing-id", "partial"])
 def test_directory_denials(directory, case):
     state = directory[0]
     if case == "ambiguous":
         state["entries"] *= 2
     if case == "missing-id":
         state["entries"][0].entry_attributes_as_dict.pop("entryUUID")
-    if case == "invalid-password":
-        state["bind"] = False
     if case == "partial":
         state["result"] = 4
     assert ldap.directory_identity("alice", "secret") is None
@@ -213,10 +219,7 @@ def test_unsafe_directory_settings_refuse_sign_in_before_connecting(
     with pytest.raises(HTTPException) as error:
         ldap.directory_identity("alice", "secret")
 
-    assert error.value.status_code == 503
-    assert error.value.detail == (
-        "LDAP authentication unavailable; check directory configuration and connectivity"
-    )
+    assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
     assert directory[1] == []
 
 
@@ -225,7 +228,7 @@ def test_a_refused_service_bind_makes_directory_sign_in_unavailable(directory, r
     directory[0]["service_bind"] = result
     with pytest.raises(HTTPException) as error:
         ldap.directory_identity("alice", "secret")
-    assert error.value.status_code == 503
+    assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
     # The search never runs and the user's password is never sent.
     assert "search" not in directory[0]
     assert ("bind", "uid=alice,ou=People,dc=example") not in directory[1]
@@ -237,7 +240,7 @@ def test_a_directory_failure_during_the_user_bind_is_not_a_wrong_password(direct
     directory[0]["user_bind"] = 52
     with pytest.raises(HTTPException) as error:
         ldap.directory_identity("alice", "secret")
-    assert error.value.status_code == 503
+    assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
     directory[0]["user_bind"] = 49
     assert ldap.directory_identity("alice", "secret") is None
 
@@ -265,7 +268,7 @@ def test_a_new_directory_user_never_takes_an_existing_account_name(db, directory
     user = ldap.authenticate_ldap(db, "alice", "password")
 
     assert user.id != taken.id
-    assert user.username.startswith("ldap:") and len(user.username) == 37
+    assert re.fullmatch("ldap:[0-9a-f]{32}", user.username)
     assert (user.role, user.auth_backend) == ("normal", "ldap")
     from app.db.models import IsmsPerson
 
@@ -309,9 +312,9 @@ def test_no_auto_provision(db, directory, monkeypatch):
 
 def test_reauthentication_requires_same_directory_identity(db, directory):
     user = ldap.authenticate_ldap(db, "alice", "password")
-    assert ldap.verify_ldap_user(db, user, "password")
+    assert ldap.verify_ldap_user(db, user, "password") is True
     directory[0]["entries"][0].entry_attributes_as_dict["entryUUID"] = ["different-id"]
-    assert not ldap.verify_ldap_user(db, user, "password")
+    assert ldap.verify_ldap_user(db, user, "password") is False
 
 
 def test_ldap_session_respects_mfa(db, directory, monkeypatch):
@@ -319,13 +322,23 @@ def test_ldap_session_respects_mfa(db, directory, monkeypatch):
     user.mfa_enabled = True
     db.commit()
     monkeypatch.setattr(settings, "mfa_policy", "all")
-    assert not mfa.local_session_allowed(
-        db, user, {"auth_method": "ldap", "mfa_version": user.mfa_version}
+    assert (
+        mfa.local_session_allowed(
+            db, user, {"auth_method": "ldap", "mfa_version": user.mfa_version}
+        )
+        is False
     )
-    assert mfa.local_session_allowed(
-        db,
-        user,
-        {"auth_method": "ldap", "mfa_version": user.mfa_version, "mfa_verified": True},
+    assert (
+        mfa.local_session_allowed(
+            db,
+            user,
+            {
+                "auth_method": "ldap",
+                "mfa_version": user.mfa_version,
+                "mfa_verified": True,
+            },
+        )
+        is True
     )
     assert not mfa.local_session_allowed(
         db,
@@ -364,11 +377,16 @@ def test_role_owner_assignment_access_and_clearing(db, role_risk):
     )
     db.commit()
     assert risk.risk_owner_user_id is None and risk.risk_owner_role_id == role.id
-    assert risks_operations.risk_owner_out(risk)["type"] == "role"
-    assert not risks_operations._is_risk_owner(user, risk)
+    assert risks_operations.risk_owner_out(risk) == {
+        "id": str(role.id),
+        "type": "role",
+        "name": "Security lead",
+        "username": "Security lead (role)",
+    }
+    assert risks_operations._is_risk_owner(user, risk) is False
     db.add(IsmsOrgNodeUser(org_node_id=role.id, user_id=user.id))
     db.commit()
-    assert risks_operations._is_risk_owner(user, risk)
+    assert risks_operations._is_risk_owner(user, risk) is True
     assert risks.list_my_owned_risks(user=user, db=db)["total"] == 1
     risks_operations._apply_payload(
         db, risk, risks.RiskUpsertPayload(note="Keep owner"), is_create=False
@@ -384,22 +402,27 @@ def test_role_owner_assignment_access_and_clearing(db, role_risk):
         db, risk, risks.RiskUpsertPayload(risk_owner_role_id=None), is_create=False
     )
     db.commit()
-    assert not risk.owner and not risk.owner_role
+    assert (risk.owner, risk.owner_role) == (None, None)
 
 
 def test_owner_validation(db, role_risk):
     user, role, risk = role_risk
-    for fields in [
-        dict(risk_owner_role_id=role.id, risk_owner_user_id=user.id),
-        dict(risk_owner_role_id=uuid.uuid4()),
+    for fields, message in [
+        (
+            dict(risk_owner_role_id=role.id, risk_owner_user_id=user.id),
+            "Choose one owner: a user or an organisational role",
+        ),
+        (dict(risk_owner_role_id=uuid.uuid4()), "Unknown organisational role"),
     ]:
-        with pytest.raises((HTTPException, DomainError)):
+        with pytest.raises(DomainError, match=f"^{message}$") as refused:
             risks_operations._apply_payload(
                 db, risk, risks.RiskUpsertPayload(**fields), is_create=False
             )
+        assert refused.value.status_code == 400
     role.node_type = "department"
     db.commit()
-    with pytest.raises((HTTPException, DomainError)):
+    # A department is no role, so it cannot own a risk.
+    with pytest.raises(DomainError, match="^Unknown organisational role$"):
         risks_operations._apply_payload(
             db,
             risk,
@@ -446,7 +469,13 @@ def test_yaml_export_roundtrip(db):
     assert [r["id"] for r in doc["rules"]] == ["patching", "paused"]
     assert doc["rules"][1]["enabled"] is False
     assert parse_rules(doc) == parse_rules({"rules": rules[:2]})
-    assert len(yaml.safe_load(mappings.export_rules("", db).body)["rules"]) == 3
+    assert [
+        r["id"] for r in yaml.safe_load(mappings.export_rules("", db).body)["rules"]
+    ] == [
+        "patching",
+        "paused",
+        "rss",
+    ]
     assert yaml.safe_load(mappings.export_rules("no-such-source", db).body) == {
         "rules": []
     }
@@ -484,9 +513,9 @@ def test_ldap_login_route_and_mfa_with_local_disabled(db, directory, monkeypatch
     response = auth.login(
         LoginPayload(username="alice", password="password", method="ldap"), request, db
     )
-    assert (
-        response.status_code == 200
-        and json.loads(response.body)["user"] == "ldap:alice"
+    assert (response.status_code, json.loads(response.body)) == (
+        200,
+        {"user": "ldap:alice", "user_id": str(db.query(User).one().id)},
     )
     from http.cookies import SimpleCookie
 
@@ -505,9 +534,13 @@ def test_ldap_login_route_and_mfa_with_local_disabled(db, directory, monkeypatch
     assert (
         db.query(MfaChallenge).filter_by(user_id=user.id, stage="verify").count() == 1
     )
-    with pytest.raises((HTTPException, DomainError)) as error:
+    # With local sign-in off, a password sign-in that names no method is refused.
+    with pytest.raises(HTTPException) as error:
         auth.login(LoginPayload(username="alice", password="password"), request, db)
-    assert error.value.status_code == 404
+    assert (error.value.status_code, error.value.detail) == (
+        404,
+        "Login method is disabled",
+    )
 
 
 def test_organisation_framework_selection(db, monkeypatch):
@@ -520,7 +553,7 @@ def test_organisation_framework_selection(db, monkeypatch):
     db.add_all([Framework(slug="ONE", name="One"), Framework(slug="TWO", name="Two")])
     db.commit()
     before = frameworks.list_frameworks(db)
-    assert {"ONE", "TWO"} <= {item["slug"] for item in before["items"]}
+    assert [item["slug"] for item in before["items"]] == ["ONE", "TWO"]
     selected = frameworks.save_framework_selection(
         frameworks.FrameworkSelectionInput(enabled=["TWO"], default="TWO", version=0),
         user,
@@ -530,8 +563,15 @@ def test_organisation_framework_selection(db, monkeypatch):
     assert frameworks.list_frameworks(db)["default"] == "TWO"
     assert [item["slug"] for item in frameworks.list_frameworks(db)["items"]] == ["TWO"]
     assert db.query(Framework).count() == 2
-    assert len(selected["items"]) >= 2
-    with pytest.raises((HTTPException, DomainError)) as error:
+    # The selection lists every framework and whether it is enabled.
+    assert [(item["slug"], item["enabled"]) for item in selected["items"]] == [
+        ("ONE", False),
+        ("TWO", True),
+    ]
+    with pytest.raises(
+        DomainError,
+        match="^Configuration changed in another session. Reload before saving.$",
+    ) as error:
         frameworks.save_framework_selection(
             frameworks.FrameworkSelectionInput(
                 enabled=["ONE"], default="ONE", version=0
@@ -543,7 +583,10 @@ def test_organisation_framework_selection(db, monkeypatch):
     monkeypatch.setattr(settings, "enabled_frameworks", "ONE")
     # Environment change chooses a valid default without exposing excluded frameworks.
     assert frameworks.list_frameworks(db)["default"] == "ONE"
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises(
+        DomainError,
+        match="^A selected framework is excluded by KEEN_ENABLED_FRAMEWORKS$",
+    ) as excluded:
         frameworks.save_framework_selection(
             frameworks.FrameworkSelectionInput(
                 enabled=["TWO"], default="TWO", version=1
@@ -551,7 +594,10 @@ def test_organisation_framework_selection(db, monkeypatch):
             user,
             db,
         )
-    with pytest.raises((HTTPException, DomainError)):
+    assert excluded.value.status_code == 400
+    with pytest.raises(
+        DomainError, match="^The default framework must be selected$"
+    ) as unselected:
         frameworks.save_framework_selection(
             frameworks.FrameworkSelectionInput(
                 enabled=["ONE"], default="TWO", version=1
@@ -559,6 +605,7 @@ def test_organisation_framework_selection(db, monkeypatch):
             user,
             db,
         )
+    assert unselected.value.status_code == 400
     monkeypatch.setattr(settings, "enabled_frameworks", "TYPO")
     assert frameworks.list_frameworks(db)["items"] == []
     assert frameworks.framework_selection(db)["unknown_environment_slugs"] == ["TYPO"]

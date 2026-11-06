@@ -1,6 +1,7 @@
 """IMAP boundaries using synthetic mail, fake peers and isolated database state."""
 
 import json
+import re
 import subprocess
 import sys
 import time
@@ -33,9 +34,9 @@ def test_mime_prefers_plain_and_excludes_attachments():
         body_part(["MESSAGE", "RFC822", None, None, None, "7BIT", "100", [], [], 1])
         is None
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^IMAP structure complexity exceeds limit$"):
         structure(b"(" * 30 + b"NIL" + b")" * 30)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^IMAP structure exceeds limit$"):
         structure(b"(" * 40000)
     text, truncated = decode_body(
         b'<img src="https://evil">', {"encoding": "7bit", "charset": "utf-8"}, 8
@@ -44,19 +45,31 @@ def test_mime_prefers_plain_and_excludes_attachments():
 
 
 @pytest.mark.parametrize(
-    "change",
+    "change, message",
     [
-        {"fetch_body": "maybe"},
-        {"body_max_chars": "65537"},
-        {"port": "0"},
-        {"host": "https://mail.example"},
-        {"username": "user\r\nLOGOUT"},
-        {"folder": "INBOX\n"},
-        {"verify_tls": "false"},
+        ({"fetch_body": "maybe"}, "IMAP fetch body must be true or false"),
+        (
+            {"body_max_chars": "65537"},
+            "IMAP port must be 1-65535; body character limit must be 1-65536",
+        ),
+        (
+            {"port": "0"},
+            "IMAP port must be 1-65535; body character limit must be 1-65536",
+        ),
+        (
+            {"host": "https://mail.example"},
+            "Enter an IMAP hostname or IP address, without a URL",
+        ),
+        (
+            {"username": "user\r\nLOGOUT"},
+            "IMAP username must be 1-256 printable ASCII characters",
+        ),
+        ({"folder": "INBOX\n"}, "IMAP folder must be 1-256 printable ASCII characters"),
+        ({"verify_tls": "false"}, "Unsupported IMAP configuration field"),
     ],
 )
-def test_configuration_rejects_invalid_values(change):
-    with pytest.raises(ValueError):
+def test_configuration_rejects_invalid_values(change, message):
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
         configuration({"host": "mail.example", "username": "user", **change})
 
 
@@ -68,13 +81,18 @@ def test_transport_blocks_private_destinations_without_explicit_allowance(monkey
             lambda *a, **kw: [(None, None, None, None, (ip, 993))],
         )
 
-    for ip in ["127.0.0.1", "169.254.169.254", "::1", "10.0.0.1"]:
+    for ip, message in [
+        ("127.0.0.1", "Prohibited IMAP destination"),
+        ("169.254.169.254", "Prohibited IMAP destination"),
+        ("::1", "Prohibited IMAP destination"),
+        ("10.0.0.1", "Private IMAP destination requires an explicit allowed CIDR"),
+    ]:
         addr(ip)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
             transport.addresses("mail.example", 993, "")
     assert transport.addresses("mail.example", 993, "10.0.0.0/8") == ["10.0.0.1"]
     addr("127.0.0.1")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Prohibited IMAP destination$"):
         transport.addresses("mail.example", 993, "127.0.0.0/8")
 
 
@@ -86,15 +104,15 @@ def test_response_limits_precede_reads_and_deadline_is_absolute():
     client.deadline = time.monotonic() + 10
     client.received = 0
     client.lines = 0
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^IMAP literal exceeds requested limit$"):
         client.read(101)
     client.file.read.assert_not_called()
     client.file.readline.return_value = b"x" * 32769
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^IMAP response line exceeds limit$"):
         client.readline()
     client.file.readline.assert_called_once_with(32769)
     client.deadline = time.monotonic() - 1
-    with pytest.raises(TimeoutError):
+    with pytest.raises(TimeoutError, match="^IMAP deadline$"):
         client.read(1)
     client.file.read.assert_not_called()
 
@@ -112,7 +130,7 @@ class Peer:
         return "OK", []
 
     def select(self, folder, readonly):
-        assert readonly
+        assert readonly is True
         self.commands.append(("EXAMINE", folder))
         return "OK", []
 
@@ -171,11 +189,11 @@ def test_readonly_peek_body_choice_and_initial_baseline(monkeypatch, body):
     if body:
         assert any("BODY.PEEK[3]" in c for c in requests)
         assert result["items"][0]["body"] == "plain"
-        assert result["items"][0]["body_truncated"]
+        assert result["items"][0]["body_truncated"] is True
     else:
         assert len(requests) == 2 and result["items"][0]["body"] is None
     reset = worker.collect(cfg, {"uidvalidity": 6, "last_uid": 1}, "")
-    assert reset["reset_required"]
+    assert reset["reset_required"] is True
     assert all(c[0] != "SEARCH" for c in Peer.last.commands)
 
 
@@ -197,7 +215,10 @@ def test_child_timeout_kills_and_reaps_without_inheriting_secrets(monkeypatch):
 
     monkeypatch.setattr(imap.subprocess, "Popen", popen)
     monkeypatch.setattr(imap, "WORKER_TIMEOUT", 0.1)
-    with pytest.raises(subprocess.TimeoutExpired):
+    with pytest.raises(
+        subprocess.TimeoutExpired,
+        match=r"^Command '\['/home/claude/run/keen/services/api/\.venv/bin/python', '-c', 'import time;time\.sleep\(10\)'\]' timed out after 0\.1 seconds$",
+    ):
         imap.fetch({}, None)
     assert processes[0].poll() is not None
 
@@ -366,15 +387,20 @@ def test_real_tls_checks_before_credentials_and_rejects_large_literal(
                 assert client.login("reader", "synthetic-secret")[0] == "OK"
                 if case == "oversized":
                     client.state = "SELECTED"
-                    with pytest.raises(ValueError, match="literal exceeds"):
+                    with pytest.raises(
+                        ValueError, match="^IMAP literal exceeds requested limit$"
+                    ):
                         worker.literal(client, 2, "1", 100)
             finally:
                 client.shutdown()
         else:
-            with pytest.raises(ssl.SSLCertVerificationError):
+            with pytest.raises(ssl.SSLCertVerificationError) as refused:
                 transport.Client(
                     "mail.example", listener.getsockname()[1], "", time.monotonic() + 3
                 )
+            # OpenSSL's X509_V_ERR codes for each refusal.
+            expected = {"wrong-name": 62, "untrusted": 18, "expired": 10}[case]
+            assert refused.value.verify_code == expected
     finally:
         thread.join(4)
         listener.close()
@@ -448,13 +474,23 @@ def test_connection_admin_csrf_credential_isolation_and_queue(keen, monkeypatch)
         "configuration": {"host": "mail.example", "username": "reader"},
         "credentials": {"password": "synthetic-secret"},
     }
-    assert keen.client().post(path, json=payload).status_code == 401
+    refused = keen.client().post(path, json=payload)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     ordinary = keen.client(keen.user())
-    assert (
-        ordinary.post(path, json=payload, headers=unsafe(ordinary)).status_code == 403
+    refused = ordinary.post(path, json=payload, headers=unsafe(ordinary))
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
     )
     admin = keen.client(keen.user(role="admin"))
-    assert admin.post(path, json=payload).status_code == 403
+    refused = admin.post(path, json=payload)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
     response = admin.post(path, json=payload, headers=unsafe(admin))
     assert response.status_code == 200, response.text
     assert "synthetic-secret" not in response.text
@@ -465,9 +501,12 @@ def test_connection_admin_csrf_credential_isolation_and_queue(keen, monkeypatch)
         "configuration": {"host": "other.example", "username": "reader"},
         "credentials": {},
     }
-    assert (
-        admin.put(path + "/" + row["id"], json=bad, headers=unsafe(admin)).status_code
-        == 422
+    refused = admin.put(path + "/" + row["id"], json=bad, headers=unsafe(admin))
+    assert (refused.status_code, refused.json()) == (
+        422,
+        {
+            "detail": "Re-enter or clear the saved credentials when changing the endpoint, authentication mode or credential header"
+        },
     )
     calls = []
     monkeypatch.setattr(
@@ -476,7 +515,7 @@ def test_connection_admin_csrf_credential_isolation_and_queue(keen, monkeypatch)
         lambda key: calls.append(key) or SimpleNamespace(id="queued"),
     )
     run = admin.post(path + "/" + row["id"] + "/run", headers=unsafe(admin))
-    assert run.status_code == 200, run.text
+    assert (run.status_code, run.json()) == (200, {"task_id": "queued"})
     assert calls == [row["id"]]
     assert (
         tasks.celery_app.conf.task_routes["keen.ingest_imap_connection"]["queue"]
@@ -487,7 +526,11 @@ def test_connection_admin_csrf_credential_isolation_and_queue(keen, monkeypatch)
         **payload,
         "configuration": {**payload["configuration"], "fetch_body": "maybe"},
     }
-    assert admin.post(path, json=invalid, headers=unsafe(admin)).status_code == 422
+    refused = admin.post(path, json=invalid, headers=unsafe(admin))
+    assert (refused.status_code, refused.json()) == (
+        422,
+        {"detail": "IMAP fetch body must be true or false"},
+    )
 
 
 CURSOR = {"uidvalidity": 7, "last_uid": 1}
@@ -880,7 +923,10 @@ def test_unusable_passwords_are_refused_before_polling(
     monkeypatch.setattr(sc, "connections", lambda *args: [peer])
     (result,) = imap.ingest_imap_all(contract_db)
     assert result["ok"] is False
-    assert result["error"].startswith("IMAP requires a printable ASCII password")
+    assert (
+        result["error"]
+        == "IMAP requires a printable ASCII password or app password (up to 4096 characters)"
+    )
     assert password not in json.dumps(result) or password == ""
     assert contract_db.query(IngestionCursor).count() == 0
 

@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -26,33 +27,128 @@ def payload(**overrides):
     }
 
 
+def validation_errors(error):
+    """Each refusal as (type, dotted location, message)."""
+    return [(e["type"], ".".join(map(str, e["loc"])), e["msg"]) for e in error.errors()]
+
+
 @pytest.mark.parametrize(
-    "change",
+    "change, error",
     [
-        {"source": ""},
-        {"source": "space name"},
-        {"source": "x" * 65},
-        {"action": ""},
-        {"action": "x" * 129},
-        {"summary": ""},
-        {"summary": "x" * 4097},
-        {"raw": "x" * 65537},
-        {"severity": -1},
-        {"severity": 11},
-        {"timestamp": "2025-01-01T00:00:00"},
-        {"timestamp": "1999-12-31T23:59:59Z"},
-        {"timestamp": datetime.now(timezone.utc) + timedelta(days=1)},
-        {"fields": {"key": "x" * 4097}},
-        {"fields": {"x" * 257: "ok"}},
-        {"fields": {str(i): "x" for i in range(129)}},
-        {"fields": {str(i): "x" * 4096 for i in range(9)}},
-        {"unexpected": "field"},
-        {"id": "bad"},
+        (
+            {"source": ""},
+            ("string_too_short", "source", "String should have at least 1 character"),
+        ),
+        (
+            {"source": "space name"},
+            (
+                "string_pattern_mismatch",
+                "source",
+                "String should match pattern '^[a-zA-Z0-9_.-]+$'",
+            ),
+        ),
+        (
+            {"source": "x" * 65},
+            ("string_too_long", "source", "String should have at most 64 characters"),
+        ),
+        (
+            {"action": ""},
+            ("string_too_short", "action", "String should have at least 1 character"),
+        ),
+        (
+            {"action": "x" * 129},
+            ("string_too_long", "action", "String should have at most 128 characters"),
+        ),
+        (
+            {"summary": ""},
+            ("string_too_short", "summary", "String should have at least 1 character"),
+        ),
+        (
+            {"summary": "x" * 4097},
+            (
+                "string_too_long",
+                "summary",
+                "String should have at most 4096 characters",
+            ),
+        ),
+        (
+            {"raw": "x" * 65537},
+            ("string_too_long", "raw", "String should have at most 65536 characters"),
+        ),
+        (
+            {"severity": -1},
+            (
+                "greater_than_equal",
+                "severity",
+                "Input should be greater than or equal to 0",
+            ),
+        ),
+        (
+            {"severity": 11},
+            ("less_than_equal", "severity", "Input should be less than or equal to 10"),
+        ),
+        (
+            {"timestamp": "2025-01-01T00:00:00"},
+            (
+                "value_error",
+                "timestamp",
+                "Value error, Expected a timezone-aware event timestamp between 2000 and now + 5 minutes",
+            ),
+        ),
+        (
+            {"timestamp": "1999-12-31T23:59:59Z"},
+            (
+                "value_error",
+                "timestamp",
+                "Value error, Expected a timezone-aware event timestamp between 2000 and now + 5 minutes",
+            ),
+        ),
+        (
+            {"timestamp": datetime.now(timezone.utc) + timedelta(days=1)},
+            (
+                "value_error",
+                "timestamp",
+                "Value error, Expected a timezone-aware event timestamp between 2000 and now + 5 minutes",
+            ),
+        ),
+        (
+            {"fields": {"key": "x" * 4097}},
+            ("value_error", "fields", "Value error, Fields exceed limits"),
+        ),
+        (
+            {"fields": {"x" * 257: "ok"}},
+            ("value_error", "fields", "Value error, Fields exceed limits"),
+        ),
+        (
+            {"fields": {str(i): "x" for i in range(129)}},
+            (
+                "too_long",
+                "fields",
+                "Dictionary should have at most 128 items after validation, not 129",
+            ),
+        ),
+        (
+            {"fields": {str(i): "x" * 4096 for i in range(9)}},
+            ("value_error", "fields", "Value error, Fields exceed limits"),
+        ),
+        (
+            {"unexpected": "field"},
+            ("extra_forbidden", "unexpected", "Extra inputs are not permitted"),
+        ),
+        (
+            {"id": "bad"},
+            (
+                "uuid_parsing",
+                "id",
+                "Input should be a valid UUID, invalid length: found 3",
+            ),
+        ),
     ],
 )
-def test_invalid_event_rejected(change):
-    with pytest.raises(ValidationError):
+def test_invalid_event_rejected(change, error):
+    with pytest.raises(ValidationError) as refused:
         AgentEvent.model_validate(payload(**change))
+    assert validation_errors(refused.value) == [error]
 
 
 @pytest.mark.parametrize("severity", [0, 5, 10])
@@ -88,8 +184,11 @@ def test_fingerprint_independent_of_field_order_but_sensitive_to_content():
     ],
 )
 def test_negative_health_counters_rejected(field):
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as refused:
         Health.model_validate({field: -1})
+    assert validation_errors(refused.value) == [
+        ("greater_than_equal", field, "Input should be greater than or equal to 0")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -116,23 +215,26 @@ def test_otlp_anyvalue_conversion(item, expected):
 
 
 @pytest.mark.parametrize(
-    "item",
+    "item, message",
     [
-        [],
-        None,
-        {"unknown": 1},
-        {"intValue": True},
-        {"doubleValue": True},
-        {"stringValue": 1},
-        {"boolValue": "false"},
-        {"intValue": "not integer"},
-        {"stringValue": "x", "boolValue": True},
-        {"arrayValue": {"values": "bad"}},
-        {"arrayValue": {"values": [{}] * 129}},
+        ([], "Invalid AnyValue"),
+        (None, "Invalid AnyValue"),
+        ({"unknown": 1}, "Invalid AnyValue"),
+        ({"intValue": True}, "Invalid AnyValue"),
+        ({"doubleValue": True}, "Invalid AnyValue"),
+        ({"stringValue": 1}, "Invalid AnyValue"),
+        ({"boolValue": "false"}, "Invalid AnyValue"),
+        (
+            {"intValue": "not integer"},
+            "invalid literal for int() with base 10: 'not integer'",
+        ),
+        ({"stringValue": "x", "boolValue": True}, "Invalid AnyValue union"),
+        ({"arrayValue": {"values": "bad"}}, "Array too large"),
+        ({"arrayValue": {"values": [{}] * 129}}, "Array too large"),
     ],
 )
-def test_invalid_otlp_values(item):
-    with pytest.raises(ValueError):
+def test_invalid_otlp_values(item, message):
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
         value(item)
 
 
@@ -140,17 +242,17 @@ def test_otlp_depth_and_attribute_limits():
     nested = {"stringValue": "x"}
     for _ in range(10):
         nested = {"arrayValue": {"values": [nested]}}
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Invalid AnyValue$"):
         value(nested)
-    for data in [
-        [{"key": "a"}, {"key": "a"}],
-        [{"key": "x" * 129}],
-        [{"key": 1}],
-        [None],
-        [{}] * 129,
-        {},
+    for data, message in [
+        ([{"key": "a"}, {"key": "a"}], "Invalid or duplicate attribute key"),
+        ([{"key": "x" * 129}], "Invalid or duplicate attribute key"),
+        ([{"key": 1}], "Invalid or duplicate attribute key"),
+        ([None], "Invalid attribute"),
+        ([{}] * 129, "Too many attributes"),
+        ({}, "Too many attributes"),
     ]:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
             attributes(data)
 
 
@@ -238,15 +340,18 @@ def test_otlp_batch_bound_is_checked_before_duplicate_collapse():
 
 
 @pytest.mark.parametrize(
-    "doc",
+    "doc, message",
     [
-        [],
-        {"resourceLogs": {}},
-        {"resourceLogs": [{}] * 65},
-        {"resourceLogs": [{"scopeLogs": [{}] * 65}]},
-        {"resourceLogs": [{"scopeLogs": [{"logRecords": "bad"}]}]},
+        ([], "Expected OTLP object"),
+        ({"resourceLogs": {}}, "Resource limit"),
+        ({"resourceLogs": [{}] * 65}, "Resource limit"),
+        ({"resourceLogs": [{"scopeLogs": [{}] * 65}]}, "Scope limit"),
+        (
+            {"resourceLogs": [{"scopeLogs": [{"logRecords": "bad"}]}]},
+            "Expected records",
+        ),
     ],
 )
-def test_otlp_invalid_container_shapes(doc):
-    with pytest.raises(ValueError):
+def test_otlp_invalid_container_shapes(doc, message):
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
         decode(json.dumps(doc), "a")

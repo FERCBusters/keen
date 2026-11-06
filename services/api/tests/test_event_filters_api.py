@@ -9,6 +9,7 @@ read events.
 import csv
 import io
 import json
+import re
 import uuid
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -441,8 +442,18 @@ def test_mapping_rule_patterns_keep_the_python_engine_rules():
     assert compile_pattern("a(?=b)").search("ab")
     # The database check reads the pattern's text, so it also refuses an
     # escaped backslash before a digit; [\\]1 matches a backslash and a digit.
-    for pattern in ("\\101", "a(?=b)", "\\\\1"):
-        with pytest.raises(ValueError):
+    for pattern, message in (
+        (
+            "\\101",
+            "Backreferences are unsupported, and the database reads a backslash followed by a digit as one; write a character code as a hexadecimal escape such as \\x41",
+        ),
+        ("a(?=b)", "Lookahead and lookbehind are unsupported"),
+        (
+            "\\\\1",
+            "Backreferences are unsupported, and the database reads a backslash followed by a digit as one; write a character code as a hexadecimal escape such as \\x41",
+        ),
+    ):
+        with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
             validate_database_pattern(pattern)
     validate_database_pattern("[\\\\]1")
     validate_database_pattern("\\x41\\d+\\.\\(")
@@ -568,8 +579,9 @@ def test_a_cancelled_scan_is_reported_as_the_pattern_taking_too_long(events):
     def failing():
         raise other
 
-    with pytest.raises(OperationalError):
+    with pytest.raises(OperationalError) as raised:
         run_scan(events.db, filters, failing)
+    assert raised.value is other
 
 
 def test_rule_facets_name_the_rules_behind_the_filtered_events(events):
@@ -777,7 +789,10 @@ def test_a_stopped_export_is_reported(events, monkeypatch):
     exported = response.json()
     assert len(exported["items"]) == 3
     assert (exported["incomplete"], exported["exported"]) == (True, 3)
-    assert exported["detail"].startswith("Export incomplete: 3 of 8 events")
+    assert (
+        exported["detail"]
+        == "Export incomplete: 3 of 8 events were exported before the export reached its time limit; narrow the date range or filters and export again"
+    )
 
 
 def test_the_ticker_shows_newer_arrivals_with_bounded_summaries(events):

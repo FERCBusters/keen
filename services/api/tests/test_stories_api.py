@@ -12,7 +12,6 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
-from app.core.config import settings
 from app.db.models import (
     ControlItem,
     EntityChangelog,
@@ -150,29 +149,46 @@ def test_reading_and_writing_follow_the_three_permissions(world):
     other_author = world.client("stories.manage")
     admin = world.client("stories.admin")
 
-    assert nobody.get("/v1/stories").status_code == 403
+    refused_2 = nobody.get("/v1/stories")
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {"detail": "stories.read permission required"},
+    )
     assert reader.get("/v1/stories").status_code == 200
     refused = reader.post("/v1/stories", json={"title": "No"}, headers=unsafe(reader))
-    assert refused.status_code == 403
-    assert "stories.manage" in refused.json()["detail"]
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "stories.manage permission required"},
+    )
 
     story = world.create(author, items=[world.item("event", world.login)])
     assert story["can_edit"] is True and story["item_count"] == 1
     assert reader.get(f"/v1/stories/{story['id']}").json()["can_edit"] is False
-    assert nobody.get(f"/v1/stories/{story['id']}").status_code == 403
+    refused_2 = nobody.get(f"/v1/stories/{story['id']}")
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {"detail": "stories.read permission required"},
+    )
 
     rename = {"title": "Renamed", "expected_version": story["version"]}
     refused = other_author.patch(
         f"/v1/stories/{story['id']}", json=rename, headers=unsafe(other_author)
     )
-    assert refused.status_code == 403
-    assert "stories you created" in refused.json()["detail"]
-    assert (
-        other_author.delete(
-            f"/v1/stories/{story['id']}?expected_version={story['version']}",
-            headers=unsafe(other_author),
-        ).status_code
-        == 403
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {
+            "detail": "You can edit the stories you created; stories.admin covers every story"
+        },
+    )
+    refused_2 = other_author.delete(
+        f"/v1/stories/{story['id']}?expected_version={story['version']}",
+        headers=unsafe(other_author),
+    )
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {
+            "detail": "You can edit the stories you created; stories.admin covers every story"
+        },
     )
     renamed = admin.patch(
         f"/v1/stories/{story['id']}", json=rename, headers=unsafe(admin)
@@ -183,7 +199,10 @@ def test_reading_and_writing_follow_the_three_permissions(world):
     stale = author.patch(
         f"/v1/stories/{story['id']}", json=rename, headers=unsafe(author)
     )
-    assert stale.status_code == 409
+    assert (stale.status_code, stale.json()) == (
+        409,
+        {"detail": "This story changed. Reload before saving."},
+    )
     listed = admin.get("/v1/stories").json()["items"]
     assert [(s["title"], s["item_count"], s["can_edit"]) for s in listed] == [
         ("Renamed", 1, True)
@@ -194,7 +213,11 @@ def test_reading_and_writing_follow_the_three_permissions(world):
         ).status_code
         == 200
     )
-    assert reader.get(f"/v1/stories/{story['id']}").status_code == 404
+    refused_2 = reader.get(f"/v1/stories/{story['id']}")
+    assert (refused_2.status_code, refused_2.json()) == (
+        404,
+        {"detail": "Story not found"},
+    )
 
 
 def test_me_reports_story_permissions_and_the_feature(world):
@@ -209,7 +232,11 @@ def test_me_reports_story_permissions_and_the_feature(world):
     assert (reader["can_view_stories"], reader["can_manage_stories"]) == (True, False)
     features.update(world.db, world.keen.user(role="admin"), 0, {"stories": False})
     assert manager.get("/v1/me").json()["can_view_stories"] is False
-    assert manager.get("/v1/stories").status_code == 404
+    refused = manager.get("/v1/stories")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
 
 
 # --- Item visibility ------------------------------------------------------------
@@ -309,7 +336,9 @@ def test_adding_an_item_needs_read_access_to_its_record(world):
     assert add(author, world.item("risk", world.risk), status=404)["detail"] == (
         "Related item not available"
     )
-    assert add(author, world.item("document", world.document), status=404)
+    assert add(author, world.item("document", world.document), status=404) == {
+        "detail": "Related item not available"
+    }
     missing = add(
         author, world.item("note", label="x", entity_id=str(uuid.uuid4())), status=400
     )
@@ -325,7 +354,9 @@ def test_adding_an_item_needs_read_access_to_its_record(world):
 
     # The author's own permissions are what count, not the story creator's.
     reader = world.client("stories.read", "events.read")
-    add(reader, world.item("event", world.login), status=403)
+    assert add(reader, world.item("event", world.login), status=403) == {
+        "detail": "stories.manage permission required"
+    }
 
     able = world.client("stories.admin", "events.read", "risk.read")
     saved = add(able, world.item("event", world.login), world.item("risk", world.risk))
@@ -354,8 +385,10 @@ def test_disabled_features_withhold_items_and_refuse_additions(world):
         json={"items": [world.item("event", world.export)], "expected_version": 1},
         headers=unsafe(author),
     )
-    assert without_events.status_code == 404
-    assert "disabled" in without_events.json()["detail"]
+    assert (without_events.status_code, without_events.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
     features.update(world.db, admin, 2, {"evidence": True})
     refused = author.post(
         f"/v1/stories/{story['id']}/items",
@@ -437,13 +470,19 @@ def test_timeline_order_uses_the_event_time_unless_the_author_sets_one(world):
         json={"label": "", "expected_version": 3},
         headers=unsafe(author),
     )
-    assert emptied.status_code == 400
+    assert (emptied.status_code, emptied.json()) == (
+        400,
+        {"detail": "A note needs a label or text"},
+    )
     unknown = author.patch(
         f"/v1/stories/{story['id']}/items/{uuid.uuid4()}",
         json={"label": "x", "expected_version": 3},
         headers=unsafe(author),
     )
-    assert unknown.status_code == 404
+    assert (unknown.status_code, unknown.json()) == (
+        404,
+        {"detail": "Story item not found"},
+    )
 
 
 # --- Layout -----------------------------------------------------------------------
@@ -472,13 +511,15 @@ def test_layout_names_only_the_story_own_items(world):
         assert response.status_code == status, response.text
         return response.json()
 
-    assert layout({"positions": [{"item_id": foreign, "x": 1, "y": 1}]}, 400)[
-        "detail"
-    ].startswith("Position refers")
-    assert layout({"links": [{"from_item_id": a, "to_item_id": foreign}]}, 400)[
-        "detail"
-    ].startswith("Link refers")
-    assert layout({"links": [{"from_item_id": a, "to_item_id": a}]}, 400)
+    assert layout({"positions": [{"item_id": foreign, "x": 1, "y": 1}]}, 400) == {
+        "detail": "Position refers to an item outside this story"
+    }
+    assert layout({"links": [{"from_item_id": a, "to_item_id": foreign}]}, 400) == {
+        "detail": "Link refers to an item outside this story"
+    }
+    assert layout({"links": [{"from_item_id": a, "to_item_id": a}]}, 400) == {
+        "detail": "A link joins two different items"
+    }
     assert layout(
         {
             "links": [
@@ -487,10 +528,28 @@ def test_layout_names_only_the_story_own_items(world):
             ]
         },
         400,
-    )["detail"].startswith("Links between the same items")
-    assert layout({"positions": [{"item_id": a, "x": 1.5, "y": 1}]}, 422)
-    assert layout({"positions": [{"item_id": a, "x": 30000, "y": 1}]}, 422)
-    assert layout({}, 409, version=99)
+    ) == {"detail": "Links between the same items are listed once"}
+    assert layout({"positions": [{"item_id": a, "x": 1.5, "y": 1}]}, 422) == {
+        "detail": [
+            {
+                "type": "int_type",
+                "loc": ["body", "positions", 0, "x"],
+                "msg": "Input should be a valid integer",
+            }
+        ]
+    }
+    assert layout({"positions": [{"item_id": a, "x": 30000, "y": 1}]}, 422) == {
+        "detail": [
+            {
+                "type": "less_than_equal",
+                "loc": ["body", "positions", 0, "x"],
+                "msg": "Input should be less than or equal to 20000",
+            }
+        ]
+    }
+    assert layout({}, 409, version=99) == {
+        "detail": "This story changed. Reload before saving."
+    }
 
     saved = layout(
         {
@@ -542,11 +601,12 @@ def test_readers_comment_and_delete_their_own_comments(world):
     admin = world.client("stories.admin")
     path = f"/v1/stories/{story['id']}/comments"
 
-    assert (
-        world.client()
-        .post(path, json={"body": "x"}, headers=unsafe(world.client()))
-        .status_code
-        == 403
+    refused_2 = world.client().post(
+        path, json={"body": "x"}, headers=unsafe(world.client())
+    )
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
     )
     posted = reader.post(
         path, json={"body": "  Looks complete.  "}, headers=unsafe(reader)
@@ -554,9 +614,10 @@ def test_readers_comment_and_delete_their_own_comments(world):
     assert posted.status_code == 200, posted.text
     comment = posted.json()
     assert (comment["body"], comment["can_delete"]) == ("Looks complete.", True)
-    assert (
-        reader.post(path, json={"body": "   "}, headers=unsafe(reader)).status_code
-        == 400
+    refused_2 = reader.post(path, json={"body": "   "}, headers=unsafe(reader))
+    assert (refused_2.status_code, refused_2.json()) == (
+        400,
+        {"detail": "comment is required"},
     )
     listed = other.get(path).json()["items"]
     assert [(c["body"], c["can_delete"]) for c in listed] == [
@@ -568,9 +629,14 @@ def test_readers_comment_and_delete_their_own_comments(world):
     assert (detail["version"], detail["comment_count"]) == (1, 1)
 
     refused = other.delete(f"{path}/{comment['id']}", headers=unsafe(other))
-    assert refused.status_code == 403
-    assert (
-        other.delete(f"{path}/{uuid.uuid4()}", headers=unsafe(other)).status_code == 404
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "You can delete your own comments"},
+    )
+    refused_2 = other.delete(f"{path}/{uuid.uuid4()}", headers=unsafe(other))
+    assert (refused_2.status_code, refused_2.json()) == (
+        404,
+        {"detail": "Comment not found"},
     )
     assert (
         admin.delete(f"{path}/{comment['id']}", headers=unsafe(admin)).status_code
@@ -639,17 +705,22 @@ def test_questions_target_stories_readers_can_see(world):
     assert posted.status_code == 200, posted.text
     (thread,) = asker.get(path).json()["threads"]
     assert thread["target_label"] == "Story: open - Payroll export incident"
-    assert thread["target_url"].startswith(
-        f"/story.html?id={story['id']}&tab=questions&thread="
+    assert thread["target_url"] == (
+        f"/story.html?id={story['id']}&tab=questions&thread={thread['id']}"
     )
     stranger = world.client("question.create")
-    assert stranger.get(path).status_code == 403
-    assert (
-        stranger.post(path, json={"body": "x"}, headers=unsafe(stranger)).status_code
-        == 403
+    refused = stranger.get(path)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "stories.read permission required"},
+    )
+    refused = stranger.post(path, json={"body": "x"}, headers=unsafe(stranger))
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "stories.read permission required"},
     )
     unknown = asker.get(f"/v1/questions/entities/story/{uuid.uuid4()}")
-    assert unknown.status_code == 404
+    assert (unknown.status_code, unknown.json()) == (404, {"detail": "Story not found"})
 
 
 def test_changes_are_recorded_in_the_story_changelog(world):
@@ -677,9 +748,16 @@ def test_changes_are_recorded_in_the_story_changelog(world):
         "created",
     ]
     assert all(e["entity_title"] == "Payroll export incident" for e in log)
-    assert log[0]["summary"].startswith("Updated")
-    assert "status" in {c["field"] for c in log[0]["changes"]}
-    assert world.client().get(f"/v1/stories/{sid}/changelog").status_code == 403
+    assert log[0]["summary"] == "Updated Status, Version"
+    assert log[0]["changes"] == [
+        {"after": "closed", "field": "status", "label": "Status", "before": "open"},
+        {"after": 3, "field": "version", "label": "Version", "before": 2},
+    ]
+    refused = world.client().get(f"/v1/stories/{sid}/changelog")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "stories.read permission required"},
+    )
     author.delete(f"/v1/stories/{sid}?expected_version=3", headers=unsafe(author))
     deleted = world.db.query(EntityChangelog).filter_by(action="deleted").one()
     assert deleted.entity_type == "story" and deleted.entity_id == uuid.UUID(sid)
@@ -688,11 +766,16 @@ def test_changes_are_recorded_in_the_story_changelog(world):
 
 def test_choices_list_readable_records_for_authors(world):
     author = world.client("stories.manage")
-    assert author.get("/v1/stories/choices/event").status_code == 400
+    refused = author.get("/v1/stories/choices/event")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Unknown story item kind"},
+    )
     assert author.get("/v1/stories/choices/document").json()["items"] == []
-    assert (
-        world.client("stories.read").get("/v1/stories/choices/document").status_code
-        == 403
+    refused = world.client("stories.read").get("/v1/stories/choices/document")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "stories.manage permission required"},
     )
     isms_author = world.client("stories.manage", "isms.read")
     found = isms_author.get("/v1/stories/choices/document?q=access").json()["items"]
@@ -864,16 +947,28 @@ def test_a_record_page_lists_the_stories_that_include_it(world, records):
     assert related(world.client("stories.read"), "swot", records.swot.id, 404) == {
         "detail": "SWOT item not found"
     }
-    assert related(world.client("stories.read"), "event", world.login.id, 404)
-    assert related(world.client("isms.read"), "swot", records.swot.id, 403)
+    assert related(world.client("stories.read"), "event", world.login.id, 404) == {
+        "detail": "Event not found"
+    }
+    assert related(world.client("isms.read"), "swot", records.swot.id, 403) == {
+        "detail": "stories.read permission required"
+    }
     assert related(author, "note", uuid.uuid4(), 400)["detail"] == (
         "Unknown story item kind"
     )
-    assert related(author, "books", uuid.uuid4(), 400)
-    assert related(author, "swot", "not-a-uuid", 404)
-    assert related(author, "swot", uuid.uuid4(), 404)
+    assert related(author, "books", uuid.uuid4(), 400) == {
+        "detail": "Unknown story item kind"
+    }
+    assert related(author, "swot", "not-a-uuid", 404) == {
+        "detail": "SWOT item not found"
+    }
+    assert related(author, "swot", uuid.uuid4(), 404) == {
+        "detail": "SWOT item not found"
+    }
     features.update(world.db, world.keen.user(role="admin"), 0, {"swot": False})
-    assert related(author, "swot", records.swot.id, 404)
+    assert related(author, "swot", records.swot.id, 404) == {
+        "detail": "SWOT item not found"
+    }
 
 
 def test_swot_relationships_keep_their_own_record_types(world, records):
@@ -897,12 +992,12 @@ def test_list_filters_by_status_and_text(world):
     assert [s["id"] for s in author.get("/v1/stories?q=campaign").json()["items"]] == [
         first["id"]
     ]
-    assert author.get("/v1/stories?status=archived").status_code == 400
+    refused = author.get("/v1/stories?status=archived")
+    assert (refused.status_code, refused.json()) == (400, {"detail": "Unknown status"})
     assert (
         author.get("/v1/stories?limit=1&offset=1").json()["items"][0]["id"]
         == first["id"]
     )
-    assert settings.default_framework_slug  # the list carries no framework scoping
 
 
 def test_the_service_checks_permissions_itself(world):
@@ -919,8 +1014,8 @@ def test_the_service_checks_permissions_itself(world):
         db=world.db,
         context=None,
     )
-    for call, code in (
-        (lambda: service.list_stories(user=nobody, db=world.db), 403),
+    for call, needed in (
+        (lambda: service.list_stories(user=nobody, db=world.db), "stories.read"),
         (
             lambda: service.create_story(
                 payload=service.StoryPayload(title="x"),
@@ -929,33 +1024,41 @@ def test_the_service_checks_permissions_itself(world):
                 db=world.db,
                 context=None,
             ),
-            403,
+            "stories.manage",
         ),
-        (lambda: service.choices(kind="risk", q="", user=reader, db=world.db), 403),
+        (
+            lambda: service.choices(kind="risk", q="", user=reader, db=world.db),
+            "stories.manage",
+        ),
         (
             lambda: service.related_stories(
                 kind="event", entity_id=str(world.login.id), user=nobody, db=world.db
             ),
-            403,
+            "stories.read",
         ),
         (
             lambda: service.changelog(
                 story_id=story["id"], limit=10, offset=0, user=nobody, db=world.db
             ),
-            403,
+            "stories.read",
         ),
-        (lambda: service._editable_story(world.db, reader, story["id"]), 403),
+        (
+            lambda: service._editable_story(world.db, reader, story["id"]),
+            "stories.manage",
+        ),
     ):
         with pytest.raises(DomainError) as refused:
             call()
-        assert refused.value.status_code == code
+        assert (refused.value.status_code, refused.value.detail) == (
+            403,
+            f"{needed} permission required",
+        )
         world.db.rollback()
-    # A reader is told which permission edits need; a manager who did not
-    # create the story is told about ownership.
-    with pytest.raises(DomainError, match="stories.manage permission required"):
-        service._editable_story(world.db, reader, story["id"])
-    world.db.rollback()
-    with pytest.raises(DomainError, match="stories you created"):
+    # A manager who did not create the story is told about ownership.
+    with pytest.raises(
+        DomainError,
+        match="^You can edit the stories you created; stories.admin covers every story$",
+    ):
         service._editable_story(
             world.db, world.keen.user("stories.manage"), story["id"]
         )
@@ -978,8 +1081,10 @@ def test_story_edits_change_named_fields_and_keep_items_to_their_action(world):
         json={"items": [world.item("event", world.export)], "expected_version": 1},
         headers=unsafe(author),
     )
-    assert refused.status_code == 400
-    assert "items action" in refused.json()["detail"]
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Use the items action to add items to a story"},
+    )
     changed = author.patch(
         path,
         json={"summary": "  After  ", "expected_version": 1},
@@ -1007,13 +1112,13 @@ def test_story_edits_change_named_fields_and_keep_items_to_their_action(world):
         headers=unsafe(author),
     )
     assert timed.status_code == 200, timed.text
-    assert timed.json()["items"][0]["occurred_at"].startswith("2026-05-01T23:30:00")
+    assert timed.json()["items"][0]["occurred_at"] == "2026-05-01T23:30:00"
     plain = author.patch(
         f"{path}/items/{item['id']}",
         json={"occurred_at": "2026-05-03T08:00:00", "expected_version": 4},
         headers=unsafe(author),
     )
-    assert plain.json()["items"][0]["occurred_at"].startswith("2026-05-03T08:00:00")
+    assert plain.json()["items"][0]["occurred_at"] == "2026-05-03T08:00:00"
 
 
 def test_an_event_item_needs_an_existing_event(world):
@@ -1054,8 +1159,10 @@ def test_a_story_holds_a_bounded_number_of_comments(world):
         json={"body": "One more"},
         headers=unsafe(reader),
     )
-    assert refused.status_code == 400
-    assert str(service.MAX_COMMENTS) in refused.json()["detail"]
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "A story holds up to 500 comments"},
+    )
     assert (
         world.db.query(StoryComment).filter_by(story_id=story_id).count()
         == service.MAX_COMMENTS

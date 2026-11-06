@@ -127,7 +127,11 @@ def test_admin_routes_reject_non_administrators(keen, method, path):  # noqa: F8
     assert response.status_code == 403
     assert response.json()["detail"] == "Admin role required"
     anonymous = keen.client()
-    assert anonymous.request(method, path, json={}).status_code in (401, 403)
+    refused = anonymous.request(method, path, json={})
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 MINUTES = "Board agreed to dismiss J. Smith pending fraud inquiry"
@@ -168,7 +172,7 @@ def test_audit_views_are_for_administrators(keen):  # noqa: F811
         },
         headers=unsafe(manager),
     )
-    assert meeting.status_code in (200, 201), meeting.text
+    assert meeting.status_code == 200, meeting.text
     meeting_id = meeting.json()["id"]
 
     # A permission named after the retired audit trail permission, as an
@@ -185,7 +189,8 @@ def test_audit_views_are_for_administrators(keen):  # noqa: F811
                 assert response.json()["detail"] == "Admin role required"
                 assert MINUTES not in response.text
                 assert "dana" not in response.text
-    assert keen.client().get("/v1/admin/entity-changelog").status_code == 401
+    answer = keen.client().get("/v1/admin/entity-changelog")
+    assert (answer.status_code, answer.json()) == (401, {"detail": "Not authenticated"})
 
     # Administrators, including those whose role comes from a group, read both.
     group = Group(name="admins-" + uuid.uuid4().hex[:8], role="admin")
@@ -430,7 +435,10 @@ def test_control_import_needs_a_usable_framework_slug(admin, slug):
         },
         status=400,
     )
-    assert response["detail"].startswith("Framework slugs use up to 64 letters")
+    assert (
+        response["detail"]
+        == "Framework slugs use up to 64 letters, digits, '.', '_', ':' or '-'"
+    )
     assert admin.db.query(Framework).filter_by(slug=slug).one_or_none() is None
 
 
@@ -585,7 +593,7 @@ def test_control_justification_and_upstream_urls(admin):
     cleared = admin.call(
         "PATCH", f"/v1/admin/controls/{control.id}/justification", {"justification": ""}
     )
-    assert cleared["justification"] in (None, "")
+    assert cleared == {"ok": True, "justification": None}
     db.expire_all()
     assert "soa_justification" not in (db.get(ControlItem, control.id).meta or {})
 
@@ -822,7 +830,15 @@ def test_permissions_are_created_once_with_valid_codes(admin):
     admin.call("POST", "/v1/admin/permissions", {"code": "has space"}, status=400)
     admin.call("POST", "/v1/admin/permissions", {"code": "   "}, status=400)
     codes = [row["code"] for row in admin.call("GET", "/v1/admin/permissions")]
-    assert "reports.export" in codes
+    assert codes == [
+        "audits.admin",
+        "quiz.manage",
+        "quiz.read",
+        "reports.export",
+        "stories.admin",
+        "stories.manage",
+        "stories.read",
+    ]
     assert codes == sorted(codes)
 
 
@@ -961,7 +977,7 @@ def test_loki_cursor_reset_moves_checkpoints_forward(admin, monkeypatch):
     legacy = db.query(IngestionCursor).filter_by(name="loki-main:loki:legacy").one()
     assert legacy.meta["keep"] is True
     assert legacy.meta["manual_reset_by"] == admin.user.username
-    assert legacy.meta["manual_reset_previous_cursor"].startswith("2026-01-01T00:00:00")
+    assert legacy.meta["manual_reset_previous_cursor"] == "2026-01-01T00:00:00+00:00"
     assert legacy.last_ts.year >= 2026
     untouched = db.query(IngestionCursor).filter_by(name="other:loki:auth").one()
     assert untouched.last_ts == datetime(2026, 1, 1)
@@ -1182,8 +1198,8 @@ def test_files_stored_by_a_failed_diary_entry_are_queued_for_cleanup(
             ("attachments", ("two.txt", io.BytesIO(b"two"), "text/plain")),
         ],
     )
-    assert response.status_code == 500
-    assert not admin.db.query(Artifact).filter(Artifact.storage_uri.in_(stored)).all()
+    assert (response.status_code, response.text) == (500, "Internal Server Error")
+    assert admin.db.query(Artifact).filter(Artifact.storage_uri.in_(stored)).all() == []
     queued = admin.db.execute(
         sqlalchemy.text(
             "SELECT storage_uri, next_attempt_at FROM evidence_object_cleanup"
@@ -1204,7 +1220,10 @@ def test_a_file_sent_as_a_diary_text_field_is_not_read_as_text(admin):
             ("timestamp", ("when.txt", io.BytesIO(b"2026-10-01"), "text/plain")),
         ],
     )
-    assert response.status_code == 400, response.text
+    assert (response.status_code, response.json()) == (
+        400,
+        {"detail": "Missing summary"},
+    )
 
 
 def test_posting_the_same_diary_entry_again_adds_no_mappings_or_duplicate_files(admin):
@@ -1271,7 +1290,10 @@ def test_a_diary_edit_must_be_a_json_object(admin):
         headers=unsafe(admin.client),
         json=["summary", "changed"],
     )
-    assert response.status_code == 400
+    assert (response.status_code, response.json()) == (
+        400,
+        {"detail": "Request body must be a JSON object"},
+    )
     event = admin.db.get(Event, uuid.UUID(created["event_id"]))
     admin.db.refresh(event)
     assert event.summary == "diary: Policy signed"

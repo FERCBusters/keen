@@ -3,33 +3,61 @@
 import pytest
 from app.mapping.fields import field_matches, observed_fields, validate_fields
 
+PATH = "Field path must contain 1-8 literal JSON keys"
+VALUE = "Field match value must be text up to 4096 characters"
+LIST = "Use at most 20 structured field conditions"
+SHAPE = "Invalid structured field condition"
+
 
 @pytest.mark.parametrize(
-    "condition",
+    "conditions,message",
     [
-        {"path": [], "operator": "exists"},
-        {"path": ["x"] * 9, "operator": "exists"},
-        {"path": [""], "operator": "exists"},
-        {"path": ["x" * 257], "operator": "exists"},
-        {"path": [1], "operator": "exists"},
-        {"path": None, "operator": "exists"},
-        {"path": ["x"], "operator": "equals"},
-        {"path": ["x"], "operator": "equals", "value": 1},
-        {"path": ["x"], "operator": "equals", "value": "x" * 4097},
-        {"path": ["x"], "operator": "exists", "unexpected": True},
+        ([{"path": [], "operator": "exists"}], PATH),
+        ([{"path": ["x"] * 9, "operator": "exists"}], PATH),
+        ([{"path": [""], "operator": "exists"}], PATH),
+        ([{"path": ["x" * 257], "operator": "exists"}], PATH),
+        ([{"path": [1], "operator": "exists"}], PATH),
+        ([{"path": None, "operator": "exists"}], PATH),
+        # A dotted path is one key's text, never a path.
+        ([{"path": "fields.name", "operator": "exists"}], PATH),
+        ([{"path": ["x"], "operator": "equals"}], VALUE),
+        ([{"path": ["x"], "operator": "equals", "value": 1}], VALUE),
+        ([{"path": ["x"], "operator": "equals", "value": "x" * 4097}], VALUE),
+        ([{"path": ["a"], "operator": "equals", "value": {}}], VALUE),
+        ([{"path": ["x"], "operator": "exists", "unexpected": True}], SHAPE),
+        # An operator outside the fixed set is never evaluated.
+        (
+            [{"path": ["fields"], "operator": "eval", "value": "x"}],
+            "Unsupported structured field operator",
+        ),
+        (
+            [{"path": ["fields", "client.ip"], "operator": "in_cidr", "value": "bad"}],
+            "Enter a valid IPv4 or IPv6 CIDR",
+        ),
+        # Event scope reaches the summary alone, never another stored column.
+        (
+            [{"scope": "event", "path": ["password"], "operator": "exists"}],
+            "Only Summary is supported as an event field",
+        ),
+        (
+            [{"scope": "unknown", "path": ["summary"], "operator": "exists"}],
+            "Unsupported field scope",
+        ),
+        (
+            [{"scope": [], "path": ["summary"], "operator": "exists"}],
+            "Unsupported field scope",
+        ),
+        (None, LIST),
+        ({}, LIST),
+        ("x", LIST),
+        ([None], SHAPE),
+        ([{"path": ["a"], "operator": "exists"}] * 21, LIST),
     ],
 )
-def test_invalid_condition_boundaries(condition):
-    with pytest.raises(ValueError):
-        validate_fields([condition])
-
-
-@pytest.mark.parametrize(
-    "items", [None, {}, "x", [None], [{"path": ["a"], "operator": "exists"}] * 21]
-)
-def test_invalid_condition_lists(items):
-    with pytest.raises(ValueError):
-        validate_fields(items)
+def test_invalid_conditions_are_refused_with_their_reason(conditions, message):
+    with pytest.raises(ValueError) as refused:
+        validate_fields(conditions)
+    assert str(refused.value) == message
 
 
 def test_inclusive_limits():
@@ -75,6 +103,10 @@ def test_missing_nested_field_never_matches(payload):
 @pytest.mark.parametrize(
     "ip,network,expected",
     [
+        ("35.221.69.202", "35.221.69.0/24", True),
+        ("2001:db8::1", "2001:db8::/32", True),
+        ("2001:db8::1", "192.0.2.0/24", False),
+        ("invalid", "192.0.2.0/24", False),
         ("192.0.2.0", "192.0.2.0/24", True),
         ("192.0.2.255", "192.0.2.0/24", True),
         ("192.0.3.0", "192.0.2.0/24", False),
@@ -84,12 +116,9 @@ def test_missing_nested_field_never_matches(payload):
     ],
 )
 def test_cidr_boundaries(ip, network, expected):
-    assert (
-        field_matches(
-            {"ip": ip}, {"path": ["ip"], "operator": "in_cidr", "value": network}
-        )
-        is expected
-    )
+    condition = {"path": ["ip"], "operator": "in_cidr", "value": network}
+    assert validate_fields([condition]) == [condition]
+    assert field_matches({"ip": ip}, condition) is expected
 
 
 def test_field_discovery_preserves_literal_keys_and_omits_unmatchable_values():

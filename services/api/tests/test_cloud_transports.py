@@ -49,9 +49,9 @@ def test_transport_failures_and_bad_bodies_are_unavailable():
         httpx.Response(200, content=b"not json"),
         httpx.Response(200, json=["a list"]),
     ):
-        with pytest.raises(Unavailable):
+        with pytest.raises(Unavailable, match="^unavailable$"):
             json_api(lambda request, answer=answer: answer).get("/x")
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         api.items({"value": "not a list"}, "value")
 
 
@@ -81,7 +81,7 @@ def test_posts_send_json_and_close_clears_credentials():
 
 
 def test_unknown_providers_are_refused():
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match="^'telepathy'$"):
         cloud.provider("telepathy")
 
 
@@ -122,9 +122,15 @@ def test_google_requests_must_be_https(monkeypatch):
         httplib2.Http, "request", lambda self, uri, *a, **k: sent.append(uri) or "ok"
     )
     http = google.HTTPSOnlyHttp()
-    assert http.follow_redirects is False
+    # Redirects, proxies and unverified certificates are all switched off.
+    assert (
+        http.follow_redirects,
+        http.follow_all_redirects,
+        http.disable_ssl_certificate_validation,
+        http.proxy_info,
+    ) == (False, False, False, None)
     assert http.request("https://admin.googleapis.com/x") == "ok"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Google API requests require HTTPS$"):
         http.request("http://admin.googleapis.com/x")
     assert sent == ["https://admin.googleapis.com/x"]
 
@@ -146,8 +152,14 @@ def test_google_keys_are_bounded_and_need_an_https_token_endpoint(tmp_path):
         ("", "", ""),
         ("", "not base64!", ""),
         (str(tmp_path / "missing.json"), "", ""),
-        ("", "", json.dumps({"token_uri": "http://oauth2.googleapis.com/token"})),
+        ("", "", "{not json"),
         ("", "", "[]"),
+        ("", "", "{}"),
+        # The token request carries the signed assertion, so its endpoint is
+        # plain HTTPS without credentials or a fragment.
+        ("", "", json.dumps({"token_uri": "http://oauth2.googleapis.com/token"})),
+        ("", "", json.dumps({"token_uri": "https://u:p@oauth2.googleapis.com/t"})),
+        ("", "", json.dumps({"token_uri": "https://oauth2.googleapis.com/token#x"})),
     ):
         with pytest.raises(Unavailable) as caught:
             google.key_info(*args)
@@ -167,9 +179,9 @@ def test_google_clients_hold_only_their_scopes_and_subject():
     unattended = google.client("cloudasset", "v1", info, ["scope-b"])
     assert unattended._http.credentials._subject is None
     unattended.close()
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         google.client("admin", "directory_v1", {"token_uri": "http://x"}, [])
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         google.client("admin", "directory_v1", {"token_uri": info["token_uri"]}, [])
 
 

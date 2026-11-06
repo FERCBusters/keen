@@ -210,7 +210,11 @@ def test_runnable_settings_are_saved_with_a_revision(defs, name, document):  # n
 def test_unknown_sources_and_demo_feeds_are_refused(defs, monkeypatch):  # noqa: F811
     unknown = defs.put_document("ftp", {"servers": []}, 0)
     assert (unknown.status_code, unknown.json()["detail"]) == (404, "Unknown connector")
-    assert defs.admin.get("/v1/admin/managed-configurations/ftp").status_code == 404
+    refused = defs.admin.get("/v1/admin/managed-configurations/ftp")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Unknown connector"},
+    )
 
     monkeypatch.setattr(settings, "demo_mode", True)
     from datetime import datetime, timezone
@@ -219,7 +223,10 @@ def test_unknown_sources_and_demo_feeds_are_refused(defs, monkeypatch):  # noqa:
         settings, "demo_expires_at", datetime(2999, 1, 1, tzinfo=timezone.utc)
     )
     demo = defs.put_document("rss", {"feeds": [{"url": "https://feeds.example/a"}]}, 0)
-    assert demo.status_code == 403
+    assert (demo.status_code, demo.json()) == (
+        403,
+        {"detail": "The public mig5 RSS preset is fixed in demo environments."},
+    )
 
 
 def test_source_wide_settings_need_a_known_adapter_and_a_bounded_document(defs):  # noqa: F811
@@ -243,17 +250,3 @@ def test_source_wide_settings_need_a_known_adapter_and_a_bounded_document(defs):
     assert oversized.status_code == 400
     assert oversized.json()["detail"] == "Configuration exceeds 2 MB"
     assert defs.db.get(ManagedConfiguration, "jenkins") is None
-
-
-def test_feeds_with_credentials_in_yaml_stay_out_of_the_web_editor(defs):  # noqa: F811
-    defs.shipped(
-        "rss",
-        {"feeds": [{"url": "https://feeds.example/a", "auth": {"username": "reader"}}]},
-    )
-
-    response = defs.admin.get("/v1/admin/managed-configurations/rss")
-
-    assert response.status_code == 409
-    assert response.json()["detail"].startswith(
-        "This RSS configuration contains headers or credentials"
-    )

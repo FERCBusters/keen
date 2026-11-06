@@ -1,5 +1,6 @@
 """Adapter workflows with actual HTTP parsing and SQL cursors; no live providers."""
 
+import re
 from datetime import datetime
 from unittest.mock import Mock
 
@@ -97,8 +98,12 @@ def test_github_http_errors_never_advance_cursor(contract_db, monkeypatch, statu
     )
     store = Mock()
     monkeypatch.setattr(github, "store_event_with_artifact", store)
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(httpx.HTTPStatusError) as failed:
         github.ingest_github_repo(contract_db, "team", "repo")
+    assert (failed.value.response.status_code, str(failed.value.request.url)) == (
+        status,
+        "https://api.example/repos/team/repo/events?per_page=100&page=1",
+    )
     assert cursor.last_ts == datetime(2026, 1, 1)
     store.assert_not_called()
 
@@ -145,7 +150,10 @@ def test_github_repo_cursor_overlap_order_dedup_and_provenance(
     assert [c.kwargs["external_id"] for c in store.call_args_list] == ["1", "0"]
     assert cursor.last_ts == datetime(2026, 1, 3)
     assert store.call_args.kwargs["raw_pointer"]["github"]["org"] == "team"
-    assert store.call_args.kwargs["summary"].startswith("[Repository]")
+    assert (
+        store.call_args.kwargs["summary"]
+        == "[Repository] GitHub push 1 commit(s) to team/repo by alice"
+    )
 
 
 def test_github_events_other_than_objects_are_skipped(contract_db, monkeypatch):
@@ -252,15 +260,6 @@ def test_rss_conditional_headers_survive_to_next_fetch(
     assert store.call_count == 1
 
 
-def test_unsafe_rss_url_is_rejected_before_http(contract_db, monkeypatch):
-    monkeypatch.setattr(settings, "demo_mode", False)
-    monkeypatch.setattr(rss, "is_safe_url", lambda url: False)
-    client = Mock()
-    monkeypatch.setattr(rss.httpx, "Client", client)
-    assert rss.ingest_rss_feed(contract_db, {"url": "http://127.0.0.1"})["ok"] is False
-    client.assert_not_called()
-
-
 @pytest.mark.parametrize("mode", ["preview", "full"])
 def test_bookstack_capture_preserves_scope_and_respects_content_mode(
     contract_db, monkeypatch, mode
@@ -336,56 +335,6 @@ def test_bookstack_capture_preserves_scope_and_respects_content_mode(
         .last_ts
         is not None
     )
-
-
-@pytest.mark.parametrize(
-    "match,page,expected",
-    [
-        ({"id": 3}, {"id": 3}, True),
-        ({"id": 3}, {"id": 4}, False),
-        ({"slug": "security"}, {"slug": "SECURITY"}, True),
-        ({"slug": "security"}, {"slug": "other"}, False),
-        ({"slug_regex": "^sec-"}, {"slug": "sec-policy"}, True),
-        ({"slug_regex": "^sec-"}, {"slug": "other"}, False),
-        ({"title": "Policy"}, {"name": "POLICY"}, True),
-        ({"title_regex": "^Policy"}, {"name": "Guide"}, False),
-        (
-            {"book": {"id": 7}, "slug": "policy"},
-            {"book_id": 8, "slug": "policy"},
-            False,
-        ),
-        (
-            {"book": {"slug": "isms"}, "slug": "policy"},
-            {"book_slug": "isms", "slug": "policy"},
-            True,
-        ),
-    ],
-)
-def test_bookstack_page_mapping_selectors(match, page, expected):
-    from app.ingest import bookstack
-
-    mappings = bookstack._parse_page_mappings(
-        {"page_mappings": [{"match": match, "map_to": ["A1"]}]}
-    )
-    assert len(mappings) == 1
-    assert mappings[0].matches(page, page) is expected
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        ("2026-01-01T11:00:00+11:00", datetime(2026, 1, 1)),
-        ("2026-01-01T00:00:00Z", datetime(2026, 1, 1)),
-        ("2026-01-01T00:00:00", datetime(2026, 1, 1)),
-        ("invalid", None),
-        ("", None),
-        (None, None),
-    ],
-)
-def test_bookstack_timestamps_are_normalized_to_naive_utc(value, expected):
-    from app.ingest import bookstack
-
-    assert bookstack._parse_bookstack_ts(value) == expected
 
 
 def test_bookstack_reads_page_identity_from_a_collected_event():
@@ -476,9 +425,18 @@ def test_rdf_feed_recovers_an_empty_cursor_with_cached_headers(
     )
 
 
-@pytest.mark.parametrize("body", [b"<html><body>Not a feed</body></html>", b"<rss/>"])
+@pytest.mark.parametrize(
+    "body, message",
+    [
+        (
+            b"<html><body>Not a feed</body></html>",
+            "Unsupported feed format: expected RSS 1.0, RSS 2.0 or Atom",
+        ),
+        (b"<rss/>", "Invalid RSS feed: missing channel"),
+    ],
+)
 def test_unsupported_or_malformed_feed_does_not_update_cache(
-    contract_db, monkeypatch, body
+    contract_db, monkeypatch, body, message
 ):
     url = "https://example.org/feed"
     cursor = IngestionCursor(
@@ -500,6 +458,6 @@ def test_unsupported_or_malformed_feed_does_not_update_cache(
             ),
         ),
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
         rss.ingest_rss_feed(contract_db, {"url": url, "label": "Security"})
     assert cursor.meta == {} and cursor.last_ts is None

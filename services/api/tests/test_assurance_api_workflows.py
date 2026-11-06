@@ -81,7 +81,11 @@ def test_registers_need_isms_read_and_manage(registers):
     anonymous = app.client()
     nobody = app.client(app.user())
     for path in reads:
-        assert anonymous.get(path).status_code == 401
+        refused = anonymous.get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         _send(nobody, "GET", path, status=403)
         registers.read("GET", path)
     assurance = {"category": "Training", "name": "Security awareness"}

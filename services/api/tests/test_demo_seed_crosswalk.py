@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 
 from app.core.datetime_utils import utc_now_naive
@@ -417,9 +418,16 @@ def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
         _clean_risk_types,
     )
 
-    db, _ = seeded
+    db, seeder = seeded
     risks = db.query(Risk).all()
     cia = [r for r in risks if r.risk_types]
+    # Closed demo risks closed as the demo begins; the others have no closing
+    # time.
+    began = datetime.combine(seeder.seed_date, datetime.min.time())
+    assert {(r.treatment_status == "closed", r.closed_at) for r in risks} == {
+        (True, began),
+        (False, None),
+    }
     assert len(risks) >= 25 and len(cia) >= 20 and len(risks) > len(cia)
     # The CIA Triad tab filters on the canonical names Keen stores.
     assert {t for r in cia for t in r.risk_types} == {
@@ -439,8 +447,13 @@ def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
             risk.register_impact,
         )
         assert (risk.risk_owner_user_id is None) != (risk.risk_owner_role_id is None)
-        assert risk.treatment_strategy in TREATMENT_STRATEGIES
-        assert risk.treatment_status in TREATMENT_STATUSES
+        assert TREATMENT_STRATEGIES == {"", "avoid", "mitigate", "accept", "transfer"}
+        assert TREATMENT_STATUSES == {
+            "closed",
+            "awaiting_review",
+            "in_progress",
+            "open",
+        }
     assert {f for (f,) in db.query(RiskControlLink.framework_slug).distinct()} == set(
         SHOWCASE
     )
@@ -608,7 +621,7 @@ def test_a_dry_run_leaves_document_link_entries_out(db, artifact_storage):
     db.flush()
     assert db.query(Event).filter_by(source="diary", system="isms").count() == 0
     assert seeder.stats["link diary entries.skipped in dry run"] == 1
-    assert not artifact_storage.exists()
+    assert artifact_storage.exists() is False
 
 
 def test_a_demo_keeps_its_dataset_alongside_its_cloud_posture(db, monkeypatch):
@@ -636,7 +649,7 @@ def test_a_demo_dry_run_stores_no_cloud_posture(db, monkeypatch, artifact_storag
 
     assert "cloud posture providers" not in seeder.stats
     assert before == {t.name: db.query(t).count() for t in Base.metadata.sorted_tables}
-    assert not artifact_storage.exists()
+    assert artifact_storage.exists() is False
 
 
 def test_evidence_spans_sources_and_covers_annex_a(seeded):

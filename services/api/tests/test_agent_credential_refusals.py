@@ -207,8 +207,12 @@ def test_an_enrolment_key_spelt_another_way_is_refused(keen):  # noqa: F811
 
 
 def test_a_public_key_has_one_spelling():
-    encoded = public(Ed25519PrivateKey.generate())
-    assert signatures.public_key(encoded)
+    key = Ed25519PrivateKey.generate()
+    encoded = public(key)
+    assert (
+        signatures.public_key(encoded).public_bytes_raw()
+        == key.public_key().public_bytes_raw()
+    )
 
     with pytest.raises(signatures.SignatureError, match="^invalid public key$"):
         signatures.public_key(_non_canonical(encoded))
@@ -243,8 +247,13 @@ def test_a_signature_for_an_unsigned_operation_is_refused():
         "keen-encryption-key": "0" * 16,
         "keen-agent-operation": "enroll",
     }
-    assert signatures.parse_request(
+    parsed = signatures.parse_request(
         {**headers, "keen-agent-operation": "heartbeat"}, "heartbeat"
+    )
+    assert (parsed.agent_id, parsed.created, parsed.encryption_key) == (
+        "a" * 36,
+        now,
+        "0" * 16,
     )
 
     # Enrolment proves its key inside the encrypted body, so no signature names it.

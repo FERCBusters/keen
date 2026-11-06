@@ -11,7 +11,6 @@ from app.services.ingestion_pause import (
     purge_pause_status,
     require_purge_receiving,
 )
-from fastapi import HTTPException
 
 
 @pytest.mark.parametrize(
@@ -31,7 +30,10 @@ def test_active_job_and_cooldown_gate(active, offset, paused):
     if paused:
         assert is_paused(db, "rss")
         db.scalar.assert_not_called()
-        with pytest.raises((HTTPException, DomainError)) as exc:
+        with pytest.raises(
+            DomainError,
+            match=r"^Ingestion is paused for evidence purge and its five-minute cooldown; retry later\.$",
+        ) as exc:
             require_purge_receiving(db)
         assert exc.value.status_code == 503 and exc.value.headers["Retry-After"] == "60"
     else:

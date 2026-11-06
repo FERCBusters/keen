@@ -562,7 +562,7 @@ def test_a_revision_that_cannot_be_stored_fails_the_save(db, storage):
     document = _document(db)
     _link(db, document, editor, "A.5.1")
     storage.fail = True
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="^synthetic storage failure$"):
         _link(db, document, editor, "A.8.2")
 
 

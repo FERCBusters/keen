@@ -48,6 +48,24 @@ def test_unusable_header_values_identify_no_one(proxy, value):
     assert _identity({"REMOTE_USER": value}) is None
 
 
+@pytest.mark.parametrize(
+    "peer,values,expected",
+    [
+        ("127.0.0.1", ["alice"], "alice"),
+        ("192.0.2.1", ["alice"], None),
+        (None, ["alice"], None),
+        ("127.0.0.1", ["attacker", "alice"], None),
+    ],
+    ids=["trusted-peer", "untrusted-peer", "no-peer", "two-copies"],
+)
+def test_the_header_counts_only_from_a_trusted_direct_peer_in_one_copy(
+    proxy, peer, values, expected
+):
+    # A forged second copy, or one sent past the proxy, names no one.
+    headers = Headers(raw=[(b"remote_user", v.encode()) for v in values])
+    assert auth._remote_user_from_headers(headers, peer=peer) == expected
+
+
 def test_only_the_configured_header_names_the_user(proxy, monkeypatch):
     monkeypatch.setattr(settings, "remote_user_header_name", "X-Forwarded-User")
     assert _identity({"X-Forwarded-User": " alice "}) == "alice"
@@ -78,26 +96,27 @@ def test_the_proxy_names_only_active_accounts(production_client, proxy, contract
             ).status_code
             == 204
         )
-        assert (
-            client.get("/v1/auth/check", headers={"REMOTE_USER": "nobody"}).status_code
-            == 401
+        refused = client.get("/v1/auth/check", headers={"REMOTE_USER": "nobody"})
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
         )
         # A proxy identity Keen cannot use is not replaced by a session cookie.
         _, redis, admin, _ = production_client
         sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
         client.cookies.set(session_cookie_name(), sid)
         assert client.get("/v1/auth/check").status_code == 204
-        assert (
-            client.get("/v1/auth/check", headers={"REMOTE_USER": "nobody"}).status_code
-            == 401
+        refused = client.get("/v1/auth/check", headers={"REMOTE_USER": "nobody"})
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
         )
         reader.is_active = False
         contract_db.commit()
-        assert (
-            client.get(
-                "/v1/auth/check", headers={"REMOTE_USER": reader.username}
-            ).status_code
-            == 401
+        refused = client.get("/v1/auth/check", headers={"REMOTE_USER": reader.username})
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
         )
     finally:
         client.close()
@@ -108,7 +127,11 @@ def test_a_session_naming_no_valid_user_id_is_refused(production_client):  # noq
     sid = sessions.create_session(redis, user_id="not-a-uuid", ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
 
-    assert client.get("/v1/auth/check").status_code == 401
+    refused = client.get("/v1/auth/check")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 def test_a_hosted_workspace_admits_only_its_owners_sign_in(

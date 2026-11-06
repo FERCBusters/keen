@@ -332,7 +332,10 @@ def test_too_many_sources_to_match_a_pattern_are_refused(db, monkeypatch):
         events(db, [NOW], source=source)
     monkeypatch.setattr(module, "MAX_SOURCES", 2)
 
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^Keen holds events from more than 2 sources, too many to match a source pattern against; name the source instead$",
+    ) as refused:
         module.rule_sources(db, {"source_regex": CLOUDS})
     assert refused.value.status_code == 409
     assert module.rule_sources(db, {"source": "ci"}) == ["ci"]
@@ -953,7 +956,10 @@ def test_slow_insights_stop_and_say_so(db, monkeypatch):
         )
 
     monkeypatch.setattr(insights, "_rule_activity", slow)
-    with pytest.raises(DomainError) as stopped:
+    with pytest.raises(
+        DomainError,
+        match="^Rule insights took too long to work out; try a shorter window$",
+    ) as stopped:
         run(db)
 
     assert (stopped.value.status_code, stopped.value.detail) == (

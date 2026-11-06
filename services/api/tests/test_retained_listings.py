@@ -139,12 +139,18 @@ def test_nested_allowances_count_together_and_release_on_exit():
         assert _used() == [30]  # the inner listing was released
         # An inner listing that overflows the outer one is refused, and every
         # byte it counted is released again, whichever allowance refused it.
-        with pytest.raises(http.ListingTooLarge):
+        with pytest.raises(
+            http.ListingTooLarge,
+            match=r"^Listing exceeds the upstream data one collection holds \(0 MiB\); narrow the input$",
+        ):
             with http.retained_listing():
                 http._retain(40)
                 http._retain(40)
         assert _used() == [30]
-        with pytest.raises(http.ListingTooLarge):
+        with pytest.raises(
+            http.ListingTooLarge,
+            match=r"^Listing exceeds the upstream data one collection holds \(0 MiB\); narrow the input$",
+        ):
             with http.retained_listing(10):
                 http._retain(11)
         assert _used() == [30]
@@ -200,7 +206,10 @@ def test_github_events_stop_at_the_allowance(upstream, monkeypatch):
     monkeypatch.setattr(http, "MAX_RETAINED_BYTES", 2 * PAGE)
     upstream.page = lambda request, number: _full_page(100, number)
     with http.client(base_url="https://ghe.example.com/api/v3") as c:
-        with pytest.raises(http.ListingTooLarge):
+        with pytest.raises(
+            http.ListingTooLarge,
+            match=r"^Listing exceeds the upstream data one collection holds \(0 MiB\); narrow the input$",
+        ):
             github._fetch_pages(c, "/repos/o/r/events", per_page=100, max_pages=3)
     assert len(upstream.served) == 3
 
@@ -245,7 +254,10 @@ def _gitea():
 
 def test_gitea_activity_stops_at_the_allowance(upstream):
     upstream.page = lambda request, number: _full_page(50, number)
-    with pytest.raises(http.ListingTooLarge):
+    with pytest.raises(
+        http.ListingTooLarge,
+        match=r"^Listing exceeds the upstream data one collection holds \(1 MiB\); narrow the input$",
+    ):
         _gitea()._fetch_api_activities(
             base_url="https://git.example.com", owner="o", repo="r", max_pages=50
         )
@@ -351,7 +363,10 @@ def test_bookstack_page_listings_stop_at_the_allowance(upstream):
         {"data": json.loads(_full_page(100, number))}
     ).encode()
     with http.client(base_url="https://books.example.com") as c:
-        with pytest.raises(http.ListingTooLarge):
+        with pytest.raises(
+            http.ListingTooLarge,
+            match=r"^Listing exceeds the upstream data one collection holds \(1 MiB\); narrow the input$",
+        ):
             bookstack._list_pages(
                 c,
                 since_ts=None,

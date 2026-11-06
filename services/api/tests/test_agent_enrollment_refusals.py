@@ -46,8 +46,10 @@ def test_a_public_profile_is_refused_until_its_subject_key_can_be_kept(
     key = os.environ["KEEN_INTEGRATION_SECRET_KEY"]
     monkeypatch.delenv("KEEN_INTEGRATION_SECRET_KEY")
     refused = c.post(PROFILES, json={"name": "Shared", "subject_type": "public"})
-    assert refused.status_code == 503, refused.text
-    assert "KEEN_INTEGRATION_SECRET_KEY" in refused.json()["detail"]
+    assert (refused.status_code, refused.json()) == (
+        503,
+        {"detail": "Public subjects need KEEN_INTEGRATION_SECRET_KEY on the API"},
+    )
     with f() as db:
         assert db.query(AgentEnrollmentProfile).count() == before
         assert db.get(UeuSettings, 1) is None
@@ -57,7 +59,7 @@ def test_a_public_profile_is_refused_until_its_subject_key_can_be_kept(
     assert created.status_code == 201, created.text
     with f() as db:
         # The key exists from the profile's creation, before any enrolment.
-        assert db.get(UeuSettings, 1).public_subject_key
+        assert db.get(UeuSettings, 1).public_subject_key.startswith("gAAAAA")
         expected = public_subject_key(db)
     enrolled = enroll(c, created.json(), name="shared-01")
     assert enrolled.status_code == 201, enrolled.text
@@ -74,7 +76,8 @@ def test_a_code_retried_after_its_agent_is_revoked_is_refused(fleet):
     code = registered.json()["enrollment_code"]
     agent = SimAgent(c)
     assert agent.enroll(code).status_code == 201
-    assert c.post(f"/v1/admin/agents/{agent.agent_id}/revoke").status_code == 200
+    answer = c.post(f"/v1/admin/agents/{agent.agent_id}/revoke")
+    assert (answer.status_code, answer.json()) == (200, {"ok": True})
 
     # The spent code still matches the key it bound, so the retry reaches the
     # agent's row, where the revocation refuses it.

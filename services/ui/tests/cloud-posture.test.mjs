@@ -231,6 +231,54 @@ test('whole-check risks, accepted subjects and refused saves', async (t) => {
   assert.match(form.querySelector('[role="status"]').textContent, /needs an owner/);
 });
 
+test('a treated resource needs no further risk, and a newer failure is told apart', async (t) => {
+  const treated = check({
+    status: 'treated',
+    subjects: [
+      {
+        name: 'bob',
+        treated: true,
+        risks: [{ id: 'r3', title: 'Bob', accepted: false, closed: true, treated: true }],
+      },
+      {
+        name: 'carol',
+        treated: false,
+        risks: [{ id: 'r4', title: 'Carol', accepted: false, closed: true, treated: false }],
+      },
+    ],
+    subjects_total: 2,
+  });
+  // A closed risk on a check that passes has no failure to predate.
+  const passing = check({
+    key: 'storage.backups',
+    status: 'met',
+    subjects: [],
+    subjects_total: 0,
+    risks: [{ id: 'r5', title: 'Backups', accepted: false, closed: true, treated: false }],
+  });
+  const { host, controller } = await fixture(t, {
+    data: posture({}, [provider({}, [treated, passing])]),
+  });
+  controller.select({ id: 'v1', name: 'AWS' });
+  await tick();
+  const badge = [...host.querySelectorAll('.badge')].find((b) => b.textContent === 'Risk treated');
+  assert.equal(badge.className, 'badge text-bg-secondary');
+  assert.deepEqual(
+    [...host.querySelectorAll('td > [data-posture-linked-risk]')].map((r) => r.textContent),
+    ['Risk closed · Backups'],
+  );
+  host.querySelector('[data-cloud-subjects]').click();
+  await tick();
+  const [bob, carol] = host.querySelectorAll('[data-cloud-subject-row="0"] li');
+  assert.equal(bob.querySelector('[data-posture-linked-risk]').textContent, 'Risk treated · Bob');
+  assert.equal(bob.querySelector('[data-cloud-subject-risk]'), null);
+  assert.equal(
+    carol.querySelector('[data-posture-linked-risk]').textContent,
+    'Risk closed before this failure began · Carol',
+  );
+  assert.equal(carol.querySelector('[data-cloud-subject-risk]').textContent, 'Create a risk');
+});
+
 test('administrators queue a refresh and see why one was refused', async (t) => {
   const posts = [];
   const fail = {};

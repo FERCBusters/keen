@@ -38,14 +38,18 @@ def test_inherited_roles_come_only_from_groups_that_have_one(keen):  # noqa: F81
     in_both = _member_of(keen, roleless)
     keen.db.execute(user_groups.insert().values(user_id=in_both.id, group_id=admins.id))
     keen.db.commit()
+    in_none = keen.user(role="inherit")
     client = keen.client(keen.user(role="admin"))
 
     listed = client.get("/v1/users")
 
     assert listed.status_code == 200, listed.text
     roles = {row["id"]: row["effective_role"] for row in listed.json()}
-    assert roles[str(in_roleless.id)] == "normal"
-    assert roles[str(in_both.id)] == "admin"
+    assert [roles[str(u.id)] for u in (in_roleless, in_both, in_none)] == [
+        "normal",
+        "admin",
+        "normal",
+    ]
 
 
 @pytest.mark.parametrize("role,effective", [("admin", "admin"), (None, "normal")])
@@ -96,7 +100,9 @@ def test_an_administrator_demoted_mid_request_cannot_delete_the_last_one(keen): 
     demoted.effective_role = "admin"
     context = ChangeContext(method="DELETE", path=f"/v1/users/{last.id}", actor=demoted)
 
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match="^Cannot delete the last effective admin user$"
+    ) as refused:
         users.delete_user_admin(user_id=last.id, context=context, db=keen.db)
 
     assert (refused.value.status_code, refused.value.detail) == (
@@ -128,7 +134,7 @@ def test_access_changes_for_an_unknown_account_are_refused(keen):  # noqa: F811
         403,
         "Admin role required",
     )
-    with pytest.raises(DomainError) as direct:
+    with pytest.raises(DomainError, match="^User not found$") as direct:
         users.set_user_access_admin(
             user_id=uuid.uuid4(),
             payload=UserAccessUpdatePayload(explicit_permission_codes=[]),

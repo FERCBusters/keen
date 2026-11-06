@@ -21,13 +21,15 @@ from tests.test_quizzes_api import world  # noqa: F401
 def test_the_summary_checks_isms_access_in_the_operation_itself(world):  # noqa: F811
     app, person = world.keen, world.students[0].person
     for codes in [("quiz.manage",), ("quiz.manage", "quiz.read")]:
-        with pytest.raises(DomainError) as refused:
+        with pytest.raises(DomainError, match="^ISMS read access required$") as refused:
             person_quizzes(db=app.db, user=app.user(*codes), person_id=person.id)
         assert (refused.value.status_code, refused.value.detail) == (
             403,
             "ISMS read access required",
         )
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError, match=r"^quiz\.manage permission required$"
+    ) as refused:
         person_quizzes(db=app.db, user=app.user("isms.read"), person_id=person.id)
     assert refused.value.detail == "quiz.manage permission required"
 

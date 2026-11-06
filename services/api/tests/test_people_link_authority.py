@@ -191,7 +191,11 @@ def test_an_isms_or_risk_manager_cannot_take_an_attendees_audits(
         manager = keen.user(code)
         own = _own_person(keen, manager)
         client = keen.client(manager)
-        assert _send(client, "GET", f"/v1/audits/{audit.id}").status_code == 403
+        refused = _send(client, "GET", f"/v1/audits/{audit.id}")
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Audit access required"},
+        )
         # Freeing the manager's own link is an ordinary People edit.
         freed = _send(client, "PATCH", f"/v1/isms/people/{own.id}", {"name": own.name})
         assert freed.status_code == 200, freed.text
@@ -211,7 +215,11 @@ def test_an_isms_or_risk_manager_cannot_take_an_attendees_audits(
         )
         keen.db.expire_all()
         assert keen.db.get(IsmsPerson, attendee.id).user_id is None
-        assert _send(client, "GET", f"/v1/audits/{audit.id}").status_code == 403
+        refused = _send(client, "GET", f"/v1/audits/{audit.id}")
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Audit access required"},
+        )
         assert _send(client, "GET", "/v1/me/audits").json()["items"] == []
         deleted = _send(client, "DELETE", f"/v1/isms/people/{attendee.id}")
         assert deleted.status_code == 403

@@ -316,4 +316,7 @@ def test_case_insensitive_registers_prefer_the_exact_reference(catalogue):
     assert [c["id"] for c in objective["controls"]] == [str(lower.id)]
     # Neither spelling matches exactly, so the reference names two controls.
     response = _objective(catalogue, ["Y.A"], status=400)
-    assert response["detail"].startswith("More than one control in A has")
+    assert (
+        response["detail"]
+        == "More than one control in A has the reference Y.A; use the control id"
+    )

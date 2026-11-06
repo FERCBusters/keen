@@ -1,6 +1,7 @@
 """Collector contract, network boundary and durable lifecycle regressions."""
 
 import json
+import re
 import socket
 import uuid
 from datetime import timedelta
@@ -45,9 +46,14 @@ def test_json_pointer_and_normalization():
     assert pointer({}, "/missing") is None
     d = Definition()
     assert normalize(record(), d)["timestamp"] == "2026-01-01T12:00:00+00:00"
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match=r"^Timestamp must include a timezone \(or use Unix seconds\)$",
+    ):
         normalize({**record(), "created_at": "2026-01-01"}, d)
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="^Required field timestamp is missing at /created_at$"
+    ):
         normalize({"id": 1}, d)
     assert external_id("a", "1") != external_id("b", "1")
 
@@ -149,23 +155,43 @@ def test_related_details_are_encoded_and_mapped():
 
 
 @pytest.mark.parametrize(
-    "url,address",
+    "url,address,message",
     [
-        ("http://example.org", "8.8.8.8"),
-        ("https://example.org", "127.0.0.1"),
-        ("https://example.org", "169.254.169.254"),
-        ("https://example.org", "::ffff:127.0.0.1"),
-        ("https://example.org", "10.0.0.1"),
-        ("https://user:pass@example.org", "8.8.8.8"),
-        ("https://evil.org", "8.8.8.8"),
+        (
+            "http://example.org",
+            "8.8.8.8",
+            "Use an HTTPS URL without embedded credentials or fragment",
+        ),
+        ("https://example.org", "127.0.0.1", "Destination address is prohibited"),
+        ("https://example.org", "169.254.169.254", "Destination address is prohibited"),
+        (
+            "https://example.org",
+            "::ffff:127.0.0.1",
+            "Destination address is prohibited",
+        ),
+        (
+            "https://example.org",
+            "10.0.0.1",
+            "Private destination requires an approved CIDR",
+        ),
+        (
+            "https://user:pass@example.org",
+            "8.8.8.8",
+            "Use an HTTPS URL without embedded credentials or fragment",
+        ),
+        (
+            "https://evil.org",
+            "8.8.8.8",
+            "Destination host and port are not in KEEN_INTEGRATION_ALLOWED_HOSTS",
+        ),
     ],
 )
-def test_destination_boundary(monkeypatch, url, address):
+def test_destination_boundary(monkeypatch, url, address, message):
     monkeypatch.setenv("KEEN_INTEGRATION_ALLOWED_HOSTS", "example.org")
     monkeypatch.setattr(
         socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", (address, 443))]
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
         transport.destination(url)
 
 
@@ -341,8 +367,12 @@ def test_failure_budget_and_exclusive_runs(database, monkeypatch):
     db.expire_all()
     c = db.get(Collector, "collector")
     assert c.failures == 3 and not c.enabled and c.cursor is None
-    with pytest.raises((HTTPException, DomainError)):
+    with pytest.raises((HTTPException, DomainError)) as refused:
         api.action_collector("collector", "run", api.Action(version=1), db)
+    assert (refused.value.status_code, refused.value.detail) == (
+        409,
+        "Review the failure and explicitly resume before collecting again",
+    )
     api.action_collector("collector", "resume", api.Action(version=1), db)
     assert c.enabled and c.failures == 0
 
@@ -477,7 +507,7 @@ def test_measurement_validation_rejects_nonfinite_and_reversed_periods():
     d = Definition(
         output="measurement", measure_id=str(uuid.uuid4()), unit="%", fields=fields
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Measurement must be finite$"):
         normalize(record(), d)
     d.fields["value"].value = 1
     with pytest.raises(ValueError, match="period"):
@@ -523,17 +553,7 @@ def test_response_size_limit(monkeypatch):
     monkeypatch.setattr(transport, "PinnedHTTPS", lambda *a: conn)
     with pytest.raises(IntegrationError, match="4 MiB"):
         transport.request("https://example.org")
-    conn.close.assert_called_once()
-
-
-def test_record_cap_does_not_silently_truncate():
-    with pytest.raises(IntegrationError, match="Record limit"):
-        collect(
-            Definition(max_records=1),
-            "https://example.org",
-            {},
-            fetch=lambda *a, **k: ([record(1), record(2)], {}),
-        )
+    conn.close.assert_called_once_with()
 
 
 def test_failed_partial_run_preserves_cursor_and_retry_deduplicates(

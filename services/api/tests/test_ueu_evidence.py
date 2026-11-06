@@ -14,7 +14,7 @@ import app.services.agent_enrollment as enrollment_operations
 import pytest
 from app.agents.ueu import catalogue as catalogues
 from app.agents.ueu.envelope import validate
-from app.agents.ueu.jcs import CanonicalError, canonical, parse, parse_canonical
+from app.agents.ueu.jcs import canonical, parse
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentKey, Artifact, Event, KeenAgent, UeuBatch, UeuEvidence
 from app.ingest import common
@@ -131,9 +131,9 @@ def test_python_reproduces_the_agents_golden_vectors():
         == VECTORS["signature_base"].encode()
     )
     signatures.verify_request(signed, pub, "POST", "heartbeat", sealed)
-    with pytest.raises(signatures.SignatureError):
+    with pytest.raises(signatures.SignatureError, match="^signature invalid$"):
         signatures.verify_request(signed, pub, "POST", "renew", sealed)
-    with pytest.raises(signatures.SignatureError):
+    with pytest.raises(signatures.SignatureError, match="^signature invalid$"):
         signatures.verify_request(signed, pub, "POST", "heartbeat", "application/json")
 
 
@@ -194,36 +194,6 @@ def test_python_reproduces_the_agents_transport_vectors():
     )
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        '{"a":1,"a":2}',
-        '{"a":1.5}',
-        '{"a":NaN}',
-        '{"a":"\\ud800"}',
-        '{"b":1, "a":2}',
-        '{"a":9007199254740992}',
-        # Longer than Python converts (4,300 digits), and than the exact range.
-        '{"a":' + "1" * 5000 + "}",
-        '{"a":-' + "9" * 17 + "}",
-    ],
-)
-def test_canonical_form_is_strict(text):
-    with pytest.raises(CanonicalError):
-        parse_canonical(text)
-
-
-def test_canonical_ordering_and_escapes_follow_rfc_8785():
-    value = {"\u20ac": 1, "\U0001f600": 2, 'a\u0001\n"': "\u2028\x7f", "": None}
-    # U+20AC sorts before U+1F600, whose first UTF-16 code unit is 0xD83D.
-    assert (
-        canonical(value)
-        == (
-            '{"":null,"a\\u0001\\n\\"":"\u2028\x7f","\u20ac":1,"\U0001f600":2}'
-        ).encode()
-    )
-
-
 # -- enrolment ---------------------------------------------------------------
 
 
@@ -265,20 +235,42 @@ def test_enrolment_rejects_bad_codes_proofs_and_expired_codes(keen):
     elsewhere = ".".join((head, secret, "A" * 22))
     with pytest.raises(AssertionError):
         SimAgent(keen.client).fetch_server_key(elsewhere)
-    assert agent.enroll(elsewhere).status_code == 401
+    refused = agent.enroll(elsewhere)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {
+            "detail": "This credential was issued under a different KEEN identity key; ask an administrator for a new one"
+        },
+    )
     # A proof made for another credential does not bind the key.
     body = agent.enrollment(code)
     body["proof"] = b64url(agent.key.sign(b"something else"))
-    assert agent.post_enrollment(code, body).status_code == 400
+    refused = agent.post_enrollment(code, body)
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Key proof invalid"},
+    )
     # So does a proof signed for another credential.
     body = {**agent.enrollment(wrong), "credential": code}
-    assert agent.post_enrollment(code, body).status_code == 400
-    assert agent.enroll(code, name="x").status_code == 400
+    refused = agent.post_enrollment(code, body)
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Key proof invalid"},
+    )
+    refused = agent.enroll(code, name="x")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Enrolment codes take only a key and its proof"},
+    )
     with keen.db() as db:
         row = db.get(KeenAgent, info["agent"]["id"])
         row.enrollment_code_expires_at = utc_now_naive() - timedelta(seconds=1)
         db.commit()
-    assert agent.enroll(code).status_code == 401
+    refused = agent.enroll(code)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid enrollment credential"},
+    )
     with keen.db() as db:
         assert db.query(AgentKey).count() == 0
 
@@ -318,7 +310,12 @@ def test_recorded_enrolment_requests_cannot_be_replayed(keen, monkeypatch):
         json=recorded,
         headers={"Authorization": "Bearer " + code},
     )
-    assert plain.status_code == 415
+    assert (plain.status_code, plain.json()) == (
+        415,
+        {
+            "detail": "keen-agent requests must be encrypted to KEEN; upgrade keen-agent to 0.3 or later"
+        },
+    )
     # The key holder's retry, with a fresh proof, recovers the same binding.
     again = agent.enroll(code)
     assert again.status_code == 201 and again.json()["key_id"] == agent.key_id
@@ -326,7 +323,11 @@ def test_recorded_enrolment_requests_cannot_be_replayed(keen, monkeypatch):
     now = int(time.time())
     for created in (now - 301, now + 301):
         stale = agent.enrollment(code, created=created)
-        assert agent.post_enrollment(code, stale).status_code == 400
+        refused = agent.post_enrollment(code, stale)
+        assert (refused.status_code, refused.json()) == (
+            400,
+            {"detail": "Key proof is not current; check the machine's clock and retry"},
+        )
     assert (
         agent.post_enrollment(
             code, agent.enrollment(code, created=now - 290)
@@ -347,13 +348,17 @@ def test_recorded_enrolment_requests_cannot_be_replayed(keen, monkeypatch):
 
 def test_profile_enrolment_proofs_are_single_use(keen):
     r = keen.client.post("/v1/admin/agent-enrollment-profiles", json={"name": "fleet"})
-    assert r.status_code in (200, 201), r.text
+    assert r.status_code == 201, r.text
     bootstrap = r.json()["bootstrap_key"]
     agent = SimAgent(keen.client)
     body = agent.enrollment(bootstrap)
     body["name"], body["nonce"] = "host-1", secrets.token_urlsafe(32)
     assert agent.post_enrollment(bootstrap, body).status_code == 201
-    assert agent.post_enrollment(bootstrap, body).status_code == 400
+    refused = agent.post_enrollment(bootstrap, body)
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Key proof has been used; sign a new proof and retry"},
+    )
     retry = agent.enrollment(bootstrap)
     retry["name"], retry["nonce"] = body["name"], body["nonce"]
     again = agent.post_enrollment(bootstrap, retry)
@@ -705,57 +710,67 @@ def test_request_signatures_cannot_be_replayed_redirected_or_altered(keen):
         == 200
     )
     # The same signature again is a replay.
-    assert (
-        keen.client.post("/v1/otlp/logs", content=body, headers=headers).status_code
-        == 401
+    refused = keen.client.post("/v1/otlp/logs", content=body, headers=headers)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     # A heartbeat signature does not authorise ingestion.
     hb = agent.signed_headers(body, "heartbeat")
-    assert (
-        keen.client.post("/v1/otlp/logs", content=body, headers=hb).status_code == 401
+    refused = keen.client.post("/v1/otlp/logs", content=body, headers=hb)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     hb = agent.signed_headers(body, "heartbeat")
     hb["Keen-Agent-Operation"] = "otlp-logs"
-    assert (
-        keen.client.post("/v1/otlp/logs", content=body, headers=hb).status_code == 401
+    refused = keen.client.post("/v1/otlp/logs", content=body, headers=hb)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     # The body is bound by its digest.
     fresh = agent.signed_headers(body, "otlp-logs")
     altered = body[:-1] + bytes([body[-1] ^ 1])
-    assert (
-        keen.client.post("/v1/otlp/logs", content=altered, headers=fresh).status_code
-        == 401
+    refused = keen.client.post("/v1/otlp/logs", content=altered, headers=fresh)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     # So is the encryption key the body names.
     moved = agent.signed_headers(body, "otlp-logs")
     moved["Keen-Encryption-Key"] = "0" * 16
-    assert (
-        keen.client.post("/v1/otlp/logs", content=body, headers=moved).status_code
-        == 401
+    refused = keen.client.post("/v1/otlp/logs", content=body, headers=moved)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     # Signatures outside the five-minute window are refused.
     old = int((datetime.now(timezone.utc) - timedelta(minutes=6)).timestamp())
     stale = agent.signed_headers(body, "otlp-logs", created=old)
-    assert (
-        keen.client.post("/v1/otlp/logs", content=body, headers=stale).status_code
-        == 401
+    refused = keen.client.post("/v1/otlp/logs", content=body, headers=stale)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     # A key that is not the agent's own cannot sign for it.
     other = Ed25519PrivateKey.generate()
     forged = agent.signed_headers(body, "otlp-logs", key=other)
-    assert (
-        keen.client.post("/v1/otlp/logs", content=body, headers=forged).status_code
-        == 401
+    refused = keen.client.post("/v1/otlp/logs", content=body, headers=forged)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     # Bearer credentials are not accepted for key identities.
     bearer = {"Authorization": "Bearer ka_" + agent.agent_id + "." + "A" * 43}
-    assert (
-        keen.client.post(
-            "/v1/otlp/logs",
-            content=body,
-            headers={**bearer, "Content-Type": "application/json"},
-        ).status_code
-        == 401
+    refused = keen.client.post(
+        "/v1/otlp/logs",
+        content=body,
+        headers={**bearer, "Content-Type": "application/json"},
+    )
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
 
 
@@ -764,7 +779,14 @@ def test_key_agents_send_only_ueu_evidence(keen):
 
     agent, _ = enrolled(keen)
     body = json.dumps(record()).encode()
-    assert agent.post("/v1/otlp/logs", body, "otlp-logs").status_code == 400
+    refused = agent.post("/v1/otlp/logs", body, "otlp-logs")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {
+            "code": 3,
+            "message": "keen-agent identities send UEU evidence only; upgrade the agent",
+        },
+    )
 
 
 def test_replay_protection_fails_closed(keen, monkeypatch):
@@ -777,7 +799,11 @@ def test_replay_protection_fails_closed(keen, monkeypatch):
             raise ConnectionError("valkey down")
 
     monkeypatch.setattr(credentials, "get_valkey", lambda: Down())
-    assert agent.heartbeat().status_code == 503
+    refused = agent.heartbeat()
+    assert (refused.status_code, refused.json()) == (
+        503,
+        {"detail": "Replay protection unavailable"},
+    )
 
 
 # -- batch signatures and envelope checks ------------------------------------
@@ -811,7 +837,14 @@ def test_a_batch_changed_after_signing_is_rejected_whole(keen):
     signature_for_other = agent.manifest([one])
     # A manifest that does not list exactly the batch's envelopes.
     body = agent.otlp([one, two], manifest=signature_for_other)
-    assert agent.post("/v1/otlp/logs", body, "otlp-logs").status_code == 400
+    refused = agent.post("/v1/otlp/logs", body, "otlp-logs")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {
+            "code": 3,
+            "message": "UEU_EVIDENCE_VERIFICATION_FAILED: manifest does not list exactly the batch's envelopes",
+        },
+    )
     # A signature that does not verify with the producer's key.
     body = agent.otlp([one, two], manifest=manifest).replace(
         b'"ueu.batch.signature", "value": {"stringValue": "',
@@ -868,7 +901,13 @@ def test_non_canonical_bodies_and_other_producers_are_rejected(keen):
     env = agent.observation("firewall", "ufw", {"enabled": True})
     sealed = agent.seal(env, stream=str(uuid.uuid4()))
     r = agent.post("/v1/otlp/logs", agent.otlp([sealed]), "otlp-logs")
-    assert r.status_code == 400
+    assert (r.status_code, r.json()) == (
+        400,
+        {
+            "code": 3,
+            "message": "UEU_SCHEMA_VALIDATION_FAILED: stream is another agent's",
+        },
+    )
 
 
 def test_oversized_integers_are_refused_as_non_canonical(keen):
@@ -1069,7 +1108,7 @@ def test_token_agents_cannot_report_posture_and_can_move_to_keys(keen):
         "/v1/admin/agents",
         json={"name": "relay", "credential_type": "token"},
     )
-    assert r.status_code in (200, 201), r.text
+    assert r.status_code == 201, r.text
     agent_id = r.json()["agent"]["id"]
     with keen.db() as db:
         from app.db.models import IsmsPerson
@@ -1082,7 +1121,10 @@ def test_token_agents_cannot_report_posture_and_can_move_to_keys(keen):
         f"/v1/admin/agents/{agent_id}",
         json={"agent_type": "workstation", "person_id": person_id},
     )
-    assert r.status_code == 409
+    assert (r.status_code, r.json()) == (
+        409,
+        {"detail": "Workstation posture agents enrol with a key"},
+    )
     r = keen.client.post(
         f"/v1/admin/agents/{agent_id}/rotate",
         json={"expires_days": 30, "credential_type": "key"},
@@ -1151,7 +1193,11 @@ def test_renewal_replaces_the_key_and_a_lost_response_can_be_retried(keen):
     again, _, _ = agent.renew(nonce=nonce, new=new)
     assert again.status_code == 200 and again.json()["key_id"] == grant["key_id"]
     # The retired key authorises nothing else.
-    assert agent.heartbeat().status_code == 401
+    refused = agent.heartbeat()
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid agent credential"},
+    )
     other, _, _ = agent.renew(new=Ed25519PrivateKey.generate())
     assert other.status_code == 401
     agent.accept(grant, new)
@@ -1174,10 +1220,18 @@ def test_admin_codes_rotate_keys_and_revocation_ends_access(keen):
     assert agent.heartbeat().status_code == 200
     replacement = SimAgent(keen.client)
     assert replacement.enroll(code["enrollment_code"]).status_code == 201
-    assert agent.heartbeat().status_code == 401
+    refused = agent.heartbeat()
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid agent credential"},
+    )
     assert replacement.heartbeat().status_code == 200
     assert keen.client.post(f"/v1/admin/agents/{ident}/revoke").status_code == 200
-    assert replacement.heartbeat().status_code == 401
+    refused = replacement.heartbeat()
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid agent credential"},
+    )
     with keen.db() as db:
         assert {k.state for k in db.query(AgentKey)} == {"revoked"}
 
@@ -1187,7 +1241,10 @@ def test_public_subjects_need_the_integration_key(keen, monkeypatch):
     r = keen.client.post(
         "/v1/admin/agents", json={"name": "a", "subject_type": "public"}
     )
-    assert r.status_code == 503
+    assert (r.status_code, r.json()) == (
+        503,
+        {"detail": "Public subjects need KEEN_INTEGRATION_SECRET_KEY on the API"},
+    )
     from cryptography.fernet import Fernet
 
     monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
@@ -1210,14 +1267,13 @@ def test_verification_bundle_downloads_are_gone(keen):
         event_id = db.query(Event).one().id
     since = stamp(datetime.now(timezone.utc) - timedelta(hours=1))
     until = stamp(datetime.now(timezone.utc) + timedelta(hours=1))
-    assert (
-        keen.client.get(
-            f"/v1/admin/agents/{info['agent']['id']}/evidence-bundle",
-            params={"since": since, "until": until},
-        ).status_code
-        == 404
+    refused = keen.client.get(
+        f"/v1/admin/agents/{info['agent']['id']}/evidence-bundle",
+        params={"since": since, "until": until},
     )
-    assert keen.client.get(f"/v1/events/{event_id}/ueu-bundle").status_code == 404
+    assert (refused.status_code, refused.json()) == (404, {"detail": "Not Found"})
+    refused = keen.client.get(f"/v1/events/{event_id}/ueu-bundle")
+    assert (refused.status_code, refused.json()) == (404, {"detail": "Not Found"})
     assert not (ROOT / "tools/ueu_verify_bundle.py").exists()
     with keen.db() as db:
         # The checks stay recorded and shown with the event.

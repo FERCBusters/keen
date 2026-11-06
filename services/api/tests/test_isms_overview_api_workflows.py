@@ -191,7 +191,11 @@ def test_overview_requires_isms_read_access(isms):
     anonymous = app.client()
     nobody = app.client(app.user())
     for path in ("/v1/isms/meta", "/v1/isms/summary"):
-        assert anonymous.get(path).status_code == 401
+        refused = anonymous.get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         _send(nobody, "GET", path, status=403)
     for code, can_manage in (
         ("isms.read", False),
@@ -310,7 +314,11 @@ def test_disabled_isms_features_are_hidden_from_the_overview(isms):
 def test_personal_views_show_only_the_signed_in_users_records(isms):
     app = isms.keen
     member = app.client(isms.member)
-    assert app.client().get("/v1/me/isms-objectives").status_code == 401
+    refused = app.client().get("/v1/me/isms-objectives")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
     objectives = _send(member, "GET", "/v1/me/isms-objectives")
     # Owner and resource at once still lists the objective once.

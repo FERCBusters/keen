@@ -107,8 +107,8 @@ def peer(monkeypatch, tls_files):
         finally:
             thread.join(4)
             listener.close()
-            assert not thread.is_alive()
-            assert not errors
+            assert thread.is_alive() is False
+            assert errors == []
 
     return run
 
@@ -118,7 +118,7 @@ def test_unsolicited_greeting_literal_is_rejected_before_authentication(peer):
         with pytest.raises(ValueError, match="literal"):
             client = transport.Client("mail.example", port, "", time.monotonic() + 3)
             client.shutdown()
-    assert not commands
+    assert commands == []
 
 
 def test_second_literal_is_rejected_before_its_payload_is_read(peer, monkeypatch):
@@ -137,7 +137,9 @@ def test_second_literal_is_rejected_before_its_payload_is_read(peer, monkeypatch
         try:
             client.login('"reader"', "synthetic-secret")
             client.state = "SELECTED"
-            with pytest.raises(ValueError):
+            with pytest.raises(
+                ValueError, match="^IMAP literal exceeds requested limit$"
+            ):
                 worker.literal(client, 2, "1", 100)
         finally:
             client.shutdown()
@@ -149,7 +151,7 @@ def test_conflicting_uidvalidity_is_rejected():
         def response(self, key):
             return key, [b"7", b"8"]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="^Conflicting IMAP UID metadata$"):
         worker.number(Peer(), "UIDVALIDITY")
 
 
@@ -177,8 +179,11 @@ def test_valid_single_literal_and_uid_after_literal_remain_supported(peer, paylo
             client.shutdown()
 
 
-@pytest.mark.parametrize("status", ["NO", "OK"])
-def test_missing_literal_does_not_leave_an_allowance(peer, status):
+@pytest.mark.parametrize(
+    "status,message",
+    [("NO", "IMAP command rejected"), ("OK", "Unexpected IMAP FETCH response")],
+)
+def test_missing_literal_does_not_leave_an_allowance(peer, status, message):
     with peer(lambda line, tag: tag + b" " + status.encode() + b" no literal\r\n") as (
         port,
         commands,
@@ -187,25 +192,23 @@ def test_missing_literal_does_not_leave_an_allowance(peer, status):
         try:
             client.login('"reader"', "synthetic-secret")
             client.state = "SELECTED"
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match=f"^{message}$"):
                 worker.literal(client, 2, "1", 100)
             assert client.literal_limit == 0
         finally:
             client.shutdown()
 
 
-@pytest.mark.parametrize(
-    "attack",
-    [
-        "valid",
-        "long-from",
-        "wrong-uid",
-        "wrong-section",
-        "wrong-offset",
-        "metadata-literal",
-        "conflicting-epoch",
-    ],
-)
+REFUSALS = {
+    "wrong-uid": "IMAP literal identity or size mismatch",
+    "wrong-section": "Unexpected IMAP literal metadata",
+    "wrong-offset": "Unexpected IMAP literal metadata",
+    "metadata-literal": "IMAP literal exceeds requested limit",
+    "conflicting-epoch": "Conflicting IMAP UID metadata",
+}
+
+
+@pytest.mark.parametrize("attack", ["valid", "long-from", *REFUSALS])
 def test_full_collection_with_hostile_tls_responses(peer, attack):
     def respond(line, tag):
         done = tag + b" OK done\r\n"
@@ -282,7 +285,7 @@ def test_full_collection_with_hostile_tls_responses(peer, attack):
             if attack == "long-from":
                 assert len(result["items"][0]["headers"]["from"]) > 128
         else:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match=f"^{REFUSALS[attack]}$"):
                 worker.collect(config, {"uidvalidity": 7, "last_uid": 1}, "")
     assert all(
         not any(
@@ -368,7 +371,7 @@ worker.main()
     assert json.loads(result.stdout) == {
         "error": "IMAP collection failed a connection, protocol or resource check"
     }
-    assert not result.stderr
+    assert result.stderr == b""
     assert secret not in result.stdout and b"synthetic-secret" not in result.stdout
     # The referral answers EXAMINE and the client follows it nowhere. Newer
     # imaplib releases ask for capabilities again after LOGIN.
@@ -378,14 +381,20 @@ worker.main()
 
 
 @pytest.mark.parametrize(
-    "values", [[b"0"], [b"4294967296"], [b"7 trailing"], [b"7", b"bad"]]
+    "values,message",
+    [
+        ([b"0"], "Invalid IMAP UID metadata"),
+        ([b"4294967296"], "Invalid IMAP UID metadata"),
+        ([b"7 trailing"], "IMAP UID metadata missing"),
+        ([b"7", b"bad"], "Conflicting IMAP UID metadata"),
+    ],
 )
-def test_invalid_epoch_values_are_rejected(values):
+def test_invalid_epoch_values_are_rejected(values, message):
     class Peer:
         def response(self, key):
             return key, values
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=f"^{message}$"):
         worker.number(Peer(), "UIDVALIDITY")
 
 

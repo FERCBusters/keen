@@ -7,6 +7,7 @@ export const POSTURE_LABELS = {
   met: 'Met',
   attention: 'Needs attention',
   accepted: 'Risk accepted',
+  treated: 'Risk treated',
   unknown: 'Not established',
   stale: 'Stale',
   external: 'Managed externally',
@@ -17,6 +18,7 @@ const tones = {
   met: 'success',
   attention: 'warning',
   accepted: 'info',
+  treated: 'secondary',
   unknown: 'secondary',
   stale: 'secondary',
   external: 'info',
@@ -29,16 +31,27 @@ export function postureBadge(status) {
   return `<span class="badge text-bg-${tones[status]}">${esc(POSTURE_LABELS[status])}</span>`;
 }
 
-// Linked risks as text: an accepted risk names its review date, and a lapsed
-// acceptance says so. Titles arrive only for viewers with risk access.
-export function linkedRisks(list, framework) {
+// The results a failure underlies, whether or not a risk covers it.
+const FAILING = new Set(['attention', 'accepted', 'treated']);
+
+// Linked risks as text: an accepted risk names its review date, a lapsed
+// acceptance says so, and a closed risk says whether it treats the failure as
+// it stands, or only that it closed while the result is not failing. Titles
+// arrive only for viewers with risk access.
+export function linkedRisks(list, framework, status) {
   return list
     .map((r) => {
       const state = r.accepted
         ? `Risk accepted until ${esc(r.due)}`
-        : r.acceptance_expired
-          ? 'Acceptance expired'
-          : 'Risk recorded';
+        : r.treated
+          ? 'Risk treated'
+          : r.closed
+            ? FAILING.has(status)
+              ? 'Risk closed before this failure began'
+              : 'Risk closed'
+            : r.acceptance_expired
+              ? 'Acceptance expired'
+              : 'Risk recorded';
       const title = r.title
         ? ` · <a href="${esc(riskHref(r.id, framework))}">${esc(r.title)}</a>`
         : '';

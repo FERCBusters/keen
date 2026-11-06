@@ -59,7 +59,7 @@ def test_a_blocking_tls_write_within_the_budget_waits_only_what_remains(
     tls_socket.settimeout(30.0)
     peer.close()  # The peer goes away, so the write fails at once.
     with http.budget(time.monotonic() + 2):
-        with pytest.raises(BrokenPipeError):
+        with pytest.raises(BrokenPipeError, match=r"^\[Errno 32\] Broken pipe$"):
             tls_socket.write(b"GET / HTTP/1.1\r\n")
     # The write ran with its timeout clamped to the budget's remainder.
     assert 0 < tls_socket.gettimeout() <= 2
@@ -70,7 +70,10 @@ def test_a_non_blocking_tls_socket_keeps_its_own_timeout(tls_socket):
     with http.budget(time.monotonic() - 1):
         # The handshake waits for nobody: it reports at once that the peer
         # has yet to answer, and the spent budget leaves it alone.
-        with pytest.raises(ssl.SSLWantReadError):
+        with pytest.raises(
+            ssl.SSLWantReadError,
+            match=r"^The operation did not complete \(read\)",
+        ):
             tls_socket.do_handshake()
     assert tls_socket.gettimeout() == 0.0
 

@@ -125,7 +125,13 @@ def test_meeting_links_need_web_addresses(isms):  # noqa: F811
         isms, status=422, links=[{"title": "Script", "url": "javascript:alert(1)"}]
     )
 
-    assert refused["detail"]
+    assert refused["detail"] == [
+        {
+            "type": "value_error",
+            "loc": ["body", "links", 0, "url"],
+            "msg": "Value error, Use an HTTP or HTTPS URL without embedded credentials or control characters",
+        }
+    ]
 
 
 def test_role_members_and_objective_resources_must_be_active_users(isms):  # noqa: F811

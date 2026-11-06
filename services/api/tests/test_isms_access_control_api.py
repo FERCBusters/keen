@@ -185,7 +185,11 @@ def test_reading_the_matrix_needs_isms_read_and_changes_need_isms_manage(acm):
         f"access-control-matrix/{row['id']}",
     ):
         assert acm.reader.get("/v1/isms/" + path).status_code == 200
-        assert outsider.get("/v1/isms/" + path).status_code == 403
+        answer = outsider.get("/v1/isms/" + path)
+        assert (answer.status_code, answer.json()) == (
+            403,
+            {"detail": "isms.read permission required"},
+        )
 
     changes = [
         (
@@ -205,4 +209,5 @@ def test_reading_the_matrix_needs_isms_read_and_changes_need_isms_manage(acm):
 
     assert acm.call(acm.reader, "GET", "access-control-matrix")["items"] == [row]
     # The hosting-account routes are gone with the records they kept.
-    assert acm.manager.get("/v1/isms/aws-accounts").status_code == 404
+    answer = acm.manager.get("/v1/isms/aws-accounts")
+    assert (answer.status_code, answer.json()) == (404, {"detail": "Not Found"})

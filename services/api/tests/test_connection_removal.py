@@ -85,7 +85,10 @@ def test_active_run_blocks_delete(database):
     )
     db.commit()
     plan = api.preview_connection_removal("api:connection", db)
-    assert plan["blocked"]
+    assert (
+        plan["blocked"]
+        == "A collection run is active. Wait for it to finish, then preview again."
+    )
     with pytest.raises((HTTPException, DomainError)) as error:
         api.remove_evidence_connection(
             "api:connection",

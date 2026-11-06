@@ -151,22 +151,31 @@ def test_graphs_follow_their_permission_rules(graph):
         "/v1/graph/risk_control": "risk.read",
     }
     for path, code in paths.items():
-        assert anonymous.get(path).status_code == 401, path
+        refused = anonymous.get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         response = nobody.get(path, params={"framework": "A"})
         assert response.status_code == 403, path
         assert response.json()["detail"] == f"{code} permission required"
         allowed = app.client(app.user(code))
         assert allowed.get(path, params={"framework": "A"}).status_code == 200
     # The clause/control catalogue relationship is visible to any signed-in user.
-    assert anonymous.get("/v1/graph/clause_control").status_code == 401
+    refused = anonymous.get("/v1/graph/clause_control")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     assert (
         nobody.get("/v1/graph/clause_control", params={"framework": "A"}).status_code
         == 200
     )
     manager = app.client(app.user("risk.manage"))
-    assert (
-        manager.get("/v1/graph/risk_control", params={"framework": "A"}).status_code
-        == 200
+    answer = manager.get("/v1/graph/risk_control", params={"framework": "A"})
+    assert (answer.status_code, answer.json()) == (
+        200,
+        {"nodes": [], "links": [], "graph_kind": "risk_control_relationship"},
     )
 
 
@@ -239,11 +248,18 @@ def test_source_control_graph_counts_distinct_events(graph):
         "/v1/graph/control_source", params={"framework": "A", "f": "actor:near:x"}
     )
     assert refused.status_code == 400
-    assert (
-        client.get(
-            "/v1/graph/control_source", params={"start_date": "not-a-date"}
-        ).status_code
-        == 422
+    answer = client.get("/v1/graph/control_source", params={"start_date": "not-a-date"})
+    assert (answer.status_code, answer.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "date_from_datetime_parsing",
+                    "loc": ["query", "start_date"],
+                    "msg": "Input should be a valid date or datetime, invalid character in year",
+                }
+            ]
+        },
     )
 
 

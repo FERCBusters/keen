@@ -1,8 +1,9 @@
 """Input rules shared by audit, finding, sample and schedule operations.
 
 Evidence links stay on web schemes or same-origin paths, report text is
-sanitised before storage, emails and schedule settings are checked, and
-completed audits refuse changes until reopened.
+sanitised before storage, schedule settings are checked, and completed audits
+refuse changes until reopened. Auditor and attendee emails pass through
+clean_email, whose rules test_email_addresses.py holds.
 """
 
 import uuid
@@ -13,7 +14,7 @@ import pytest
 from app.core.config import settings
 from app.services.audits import validation as v
 from app.services.errors import DomainError
-from app.services.text import clean_email, clean_text
+from app.services.text import clean_text
 
 
 def refused(call, *args, **kwargs):
@@ -76,31 +77,6 @@ def test_event_ids_come_only_from_event_page_links():
         None,
     ):
         assert v.event_id_from_url(url) is None, url
-
-
-@pytest.mark.parametrize(
-    "email",
-    [
-        "@example.test",
-        "auditor@",
-        "no-at-sign",
-        "a" * 250 + "@x.test",
-        "a@b\x00c",
-        "lead@example.test, other@example.test",
-        "lead@example.test;other@example.test",
-        "Lead <lead@example.test>",
-    ],
-)
-def test_unusable_emails_are_refused(email):
-    assert refused(clean_email, email, label="auditor email") == (
-        400,
-        "Invalid auditor email",
-    )
-
-
-def test_emails_are_trimmed_and_blank_means_none():
-    assert clean_email("  lead@example.test ") == "lead@example.test"
-    assert clean_email("  ") is None
 
 
 def test_audit_types_outside_the_supported_set_are_refused():

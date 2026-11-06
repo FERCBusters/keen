@@ -58,8 +58,8 @@ def test_every_served_route_has_an_access_rule():
     assert len(served) > 300  # the walk reached the included routers
     missing = sorted(served - set(policy.POLICY))
     stale = sorted(set(policy.POLICY) - served)
-    assert not missing, f"Give these routes a rule in {POLICY_FILE.name}: {missing}"
-    assert not stale, f"Remove rules for routes that no longer exist: {stale}"
+    assert missing == [], f"Give these routes a rule in {POLICY_FILE.name}: {missing}"
+    assert stale == [], f"Remove rules for routes that no longer exist: {stale}"
 
 
 def test_public_rules_match_the_route_policy():

@@ -27,9 +27,11 @@ def test_httpx_does_not_log_query_credentials_or_reason_phrase(caplog):
 def test_google_sdk_does_not_log_invalid_response_body(caplog):
     from googleapiclient.http import _should_retry_response
 
-    assert google_workspace.SCOPES
+    assert google_workspace.SCOPES == [
+        "https://www.googleapis.com/auth/admin.reports.audit.readonly"
+    ]
     with caplog.at_level(logging.DEBUG, logger="googleapiclient.http"):
-        assert not _should_retry_response(403, b"SYNTHETIC_SECRET")
+        assert _should_retry_response(403, b"SYNTHETIC_SECRET") is False
     assert "SYNTHETIC_SECRET" not in caplog.text
     assert not [r for r in caplog.records if r.name == "googleapiclient.http"]
 

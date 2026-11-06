@@ -36,10 +36,17 @@ LISTS = [
     "victim@example.com\r\nBcc: attacker@example.com",
     "victim@example.com attacker@example.com",
 ]
+MALFORMED = [
+    "@example.test",
+    "auditor@",
+    "no-at-sign",
+    "a" * 250 + "@x.test",
+    "a@b\x00c",
+]
 
 
-@pytest.mark.parametrize("value", LISTS)
-def test_more_than_one_mailbox_is_not_an_address(value):
+@pytest.mark.parametrize("value", LISTS + MALFORMED)
+def test_lists_and_malformed_values_are_refused(value):
     assert single_mailbox(value) is None
     with pytest.raises(DomainError) as refused:
         clean_email(value, label="attendee email")
@@ -58,8 +65,12 @@ def test_one_mailbox_is_kept_trimmed(value):
 
 def test_blank_values_are_absent_unless_required():
     assert clean_email("  ") is None and clean_email(None) is None
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError) as refused:
         clean_email("", required=True)
+    assert (refused.value.status_code, refused.value.detail) == (
+        400,
+        "email address is required",
+    )
 
 
 class FakeSmtp:
@@ -104,7 +115,7 @@ def test_the_mailer_sends_to_exactly_one_envelope_recipient(smtp):
     # to the database, reaches nobody.
     for value in LISTS:
         mailer.send_email(to_email=value, subject="S", body="B")
-    assert len(smtp) == 1
+    assert smtp == [("lead@example.test", ["lead@example.test"])]
 
 
 def test_account_and_security_addresses_use_the_helper(monkeypatch):
@@ -158,8 +169,12 @@ def test_no_email_check_outside_the_shared_helper():
         "app.core.email_address.single_mailbox"
     )
     # The sweep finds the checks that let a list of addresses through.
-    assert _email_checks('ok = "@" in value', "services/x.py")
-    assert _email_checks('ok = value.count("@") == 1', "services/x.py")
+    assert _email_checks('ok = "@" in value', "services/x.py") == [
+        "services/x.py:1 '@' in value"
+    ]
+    assert _email_checks('ok = value.count("@") == 1', "services/x.py") == [
+        "services/x.py:1 value.count('@')"
+    ]
 
 
 def test_every_smtp_send_names_its_envelope_recipients():
@@ -171,6 +186,6 @@ def test_every_smtp_send_names_its_envelope_recipients():
         and isinstance(node.func, ast.Attribute)
         and node.func.attr in {"send_message", "sendmail"}
     ]
-    assert sends
+    assert len(sends) == 2
     for call in sends:
         assert any(k.arg == "to_addrs" for k in call.keywords) or len(call.args) >= 3

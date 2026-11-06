@@ -1,10 +1,10 @@
-"""Google Workspace posture and the shared Google transport, against
-in-memory answers. No network is used."""
+"""Google Workspace posture against in-memory answers. No network is used.
+
+The shared Google transport and key reading are tested in
+test_cloud_transports.py."""
 
 from __future__ import annotations
 
-import base64
-import json
 from datetime import datetime
 
 import pytest
@@ -63,7 +63,7 @@ def test_directory_checks_and_identities(directory):
     ]
     # The listing pages through every user and closes its client.
     assert len([c for c in directory.calls if c[0] == "users.list"]) == 3
-    assert directory.services[0].closed
+    assert directory.services[0].closed is True
     assert all(kwargs["customer"] == "my_customer" for _, kwargs in directory.calls)
 
 
@@ -85,58 +85,13 @@ def test_users_of_another_customer_are_refused(directory):
 
 def test_settings_and_refusals(monkeypatch, directory):
     monkeypatch.setattr(settings, "google_workspace_impersonate", "not an email")
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         workspace.collect()
     monkeypatch.setattr(settings, "google_workspace_impersonate", "admin@example.org")
     directory.fail["users.list"] = http_error(403)
     with pytest.raises(Unavailable) as caught:
         workspace.collect()
     assert caught.value.reason == "permission_denied"
-
-
-@pytest.mark.parametrize(
-    "info",
-    [
-        {"token_uri": "http://oauth2.googleapis.com/token"},
-        {"token_uri": "https://user:pass@oauth2.googleapis.com/token"},
-        {"token_uri": "https://oauth2.googleapis.com/token#x"},
-        {},
-        [],
-    ],
-)
-def test_keys_with_unsafe_token_endpoints_are_refused(info):
-    with pytest.raises(Unavailable) as caught:
-        google.key_info("", "", json.dumps(info))
-    assert caught.value.reason == "not_configured"
-
-
-def test_keys_are_read_from_a_file_base64_or_json(tmp_path):
-    text = json.dumps(KEY)
-    path = tmp_path / "key.json"
-    path.write_text(text)
-    assert google.key_info(str(path), "", "") == KEY
-    assert google.key_info("", base64.b64encode(text.encode()).decode(), "") == KEY
-    assert google.key_info("", "", text) == KEY
-    for keyfile, b64, raw in (
-        ("", "", ""),
-        (str(tmp_path / "missing.json"), "", ""),
-        ("", "not base64!", ""),
-        ("", "", "{not json"),
-        ("", "", " " * (google.MAX_KEY_BYTES + 1)),
-    ):
-        with pytest.raises(Unavailable):
-            google.key_info(keyfile, b64, raw)
-
-
-def test_the_transport_refuses_plain_http_and_redirects():
-    transport = google.HTTPSOnlyHttp()
-    assert (
-        transport.follow_redirects is False and transport.follow_all_redirects is False
-    )
-    assert transport.disable_ssl_certificate_validation is False
-    assert transport.proxy_info is None
-    with pytest.raises(ValueError):
-        transport.request("http://admin.googleapis.com/x")
 
 
 @pytest.mark.parametrize(

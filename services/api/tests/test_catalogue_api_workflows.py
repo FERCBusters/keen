@@ -159,7 +159,11 @@ def test_catalogue_reads_need_a_signed_in_user(catalogue):
         f"/v1/controls/{control}/changelog",
         f"/v1/controls/{control}/evidence",
     ):
-        assert anonymous.get(path).status_code == 401, path
+        refused = anonymous.get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
     signed_in = catalogue.keen.client(catalogue.keen.user())
     assert signed_in.get(f"/v1/controls/{control}").status_code == 200
     response = signed_in.get(f"/v1/controls/{control}/evidence")
@@ -252,8 +256,16 @@ def test_clause_detail_controls_and_changelog(catalogue):
     assert [item["summary"] for item in changelog["items"]] == ["Updated evidence"]
 
     for suffix in ("", "/controls", "/changelog"):
-        assert client.get(f"/v1/clauses/not-a-uuid{suffix}").status_code == 400
-        assert client.get(f"/v1/clauses/{uuid.uuid4()}{suffix}").status_code == 404
+        refused = client.get(f"/v1/clauses/not-a-uuid{suffix}")
+        assert (refused.status_code, refused.json()) == (
+            400,
+            {"detail": "clause_id must be a UUID"},
+        )
+        refused = client.get(f"/v1/clauses/{uuid.uuid4()}{suffix}")
+        assert (refused.status_code, refused.json()) == (
+            404,
+            {"detail": "Clause not found"},
+        )
 
 
 def test_controls_are_listed_and_described_per_framework(catalogue):
@@ -275,10 +287,26 @@ def test_controls_are_listed_and_described_per_framework(catalogue):
         ("4.2", "4"),
         ("4.10", "4"),
     ]
-    assert client.get("/v1/controls/not-a-uuid").status_code == 400
-    assert client.get(f"/v1/controls/{uuid.uuid4()}").status_code == 404
-    assert client.get(f"/v1/controls/{uuid.uuid4()}/changelog").status_code == 404
-    assert client.get("/v1/controls/nope/changelog").status_code == 400
+    refused = client.get("/v1/controls/not-a-uuid")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "control_id must be a UUID"},
+    )
+    refused = client.get(f"/v1/controls/{uuid.uuid4()}")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Control not found"},
+    )
+    refused = client.get(f"/v1/controls/{uuid.uuid4()}/changelog")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Control not found"},
+    )
+    refused = client.get("/v1/controls/nope/changelog")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "control_id must be a UUID"},
+    )
     assert (
         client.get(f"/v1/controls/{catalogue.logging.id}/changelog").json()["items"]
         == []
@@ -342,7 +370,9 @@ def test_control_evidence_is_redacted_inherited_and_deduplicated(catalogue):
     assert first["inherited"] is False and first["inherited_from"] is None
     assert "hunter2" not in str(first) and "abc123" not in str(first)
     assert first["raw_pointer"]["password"] == REDACTED
-    assert first["source_url"].startswith(f"https://{REDACTED}@ci.example/job/1")
+    assert (
+        first["source_url"] == "https://REDACTED@ci.example/job/1?token=REDACTED&page=2"
+    )
 
     crosswalk = by_event[str(inherited.id)]
     assert crosswalk["inherited"] is True
@@ -362,5 +392,13 @@ def test_control_evidence_is_redacted_inherited_and_deduplicated(catalogue):
     assert page["total"] == 3 and len(page["items"]) == 1
     newest_first = [item["event_id"] for item in evidence["items"]]
     assert page["items"][0]["event_id"] == newest_first[1]
-    assert client.get("/v1/controls/nope/evidence").status_code == 400
-    assert client.get(f"/v1/controls/{uuid.uuid4()}/evidence").status_code == 404
+    refused = client.get("/v1/controls/nope/evidence")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "control_id must be a UUID"},
+    )
+    refused = client.get(f"/v1/controls/{uuid.uuid4()}/evidence")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Control not found"},
+    )

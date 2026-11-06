@@ -396,5 +396,5 @@ def test_action_records_redact_secrets_in_the_referring_address(incident):
     record_action(incident.db, context, None, "sign-in", {"outcome": "failed"})
     incident.db.commit()
     (row,) = incident.db.query(AuditLog).filter_by(path="/action/sign-in").all()
-    assert row.referer.startswith("https://idp.example/authorize?")
+    assert row.referer == "https://idp.example/authorize?access_token=REDACTED&state=s"
     assert secret not in row.referer

@@ -572,7 +572,11 @@ def test_assembled_permissions_for_evidence_policy(keen):
     aid = r.json()["agent"]["id"]
     policy = f"/v1/admin/agents/{aid}/evidence"
     anonymous = keen.client()
-    assert anonymous.patch(policy, json={}).status_code in (401, 403)
+    refused = anonymous.patch(policy, json={})
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     rc = keen.client(reader)
     assert (
         rc.patch(

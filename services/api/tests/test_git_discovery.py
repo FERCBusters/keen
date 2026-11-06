@@ -48,7 +48,7 @@ class GitDiscoveryTests(unittest.TestCase):
                 self.assertEqual(
                     client.get.call_args_list[1].kwargs["params"]["page"], 2
                 )
-                self.assertFalse(factory.call_args.kwargs["follow_redirects"])
+                self.assertIs(factory.call_args.kwargs["follow_redirects"], False)
 
     def test_repeated_page_fails(self):
         with (
@@ -99,22 +99,23 @@ class GitDiscoveryTests(unittest.TestCase):
                     }
                 },
             }
-            self.assertTrue(matches_collector(identity, event))
+            self.assertIs(matches_collector(identity, event), True)
             self.assertEqual(
                 collector_pointer_filter(identity), {source: {"owner": "mig5"}}
             )
-            self.assertFalse(
-                matches_collector(collector_id(source, "users", "other"), event)
+            self.assertIs(
+                matches_collector(collector_id(source, "users", "other"), event), False
             )
         identity = collector_id("gitlab", "groups", "team/sub")
-        self.assertTrue(
+        self.assertIs(
             matches_collector(
                 identity,
                 {
                     "source": "gitlab",
                     "raw_pointer": {"gitlab": {"section": "groups", "key": "team/sub"}},
                 },
-            )
+            ),
+            True,
         )
 
     def test_config_validation(self):
@@ -124,7 +125,7 @@ class GitDiscoveryTests(unittest.TestCase):
                 {"users": [{"user": "mig5"}], "organizations": [{"org": "team"}]},
             )
             self.assertEqual(_collector_key(source, "users", {"user": "mig5"}), "mig5")
-            self.assertTrue(_editable_collector(source, "users"))
+            self.assertIs(_editable_collector(source, "users"), True)
             with self.assertRaises((HTTPException, DomainError)):
                 _validate_connector(source, {"users": [{"user": "../bad"}]})
         _validate_connector(
@@ -204,10 +205,10 @@ class GitDiscoveryTests(unittest.TestCase):
         self.assertEqual(result[-1]["created_events"], 1)
         event = store.call_args.kwargs
         self.assertEqual(event["source"], "gitlab")
-        self.assertTrue(
-            matches_collector(collector_id("gitlab", "groups", "team/sub"), event)
+        self.assertIs(
+            matches_collector(collector_id("gitlab", "groups", "team/sub"), event), True
         )
-        db.commit.assert_called_once()
+        db.commit.assert_called_once_with()
 
     def test_discovery_inputs_reach_runner(self):
         db = Mock()
@@ -419,7 +420,7 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
         self.assertEqual(
             [r for r in results if r.get("project") == 2][0]["created_events"], 0
         )
-        db.rollback.assert_called_once()
+        db.rollback.assert_called_once_with()
 
     def test_a_project_without_a_usable_id_fails_alone(self):
         # Discovery keeps each project's ID; one that is a list or an object
@@ -500,7 +501,7 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
         self.assertTrue(results[0]["error"].startswith("Collection failed"))
         self.assertEqual(results[1]["scope"], "users")
         self.assertEqual(results[1]["discovered_projects"], 0)
-        db.rollback.assert_called_once()
+        db.rollback.assert_called_once_with()
 
     def test_an_existing_cursor_sets_the_window_and_is_moved_forward(self):
         db = Mock()

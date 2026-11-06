@@ -228,7 +228,10 @@ def test_collection_documents_are_saved_against_the_version_read(defs):
     )
     assert defs.revisions("jenkins") == [1]
     unknown = defs.admin.get("/v1/admin/managed-configurations/ftp")
-    assert unknown.status_code == 404
+    assert (unknown.status_code, unknown.json()) == (
+        404,
+        {"detail": "Unknown connector"},
+    )
 
 
 @pytest.mark.parametrize(
@@ -407,7 +410,12 @@ def test_documents_holding_credentials_are_withheld_from_the_editors(defs):
     assert [c["key"] for c in listing.json()["collectors"]] == [
         "https://git.example/team.rss"
     ]
-    assert viewed.status_code == 400
+    assert (viewed.status_code, viewed.json()) == (
+        400,
+        {
+            "detail": "Move credential feeds.auth.password into a server environment variable"
+        },
+    )
 
 
 def test_listings_withhold_rss_feed_headers_and_credentials(defs, monkeypatch):
@@ -557,17 +565,22 @@ def test_database_connection_inputs_withhold_credential_values(defs):
     assert stored.inputs["jobs"][0]["X-Api-Key"] == SECRET
 
 
-def test_rss_documents_with_custom_headers_stay_out_of_the_web_editor(defs):
-    defs.shipped(
-        "rss",
-        {"feeds": [{"url": "https://news.example/feed", "headers": {"X-Feed": "1"}}]},
-    )
+@pytest.mark.parametrize(
+    "extra", [{"headers": {"X-Feed": "1"}}, {"auth": {"username": "reader"}}]
+)
+def test_rss_documents_with_headers_or_credentials_stay_out_of_the_web_editor(
+    defs, extra
+):
+    defs.shipped("rss", {"feeds": [{"url": "https://news.example/feed", **extra}]})
 
     refused = defs.admin.get("/v1/admin/managed-configurations/rss")
 
-    assert refused.status_code == 409
-    assert refused.json()["detail"].startswith(
-        "This RSS configuration contains headers or credentials."
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {
+            "detail": "This RSS configuration contains headers or credentials. "
+            "Move them out of YAML before editing it in the web UI."
+        },
     )
 
 
@@ -584,7 +597,10 @@ def test_items_with_published_definitions_cannot_be_removed_or_renamed(defs):
     kept = defs.put_document(
         "jenkins", {"jobs": [{"name": "deploy"}, {"name": "nightly"}]}, version=1
     )
-    assert kept.status_code == 200, kept.text
+    assert (kept.status_code, kept.json()) == (
+        200,
+        {"version": 2, "document": {"jobs": [{"name": "deploy"}, {"name": "nightly"}]}},
+    )
 
 
 def test_adapter_settings_change_only_source_wide_values(defs):
@@ -612,7 +628,8 @@ def test_adapter_settings_change_only_source_wide_values(defs):
     }
     assert put({}, 1).json()["document"] == {"jobs": [{"name": "nightly"}]}
     assert put({"poll_minutes": 5}, 1).status_code == 409
-    assert defs.admin.get("/v1/admin/adapter-settings/ftp").status_code == 404
+    answer = defs.admin.get("/v1/admin/adapter-settings/ftp")
+    assert (answer.status_code, answer.json()) == (404, {"detail": "Unknown adapter"})
 
 
 # --- Evidence definitions -------------------------------------------------------
@@ -1369,7 +1386,21 @@ def test_saving_a_definition_again_replaces_its_rule_in_place(defs):
         rule=_rule("all-ci", source="jenkins"),
         rules_version=1,
     )
-    assert source_wide.status_code == 200, source_wide.text
+    assert (source_wide.status_code, source_wide.json()) == (
+        200,
+        {
+            "rules_version": 2,
+            "rule": {
+                "id": "all-ci",
+                "when": {"source": "jenkins"},
+                "map_to": [
+                    {"framework": "fw-definitions", "ref": "A.1", "kind": "control"}
+                ],
+                "confidence": 0.8,
+            },
+            "backfill": None,
+        },
+    )
 
     edited = defs.definition(
         entry={"name": "deploy"},
@@ -1387,7 +1418,22 @@ def test_saving_a_definition_again_replaces_its_rule_in_place(defs):
         rule={**_rule("all-ci", source="jenkins"), "description": "Every CI event"},
         rules_version=3,
     )
-    assert rewritten.status_code == 200, rewritten.text
+    assert (rewritten.status_code, rewritten.json()) == (
+        200,
+        {
+            "rules_version": 4,
+            "rule": {
+                "id": "all-ci",
+                "when": {"source": "jenkins"},
+                "map_to": [
+                    {"framework": "fw-definitions", "ref": "A.1", "kind": "control"}
+                ],
+                "confidence": 0.8,
+                "description": "Every CI event",
+            },
+            "backfill": None,
+        },
+    )
 
     rules = {
         r["id"]: r for r in defs.admin.get("/v1/admin/mapping-rules").json()["items"]
@@ -1698,7 +1744,21 @@ def test_webhook_removal_previews_cover_every_provider_source(defs):
         rule=_rule("all-ci", source="jenkins"),
         rules_version=1,
     )
-    assert others.status_code == 200, others.text
+    assert (others.status_code, others.json()) == (
+        200,
+        {
+            "rules_version": 2,
+            "rule": {
+                "id": "all-ci",
+                "when": {"source": "jenkins"},
+                "map_to": [
+                    {"framework": "fw-definitions", "ref": "A.1", "kind": "control"}
+                ],
+                "confidence": 0.8,
+            },
+            "backfill": None,
+        },
+    )
 
     plan = _removal_preview(defs, "builtin:webhooks")
 

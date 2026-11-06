@@ -178,18 +178,32 @@ def test_another_control_and_an_empty_control(summary):
 
 def test_the_summary_needs_events_read(summary):
     path = f"/v1/controls/{summary.access.id}/evidence/summary"
-    assert summary.keen.client().get(path).status_code == 401
+    refused = summary.keen.client().get(path)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     isms_only = summary.keen.client(summary.keen.user("isms.read", "risk.read"))
     response = isms_only.get(path)
     assert response.status_code == 403
     assert response.json()["detail"] == "events.read permission required"
     reader = summary.keen.client(summary.keen.user("events.read"))
-    assert reader.get("/v1/controls/not-a-uuid/evidence/summary").status_code == 400
-    assert (
-        reader.get(f"/v1/controls/{uuid.uuid4()}/evidence/summary").status_code == 404
+    refused = reader.get("/v1/controls/not-a-uuid/evidence/summary")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "control_id must be a UUID"},
+    )
+    refused = reader.get(f"/v1/controls/{uuid.uuid4()}/evidence/summary")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Control not found"},
     )
     # Writes are not part of the route.
-    assert reader.post(path, json={}).status_code in (403, 405)
+    refused = reader.post(path, json={})
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Read-only users cannot perform write actions"},
+    )
 
 
 @pytest.mark.parametrize("listed", [5000, 0])

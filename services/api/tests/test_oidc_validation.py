@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from app.security import oidc
-from app.services.errors import DomainError
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import ECKey, RSAKey
@@ -123,29 +122,44 @@ def test_ec_signature(callback):
 
 
 @pytest.mark.parametrize(
-    "change",
+    "change,problem",
     [
-        {"iss": "https://wrong.example"},
-        {"aud": "other-client"},
-        {"nonce": "other-browser"},
-        {"exp": 1},
-        {"iat": 4102444800},
-        {"nbf": 4102444800},
-        {"azp": "other-client"},
-        {"aud": ["keen-client", "other-client"]},
-        {"at_hash": "incorrect"},
+        ({"iss": "https://wrong.example"}, "invalid_claim: Invalid claim: 'iss'"),
+        ({"aud": "other-client"}, "invalid_claim: Invalid claim: 'aud'"),
+        ({"nonce": "other-browser"}, "invalid_claim: Invalid claim: 'nonce'"),
+        ({"exp": 1}, "expired_token: The token is expired"),
+        ({"iat": 4102444800}, "invalid_claim: The token was issued in the future"),
+        ({"nbf": 4102444800}, "invalid_claim: The token is not yet valid"),
+        ({"azp": "other-client"}, "invalid_claim: Invalid claim: 'azp'"),
+        (
+            {"aud": ["keen-client", "other-client"]},
+            "invalid_claim: Invalid claim: 'aud'",
+        ),
+        ({"at_hash": "incorrect"}, "invalid_claim: Invalid claim: 'at_hash'"),
     ],
 )
-def test_invalid_claims_cannot_provision(callback, change):
-    with pytest.raises(JoseError):
+def test_invalid_claims_cannot_provision(callback, change, problem):
+    with pytest.raises(JoseError) as refused:
         callback.run(change)
+    assert str(refused.value) == problem
     callback.provision.assert_not_called()
 
 
-@pytest.mark.parametrize("claim", ["iss", "aud", "sub", "exp", "iat", "nonce"])
-def test_required_claims_cannot_be_omitted(callback, claim):
-    with pytest.raises(JoseError):
+@pytest.mark.parametrize(
+    "claim,problem",
+    [
+        ("iss", "invalid_claim: Invalid claim: 'iss'"),
+        ("aud", "invalid_claim: Invalid claim: 'aud'"),
+        ("sub", "invalid_claim: Invalid claim: 'sub'"),
+        ("exp", "missing_claim: Missing claim: 'exp'"),
+        ("iat", "missing_claim: Missing claim: 'iat'"),
+        ("nonce", "invalid_claim: Invalid claim: 'nonce'"),
+    ],
+)
+def test_required_claims_cannot_be_omitted(callback, claim, problem):
+    with pytest.raises(JoseError) as refused:
         callback.run(drop=[claim])
+    assert str(refused.value) == problem
     callback.provision.assert_not_called()
 
 
@@ -154,7 +168,9 @@ def test_single_trusted_audience_and_optional_at_hash(callback):
 
 
 def test_authorized_party_does_not_trust_additional_audiences(callback):
-    with pytest.raises(Exception) as error:
+    with pytest.raises(
+        Exception, match="^invalid_claim: Invalid claim: 'aud'$"
+    ) as error:
         callback.run({"aud": ["keen-client", "other-client"], "azp": "keen-client"})
     assert error.value.__class__.__name__ == "InvalidClaimError"
     callback.provision.assert_not_called()
@@ -177,7 +193,7 @@ def test_configured_issuer_alias_and_leeway(callback):
 
 def test_wrong_signature_cannot_provision(callback):
     key = RSAKey.generate_key(2048, {"kid": "issuer-key"})
-    with pytest.raises(JoseError):
+    with pytest.raises(JoseError, match="^bad_signature: $"):
         callback.run(key=key)
     callback.provision.assert_not_called()
 
@@ -189,7 +205,9 @@ def test_unsigned_token_cannot_provision(callback):
         )
 
     token = encode({"alg": "none"}) + "." + encode(callback.claims) + "."
-    with pytest.raises(JoseError):
+    with pytest.raises(
+        JoseError, match="^unsupported_algorithm: Algorithm of 'none' is not allowed$"
+    ):
         callback.run(raw=token)
     callback.provision.assert_not_called()
 
@@ -257,15 +275,27 @@ def test_oauth_httpx2_transport(monkeypatch):
 
 def test_unknown_signing_key_cannot_provision(callback):
     key = RSAKey.generate_key(2048, {"kid": "unknown-key"})
-    with pytest.raises(JoseError):
+    with pytest.raises(
+        JoseError, match="^invalid_key_id: No key for kid: 'unknown-key'$"
+    ):
         callback.run(key=key)
     callback.provision.assert_not_called()
 
 
-@pytest.mark.parametrize("alg", ["RS384", "RS512", "PS256"])
-def test_unconfigured_algorithm_rejected_even_with_valid_signature(callback, alg):
-    with pytest.raises(JoseError):
+@pytest.mark.parametrize(
+    "alg,problem",
+    [
+        ("RS384", "unsupported_algorithm: Algorithm of 'RS384' is not allowed"),
+        ("RS512", "unsupported_algorithm: Algorithm of 'RS512' is not allowed"),
+        ("PS256", "unsupported_algorithm: Algorithm of 'PS256' is not allowed"),
+    ],
+)
+def test_unconfigured_algorithm_rejected_even_with_valid_signature(
+    callback, alg, problem
+):
+    with pytest.raises(JoseError) as refused:
         callback.run(alg=alg)
+    assert str(refused.value) == problem
     callback.provision.assert_not_called()
 
 
@@ -273,7 +303,10 @@ def test_unconfigured_algorithm_rejected_even_with_valid_signature(callback, alg
 def test_invalid_algorithm_configuration_fails_closed(callback, algs):
     from fastapi import HTTPException
 
-    with pytest.raises((HTTPException, DomainError)) as exc:
+    with pytest.raises(
+        HTTPException,
+        match="^503: Configure supported asymmetric OIDC signing algorithms$",
+    ) as exc:
         callback.run(selected_provider=replace(callback.provider, allowed_algs=algs))
     assert exc.value.status_code == 503
     callback.provision.assert_not_called()
@@ -288,20 +321,21 @@ def test_generic_oidc_reads_operator_algorithm_policy(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "change",
+    "change,problem",
     [
-        {"sub": 123},
-        {"sub": ["subject"]},
-        {"sub": True},
-        {"exp": True},
-        {"iat": False},
-        {"azp": ""},
-        {"azp": False},
+        ({"sub": 123}, "invalid_claim: Invalid claim: 'sub'"),
+        ({"sub": ["subject"]}, "invalid_claim: Invalid claim: 'sub'"),
+        ({"sub": True}, "invalid_claim: Invalid claim: 'sub'"),
+        ({"exp": True}, "invalid_claim: Invalid claim: 'exp'"),
+        ({"iat": False}, "invalid_claim: Invalid claim: 'iat'"),
+        ({"azp": ""}, "invalid_claim: Invalid claim: 'azp'"),
+        ({"azp": False}, "invalid_claim: Invalid claim: 'azp'"),
     ],
 )
-def test_claim_types_are_not_coerced_into_identities(callback, change):
-    with pytest.raises(JoseError):
+def test_claim_types_are_not_coerced_into_identities(callback, change, problem):
+    with pytest.raises(JoseError) as refused:
         callback.run(change)
+    assert str(refused.value) == problem
     callback.provision.assert_not_called()
 
 
@@ -327,7 +361,10 @@ def test_callback_needs_exactly_one_usable_code(query):
             "headers": [],
         }
     )
-    with pytest.raises(Exception) as error:
+    with pytest.raises(
+        Exception,
+        match="^400: SSO verification failed; start sign-in again or contact an administrator$",
+    ) as error:
         oidc._authorization_code(request)
     assert error.value.status_code == 400
 

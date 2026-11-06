@@ -72,7 +72,10 @@ def test_regex_accepted_polynomial_pattern_has_runtime_deadline():
     # Within the match window, so the pattern itself exhausts its budget.
     with (
         measured(time.monotonic) as timing,
-        pytest.raises(regex.MatchBudgetExceeded, match="time budget"),
+        pytest.raises(
+            regex.MatchBudgetExceeded,
+            match="^Regex match exceeded its time budget; simplify the rule$",
+        ),
     ):
         pattern.search("a" * (regex.MATCH_WINDOW_CHARS - 1) + "!")
     assert timing.seconds < 2
@@ -83,10 +86,10 @@ def test_a_pattern_reads_a_bounded_window_of_any_value():
     # it reads the first MATCH_WINDOW_CHARS characters and never refuses input.
     pattern = regex.compile_pattern("failed.*password")
     window = regex.MATCH_WINDOW_CHARS
-    assert pattern.search("failed password" + "x" * 1_000_000)
-    assert not pattern.search("x" * window + "failed password")
+    assert pattern.search("failed password" + "x" * 1_000_000).span() == (0, 15)
+    assert pattern.search("x" * window + "failed password") is None
     with measured(time.thread_time) as timing:
-        assert not pattern.search("failed " * 1_000_000)
+        assert pattern.search("failed " * 1_000_000) is None
     assert timing.seconds < regex.MATCH_TIMEOUT_SECONDS
 
 
@@ -109,7 +112,10 @@ def test_a_timeout_from_other_threads_work_is_retried():
     assert retried.calls == regex.MATCH_ATTEMPTS
     # Interrupted every time, the run stops after the last attempt.
     stopped = Interrupted(timeouts=regex.MATCH_ATTEMPTS)
-    with pytest.raises(ValueError, match="time budget"):
+    with pytest.raises(
+        regex.MatchBudgetExceeded,
+        match="^Regex match exceeded its time budget; simplify the rule$",
+    ):
         regex.BoundedPattern(stopped).search("azure")
     assert stopped.calls == regex.MATCH_ATTEMPTS
 
@@ -125,7 +131,10 @@ def test_a_match_that_uses_its_budget_is_not_retried():
                 pass
             raise TimeoutError
 
-    with pytest.raises(ValueError, match="time budget"):
+    with pytest.raises(
+        regex.MatchBudgetExceeded,
+        match="^Regex match exceeded its time budget; simplify the rule$",
+    ):
         regex.BoundedPattern(Slow()).search("aaaa")
     assert calls == ["aaaa"]
 
@@ -149,7 +158,10 @@ def test_bounded_matches_keep_the_interpreter_lock(monkeypatch):
             return self.compiled.sub(*args, **kwargs)
 
     pattern = regex.compile_pattern(r"\A(?:aws|azure)\Z")
-    assert regex.BoundedPattern(Recording(pattern.compiled)).search("azure")
+    assert (
+        regex.BoundedPattern(Recording(pattern.compiled)).search("azure").group()
+        == "azure"
+    )
     monkeypatch.setattr(bookstack, "_TAG_RE", Recording(bookstack._TAG_RE))
     monkeypatch.setattr(
         bookstack, "_SCRIPT_STYLE_RE", Recording(bookstack._SCRIPT_STYLE_RE)
@@ -165,11 +177,11 @@ def test_bounded_matches_keep_the_interpreter_lock(monkeypatch):
 def test_mapping_runtime_uses_regex_boundary():
     from app.mapping.rules import _match_regex
 
-    with pytest.raises(ValueError, match="Nested repetition"):
+    with pytest.raises(ValueError, match="^Nested repetition can stall ingestion$"):
         _match_regex("(a+)+$", "a" * 100 + "!")
-    assert _match_regex(r"(?i)\bfailed\b", "Operation FAILED")
-    assert _match_regex("x", "x" * 65537)
-    assert not _match_regex("needle", "x" * 65537 + "needle")
+    assert _match_regex(r"(?i)\bfailed\b", "Operation FAILED") is True
+    assert _match_regex("x", "x" * 65537) is True
+    assert _match_regex("needle", "x" * 65537 + "needle") is False
 
 
 def test_expanded_mode_is_refused_for_rules_and_event_filters():
@@ -178,7 +190,10 @@ def test_expanded_mode_is_refused_for_rules_and_event_filters():
     # checks unseen.
     hidden = "(?x)(a{1, 2}){1, 1000}$"
     assert re.fullmatch("(?x)a{1, 2}", "aa") is None
-    assert regex_engine.fullmatch("(?x)a{1, 2}", "aa", regex_engine.VERSION0)
+    assert (
+        regex_engine.fullmatch("(?x)a{1, 2}", "aa", regex_engine.VERSION0).group()
+        == "aa"
+    )
     for pattern in (hidden, "(?ix)a", "(?xi)a", "(?x:a)", "(?i:b(?x:a))", "b|(?x:a)"):
         for validate in (
             regex.validate_pattern,
@@ -190,7 +205,7 @@ def test_expanded_mode_is_refused_for_rules_and_event_filters():
     # Turning the flag off, or an x that is only text, is ordinary.
     for pattern in ("(?i-x:a)", "(?-x:a)", "[(?x)]", "(?i)x"):
         regex.validate_database_pattern(pattern)
-        assert regex.compile_pattern(pattern)
+        assert regex.compile_pattern(pattern).compiled.pattern == pattern
 
 
 def test_regex_cache_is_bounded():
@@ -201,42 +216,43 @@ def test_regex_cache_is_bounded():
 
 
 @pytest.mark.parametrize(
-    "pattern", ["a{1,1000000}", "(a+)+$", "(a|aa)+$", "(a+)\\1", "(?>a+)+$"]
+    "pattern,problem",
+    [
+        ("a{1,1000000}", "Bounded repetition must be at most 1000"),
+        ("(a+)+$", "Nested repetition can stall ingestion"),
+        ("(a|aa)+$", "Repeated alternatives can stall ingestion"),
+        ("(a+)\\1", "Backreferences are unsupported"),
+        ("(?>a+)+$", "Nested repetition can stall ingestion"),
+    ],
 )
-def test_unsafe_patterns_rejected_for_all_configuration_sources(pattern):
-    with pytest.raises(ValueError):
+def test_unsafe_patterns_rejected_for_all_configuration_sources(pattern, problem):
+    with pytest.raises(ValueError) as refused:
         regex.compile_pattern(pattern)
+    assert str(refused.value) == problem
 
 
+# Public exemptions name exact methods and full route patterns, so a new route
+# beside or below one, or another method on it, inherits nothing.
 @pytest.mark.parametrize(
-    "path,method",
+    "path,method,public",
     [
-        ("/v1/auth/mfa/new-admin-action", "POST"),
-        ("/v1/auth/sso/provider/delete", "DELETE"),
-        ("/v1/webhooks-admin", "GET"),
-        ("/docs-sensitive", "GET"),
-        ("/v1/auth/login", "DELETE"),
-        ("/v1/webhooks/github/push/extra", "POST"),
-        ("/v1/auth/mfa/finish", "GET"),
+        ("/v1/auth/login", "POST", True),
+        ("/v1/auth/mfa/finish", "POST", True),
+        ("/v1/webhooks/github/push", "POST", True),
+        ("/v1/auth/sso/github/start", "GET", True),
+        ("/v1/agents/enroll", "POST", True),
+        ("/health", "GET", True),
+        ("/v1/auth/mfa/new-admin-action", "POST", False),
+        ("/v1/auth/sso/provider/delete", "DELETE", False),
+        ("/v1/webhooks-admin", "GET", False),
+        ("/docs-sensitive", "GET", False),
+        ("/v1/auth/login", "DELETE", False),
+        ("/v1/webhooks/github/push/extra", "POST", False),
+        ("/v1/auth/mfa/finish", "GET", False),
     ],
 )
-def test_new_routes_do_not_inherit_public_exemptions(path, method):
-    assert not is_public_request(request(path, method))
-
-
-@pytest.mark.parametrize(
-    "path,method",
-    [
-        ("/v1/auth/login", "POST"),
-        ("/v1/auth/mfa/finish", "POST"),
-        ("/v1/webhooks/github/push", "POST"),
-        ("/v1/auth/sso/github/start", "GET"),
-        ("/v1/agents/enroll", "POST"),
-        ("/health", "GET"),
-    ],
-)
-def test_explicit_public_protocol_routes(path, method):
-    assert is_public_request(request(path, method))
+def test_public_exemptions_name_exact_methods_and_routes(path, method, public):
+    assert is_public_request(request(path, method)) is public
 
 
 @pytest.mark.parametrize(
@@ -280,9 +296,10 @@ def test_only_the_configured_origin_counts_and_origin_can_be_required(monkeypatc
             ],
         }
     )
-    assert not csrf.request_origin_allowed(spoofed, require_origin=True)
-    assert not csrf.request_origin_allowed(request(), require_origin=True)
-    assert csrf.request_origin_allowed(request())
+    assert csrf.request_origin_allowed(spoofed, require_origin=True) is False
+    assert csrf.request_origin_allowed(request(), require_origin=True) is False
+    # Without an Origin header, only a caller that requires one refuses.
+    assert csrf.request_origin_allowed(request()) is True
 
 
 @pytest.fixture
@@ -331,11 +348,9 @@ def test_production_middleware_protects_all_nonpublic_api_paths(production_clien
             if is_public_request(request(path, method)):
                 continue
             response = client.request(method, path)
-            assert response.status_code == 401, (
-                method,
-                path,
-                response.status_code,
-                response.text[:100],
+            assert (response.status_code, response.json()) == (
+                401,
+                {"detail": "Not authenticated"},
             )
             assert response.headers["cache-control"] == "no-store"
             assert response.headers["x-content-type-options"] == "nosniff"
@@ -365,16 +380,26 @@ def test_production_csrf_and_admin_gates(production_client):
             "Origin": "https://evil.example",
         },
     )
-    assert response.status_code == 403
+    assert (response.status_code, response.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
-    assert client.get("/v1/admin/source-connections").status_code == 403
+    refused = client.get("/v1/admin/source-connections")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
 
 
 def test_production_body_rejection_has_headers(production_client):
     client, *_ = production_client
     response = client.post("/v1/auth/login", content=b"x" * 17000)
-    assert response.status_code == 413
+    assert (response.status_code, response.json()) == (
+        413,
+        {"detail": "Request body too large"},
+    )
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
 
@@ -415,13 +440,13 @@ def test_notification_connection_limits_and_cleanup():
         hub = NotificationHub()
         sockets = [Mock() for _ in range(6)]
         for sock in sockets[:5]:
-            assert await hub.connect(sock, user_id="one", is_admin=False)
-        assert not await hub.connect(sockets[5], user_id="one", is_admin=False)
+            assert await hub.connect(sock, user_id="one", is_admin=False) is True
+        assert await hub.connect(sockets[5], user_id="one", is_admin=False) is False
         await hub.disconnect(sockets[0])
-        assert await hub.connect(sockets[5], user_id="one", is_admin=False)
+        assert await hub.connect(sockets[5], user_id="one", is_admin=False) is True
         for sock in sockets:
             await hub.disconnect(sock)
-        assert not hub._user_sockets and not hub._admin_sockets
+        assert (hub._user_sockets, hub._admin_sockets) == ({}, set())
 
     asyncio.run(run())
 
@@ -439,13 +464,13 @@ def test_oauth_client_closed_on_failed_exchange(monkeypatch):
         redirect_uri="https://keen.example/callback",
         issuer="https://idp.example",
     )
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="^upstream failed$"):
         asyncio.run(
             oidc._handle_oidc_callback(
                 "code", None, provider, SimpleNamespace(code_verifier="proof")
             )
         )
-    client.aclose.assert_awaited_once()
+    client.aclose.assert_awaited_once_with()
 
 
 def test_taiga_tokens_are_isolated_between_connections_and_runs(monkeypatch):
@@ -526,7 +551,9 @@ def test_sso_start_rate_limit_rejects_before_creating_state(monkeypatch):
     db = Mock()
     from fastapi import HTTPException
 
-    with pytest.raises((HTTPException, DomainError)) as error:
+    with pytest.raises(
+        HTTPException, match="^429: Too many sign-in attempts$"
+    ) as error:
         asyncio.run(oidc.build_authorize_redirect(request(), db, None, "oidc"))
     assert error.value.status_code == 429
     db.add.assert_not_called()
@@ -552,14 +579,15 @@ def test_abandoned_sso_state_is_cleaned(contract_db):
 
 
 def test_pdf_preview_concurrency_is_bounded_and_slots_survive_failure(monkeypatch):
-    from fastapi import HTTPException
 
-    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
-    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False) is True
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False) is True
     run = Mock()
     monkeypatch.setattr(artifacts_operations.subprocess, "run", run)
     try:
-        with pytest.raises((HTTPException, DomainError)) as error:
+        with pytest.raises(
+            DomainError, match="^Preview renderer busy; retry shortly$"
+        ) as error:
             artifacts_operations._run_preview(["renderer"])
         assert error.value.status_code == 429
         run.assert_not_called()
@@ -567,10 +595,10 @@ def test_pdf_preview_concurrency_is_bounded_and_slots_survive_failure(monkeypatc
         artifacts_operations._PREVIEW_SLOTS.release()
         artifacts_operations._PREVIEW_SLOTS.release()
     run.side_effect = RuntimeError("renderer failure")
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="^renderer failure$"):
         artifacts_operations._run_preview(["renderer"])
-    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
-    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False)
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False) is True
+    assert artifacts_operations._PREVIEW_SLOTS.acquire(blocking=False) is True
     artifacts_operations._PREVIEW_SLOTS.release()
     artifacts_operations._PREVIEW_SLOTS.release()
 
@@ -593,7 +621,7 @@ def test_notification_webhook_does_not_buffer_hostile_response():
         transport=httpx.MockTransport(lambda req: httpx.Response(204, stream=stream))
     ) as client:
         assert _post_json(client, "https://notify.example", {}) == 204
-    assert stream.closed
+    assert stream.closed is True
 
 
 def test_builtin_transport_cannot_disable_certificate_verification(monkeypatch):
@@ -637,11 +665,12 @@ def test_websocket_rejects_cross_origin_before_database(production_client, monke
     client, *_ = production_client
     snapshot = Mock()
     monkeypatch.setattr(questions, "_notification_snapshot", snapshot)
-    with pytest.raises(WebSocketDisconnect):
+    with pytest.raises(WebSocketDisconnect) as closed:
         with client.websocket_connect(
             "/ws/notifications", headers={"Origin": "https://evil.example"}
         ):
             pass
+    assert (closed.value.code, closed.value.reason) == (1008, "Origin not allowed")
     snapshot.assert_not_called()
 
 
@@ -661,10 +690,11 @@ def test_live_websocket_closes_after_logout(production_client, monkeypatch):
     ) as socket:
         assert socket.receive_json()["type"] == "questions.unread_replies_count"
         sessions.delete_session(redis, sid)
-        with pytest.raises(WebSocketDisconnect):
+        with pytest.raises(WebSocketDisconnect) as closed:
             for _ in range(10):
                 socket.receive_json()
-    assert not questions.notification_hub._user_sockets
+    assert (closed.value.code, closed.value.reason) == (1008, "")
+    assert questions.notification_hub._user_sockets == {}
 
 
 def test_production_mfa_requires_verified_current_security_version(
@@ -687,7 +717,10 @@ def test_production_mfa_requires_verified_current_security_version(
             mfa_version=version,
         )
         client.cookies.set(session_cookie_name(), sid)
-        assert client.get("/v1/auth/check").status_code == expected
+        checked = client.get("/v1/auth/check")
+        assert (checked.status_code, checked.content) == (
+            (204, b"") if expected == 204 else (401, b'{"detail":"Not authenticated"}')
+        )
 
 
 def test_production_code_never_opts_out_of_tls_verification():
@@ -733,7 +766,10 @@ def test_disabled_webhooks_reject_before_credentials(
     monkeypatch.setattr(webhooks, "verify_secret", verify)
     monkeypatch.setattr(webhooks.service, "submit_signed_metric", verify)
     response = production_client[0].post(path, json={"value": 1})
-    assert response.status_code == 503
+    assert (response.status_code, response.json()) == (
+        503,
+        {"detail": "Webhook ingestion is disabled"},
+    )
     verify.assert_not_called()
 
 
@@ -752,7 +788,10 @@ def test_metric_webhook_refusals_spend_their_own_allowance(
     )
     # An unsigned submission is refused, and counted only as a refusal, so a
     # sender without a secret cannot spend a shared address's metric allowance.
-    assert response.status_code == 429
+    assert (response.status_code, response.json()) == (
+        429,
+        {"detail": "Webhook rate limit exceeded"},
+    )
     assert response.headers["retry-after"] == "60"
     assert limiter.call_args.args[1] == webhooks.service.REFUSED_ALLOWANCE
     assert limiter.call_args.kwargs["fail_closed"] is True
@@ -763,9 +802,10 @@ def test_metric_webhook_refusals_spend_their_own_allowance(
 )
 def test_webhook_metric_requires_finite_number(value):
     from app.services.webhooks import _webhook_metric_value
-    from fastapi import HTTPException
 
-    with pytest.raises((HTTPException, DomainError)) as exc:
+    with pytest.raises(
+        DomainError, match="^metric_value must be a finite number$"
+    ) as exc:
         _webhook_metric_value(value)
     assert exc.value.status_code == 400
     assert _webhook_metric_value("12.5") == 12.5
@@ -807,7 +847,7 @@ def test_deactivation_permanently_revokes_all_session_methods(
     main.app.dependency_overrides[get_db] = lambda: contract_db
     try:
         client.cookies.set(session_cookie_name(), old_sid)
-        assert client.get("/v1/me").status_code == 200
+        assert client.get("/v1/me").json()["user"] == reader.username
 
         def change(active):
             client.cookies.clear()
@@ -822,14 +862,23 @@ def test_deactivation_permanently_revokes_all_session_methods(
                 },
             )
             assert response.status_code == 200, response.text
+            assert response.json()["is_active"] is active
 
         change(False)
         client.cookies.set(session_cookie_name(), old_sid)
-        assert client.get("/v1/me").status_code == 401
+        refused = client.get("/v1/me")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         assert sessions.get_session(redis, old_sid) is None
         change(True)
         client.cookies.set(session_cookie_name(), untouched_sid)
-        assert client.get("/v1/me").status_code == 401
+        refused = client.get("/v1/me")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         assert sessions.get_session(redis, untouched_sid) is None
         contract_db.refresh(reader)
         fresh = sessions.create_session(
@@ -841,7 +890,7 @@ def test_deactivation_permanently_revokes_all_session_methods(
             mfa_version=reader.mfa_version,
         )
         client.cookies.set(session_cookie_name(), fresh)
-        assert client.get("/v1/me").status_code == 200
+        assert client.get("/v1/me").json()["user"] == reader.username
     finally:
         main.app.dependency_overrides.pop(get_db, None)
 
@@ -977,7 +1026,11 @@ def test_audit_domain_adapter_preserves_access_and_csrf(production_client, contr
             client.cookies.set(session_cookie_name(), sid)
 
         sign_in(admin)
-        assert client.post("/v1/audits", json={"title": "Review"}).status_code == 403
+        refused = client.post("/v1/audits", json={"title": "Review"})
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "CSRF token missing or invalid"},
+        )
         client.cookies.set(csrf.csrf_cookie_name(), "audit-token")
         headers = {
             csrf.csrf_header_name(): "audit-token",
@@ -987,19 +1040,25 @@ def test_audit_domain_adapter_preserves_access_and_csrf(production_client, contr
         assert created.status_code == 200, created.text
         audit_id = created.json()["id"]
         sign_in(reader)
-        assert client.get(f"/v1/audits/{audit_id}").status_code == 403
+        refused = client.get(f"/v1/audits/{audit_id}")
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Audit access required"},
+        )
         contract_db.add(
             AuditAttendee(
                 audit_id=uuid.UUID(audit_id), user_id=reader.id, name="Reader"
             )
         )
         contract_db.commit()
-        assert client.get(f"/v1/audits/{audit_id}").status_code == 200
-        assert (
-            client.patch(
-                f"/v1/audits/{audit_id}", json={"title": "Changed"}, headers=headers
-            ).status_code
-            == 403
+        # An attendee may read the audit and still not change it.
+        assert client.get(f"/v1/audits/{audit_id}").json()["id"] == audit_id
+        refused = client.patch(
+            f"/v1/audits/{audit_id}", json={"title": "Changed"}, headers=headers
+        )
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "audits.manage or audits.admin permission required"},
         )
         sign_in(admin)
         invalid = client.get("/v1/audits/not-a-uuid")
@@ -1010,9 +1069,15 @@ def test_audit_domain_adapter_preserves_access_and_csrf(production_client, contr
         main.app.dependency_overrides.pop(get_db, None)
 
 
-@pytest.mark.parametrize("path", ["/v1/auth/logout", "/v1/auth/oidc/logout"])
+@pytest.mark.parametrize(
+    "path,signed_out",
+    [
+        ("/v1/auth/logout", (204, b"")),
+        ("/v1/auth/oidc/logout", (200, b'{"logout_url":"/login.html"}')),
+    ],
+)
 def test_logout_requires_intent_and_get_never_revokes(
-    production_client, monkeypatch, contract_db, path
+    production_client, monkeypatch, contract_db, path, signed_out
 ):
     from app import main
     from app.api.routes import auth as routes
@@ -1028,15 +1093,22 @@ def test_logout_requires_intent_and_get_never_revokes(
         response = client.get(
             path, headers={"Origin": "https://evil.example"}, follow_redirects=False
         )
-        assert response.status_code == 303
-        assert sessions.get_session(redis, sid)
+        assert (response.status_code, response.headers["location"]) == (
+            303,
+            "/account.html",
+        )
+        assert sessions.get_session(redis, sid)["user_id"] == str(reader.id)
         for headers in (
             {},
             {"Origin": "https://evil.example", "X-CSRF-Token": "synthetic-token"},
             {"Origin": "https://keen.example", "X-CSRF-Token": "wrong"},
         ):
-            assert client.post(path, headers=headers).status_code == 403
-            assert sessions.get_session(redis, sid)
+            refused = client.post(path, headers=headers)
+            assert (refused.status_code, refused.json()) == (
+                403,
+                {"detail": "CSRF token missing or invalid"},
+            )
+            assert sessions.get_session(redis, sid)["user_id"] == str(reader.id)
         response = client.post(
             path,
             headers={
@@ -1044,7 +1116,7 @@ def test_logout_requires_intent_and_get_never_revokes(
                 "X-CSRF-Token": "synthetic-token",
             },
         )
-        assert response.status_code in {200, 204}
+        assert (response.status_code, response.content) == signed_out
         assert sessions.get_session(redis, sid) is None
     finally:
         main.app.dependency_overrides.pop(get_db, None)
@@ -1075,13 +1147,18 @@ def test_permission_owned_mutations_keep_csrf_and_route_permissions(
     client.cookies.set(csrf.csrf_cookie_name(), "synthetic-token")
     headers = {"Origin": "https://keen.example", "X-CSRF-Token": "synthetic-token"}
     try:
-        assert client.request(method, path, json={}).status_code == 403
+        refused = client.request(method, path, json={})
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "CSRF token missing or invalid"},
+        )
         if "/pestle/" in path:
-            assert (
-                client.request(
-                    method, path, json={"title": "fixture"}, headers=headers
-                ).status_code
-                == 403
+            refused = client.request(
+                method, path, json={"title": "fixture"}, headers=headers
+            )
+            assert (refused.status_code, refused.json()) == (
+                403,
+                {"detail": "pestle.manage permission required"},
             )
             permission = Permission(code="pestle.manage", description="fixture")
             contract_db.add(permission)
@@ -1107,19 +1184,36 @@ def test_permission_owned_mutations_keep_csrf_and_route_permissions(
                 },
                 headers=headers,
             )
-            assert response.status_code == 200, response.text
+            assert (response.status_code, response.json()) == (200, {"ok": True})
         elif "/questions/" in path:
-            assert (
-                client.request(
-                    method, path, json={"body": "fixture"}, headers=headers
-                ).status_code
-                == 403
+            refused = client.request(
+                method, path, json={"body": "fixture"}, headers=headers
+            )
+            assert (refused.status_code, refused.json()) == (
+                403,
+                {"detail": "question.create permission required"},
             )
         else:
             # A self-service write reaches its adapter (validation or missing object
             # is distinct from the middleware's blanket admin denial).
             response = client.request(method, path, json={}, headers=headers)
-            assert response.status_code in {400, 404, 422}, response.text
+            assert (response.status_code, response.json()) == (
+                (
+                    422,
+                    {
+                        "detail": [
+                            {
+                                "type": "missing",
+                                "loc": ["body", field],
+                                "msg": "Field required",
+                            }
+                            for field in ("name", "url")
+                        ]
+                    },
+                )
+                if method == "POST"
+                else (404, {"detail": "Not found"})
+            )
     finally:
         main.app.dependency_overrides.pop(get_db, None)
 
@@ -1201,7 +1295,12 @@ def test_question_attachment_rejection_rolls_back_http_operation(
             files={"attachments": ("bad.pdf", b"not a PDF", "application/pdf")},
             headers=headers,
         )
-        assert response.status_code == 400, response.text
+        assert (response.status_code, response.json()) == (
+            400,
+            {
+                "detail": "Invalid file type: file content does not match declared content-type"
+            },
+        )
         assert contract_db.query(EventQuestionThread).count() == 0
         assert contract_db.query(EventQuestionPost).count() == 0
         assert not list(tmp_path.rglob("*.pdf"))
@@ -1247,7 +1346,10 @@ def test_assembled_remote_user_uses_direct_peer_and_rejects_duplicates(
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "127.0.0.1/32")
     client = TestClient(main.app, base_url="https://keen.example", client=(peer, 12345))
     try:
-        assert client.get("/v1/auth/check", headers=headers).status_code == expected
+        checked = client.get("/v1/auth/check", headers=headers)
+        assert (checked.status_code, checked.content) == (
+            (204, b"") if expected == 204 else (401, b'{"detail":"Not authenticated"}')
+        )
     finally:
         client.close()
 
@@ -1298,10 +1400,28 @@ def test_a_signed_in_browser_without_a_csrf_token_receives_one_for_its_writes(
         client = browser()
         # The signed-in browser still needs the token before it can write.
         refused = client.post(write[0], json=write[1], headers=origin)
-        assert refused.status_code == 403 and "CSRF" in refused.text
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "CSRF token missing or invalid"},
+        )
 
         first = client.get(path)
-        assert first.status_code == 200, first.text
+        assert (first.status_code, first.json()) == (
+            200,
+            {
+                "use_local_timezone": False,
+                "timezone": None,
+                "theme": "ink",
+                "date_format": "default",
+                "auto_apply_filters": False,
+                "source_colors": {},
+                "default_visualisation": None,
+                "landing_page": "/",
+                "default_framework": None,
+                "notification_delivery": "app",
+                "notification_email": False,
+            },
+        )
         cookie = minted(first)
         assert cookie is not None
         # The UI reads the token to echo it, and only same-site requests carry it.
@@ -1313,7 +1433,7 @@ def test_a_signed_in_browser_without_a_csrf_token_receives_one_for_its_writes(
 
         # The browser keeps its token, so requests already in flight stay valid.
         later = client.get(path)
-        assert later.status_code == 200 and minted(later) is None
+        assert (later.json(), minted(later)) == (first.json(), None)
         assert client.cookies.get(csrf.csrf_cookie_name()) == token
 
         saved = client.post(
@@ -1324,7 +1444,7 @@ def test_a_signed_in_browser_without_a_csrf_token_receives_one_for_its_writes(
 
         # Each browser receives its own token.
         other = browser()
-        assert other.get(path).status_code == 200
+        assert other.get(path).json() == first.json()
         assert other.cookies.get(csrf.csrf_cookie_name()) not in (None, token)
     finally:
         main.app.dependency_overrides.pop(get_db, None)
@@ -1355,23 +1475,34 @@ def test_retention_overrides_keep_admin_and_csrf_boundary(
     }
     path = "/v1/admin/evidence-retention"
     try:
-        assert client.put(path, json=payload).status_code == 401
+        refused = client.put(path, json=payload)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         client.cookies.set(csrf.csrf_cookie_name(), "retention-token")
         headers = {
             csrf.csrf_header_name(): "retention-token",
             "Origin": "https://keen.example",
         }
-        for user in (reader, admin):
+        admin_only = (403, {"detail": "Admin role required"})
+        for user, unsigned, signed in (
+            (reader, admin_only, admin_only),
+            (
+                admin,
+                (403, {"detail": "CSRF token missing or invalid"}),
+                (200, {"mode": "disabled"}),
+            ),
+        ):
             sid = sessions.create_session(redis, user_id=str(user.id), ttl_seconds=300)
             client.cookies.set(session_cookie_name(), sid)
-            assert client.put(path, json=payload).status_code == 403
-            assert not writes
+            refused = client.put(path, json=payload)
+            assert (refused.status_code, refused.json()) == unsigned
+            assert writes == []
             response = client.put(path, json=payload, headers=headers)
-            assert response.status_code == (200 if user is admin else 403), (
-                response.text
-            )
-        assert len(writes) == 1
-        assert writes[0]["overrides"] == payload["overrides"]
+            assert (response.status_code, response.json()) == signed
+        (written,) = writes
+        assert written["overrides"] == payload["overrides"]
     finally:
         main.app.dependency_overrides.pop(get_db, None)
 
@@ -1404,7 +1535,7 @@ def test_websocket_without_a_session_is_refused(production_client, monkeypatch):
         with client.websocket_connect("/ws/notifications", headers=ORIGIN):
             pass
 
-    assert closed.value.code == 1008
+    assert (closed.value.code, closed.value.reason) == (1008, "")
 
 
 def test_each_user_has_a_bounded_number_of_notification_sockets(
@@ -1430,7 +1561,7 @@ def test_each_user_has_a_bounded_number_of_notification_sockets(
             "Too many notification connections",
         )
         assert len(questions.notification_hub._user_sockets[str(reader.id)]) == 5
-    assert not questions.notification_hub._user_sockets
+    assert questions.notification_hub._user_sockets == {}
 
 
 def test_live_websockets_are_pinged_until_the_users_access_changes(
@@ -1446,10 +1577,11 @@ def test_live_websockets_are_pinged_until_the_users_access_changes(
         assert socket.receive_json() == {"type": "ping"}
         reader.authz_version = (reader.authz_version or 0) + 1
         contract_db.commit()
-        with pytest.raises(WebSocketDisconnect):
+        with pytest.raises(WebSocketDisconnect) as closed:
             for _ in range(50):
                 assert socket.receive_json() == {"type": "ping"}
-    assert not questions.notification_hub._user_sockets
+    assert (closed.value.code, closed.value.reason) == (1008, "")
+    assert questions.notification_hub._user_sockets == {}
 
 
 def test_oversized_websocket_messages_close_the_connection(
@@ -1465,5 +1597,5 @@ def test_oversized_websocket_messages_close_the_connection(
         socket.send_text("x" * 1025)
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_json()
-    assert closed.value.code == 1008
-    assert not questions.notification_hub._user_sockets
+    assert (closed.value.code, closed.value.reason) == (1008, "")
+    assert questions.notification_hub._user_sockets == {}

@@ -35,4 +35,4 @@ class ForgejoProvenanceTests(unittest.TestCase):
         self.assertEqual(event_collector(event), collector_id("forgejo", "feeds", feed))
         self.assertEqual(event["normalized_payload"]["feed_url"], feed)
         self.assertEqual(result["created_events"], 1)
-        db.commit.assert_called_once()
+        db.commit.assert_called_once_with()

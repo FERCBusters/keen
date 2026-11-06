@@ -322,7 +322,10 @@ def test_stale_review_compares_the_row_each_target_names(backfill, monkeypatch):
     )
     assert pruned == {"deleted": 1}
     assert _mapped(db, backfill.event) == {backfill.clause.id}
-    with pytest.raises(managed_configurations.DomainError) as refused:
+    with pytest.raises(
+        managed_configurations.DomainError,
+        match=r"^At least one mapping is now valid\. Preview again\.$",
+    ) as refused:
         managed_configurations.prune_stale_rule_mappings(
             payload=managed_configurations.PruneInput(
                 version=1, source="test", mapping_ids=[str(rows["clause"].id)]

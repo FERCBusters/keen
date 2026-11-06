@@ -120,7 +120,7 @@ def test_source_counters_and_metadata_count_only_visible_entries(keen, entries):
                 len(visible),
             ), name
             assert diary["unmapped_events"] == 0, name
-            assert "diary" in {item["source"] for item in meta}, name
+            assert {item["source"] for item in meta} == {"ci", "diary"}, name
         else:
             assert "diary" not in rows, name
             assert "diary" not in {item["source"] for item in meta}, name

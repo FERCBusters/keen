@@ -116,7 +116,10 @@ def test_an_isms_document_declared_as_script_downloads_as_octet_stream(keen):  #
         assert download.status_code == 200
         assert download.headers["content-type"] == served
         assert download.headers["x-content-type-options"] == "nosniff"
-        assert download.headers["content-disposition"].startswith("attachment;")
+        assert (
+            download.headers["content-disposition"]
+            == "attachment; filename=\"f.js\"; filename*=UTF-8''f.js"
+        )
         assert download.content == SCRIPT
 
 

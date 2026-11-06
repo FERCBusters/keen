@@ -77,6 +77,36 @@ def api_timestamp(when: datetime) -> str:
     return when.replace(tzinfo=None, microsecond=0).isoformat() + "Z"
 
 
+def attention_record(
+    previous: dict | None, status: str, subjects: list[str], total: int, now: datetime
+) -> dict | None:
+    """When a check's failure began, and each listed resource's, kept with its result.
+
+    ``since`` moves forward whenever the check starts failing or fails for a
+    resource it did not list before, or for more resources than before, so a
+    risk closed earlier no longer treats it. A resource that passes and then
+    fails again starts afresh.
+    """
+    if status == "unknown":
+        return previous
+    if status != "attention":
+        return None
+    stamp = now.isoformat()
+    if previous is None:
+        return {
+            "since": stamp,
+            "subjects": dict.fromkeys(subjects, stamp),
+            "total": total,
+        }
+    known = previous["subjects"]
+    grew = total > previous["total"] or any(name not in known for name in subjects)
+    return {
+        "since": stamp if grew else previous["since"],
+        "subjects": {name: known.get(name, stamp) for name in subjects},
+        "total": total,
+    }
+
+
 @dataclass
 class Check:
     key: str
@@ -197,8 +227,13 @@ def guarded(checks: dict, keys, collect: Callable[[], list[Check]]) -> list[Chec
         return unknown(checks, keys, exc.reason)
 
 
+def agrees(count: int, one: str, many: str) -> str:
+    """The word that agrees with a count: "holds" for one, "hold" for others."""
+    return one if count == 1 else many
+
+
 def plural(count: int, noun: str, plural_noun: str | None = None) -> str:
-    return f"{count} {noun if count == 1 else plural_noun or noun + 's'}"
+    return f"{count} {agrees(count, noun, plural_noun or noun + 's')}"
 
 
 def mfa_check(key, label, people: list[Identity], *, who="users") -> Check:

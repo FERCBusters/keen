@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 from app.core.config import settings
 from app.db.models import Group, Permission, SavedSearch, User, user_groups
-from app.security.passwords import hash_password
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (  # noqa: F401
@@ -53,7 +52,11 @@ def test_me_reports_identity_permissions_and_policy(keen):  # noqa: F811
     admin = _json(keen.client(keen.user(role="admin")).get("/v1/me"))
     assert admin["is_admin"] is True
     assert admin["can_manage_risks"] is True
-    assert keen.client().get("/v1/me").status_code == 401
+    refused = keen.client().get("/v1/me")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 def test_me_reflects_the_permissions_audit_managers_imply(keen):  # noqa: F811
@@ -206,43 +209,79 @@ def test_sign_out_follows_the_sign_in_method(
 
 
 @pytest.mark.parametrize(
-    "payload",
+    "payload, detail",
     [
-        {"date_format": "mm/dd/yyyy"},
-        {"default_visualisation": {"mode": "pie"}},
-        {"timezone": "Mars/Olympus"},
-        {"source_colors": {"github": "red"}},
-        {"source_colors": {"x" * 129: "#000000"}},
-        {"source_colors": {f"s{i}": "#000000" for i in range(501)}},
-        {"default_framework": "x" * 65},
-        {"default_framework": "ISO 27001"},
-        {"default_visualisation": {"date_range": {"days": 0}}},
-        {"default_visualisation": {"date_range": {"days": "many"}}},
-        {"default_visualisation": {"date_range": []}},
-        {"default_visualisation": {"date_range": {"start_date": "2026-01-01"}}},
-        {"default_visualisation": {"sunburst_focus": "github"}},
-        {
-            "default_visualisation": {
-                "sunburst_focus": {"source_key": "a", "control_id": "b"}
-            }
-        },
-        {"default_visualisation": {"sunburst_focus": {"source_key": "x" * 129}}},
-        {"default_visualisation": {"sunburst_focus": {"control_id": "not-a-uuid"}}},
-        {"landing_page": "https://evil.example/"},
-        {"landing_page": "//evil.example/"},
+        ({"date_format": "mm/dd/yyyy"}, "Invalid date_format"),
+        (
+            {"default_visualisation": {"mode": "pie"}},
+            "Invalid default_visualisation.mode",
+        ),
+        (
+            {"timezone": "Mars/Olympus"},
+            "Invalid timezone. Use an IANA name like 'Australia/Melbourne'.",
+        ),
+        ({"source_colors": {"github": "red"}}, "Invalid hex color for source: github"),
+        ({"source_colors": {"x" * 129: "#000000"}}, "source_colors key is too long"),
+        (
+            {"source_colors": {f"s{i}": "#000000" for i in range(501)}},
+            "source_colors is too large",
+        ),
+        ({"default_framework": "x" * 65}, "default_framework is too long"),
+        (
+            {"default_framework": "ISO 27001"},
+            "default_framework may contain only letters, numbers, dot, underscore, colon and hyphen",
+        ),
+        (
+            {"default_visualisation": {"date_range": {"days": 0}}},
+            "default_visualisation.date_range.days out of range",
+        ),
+        (
+            {"default_visualisation": {"date_range": {"days": "many"}}},
+            "Invalid default_visualisation.date_range.days",
+        ),
+        (
+            {"default_visualisation": {"date_range": []}},
+            "default_visualisation.date_range must be an object",
+        ),
+        (
+            {"default_visualisation": {"date_range": {"start_date": "2026-01-01"}}},
+            "Invalid default_visualisation.date_range start/end",
+        ),
+        (
+            {"default_visualisation": {"sunburst_focus": "github"}},
+            "default_visualisation.sunburst_focus must be an object",
+        ),
+        (
+            {
+                "default_visualisation": {
+                    "sunburst_focus": {"source_key": "a", "control_id": "b"}
+                }
+            },
+            "default_visualisation.sunburst_focus must specify one of source_key or control_id",
+        ),
+        (
+            {"default_visualisation": {"sunburst_focus": {"source_key": "x" * 129}}},
+            "default_visualisation.sunburst_focus.source_key too long",
+        ),
+        (
+            {"default_visualisation": {"sunburst_focus": {"control_id": "not-a-uuid"}}},
+            "Invalid default_visualisation.sunburst_focus.control_id",
+        ),
+        ({"landing_page": "https://evil.example/"}, "Invalid landing_page"),
+        ({"landing_page": "//evil.example/"}, "Invalid landing_page"),
         # An empty authority leaves a path that begins with two slashes.
-        {"landing_page": "////evil.example/"},
-        {"landing_page": "/login.html"},
-        {"landing_page": "/admin.html"},
-        {"theme": "neon"},
-        {"landing_page": "/events.html?q=" + "x" * 2100},
+        ({"landing_page": "////evil.example/"}, "Invalid landing_page"),
+        ({"landing_page": "/login.html"}, "Invalid landing_page"),
+        ({"landing_page": "/admin.html"}, "Invalid landing_page"),
+        ({"theme": "neon"}, "Invalid theme"),
+        ({"landing_page": "/events.html?q=" + "x" * 2100}, "landing_page is too long"),
     ],
 )
-def test_invalid_preferences_are_rejected_without_change(keen, payload):  # noqa: F811
+def test_invalid_preferences_are_rejected_without_change(keen, payload, detail):  # noqa: F811
     client = keen.client(keen.user())
     before = _json(client.get("/v1/me/preferences"))
     response = client.patch("/v1/me/preferences", headers=unsafe(client), json=payload)
-    assert response.status_code in (400, 422), response.text
+    assert (response.status_code, response.json()) == (400, {"detail": detail})
     assert _json(client.get("/v1/me/preferences")) == before
 
 
@@ -265,7 +304,16 @@ def _account_page_landing_choices():
 
 def test_landing_page_choices_offered_by_the_account_page_are_accepted(keen):  # noqa: F811
     choices, admin_only = _account_page_landing_choices()
-    assert "/" in choices
+    assert choices == [
+        "/",
+        "/controls.html",
+        "/events.html",
+        "/sources.html",
+        "/risks.html",
+        "/isms.html",
+        "/statement-of-applicability.html",
+        "/account.html",
+    ]
     client = keen.client(keen.user())
     for page in choices:
         saved = _json(
@@ -315,18 +363,12 @@ def test_saved_searches_are_private_to_their_owner(keen):  # noqa: F811
     ]
     assert _json(other.get("/v1/me/saved-searches")) == []
     # Another user cannot delete it, and an unknown or malformed id is rejected.
-    assert (
-        other.delete(
-            f"/v1/me/saved-searches/{created['id']}", headers=unsafe(other)
-        ).status_code
-        == 404
+    refused = other.delete(
+        f"/v1/me/saved-searches/{created['id']}", headers=unsafe(other)
     )
-    assert (
-        owner.delete(
-            "/v1/me/saved-searches/not-a-uuid", headers=unsafe(owner)
-        ).status_code
-        == 400
-    )
+    assert (refused.status_code, refused.json()) == (404, {"detail": "Not found"})
+    refused = owner.delete("/v1/me/saved-searches/not-a-uuid", headers=unsafe(owner))
+    assert (refused.status_code, refused.json()) == (400, {"detail": "Invalid id"})
     assert _json(
         owner.delete(f"/v1/me/saved-searches/{created['id']}", headers=unsafe(owner))
     ) == {"ok": True}
@@ -337,37 +379,56 @@ def test_saved_searches_are_private_to_their_owner(keen):  # noqa: F811
 
 
 @pytest.mark.parametrize(
-    "url",
+    "url, detail",
     [
-        "javascript:alert(1)",
-        "DATA:text/html,x",
-        "https://evil.example/events.html",
-        "//evil.example/x",
-        "/\\evil.example/x",
-        "/\tevil.example/x",
-        "/.//evil.example/x",
-        "/x/%2e%2e//evil.example/x",
-        "/events.html?q=" + "x" * 2050,
+        ("javascript:alert(1)", "Invalid saved search URL"),
+        ("DATA:text/html,x", "Invalid saved search URL"),
+        (
+            "https://evil.example/events.html",
+            "Saved search URL must be a relative path (e.g. /events.html?q=...)",
+        ),
+        (
+            "//evil.example/x",
+            "Saved search URL must be a relative path (e.g. /events.html?q=...)",
+        ),
+        ("/\\evil.example/x", "Invalid saved search URL"),
+        ("/\tevil.example/x", "Invalid saved search URL"),
+        ("/.//evil.example/x", "Invalid saved search URL"),
+        ("/x/%2e%2e//evil.example/x", "Invalid saved search URL"),
+        (
+            "/events.html?q=" + "x" * 2050,
+            [
+                {
+                    "type": "string_too_long",
+                    "loc": ["body", "url"],
+                    "msg": "String should have at most 2048 characters",
+                }
+            ],
+        ),
     ],
 )
-def test_saved_search_urls_must_stay_inside_keen(keen, url):  # noqa: F811
+def test_saved_search_urls_must_stay_inside_keen(keen, url, detail):  # noqa: F811
     client = keen.client(keen.user())
     response = client.post(
         "/v1/me/saved-searches", headers=unsafe(client), json={"name": "x", "url": url}
     )
-    assert response.status_code in (400, 422)
+    assert (response.status_code, response.json()) == (
+        422 if isinstance(detail, list) else 400,
+        {"detail": detail},
+    )
     assert _json(client.get("/v1/me/saved-searches")) == []
 
 
 def test_saved_search_names_are_required(keen):  # noqa: F811
     client = keen.client(keen.user())
-    assert (
-        client.post(
-            "/v1/me/saved-searches",
-            headers=unsafe(client),
-            json={"name": "   ", "url": "/events.html"},
-        ).status_code
-        == 400
+    refused = client.post(
+        "/v1/me/saved-searches",
+        headers=unsafe(client),
+        json={"name": "   ", "url": "/events.html"},
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "name is required"},
     )
 
 
@@ -392,7 +453,10 @@ def test_password_change_verifies_the_current_password_and_revokes_sessions(keen
         headers=unsafe(client),
         json={"current_password": PASSWORD, "new_password": "x"},
     )
-    assert weak.status_code == 400
+    assert (weak.status_code, weak.json()) == (
+        400,
+        {"detail": "Password must be at least 8 characters"},
+    )
     before = keen.db.get(User, user.id).mfa_version
     ok = client.post(
         "/v1/me/password",
@@ -406,14 +470,21 @@ def test_password_change_verifies_the_current_password_and_revokes_sessions(keen
     keen.db.expire_all()
     assert keen.db.get(User, user.id).mfa_version == before + 1
     # The existing session no longer authenticates, and the new password works.
-    assert client.get("/v1/me").status_code == 401
+    refused = client.get("/v1/me")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     fresh = keen.client()
     login = fresh.post(
         "/v1/auth/login",
         json={"username": user.username, "password": "another-synthetic-passphrase"},
         headers={"Origin": BASE},
     )
-    assert login.status_code == 200, login.text
+    assert (login.status_code, login.json()) == (
+        200,
+        {"user": user.username, "user_id": str(user.id)},
+    )
 
 
 def test_password_change_is_refused_for_directory_and_proxy_accounts(keen, monkeypatch):  # noqa: F811
@@ -426,26 +497,48 @@ def test_password_change_is_refused_for_directory_and_proxy_accounts(keen, monke
     row = keen.db.get(User, user.id)
     row.auth_backend = "ldap"
     keen.db.commit()
-    assert (
-        client.post("/v1/me/password", headers=unsafe(client), json=body).status_code
-        == 403
+    refused = client.post("/v1/me/password", headers=unsafe(client), json=body)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Change your password in your LDAP directory"},
     )
     row.auth_backend = "local"
     keen.db.commit()
     monkeypatch.setattr(settings, "trust_remote_user", True)
     response = client.post("/v1/me/password", headers=unsafe(client), json=body)
-    assert response.status_code in (401, 403)
+    assert (response.status_code, response.json()) == (
+        403,
+        {
+            "detail": "Password changes are disabled when KEEN_TRUST_REMOTE_USER is enabled"
+        },
+    )
 
 
 def test_password_change_attempts_are_rate_limited_per_user(keen, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 100)
     monkeypatch.setattr(settings, "login_rate_limit_per_username", 2)
-    client = keen.client(keen.user())
-    body = {"current_password": "wrong", "new_password": "another-synthetic-passphrase"}
-    codes = [
-        client.post("/v1/me/password", headers=unsafe(client), json=body).status_code
-        for _ in range(3)
+    user = keen.user()
+    client = keen.client(user)
+    original = user.password_hash
+    new_password = "another-synthetic-passphrase"
+    wrong = {"current_password": "wrong", "new_password": new_password}
+    refusals = [
+        client.post("/v1/me/password", headers=unsafe(client), json=wrong)
+        for _ in range(2)
     ]
-    assert codes == [400, 400, 429]
+    assert [(r.status_code, r.json()) for r in refusals] == [
+        (400, {"detail": "Current password is incorrect"})
+    ] * 2
+    # Once the account's allowance is spent, the right password is refused
+    # before it is checked too, so guesses cannot continue from new addresses.
+    right = {"current_password": PASSWORD, "new_password": new_password}
+    limited = client.post("/v1/me/password", headers=unsafe(client), json=right)
+    assert (limited.status_code, limited.json()) == (
+        429,
+        {"detail": "Too many password change attempts. Please try again later."},
+    )
+    keen.db.refresh(user)
+    assert user.password_hash == original
 
 
 # --- User administration ----------------------------------------------------------
@@ -486,13 +579,14 @@ def test_administrators_create_update_and_delete_users(keen, admin_client):  # n
     )
     assert created["effective_role"] == "normal"
     assert created["email"] == "riley@example.test"
-    assert (
-        client.post(
-            "/v1/users",
-            headers=h,
-            json={"username": "riley", "password": "synthetic-password-riley"},
-        ).status_code
-        == 400
+    refused = client.post(
+        "/v1/users",
+        headers=h,
+        json={"username": "riley", "password": "synthetic-password-riley"},
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "username already exists"},
     )
     for email in [
         "no-at-sign",
@@ -510,7 +604,10 @@ def test_administrators_create_update_and_delete_users(keen, admin_client):  # n
                 "email": email,
             },
         )
-        assert response.status_code == 400, email
+        assert (response.status_code, response.json()) == (
+            400,
+            {"detail": "Invalid email address"},
+        )
     uid = created["id"]
     updated = _json(
         client.patch(f"/v1/users/{uid}", headers=h, json={"role": "admin", "email": ""})
@@ -518,9 +615,10 @@ def test_administrators_create_update_and_delete_users(keen, admin_client):  # n
     assert updated["role"] == "admin"
     assert updated["effective_role"] == "admin"
     assert updated["email"] is None
-    assert (
-        client.patch(f"/v1/users/{uid}", headers=h, json={"role": "owner"}).status_code
-        == 400
+    refused = client.patch(f"/v1/users/{uid}", headers=h, json={"role": "owner"})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "role must be 'admin', 'normal', or 'inherit'"},
     )
     listed = {row["username"]: row for row in _json(client.get("/v1/users"))}
     assert listed["riley"]["effective_role"] == "admin"
@@ -529,24 +627,10 @@ def test_administrators_create_update_and_delete_users(keen, admin_client):  # n
     )
     assert deactivated["is_active"] is False
     assert _json(client.delete(f"/v1/users/{uid}", headers=h)) == {"ok": True}
-    assert client.delete(f"/v1/users/{uid}", headers=h).status_code == 404
-    assert (
-        client.patch(f"/v1/users/{uuid.uuid4()}", headers=h, json={}).status_code == 404
-    )
-
-
-def test_effective_roles_follow_group_membership(keen, admin_client):  # noqa: F811
-    _admin, client = admin_client
-    member = keen.user(role="inherit")
-    plain = keen.user(role="inherit")
-    group = Group(name="Admins-" + uuid.uuid4().hex[:6], role="admin")
-    keen.db.add(group)
-    keen.db.flush()
-    keen.db.execute(user_groups.insert().values(user_id=member.id, group_id=group.id))
-    keen.db.commit()
-    listed = {row["username"]: row for row in _json(client.get("/v1/users"))}
-    assert listed[member.username]["effective_role"] == "admin"
-    assert listed[plain.username]["effective_role"] == "normal"
+    refused = client.delete(f"/v1/users/{uid}", headers=h)
+    assert (refused.status_code, refused.json()) == (404, {"detail": "User not found"})
+    refused = client.patch(f"/v1/users/{uuid.uuid4()}", headers=h, json={})
+    assert (refused.status_code, refused.json()) == (404, {"detail": "User not found"})
 
 
 def test_administrators_cannot_lock_themselves_out(keen, admin_client):  # noqa: F811
@@ -617,25 +701,31 @@ def test_user_access_sets_groups_and_explicit_permissions(keen, admin_client):  
     )
     assert access["group_ids"] == [str(group.id)]
     assert access["explicit_permission_codes"] == [perm.code]
-    assert perm.code in access["effective_permission_codes"]
+    assert access["effective_permission_codes"] == [perm.code]
     keen.db.expire_all()
     assert keen.db.get(User, target.id).authz_version > before
     assert _json(client.get(f"/v1/users/{target.id}/access"))["group_ids"] == [
         str(group.id)
     ]
+    unknown = str(uuid.uuid4())
     missing_group = client.put(
         f"/v1/users/{target.id}/access",
         headers=h,
-        json={"group_ids": [str(uuid.uuid4())]},
+        json={"group_ids": [unknown]},
     )
-    assert missing_group.status_code == 400
-    assert "missing_group_ids" in missing_group.json()["detail"]
+    assert (missing_group.status_code, missing_group.json()) == (
+        400,
+        {"detail": {"missing_group_ids": [unknown]}},
+    )
     missing_perm = client.put(
         f"/v1/users/{target.id}/access",
         headers=h,
         json={"explicit_permission_codes": ["no.such"]},
     )
-    assert missing_perm.json()["detail"] == {"missing_permission_codes": ["no.such"]}
+    assert (missing_perm.status_code, missing_perm.json()) == (
+        400,
+        {"detail": {"missing_permission_codes": ["no.such"]}},
+    )
     cleared = _json(
         client.put(
             f"/v1/users/{target.id}/access",
@@ -644,7 +734,8 @@ def test_user_access_sets_groups_and_explicit_permissions(keen, admin_client):  
         )
     )
     assert cleared["group_ids"] == [] and cleared["explicit_permission_codes"] == []
-    assert client.get(f"/v1/users/{uuid.uuid4()}/access").status_code == 404
+    refused = client.get(f"/v1/users/{uuid.uuid4()}/access")
+    assert (refused.status_code, refused.json()) == (404, {"detail": "User not found"})
     admin_view = _json(client.get(f"/v1/users/{_admin.id}/access"))
     assert admin_view["effective_permission_codes"] == ["*"]
 
@@ -685,34 +776,37 @@ def test_administrators_reset_local_passwords_only(keen, admin_client):  # noqa:
         )
     ) == {"ok": True}
     # The target's existing session is revoked by the MFA/session version change.
-    assert target_client.get("/v1/me").status_code == 401
-    assert (
-        client.post(
-            f"/v1/users/{target.id}/password", headers=h, json={"new_password": "x"}
-        ).status_code
-        == 400
+    refused = target_client.get("/v1/me")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
+    refused = client.post(
+        f"/v1/users/{target.id}/password", headers=h, json={"new_password": "x"}
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Password must be at least 8 characters"},
     )
     directory = keen.user()
     row = keen.db.get(User, directory.id)
     row.auth_backend = "ldap"
     keen.db.commit()
-    assert (
-        client.post(
-            f"/v1/users/{directory.id}/password",
-            headers=h,
-            json={"new_password": "reset-synthetic-passphrase"},
-        ).status_code
-        == 400
+    refused = client.post(
+        f"/v1/users/{directory.id}/password",
+        headers=h,
+        json={"new_password": "reset-synthetic-passphrase"},
     )
-    assert (
-        client.post(
-            f"/v1/users/{uuid.uuid4()}/password",
-            headers=h,
-            json={"new_password": "reset-synthetic-passphrase"},
-        ).status_code
-        == 404
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Change LDAP passwords in the directory"},
     )
-    assert hash_password  # imported helper retained for fixture users
+    refused = client.post(
+        f"/v1/users/{uuid.uuid4()}/password",
+        headers=h,
+        json={"new_password": "reset-synthetic-passphrase"},
+    )
+    assert (refused.status_code, refused.json()) == (404, {"detail": "User not found"})
 
 
 @pytest.mark.parametrize(
@@ -750,7 +844,9 @@ def test_password_changes_stop_while_the_rate_limit_store_is_unavailable(
 ):
     from app.services import me as account
 
-    client = keen.client(keen.user())
+    user = keen.user()
+    client = keen.client(user)
+    original = (user.password_hash, user.mfa_version)
 
     def unavailable():
         raise ConnectionError("valkey down")
@@ -770,5 +866,7 @@ def test_password_changes_stop_while_the_rate_limit_store_is_unavailable(
         503,
         "Service temporarily unavailable. Please try again later.",
     )
-    # The password is unchanged.
-    assert client.get("/v1/me").status_code == 200
+    # The password is unchanged, so the session still signs the user in.
+    keen.db.refresh(user)
+    assert (user.password_hash, user.mfa_version) == original
+    assert _json(client.get("/v1/me"))["user"] == user.username

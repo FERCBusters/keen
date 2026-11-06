@@ -36,7 +36,7 @@ def test_questions_outlive_the_account_that_asked_them(qa):  # noqa: F811
     evidence = _event_question(qa, client, body="Who ran this?").json()["thread_id"]
     risk = qa.ask(client, "risk", "Who owns this?").json()["thread_id"]
     removed = qa.admin.delete(f"/v1/users/{author.id}", headers=unsafe(qa.admin))
-    assert removed.status_code == 200, removed.text
+    assert (removed.status_code, removed.json()) == (200, {"ok": True})
     administrator = qa.admin.get("/v1/me").json()["user"]
     qa.published.clear()
 

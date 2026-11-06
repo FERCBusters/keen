@@ -13,7 +13,6 @@ from app.db.models import Base, Event, SourceIngestionState
 from app.services import evidence_retention as retention
 from app.services.errors import DomainError
 from app.services.ingestion_pause import is_paused, require_receiving
-from fastapi import HTTPException
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -80,7 +79,10 @@ def test_purge_drains_transactions_rejects_writes_and_preserves_manual_pause(dat
         db.commit()
     with factory() as db:
         assert is_paused(db, "keen-agent")
-        with pytest.raises((HTTPException, DomainError)):
+        with pytest.raises(
+            DomainError,
+            match=r"^Source ingestion is paused by an administrator; retry later\.$",
+        ):
             require_receiving(db, "webhooks")
         db.add(
             Event(
@@ -90,7 +92,10 @@ def test_purge_drains_transactions_rejects_writes_and_preserves_manual_pause(dat
                 summary="Must not arrive",
             )
         )
-        with pytest.raises((HTTPException, DomainError)):
+        with pytest.raises(
+            DomainError,
+            match=r"^Ingestion is paused for evidence purge and its five-minute cooldown; retry later\.$",
+        ):
             db.flush()
         db.rollback()
     held = factory()

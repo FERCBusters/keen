@@ -19,7 +19,7 @@ import secrets
 import textwrap
 import time
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -120,7 +120,8 @@ def test_walkers_stop_at_the_bound_and_keep_shallow_structures_whole():
 def test_deep_documents_stay_text_where_evidence_keeps_text():
     line = "[" * 3000 + "]" * 3000
     assert try_parse_json_line(line) is None
-    assert try_parse_json_line(json.dumps(nested(MAX_DEPTH, 1))) is not None
+    shallow = nested(MAX_DEPTH, 1)
+    assert try_parse_json_line(json.dumps(shallow)) == shallow
     assert try_parse_json_line(json.dumps(nested(MAX_DEPTH + 1, 1))) is None
 
     # Artifacts keep their whole content: a document deeper than the walkers
@@ -207,8 +208,8 @@ def test_every_recursive_function_has_a_reviewed_depth_bound():
 
 
 def test_feed_dates_are_parsed_only_at_a_dates_length():
-    assert rss._parse_dt("Tue, 03 Nov 2026 10:00:00 +0000") is not None
-    assert rss._parse_dt("2026-11-03T10:00:00Z") is not None
+    assert rss._parse_dt("Tue, 03 Nov 2026 10:00:00 +0000") == datetime(2026, 11, 3, 10)
+    assert rss._parse_dt("2026-11-03T10:00:00Z") == datetime(2026, 11, 3, 10)
     # dateutil's time grows with the square of its input; a feed's date text
     # is refused at a length no date needs, before any parsing.
     with measured() as timing:
@@ -269,16 +270,16 @@ def encoded_path(levels, tail):
 
 def test_dot_segments_are_found_within_a_bounded_number_of_decodings():
     for levels in (1, 2, MAX_DECODINGS):
-        assert has_dot_segment(encoded_path(levels, "2e"))
-        assert not has_dot_segment(encoded_path(levels, "41"))
-    assert not has_dot_segment("/checks/a%25252Fb")
+        assert has_dot_segment(encoded_path(levels, "2e")) is True
+        assert has_dot_segment(encoded_path(levels, "41")) is False
+    assert has_dot_segment("/checks/a%25252Fb") is False
     # Encoded more deeply than any server decodes: refused unread.
-    assert has_dot_segment(encoded_path(MAX_DECODINGS + 1, "41"))
+    assert has_dot_segment(encoded_path(MAX_DECODINGS + 1, "41")) is True
     # Each decoding of a value encoded within itself removes two characters;
     # decoding it until it stopped changing took 4 s for this record value.
     value = "/checks/" + quote("%" + "25" * 32_768, safe="")
     with measured() as timing:
-        assert has_dot_segment(value)
+        assert has_dot_segment(value) is True
     assert timing.seconds < 0.1
     # As long as the responses a run may read.
     longest = "/checks/" + quote("%" + "25" * (8 * 1024 * 1024), safe="")
@@ -290,7 +291,7 @@ def test_dot_segments_are_found_within_a_bounded_number_of_decodings():
 def test_github_paging_links_stay_under_the_api_base_path(monkeypatch):
     monkeypatch.setattr(settings, "github_base_url", "https://ghe.example/api/v3")
     base = "https://ghe.example/api/v3"
-    assert github._within_api(base + "/orgs/acme/audit-log?page=2&after=Y2Q%3D")
+    assert github._within_api(base + "/orgs/acme/audit-log?page=2&after=Y2Q%3D") is True
     for escaped in (
         base + "/../x",
         base + "/%2e%2e/%2e%2e/x",
@@ -298,7 +299,7 @@ def test_github_paging_links_stay_under_the_api_base_path(monkeypatch):
         base + "/%252e%252e/x",
         "https://other.example/api/v3/x",
     ):
-        assert not github._within_api(escaped), escaped
+        assert github._within_api(escaped) is False, escaped
 
 
 # --- Agent locks ----------------------------------------------------------------------
@@ -478,8 +479,9 @@ def test_chat_messages_carry_untrusted_text_as_text():
     teams = qw.teams_payload(payload)
     for field in (teams["text"], teams["title"]):
         assert "[x](https://a.example)" not in field and "<" not in field
-    assert teams["text"].endswith(
-        "[View in Keen](https://keen.example/event.html?id=1&framework=A)"
+    assert (
+        teams["text"]
+        == "New question on event\nEvent: Open: ‹https://attacker.example|View in Keen› ‹!channel› ［x］(https://a.example) & ‹users/all›\nSource: ‹!here›\nAsked by: ‹@U1›\n\nOpen: ‹https://attacker.example|View in Keen› ‹!channel› ［x］(https://a.example) & ‹users/all›\nControls: ‹b›\nOpen: https://keen.example/event.html?id=1&framework=A\n\n[View in Keen](https://keen.example/event.html?id=1&framework=A)"
     )
 
 
@@ -542,8 +544,15 @@ def test_run_budgets_follow_their_settings_under_the_general_cap(monkeypatch):
     for name in ("KEEN_RSS_RUN_SECONDS", "KEEN_LOKI_RUN_SECONDS"):
         field = name.removeprefix("KEEN_").lower()
         assert field in type(settings).model_fields, name
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as refused:
         type(settings)(rss_run_seconds=60)
+    assert [(e["type"], e["loc"], e["msg"]) for e in refused.value.errors()] == [
+        (
+            "greater_than_equal",
+            ("rss_run_seconds",),
+            "Input should be greater than or equal to 300",
+        )
+    ]
 
 
 # --- Cookies -----------------------------------------------------------------------------

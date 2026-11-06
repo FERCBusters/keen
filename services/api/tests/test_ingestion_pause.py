@@ -64,7 +64,7 @@ def test_resume_allows_next_call_without_resetting_state(db):
     pause(db, "rss", False)
     assert run(db) == ["collected"]
     assert collect.call_count == 2
-    assert not is_paused(db, "github")
+    assert is_paused(db, "github") is False
 
 
 def test_state_endpoint_requires_admin_and_persists_upsert(db):
@@ -81,23 +81,40 @@ def test_state_endpoint_requires_admin_and_persists_upsert(db):
 
     with TestClient(app) as client:
         url = "/v1/admin/sources/rss/ingestion-state"
-        assert client.put(url, json={"paused": True}).status_code == 401
+        refused = client.put(url, json={"paused": True})
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
         identity["role"] = "normal"
-        assert client.put(url, json={"paused": True}).status_code == 403
+        refused = client.put(url, json={"paused": True})
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Admin role required"},
+        )
         identity["role"] = "admin"
-        assert client.put(url, json={"paused": True}).status_code == 200
-        assert is_paused(db, "rss")
+        answer = client.put(url, json={"paused": True})
+        assert (answer.status_code, answer.json()) == (
+            200,
+            {"source": "rss", "paused": True},
+        )
+        assert is_paused(db, "rss") is True
         assert db.get(SourceIngestionState, "rss").updated_by == "operator"
-        assert client.put(url, json={"paused": False}).status_code == 200
+        answer = client.put(url, json={"paused": False})
+        assert (answer.status_code, answer.json()) == (
+            200,
+            {"source": "rss", "paused": False},
+        )
         db.expire_all()
-        assert not is_paused(db, "rss")
+        assert is_paused(db, "rss") is False
         assert db.query(SourceIngestionState).count() == 1
-        assert (
-            client.put(
-                "/v1/admin/sources/no-such-source/ingestion-state",
-                json={"paused": True},
-            ).status_code
-            == 404
+        refused = client.put(
+            "/v1/admin/sources/no-such-source/ingestion-state",
+            json={"paused": True},
+        )
+        assert (refused.status_code, refused.json()) == (
+            404,
+            {"detail": "Unknown ingestion source type"},
         )
 
 
@@ -112,9 +129,8 @@ def test_agents_retry_without_losing_records_or_revoking_credentials(
     assert stored == []
     with factory() as db:
         pause(db, "keen-agent", False)
-    assert (
-        client.post("/v1/otlp/logs", json=record(), headers=headers).status_code == 200
-    )
+    answer = client.post("/v1/otlp/logs", json=record(), headers=headers)
+    assert (answer.status_code, answer.json()) == (200, {})
     assert len(stored) == 1
 
 

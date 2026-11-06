@@ -65,6 +65,21 @@ from tests.test_assembled_authority_regressions import (  # noqa: F401
 
 URL = os.environ.get("KEEN_MFA_TEST_DATABASE_URL")
 
+INVALID_CODE = (400, {"detail": "Invalid or already-used code"})
+EXPIRED = (401, {"detail": "Verification expired; start again"})
+ACCEPTED = (200, {"ok": True})
+ORIGIN_REFUSED = (403, {"detail": "Authentication request origin is not allowed"})
+UNVERIFIED = (403, {"detail": "Complete second-factor verification or enrolment first"})
+KEY_REFUSED = (
+    400,
+    {"detail": "Security key verification failed; request another challenge"},
+)
+NOT_VERIFIED = (403, {"detail": "Verify your existing second factor first"})
+
+
+def outcome(response):
+    return response.status_code, response.json()
+
 
 class LocalMfaTests(unittest.TestCase):
     @classmethod
@@ -200,6 +215,11 @@ class LocalMfaTests(unittest.TestCase):
     def post(self, path, data=None):
         return self.client.post("/v1/auth/mfa/" + path, json=data or {})
 
+    def signed_in(self):
+        with self.Session() as db:
+            user = db.get(User, self.uid)
+            return 200, {"user": user.username, "user_id": str(user.id)}
+
     def login(self):
         return self.client.post(
             "/v1/auth/login",
@@ -260,15 +280,16 @@ class LocalMfaTests(unittest.TestCase):
             ]
             self.assertEqual(len(hashes_), 10)
             self.assertNotIn(self.codes[0], hashes_)
-        self.assertEqual(self.post("finish").status_code, 200)
-        self.assertTrue(self.client.get("/protected").json()["authenticated"])
-        self.assertEqual(self.post("finish").status_code, 401)
+        self.assertEqual(outcome(self.post("finish")), self.signed_in())
+        self.assertEqual(self.client.get("/protected").json(), {"authenticated": True})
+        self.assertEqual(outcome(self.post("finish")), EXPIRED)
 
     def test_invalid_enrolment_does_not_enable(self):
         self.start()
         self.post("totp/start")
         self.assertEqual(
-            self.post("totp/confirm", {"code": "invalid"}).status_code, 400
+            outcome(self.post("totp/confirm", {"code": "invalid"})),
+            (400, {"detail": "Invalid authenticator code"}),
         )
         with self.Session() as db:
             self.assertFalse(db.get(User, self.uid).mfa_enabled)
@@ -277,90 +298,94 @@ class LocalMfaTests(unittest.TestCase):
     def test_pending_cannot_access_and_totp_cannot_replay(self):
         self.enrol()
         self.client.cookies.clear()
-        self.assertTrue(self.login().json()["mfa_required"])
-        self.assertFalse(self.client.get("/protected").json()["authenticated"])
-        self.assertEqual(self.post("finish").status_code, 403)
+        self.assertEqual(
+            self.login().json(), {"mfa_required": True, "next": "/mfa.html"}
+        )
+        self.assertEqual(self.client.get("/protected").json(), {"authenticated": False})
+        self.assertEqual(outcome(self.post("finish")), UNVERIFIED)
         # The code that enrolment consumed is refused, whether or not the
         # 30-second window has rolled over since. A code from a later window is
         # fresh, so the test replays that exact code.
         self.assertEqual(
-            self.post("verify-code", {"code": self.enrol_code}).status_code, 400
+            outcome(self.post("verify-code", {"code": self.enrol_code})), INVALID_CODE
         )
         self.allow_next_totp()
         self.assertEqual(
-            self.post(
-                "verify-code", {"code": pyotp.TOTP(self.secret).now()}
-            ).status_code,
-            200,
+            outcome(self.post("verify-code", {"code": pyotp.TOTP(self.secret).now()})),
+            ACCEPTED,
         )
-        self.assertEqual(self.post("finish").status_code, 200)
-        self.assertTrue(self.client.get("/protected").json()["authenticated"])
+        self.assertEqual(outcome(self.post("finish")), self.signed_in())
+        self.assertEqual(self.client.get("/protected").json(), {"authenticated": True})
 
     def test_recovery_is_single_use(self):
         self.enrol()
         self.start("login")
-        self.assertEqual(
-            self.post(
-                "verify-code", {"kind": "recovery", "code": self.codes[0]}
-            ).status_code,
-            200,
-        )
+        used = {"kind": "recovery", "code": self.codes[0]}
+        self.assertEqual(outcome(self.post("verify-code", used)), ACCEPTED)
         self.start("login")
-        self.assertEqual(
-            self.post(
-                "verify-code", {"kind": "recovery", "code": self.codes[0]}
-            ).status_code,
-            400,
-        )
-        self.assertEqual(
-            self.post(
-                "verify-code", {"kind": "recovery", "code": self.codes[1]}
-            ).status_code,
-            200,
-        )
+        self.assertEqual(outcome(self.post("verify-code", used)), INVALID_CODE)
+        # Spending one code leaves the others usable.
+        unused = {"kind": "recovery", "code": self.codes[1]}
+        self.assertEqual(outcome(self.post("verify-code", unused)), ACCEPTED)
 
     def test_origin_expiry_and_password_change(self):
         self.start()
         self.assertEqual(
-            self.client.post(
-                "/v1/auth/mfa/state",
-                headers={"Origin": "https://evil.example"},
-                json={},
-            ).status_code,
-            403,
+            outcome(
+                self.client.post(
+                    "/v1/auth/mfa/state",
+                    headers={"Origin": "https://evil.example"},
+                    json={},
+                )
+            ),
+            ORIGIN_REFUSED,
         )
         with self.Session() as db:
             row = db.query(MfaChallenge).filter_by(user_id=self.uid).one()
             row.expires_at = mfa.now() - timedelta(seconds=1)
             db.commit()
-        self.assertEqual(self.post("state").status_code, 401)
+        self.assertEqual(outcome(self.post("state")), EXPIRED)
         self.start()
         with self.Session() as db:
             db.get(User, self.uid).password_hash = hash_password("another-password-123")
             db.commit()
-        self.assertEqual(self.post("finish").status_code, 401)
+        self.assertEqual(outcome(self.post("finish")), EXPIRED)
 
     def test_policy_blocks_old_local_sessions_but_not_sso(self):
         with self.Session() as db:
             user = db.get(User, self.uid)
-            self.assertTrue(
-                mfa.local_session_allowed(db, user, {"auth_method": "local"})
+            self.assertIs(
+                mfa.local_session_allowed(db, user, {"auth_method": "local"}), True
             )
             with patch.object(settings, "mfa_policy", "all"):
-                self.assertFalse(
-                    mfa.local_session_allowed(db, user, {"auth_method": "local"})
+                self.assertIs(
+                    mfa.local_session_allowed(db, user, {"auth_method": "local"}),
+                    False,
                 )
-                self.assertTrue(
-                    mfa.local_session_allowed(db, user, {"auth_method": "oidc"})
+                self.assertIs(
+                    mfa.local_session_allowed(db, user, {"auth_method": "oidc"}), True
                 )
             with patch.object(settings, "mfa_policy", "admins"):
-                self.assertFalse(mfa.required(db, user))
+                self.assertIs(mfa.required(db, user), False)
                 user.role = "admin"
-                self.assertTrue(mfa.required(db, user))
+                self.assertIs(mfa.required(db, user), True)
         with patch.object(settings, "mfa_policy", "all"):
-            self.assertTrue(self.login().json()["mfa_required"])
-            self.assertEqual(self.post("state").json()["stage"], "enrol")
-            self.assertEqual(self.post("finish").status_code, 403)
+            self.assertEqual(
+                self.login().json(), {"mfa_required": True, "next": "/mfa.html"}
+            )
+            self.assertEqual(
+                self.post("state").json(),
+                {
+                    "stage": "enrol",
+                    "purpose": "login",
+                    "username": self.username,
+                    "totp": False,
+                    "required": True,
+                    "credentials": [],
+                    "recovery_codes_remaining": 0,
+                },
+            )
+            self.assertEqual(outcome(self.post("finish")), UNVERIFIED)
 
     def test_factor_change_revokes_existing_sessions(self):
         sid = create_session(
@@ -371,58 +396,80 @@ class LocalMfaTests(unittest.TestCase):
             mfa_version=0,
         )
         self.client.cookies.set(session_cookie_name(), sid)
-        self.assertTrue(self.client.get("/protected").json()["authenticated"])
+        self.assertEqual(self.client.get("/protected").json(), {"authenticated": True})
         self.enrol()
-        self.assertFalse(self.client.get("/protected").json()["authenticated"])
+        self.assertEqual(self.client.get("/protected").json(), {"authenticated": False})
 
     def test_rate_limit_and_missing_key_fail_closed(self):
         self.start()
         with patch.object(settings, "mfa_encryption_key", ""):
-            self.assertEqual(self.post("totp/start").status_code, 503)
+            self.assertEqual(
+                outcome(self.post("totp/start")),
+                (503, {"detail": "TOTP requires a valid KEEN_MFA_ENCRYPTION_KEY"}),
+            )
         for _ in range(16):
             result = self.post("totp/start")
-        self.assertEqual(result.status_code, 429)
+        self.assertEqual(
+            outcome(result),
+            (429, {"detail": "Too many verification attempts; try again later"}),
+        )
         with patch.object(mfa, "get_valkey", side_effect=RuntimeError("offline")):
-            self.assertEqual(self.post("totp/start").status_code, 503)
+            self.assertEqual(
+                outcome(self.post("totp/start")),
+                (503, {"detail": "Authentication rate limiter unavailable"}),
+            )
 
     def test_management_requires_password_and_factor(self):
         self.assertEqual(
-            self.post("manage/start", {"password": self.password}).status_code, 401
+            outcome(self.post("manage/start", {"password": self.password})),
+            (401, {"detail": "Sign in before managing local account security"}),
         )
-        self.assertEqual(self.login().status_code, 200)
+        self.assertEqual(outcome(self.login()), self.signed_in())
         self.assertEqual(
-            self.post("manage/start", {"password": "wrong"}).status_code, 401
+            outcome(self.post("manage/start", {"password": "wrong"})),
+            (401, {"detail": "Invalid password"}),
         )
+        started = (200, {"mfa_required": True, "next": "/mfa.html"})
         self.assertEqual(
-            self.post("manage/start", {"password": self.password}).status_code, 200
+            outcome(self.post("manage/start", {"password": self.password})), started
         )
         self.enrol()
         self.post("finish")
         self.assertEqual(
-            self.post("manage/start", {"password": self.password}).status_code, 200
+            outcome(self.post("manage/start", {"password": self.password})), started
         )
-        self.assertEqual(self.post("recovery/regenerate").status_code, 403)
-        self.assertEqual(self.post("remove", {"id": "totp"}).status_code, 403)
+        self.assertEqual(outcome(self.post("recovery/regenerate")), NOT_VERIFIED)
+        self.assertEqual(outcome(self.post("remove", {"id": "totp"})), NOT_VERIFIED)
 
     def test_required_factor_cannot_be_removed_and_codes_replace(self):
         self.enrol()
         with patch.object(settings, "mfa_policy", "all"):
-            self.assertEqual(self.post("remove", {"id": "totp"}).status_code, 400)
+            self.assertEqual(
+                outcome(self.post("remove", {"id": "totp"})),
+                (
+                    400,
+                    {
+                        "detail": "Register a replacement before removing "
+                        "your last required factor"
+                    },
+                ),
+            )
         result = self.post("recovery/regenerate")
         self.assertEqual(result.status_code, 200)
+        replaced = result.json()["recovery_codes"]
+        self.assertEqual(len(set(replaced) - set(self.codes)), 10)
         self.start("login")
         self.assertEqual(
-            self.post(
-                "verify-code", {"kind": "recovery", "code": self.codes[0]}
-            ).status_code,
-            400,
+            outcome(
+                self.post("verify-code", {"kind": "recovery", "code": self.codes[0]})
+            ),
+            INVALID_CODE,
         )
         self.assertEqual(
-            self.post(
-                "verify-code",
-                {"kind": "recovery", "code": result.json()["recovery_codes"][0]},
-            ).status_code,
-            200,
+            outcome(
+                self.post("verify-code", {"kind": "recovery", "code": replaced[0]})
+            ),
+            ACCEPTED,
         )
 
     def test_removing_factors_keeps_the_rest_and_the_last_turns_mfa_off(self):
@@ -433,33 +480,32 @@ class LocalMfaTests(unittest.TestCase):
         verified = self.post(
             "verify-code", {"kind": "totp", "code": pyotp.TOTP(self.secret).now()}
         )
-        self.assertEqual(verified.status_code, 200, verified.text)
+        self.assertEqual(outcome(verified), ACCEPTED)
         private, cid, credential = self.webauthn_registration(start=False)
         added = self.post(
             "webauthn/register", {"credential": credential, "name": "Desk key"}
         )
-        self.assertEqual(added.status_code, 200, added.text)
         # A further factor issues no new recovery codes.
-        self.assertIsNone(added.json()["recovery_codes"])
+        self.assertEqual(outcome(added), (200, {"ok": True, "recovery_codes": None}))
         with self.Session() as db:
             (key,) = db.query(MfaCredential).filter_by(user_id=self.uid).all()
             key_id = str(key.id)
 
-        self.assertEqual(self.post("remove", {"id": "totp"}).status_code, 200)
+        self.assertEqual(outcome(self.post("remove", {"id": "totp"})), ACCEPTED)
         with self.Session() as db:
             user = db.get(User, self.uid)
             self.assertIsNone(user.mfa_totp_secret)
-            self.assertTrue(user.mfa_enabled)
+            self.assertIs(user.mfa_enabled, True)
             self.assertEqual(
                 db.query(MfaRecoveryCode).filter_by(user_id=self.uid).count(), 10
             )
         missing = self.post("remove", {"id": str(uuid.uuid4())})
-        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(outcome(missing), (404, {"detail": "Authenticator not found"}))
 
-        self.assertEqual(self.post("remove", {"id": key_id}).status_code, 200)
+        self.assertEqual(outcome(self.post("remove", {"id": key_id})), ACCEPTED)
         with self.Session() as db:
             user = db.get(User, self.uid)
-            self.assertFalse(user.mfa_enabled)
+            self.assertIs(user.mfa_enabled, False)
             self.assertEqual(
                 db.query(MfaRecoveryCode).filter_by(user_id=self.uid).count(), 0
             )
@@ -467,24 +513,25 @@ class LocalMfaTests(unittest.TestCase):
                 db.query(MfaCredential).filter_by(user_id=self.uid).count(), 0
             )
         refused = self.post("recovery/regenerate")
-        self.assertEqual(refused.status_code, 400)
-        self.assertEqual(refused.json()["detail"], "Enrol an authenticator first")
+        self.assertEqual(
+            outcome(refused), (400, {"detail": "Enrol an authenticator first"})
+        )
 
     def test_cancel_and_logout_invalidate_pending_challenge(self):
         self.start()
         token = self.client.cookies.get(mfa.cookie_name())
-        self.assertEqual(self.post("cancel").status_code, 200)
+        self.assertEqual(outcome(self.post("cancel")), ACCEPTED)
         self.client.cookies.set(
             mfa.cookie_name(), token, domain="keen.example", path="/"
         )
-        self.assertEqual(self.post("state").status_code, 401)
+        self.assertEqual(outcome(self.post("state")), EXPIRED)
         self.start()
         token = self.client.cookies.get(mfa.cookie_name())
         self.assertEqual(self.client.post("/v1/auth/logout").status_code, 204)
         self.client.cookies.set(
             mfa.cookie_name(), token, domain="keen.example", path="/"
         )
-        self.assertEqual(self.post("state").status_code, 401)
+        self.assertEqual(outcome(self.post("state")), EXPIRED)
 
     def test_full_application_middleware_boundary(self):
         from app import main
@@ -504,18 +551,29 @@ class LocalMfaTests(unittest.TestCase):
                 "/v1/auth/login",
                 json={"username": self.username, "password": self.password},
             )
-            self.assertEqual(result.status_code, 200, result.text)
-            self.assertEqual(client.get("/v1/auth/check").status_code, 401)
+            self.assertEqual(
+                outcome(result), (200, {"mfa_required": True, "next": "/mfa.html"})
+            )
+            # A pending second factor is no session.
+            self.assertEqual(
+                outcome(client.get("/v1/auth/check")),
+                (401, {"detail": "Not authenticated"}),
+            )
             state = client.post("/v1/auth/mfa/state", json={})
             self.assertEqual(state.status_code, 200, state.text)
-            self.assertEqual(state.headers.get("cache-control"), "no-store")
             self.assertEqual(
-                client.post(
-                    "/v1/auth/mfa/state",
-                    headers={"Origin": "https://evil.example"},
-                    json={},
-                ).status_code,
-                403,
+                (state.json()["stage"], state.headers.get("cache-control")),
+                ("enrol", "no-store"),
+            )
+            self.assertEqual(
+                outcome(
+                    client.post(
+                        "/v1/auth/mfa/state",
+                        headers={"Origin": "https://evil.example"},
+                        json={},
+                    )
+                ),
+                ORIGIN_REFUSED,
             )
 
     def test_security_mail_login_once_per_ip_after_full_mfa(self):
@@ -537,12 +595,14 @@ class LocalMfaTests(unittest.TestCase):
                     db.query(UserLoginIP).filter_by(user_id=self.uid).count(), 0
                 )
             self.assertEqual(
-                self.post(
-                    "verify-code", {"kind": "recovery", "code": self.codes[0]}
-                ).status_code,
-                200,
+                outcome(
+                    self.post(
+                        "verify-code", {"kind": "recovery", "code": self.codes[0]}
+                    )
+                ),
+                ACCEPTED,
             )
-            self.assertEqual(self.post("finish").status_code, 200)
+            self.assertEqual(outcome(self.post("finish")), self.signed_in())
             self.start("login")
             self.post("verify-code", {"kind": "recovery", "code": self.codes[1]})
             self.post("finish")
@@ -631,8 +691,22 @@ class LocalMfaTests(unittest.TestCase):
             patch.object(mail, "send_email") as send,
         ):
             mail.deliver_pending()
-            self.assertTrue(send.called)
-            self.assertIn("recovery codes", send.call_args.kwargs["body"])
+        # The class shares one database, so other tests' notices go out too.
+        (sent,) = [
+            call.kwargs
+            for call in send.call_args_list
+            if f"\nAccount: {self.username}\n" in call.kwargs["body"]
+        ]
+        self.assertEqual(
+            (sent["to_email"], sent["subject"]),
+            (
+                "alice@example.org",
+                "Keen security: Your Keen recovery codes were replaced",
+            ),
+        )
+        self.assertTrue(
+            sent["body"].startswith("Your Keen recovery codes were replaced.\n")
+        )
         with self.Session() as db:
             row = db.query(SecurityNotification).filter_by(user_id=self.uid).one()
             self.assertEqual(row.status, "sent")
@@ -682,8 +756,13 @@ class LocalMfaTests(unittest.TestCase):
                 x.subject
                 for x in db.query(SecurityNotification).filter_by(user_id=self.uid)
             ]
-            self.assertTrue(any("password was changed" in x for x in subjects))
-            self.assertTrue(any("password was reset" in x for x in subjects))
+            self.assertEqual(
+                subjects,
+                [
+                    "Keen security: Your Keen password was changed",
+                    "Keen security: Your Keen password was reset by an administrator",
+                ],
+            )
 
     def webauthn_registration(self, start=True, private=None, cid=None):
         if start:
@@ -767,20 +846,23 @@ class LocalMfaTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(len(response.json()["recovery_codes"]), 10)
+        # The registration challenge is spent.
         self.assertEqual(
-            self.post("webauthn/register", {"credential": credential}).status_code, 400
+            outcome(self.post("webauthn/register", {"credential": credential})),
+            (400, {"detail": "Registration failed; request another challenge"}),
         )
         self.start("login")
         options = self.post("webauthn/options").json()
         assertion = self.assertion(private, cid, options)
         self.assertEqual(
-            self.post("webauthn/verify", {"credential": assertion}).status_code, 200
+            outcome(self.post("webauthn/verify", {"credential": assertion})), ACCEPTED
         )
         self.assertEqual(
-            self.post("webauthn/verify", {"credential": assertion}).status_code, 400
+            outcome(self.post("webauthn/verify", {"credential": assertion})),
+            (400, {"detail": "Start verification first"}),
         )
-        self.assertEqual(self.post("finish").status_code, 200)
-        self.assertTrue(self.client.get("/protected").json()["authenticated"])
+        self.assertEqual(outcome(self.post("finish")), self.signed_in())
+        self.assertEqual(self.client.get("/protected").json(), {"authenticated": True})
 
     def test_webauthn_wrong_origin_cross_origin_wrong_user_and_tampered_signature(self):
         private, cid, credential = self.webauthn_registration()
@@ -805,35 +887,46 @@ class LocalMfaTests(unittest.TestCase):
             if kind == "signature":
                 assertion["response"]["signature"] = mfa.b64(b"invalid")
             self.assertEqual(
-                self.post("webauthn/verify", {"credential": assertion}).status_code, 400
+                outcome(self.post("webauthn/verify", {"credential": assertion})),
+                KEY_REFUSED,
+                kind,
             )
-            self.assertEqual(self.post("finish").status_code, 403)
+            self.assertEqual(outcome(self.post("finish")), UNVERIFIED)
 
     def test_verification_and_management_steps_need_their_own_stage(self):
         # Management-only steps are refused during verification, and
         # verification steps are refused during management.
         self.start()
         refused = self.post("verify-code", {"code": "123456"})
-        self.assertEqual(refused.status_code, 400)
-        self.assertIn("Start a second-factor verification first", refused.text)
-        self.assertEqual(self.post("webauthn/options").status_code, 400)
+        self.assertEqual(
+            outcome(refused),
+            (400, {"detail": "Start a second-factor verification first"}),
+        )
+        self.assertEqual(
+            outcome(self.post("webauthn/options")),
+            (400, {"detail": "Start verification first"}),
+        )
         confirm = self.post("totp/confirm", {"code": "123456"})
-        self.assertEqual(confirm.status_code, 400)
-        self.assertIn("Start authenticator setup first", confirm.text)
+        self.assertEqual(
+            outcome(confirm), (400, {"detail": "Start authenticator setup first"})
+        )
         with self.Session() as db:
             self.assertIsNone(db.get(User, self.uid).mfa_totp_secret)
-            self.assertFalse(db.get(User, self.uid).mfa_enabled)
+            self.assertIs(db.get(User, self.uid).mfa_enabled, False)
 
     def test_a_second_authenticator_needs_the_first_removed(self):
         self.enrol()
         refused = self.post("totp/start")
-        self.assertEqual(refused.status_code, 409)
-        self.assertIn("Remove the existing authenticator", refused.text)
         self.assertEqual(
-            self.post(
-                "totp/confirm", {"code": pyotp.TOTP(self.secret).now()}
-            ).status_code,
-            400,
+            outcome(refused),
+            (
+                409,
+                {"detail": "Remove the existing authenticator before adding another"},
+            ),
+        )
+        self.assertEqual(
+            outcome(self.post("totp/confirm", {"code": pyotp.TOTP(self.secret).now()})),
+            (400, {"detail": "Start authenticator setup first"}),
         )
         with self.Session() as db:
             row = db.query(MfaChallenge).filter_by(user_id=self.uid).one()
@@ -843,16 +936,18 @@ class LocalMfaTests(unittest.TestCase):
         self.enrol()
         self.start("login")
         refused = self.post("webauthn/options")
-        self.assertEqual(refused.status_code, 400)
-        self.assertIn("No security key or passkey is registered", refused.text)
+        self.assertEqual(
+            outcome(refused),
+            (400, {"detail": "No security key or passkey is registered"}),
+        )
         # Without an issued challenge no assertion can verify.
         private = ec.generate_private_key(ec.SECP256R1())
         cid = os.urandom(32)
         stray = self.assertion(private, cid, {"challenge": mfa.b64(os.urandom(32))})
         self.assertEqual(
-            self.post("webauthn/verify", {"credential": stray}).status_code, 400
+            outcome(self.post("webauthn/verify", {"credential": stray})), KEY_REFUSED
         )
-        self.assertEqual(self.post("finish").status_code, 403)
+        self.assertEqual(outcome(self.post("finish")), UNVERIFIED)
 
     def test_an_assertion_from_an_unregistered_key_is_refused(self):
         private, cid, credential = self.webauthn_registration()
@@ -865,13 +960,14 @@ class LocalMfaTests(unittest.TestCase):
         other = ec.generate_private_key(ec.SECP256R1())
         foreign = self.assertion(other, os.urandom(32), options)
         self.assertEqual(
-            self.post("webauthn/verify", {"credential": foreign}).status_code, 400
+            outcome(self.post("webauthn/verify", {"credential": foreign})), KEY_REFUSED
         )
-        self.assertEqual(self.post("finish").status_code, 403)
+        self.assertEqual(outcome(self.post("finish")), UNVERIFIED)
         # The ceremony is consumed: the genuine key needs a fresh challenge.
         genuine = self.assertion(private, cid, options)
         self.assertEqual(
-            self.post("webauthn/verify", {"credential": genuine}).status_code, 400
+            outcome(self.post("webauthn/verify", {"credential": genuine})),
+            KEY_REFUSED,
         )
 
     def test_at_most_ten_security_keys_and_no_duplicate_registrations(self):
@@ -882,7 +978,10 @@ class LocalMfaTests(unittest.TestCase):
         # Re-registering the same authenticator in a fresh ceremony is a conflict.
         _, _, again = self.webauthn_registration(start=False, private=private, cid=cid)
         duplicate = self.post("webauthn/register", {"credential": again})
-        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        self.assertEqual(
+            outcome(duplicate),
+            (409, {"detail": "This credential is already registered"}),
+        )
         with self.Session() as db:
             self.assertEqual(
                 db.query(MfaCredential).filter_by(user_id=self.uid).count(), 1
@@ -899,28 +998,13 @@ class LocalMfaTests(unittest.TestCase):
                 )
             db.commit()
         refused = self.post("webauthn/register-options")
-        self.assertEqual(refused.status_code, 400)
-        self.assertIn("maximum of ten", refused.text)
-
-
-class SecurityIpTests(unittest.TestCase):
-    """Proxy trust and IP normalisation do not require a database."""
-
-    def test_security_ip_trust_and_ipv6_normalisation(self):
-        from app.security.client_ip import normalise_ip, request_ip
-
-        request = Request(
-            {
-                "type": "http",
-                "headers": [(b"x-forwarded-for", b"192.0.2.99, 203.0.113.8, 10.0.0.2")],
-                "client": ("10.0.0.3", 1),
-            }
+        self.assertEqual(
+            outcome(refused),
+            (
+                400,
+                {"detail": "A maximum of ten security keys/passkeys can be registered"},
+            ),
         )
-        with patch.object(settings, "security_trusted_proxy_cidrs", ""):
-            self.assertEqual(request_ip(request), "10.0.0.3")
-        with patch.object(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24"):
-            self.assertEqual(request_ip(request), "203.0.113.8")
-        self.assertEqual(normalise_ip("::ffff:203.0.113.8"), "203.0.113.8")
 
 
 if __name__ == "__main__":
@@ -1014,19 +1098,19 @@ def test_five_wrong_codes_end_the_ceremony_and_tell_the_owner(ceremony):
     # TOTP and recovery-code guesses both count against the account.
     guesses = [(c, "totp") for c in ceremony.wrong[:3]] + [("F" * 32, "recovery")]
     for value, kind in guesses:
-        refused = ceremony.code(client, value, kind)
-        assert refused.status_code == 400
-        assert refused.json()["detail"] == "Invalid or already-used code"
+        assert outcome(ceremony.code(client, value, kind)) == INVALID_CODE
 
     ended = ceremony.code(client, ceremony.wrong[3])
 
-    assert ended.status_code == 401
-    assert ended.json()["detail"] == mfa_operations.CODES_REFUSED
+    assert outcome(ended) == (401, {"detail": mfa_operations.CODES_REFUSED})
     # The right code no longer completes the ended ceremony.
-    assert ceremony.code(client, ceremony.good).status_code == 401
+    assert outcome(ceremony.code(client, ceremony.good)) == EXPIRED
     origin = {"Origin": BASE}
-    assert client.post("/v1/auth/mfa/finish", headers=origin).status_code == 401
-    assert client.get("/v1/auth/check").status_code == 401
+    assert outcome(client.post("/v1/auth/mfa/finish", headers=origin)) == EXPIRED
+    assert outcome(client.get("/v1/auth/check")) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     db = ceremony.keen.db
     assert db.query(MfaChallenge).filter_by(user_id=ceremony.user.id).count() == 0
     (notice,) = ceremony.mail()
@@ -1054,8 +1138,7 @@ def test_five_wrong_codes_end_the_ceremony_and_tell_the_owner(ceremony):
     # sends no further mail.
     client = ceremony.sign_in(client)
     refused = ceremony.code(client, ceremony.good)
-    assert refused.status_code == 401
-    assert refused.json()["detail"] == mfa_operations.CODES_REFUSED
+    assert outcome(refused) == (401, {"detail": mfa_operations.CODES_REFUSED})
     assert len(ceremony.mail()) == 1
 
     # Once the hour has passed, the right code completes a new sign-in.
@@ -1063,29 +1146,35 @@ def test_five_wrong_codes_end_the_ceremony_and_tell_the_owner(ceremony):
     user.mfa_code_failures_since -= mfa.CODE_LOCKOUT
     db.commit()
     client = ceremony.sign_in(client)
-    assert ceremony.code(client, ceremony.good).status_code == 200
-    assert client.post("/v1/auth/mfa/finish", headers=origin).status_code == 200
-    assert client.get("/v1/auth/check").status_code == 204
+    assert outcome(ceremony.code(client, ceremony.good)) == ACCEPTED
+    assert outcome(client.post("/v1/auth/mfa/finish", headers=origin)) == (
+        200,
+        {"user": user.username, "user_id": str(user.id)},
+    )
+    checked = client.get("/v1/auth/check")
+    assert (checked.status_code, checked.content) == (204, b"")
 
 
 def test_wrong_codes_count_across_sign_ins(ceremony):
     """Starting again does not reset the count, so guesses stay bounded."""
     client = ceremony.sign_in()
     for value in ceremony.wrong[:4]:
-        assert ceremony.code(client, value).status_code == 400
+        assert outcome(ceremony.code(client, value)) == INVALID_CODE
 
     client = ceremony.sign_in(client)
     ended = ceremony.code(client, ceremony.wrong[4 % len(ceremony.wrong)])
 
-    assert ended.status_code == 401
-    assert ended.json()["detail"] == mfa_operations.CODES_REFUSED
+    assert outcome(ended) == (401, {"detail": mfa_operations.CODES_REFUSED})
     assert [n.subject for n in ceremony.mail()] == [
         "Keen security: Keen ended a two-factor verification after repeated "
         "incorrect codes"
     ]
     # A third sign-in gets no guess at all.
     client = ceremony.sign_in(client)
-    assert ceremony.code(client, ceremony.wrong[0]).status_code == 401
+    assert outcome(ceremony.code(client, ceremony.wrong[0])) == (
+        401,
+        {"detail": mfa_operations.CODES_REFUSED},
+    )
     ceremony.keen.db.expire_all()
     assert ceremony.keen.db.get(User, ceremony.user.id).mfa_code_failures == 5
 
@@ -1093,7 +1182,7 @@ def test_wrong_codes_count_across_sign_ins(ceremony):
 def test_fewer_wrong_codes_leave_the_ceremony_usable(ceremony):
     client = ceremony.sign_in()
     for value in ceremony.wrong[:4]:
-        assert ceremony.code(client, value).status_code == 400
+        assert outcome(ceremony.code(client, value)) == INVALID_CODE
     # Failed security-key assertions are not guesses: each consumes its own
     # challenge, and a forged one needs the key's private half.
     for _ in range(3):
@@ -1102,12 +1191,19 @@ def test_fewer_wrong_codes_leave_the_ceremony_usable(ceremony):
             json={"credential": {"id": "unknown"}},
             headers={"Origin": BASE},
         )
-        assert failed.status_code == 400
+        assert outcome(failed) == (
+            400,
+            {"detail": "Security key verification failed; request another challenge"},
+        )
 
-    assert ceremony.code(client, ceremony.good).status_code == 200
+    assert outcome(ceremony.code(client, ceremony.good)) == ACCEPTED
     origin = {"Origin": BASE}
-    assert client.post("/v1/auth/mfa/finish", headers=origin).status_code == 200
-    assert not any("two-factor verification" in n.subject for n in ceremony.mail())
+    assert outcome(client.post("/v1/auth/mfa/finish", headers=origin)) == (
+        200,
+        {"user": ceremony.user.username, "user_id": str(ceremony.user.id)},
+    )
+    # Nothing tells the owner about a ceremony that ends well.
+    assert ceremony.mail() == []
     # The right code clears the count.
     ceremony.keen.db.expire_all()
     user = ceremony.keen.db.get(User, ceremony.user.id)
@@ -1129,7 +1225,7 @@ def test_using_a_recovery_code_tells_the_owner(ceremony):
 
     used = ceremony.code(client, ceremony.recovery[0], "recovery")
 
-    assert used.status_code == 200
+    assert outcome(used) == ACCEPTED
     notices = [n for n in ceremony.mail() if "recovery code was used" in n.subject]
     assert [n.subject for n in notices] == [
         "Keen security: A recovery code was used for your Keen account"
@@ -1138,7 +1234,9 @@ def test_using_a_recovery_code_tells_the_owner(ceremony):
     assert ceremony.recovery[1] not in notices[0].body
     # The code is single use: a second ceremony cannot reuse it.
     client = ceremony.sign_in(ceremony.keen.client())
-    assert ceremony.code(client, ceremony.recovery[0], "recovery").status_code == 400
+    assert outcome(ceremony.code(client, ceremony.recovery[0], "recovery")) == (
+        INVALID_CODE
+    )
 
 
 def test_a_refused_second_factor_start_still_audits_the_account(ceremony):
@@ -1150,7 +1248,10 @@ def test_a_refused_second_factor_start_still_audits_the_account(ceremony):
         json={"username": ceremony.user.username, "password": PASSWORD},
     )
 
-    assert refused.status_code == 403
+    assert outcome(refused) == (
+        403,
+        {"detail": "Authentication request origin is not allowed"},
+    )
     db = ceremony.keen.db
     db.expire_all()
     rows = (

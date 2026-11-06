@@ -221,7 +221,10 @@ def test_samples_of_hidden_or_missing_events_are_refused(aud):
             json={"event_id": str(event_id)},
             headers=unsafe(client),
         )
-        assert refused.status_code == 404, refused.text
+        assert (refused.status_code, refused.json()) == (
+            404,
+            {"detail": "Event not found"},
+        )
     assert aud.db.query(AuditEvidence).count() == 0
 
 
@@ -259,13 +262,19 @@ def test_completed_audits_are_locked_until_reopened(aud):
     sampled = aud.call(
         aud.client, "POST", "/evidence", json={"evidence_url": "https://x.example"}
     )
-    assert sampled.json()["detail"].startswith(
-        "This audit is completed and cannot be sampled into."
+    assert (
+        sampled.json()["detail"]
+        == "This audit is completed and cannot be sampled into. Change its status back to Open or In progress before editing it."
     )
     finding = aud.call(
         aud.client, "POST", "/findings", json={"kind": "ofi", "title": "Late"}
     )
-    assert finding.status_code == 409
+    assert (finding.status_code, finding.json()) == (
+        409,
+        {
+            "detail": "This audit is completed and cannot be modified. Change its status back to Open or In progress before editing it."
+        },
+    )
     archived = aud.call(aud.client, "PATCH", json={"status": "archived"})
     assert archived.status_code == 409
     assert archived.json()["detail"] == (
@@ -356,7 +365,10 @@ def test_deleting_an_audit_needs_audits_admin_and_queues_its_report(aud):
     as_template = aud.admin.delete(
         f"/v1/audits/{template.id}", headers=unsafe(aud.admin)
     )
-    assert as_template.status_code == 400
+    assert (as_template.status_code, as_template.json()) == (
+        400,
+        {"detail": "Use the scheduled audit template delete endpoint for templates"},
+    )
 
     assert aud.call(aud.admin, "DELETE").json() == {"ok": True}
 
@@ -519,7 +531,18 @@ def test_a_new_audit_arrives_with_its_scope_and_attendees(aud):
         json={**payload, "attendees": [{"name": "x"}] * 101},
         headers=unsafe(aud.client),
     )
-    assert too_many.status_code == 422
+    assert (too_many.status_code, too_many.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "too_long",
+                    "loc": ["body", "attendees"],
+                    "msg": "List should have at most 100 items after validation, not 101",
+                }
+            ]
+        },
+    )
 
 
 def test_findings_keep_to_the_audit_framework(aud):
@@ -553,11 +576,14 @@ def test_findings_keep_to_the_audit_framework(aud):
     assert (moved["control"]["ref"], moved["kind"]) == ("A.2", "major_nc")
     cleared = aud.call(aud.client, "PATCH", path, json={"control": None}).json()
     assert cleared["control"] is None
-    for missing in ("not-a-uuid", str(uuid.uuid4())):
+    for missing, status, detail in (
+        ("not-a-uuid", 400, "finding_id must be a UUID"),
+        (str(uuid.uuid4()), 404, "Finding not found"),
+    ):
         response = aud.call(
             aud.client, "PATCH", f"/findings/{missing}", json={"title": "x"}
         )
-        assert response.status_code in (400, 404)
+        assert (response.status_code, response.json()) == (status, {"detail": detail})
 
 
 # --- Sample, attendee and finding identifiers ------------------------------------

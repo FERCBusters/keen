@@ -57,7 +57,11 @@ def test_framework_administration_needs_an_administrator(keen, admin):  # noqa: 
         "A",
         "B",
     ]
-    assert keen.client().get("/v1/frameworks").status_code == 401
+    refused = keen.client().get("/v1/frameworks")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     for method, path, body in (
         ("GET", "/v1/admin/framework-selection", None),
         (
@@ -98,7 +102,10 @@ def test_the_organisation_chooses_enabled_frameworks_and_a_default(keen, admin):
         {"enabled": ["A", "B"], "default": "A", "version": 0},
         status=409,
     )
-    assert stale["detail"].startswith("Configuration changed in another session")
+    assert (
+        stale["detail"]
+        == "Configuration changed in another session. Reload before saving."
+    )
     for body, detail in (
         (
             {"enabled": ["A", "A"], "default": "A", "version": 1},

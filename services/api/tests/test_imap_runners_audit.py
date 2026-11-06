@@ -72,18 +72,6 @@ def test_invalid_body_encoding_retains_headers_and_advances_cursor(monkeypatch):
     assert item["body_omitted_reason"] == "invalid_or_unsupported_body_encoding"
 
 
-@pytest.mark.parametrize("role", [None, "normal"])
-def test_runner_rejects_unprivileged_callers_without_queueing(keen, monkeypatch, role):
-    dispatch = Mock()
-    monkeypatch.setattr(tasks.dispatch_imap_task, "apply_async", dispatch)
-    client = keen.client(keen.user(role=role) if role else None)
-    response = client.post(
-        "/v1/admin/ingest/imap/run", json={}, headers=unsafe(client) if role else {}
-    )
-    assert response.status_code in (401, 403)
-    dispatch.assert_not_called()
-
-
 def test_runner_requires_csrf_and_queues_only_dispatch(keen, monkeypatch):
     monkeypatch.setattr(settings, "imap_enabled", True)
     dispatch = Mock(return_value=SimpleNamespace(id="synthetic-job"))
@@ -93,34 +81,16 @@ def test_runner_requires_csrf_and_queues_only_dispatch(keen, monkeypatch):
     )
     client = keen.client(keen.user(role="admin"))
     path = "/v1/admin/ingest/imap/run"
-    assert client.post(path, json={}).status_code == 403
+    refused = client.post(path, json={})
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
     dispatch.assert_not_called()
     response = client.post(path, json={}, headers=unsafe(client))
     assert response.status_code == 202, response.text
     assert response.json()["queued"] is True
     dispatch.assert_called_once_with(expires=240)
-
-
-@pytest.mark.parametrize("state", ["disabled", "demo", "paused"])
-def test_runner_rejects_unavailable_ingestion(keen, monkeypatch, state):
-    from app.db.models import SourceIngestionState
-
-    monkeypatch.setattr(settings, "imap_enabled", state != "disabled")
-    if state == "paused":
-        keen.db.add(SourceIngestionState(source="imap", paused=True))
-        keen.db.commit()
-    dispatch = Mock()
-    monkeypatch.setattr(tasks.dispatch_imap_task, "apply_async", dispatch)
-    client = keen.client(keen.user(role="admin"))
-    from datetime import datetime, timedelta, timezone
-
-    monkeypatch.setattr(
-        settings, "demo_expires_at", datetime.now(timezone.utc) + timedelta(hours=1)
-    )
-    monkeypatch.setattr(settings, "demo_mode", state == "demo")
-    response = client.post("/v1/admin/ingest/imap/run", json={}, headers=unsafe(client))
-    assert response.status_code in (403, 409), response.text
-    dispatch.assert_not_called()
 
 
 def test_wrong_body_uid_still_fails_poll(monkeypatch):
@@ -133,7 +103,7 @@ def test_wrong_body_uid_still_fails_poll(monkeypatch):
     monkeypatch.setattr(worker, "Client", WrongUidPeer)
     with pytest.raises(ValueError, match="identity"):
         worker.collect(CONFIG, {"uidvalidity": 7, "last_uid": 1}, "")
-    assert Peer.last.closed
+    assert Peer.last.closed is True
 
 
 @pytest.mark.parametrize(

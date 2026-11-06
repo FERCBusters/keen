@@ -135,8 +135,14 @@ def test_pestle_routes_follow_the_read_and_manage_permissions(pestle):
     # Existing risk readers keep read access to the PESTLE(E) register.
     risk_reader = app.client(app.user("risk.read"))
     for path in reads:
-        assert anonymous.get(path).status_code == 401, path
-        _send(nobody, "GET", path, status=403, framework="A")
+        refused = anonymous.get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
+        assert _send(nobody, "GET", path, status=403, framework="A") == {
+            "detail": "pestle.read permission required"
+        }
         pestle.read("GET", path, framework="A")
         _send(risk_reader, "GET", path, framework="A")
 
@@ -159,9 +165,15 @@ def test_pestle_routes_follow_the_read_and_manage_permissions(pestle):
         ("PATCH", f"/v1/pestle/items/{item['id']}/clauses", {"items": []}),
     )
     for method, path, body in writes:
-        pestle.read(method, path, body, status=403)
-        _send(risk_reader, method, path, body, status=403)
-        _send(nobody, method, path, body, status=403)
+        assert pestle.read(method, path, body, status=403) == {
+            "detail": "pestle.manage permission required"
+        }
+        assert _send(risk_reader, method, path, body, status=403) == {
+            "detail": "pestle.manage permission required"
+        }
+        assert _send(nobody, method, path, body, status=403) == {
+            "detail": "pestle.manage permission required"
+        }
     assert pestle.db.query(PestleItem).count() == 1
 
     # Risk managers can manage the register as well.
@@ -243,15 +255,30 @@ def test_items_are_validated_and_normalised(pestle):
     )
     assert updated["overall_relevance"]["code"] == "low"
     assert updated["rationale"] == HOSTILE  # not sent, so unchanged
-    pestle.manage("PATCH", path, {"item": "Missing type and lens"}, status=422)
-    pestle.manage("PATCH", "/v1/pestle/items/nope", _base_item(), status=400)
-    pestle.manage("PATCH", f"/v1/pestle/items/{uuid.uuid4()}", _base_item(), status=404)
-    pestle.read("GET", f"/v1/pestle/items/{uuid.uuid4()}", status=404)
+    assert pestle.manage(
+        "PATCH", path, {"item": "Missing type and lens"}, status=422
+    ) == {
+        "detail": [
+            {"type": "missing", "loc": ["body", "type"], "msg": "Field required"},
+            {"type": "missing", "loc": ["body", "lens"], "msg": "Field required"},
+        ]
+    }
+    assert pestle.manage(
+        "PATCH", "/v1/pestle/items/nope", _base_item(), status=400
+    ) == {"detail": "pestle item id must be a UUID"}
+    assert pestle.manage(
+        "PATCH", f"/v1/pestle/items/{uuid.uuid4()}", _base_item(), status=404
+    ) == {"detail": "PESTLE(E) item not found"}
+    assert pestle.read("GET", f"/v1/pestle/items/{uuid.uuid4()}", status=404) == {
+        "detail": "PESTLE(E) item not found"
+    }
 
     changelog = pestle.read("GET", f"{path}/changelog")["items"]
     assert [entry["action"] for entry in changelog] == ["updated", "created"]
     assert pestle.manage("DELETE", path) == {"ok": True}
-    pestle.read("GET", path, status=404)
+    assert pestle.read("GET", path, status=404) == {
+        "detail": "PESTLE(E) item not found"
+    }
     deleted = (
         pestle.db.query(EntityChangelog)
         .filter_by(entity_id=uuid.UUID(created["id"]), action="deleted")
@@ -301,12 +328,14 @@ def test_items_are_filtered_searched_and_paged(pestle):
     assert ids(type="social, technological") == [social["id"], tech["id"]]
     assert ids(lens="external") == [legal["id"], tech["id"]]
     assert ids(relevance_code="high,2") == [legal["id"], social["id"]]
-    for params in (
-        {"type": "Spiritual"},
-        {"lens": "Up"},
-        {"relevance_code": "critical"},
+    for params, detail in (
+        ({"type": "Spiritual"}, "type must be a valid PESTLE(E) type"),
+        ({"lens": "Up"}, "lens must be Internal or External"),
+        ({"relevance_code": "critical"}, "Unknown relevance_code"),
     ):
-        pestle.read("GET", "/v1/pestle/items", status=400, framework="A", **params)
+        assert pestle.read(
+            "GET", "/v1/pestle/items", status=400, framework="A", **params
+        ) == {"detail": detail}
     page = pestle.read("GET", "/v1/pestle/items", framework="A", limit=1, offset=1)
     assert [i["id"] for i in page["items"]] == [social["id"]]
     assert (page["total"], page["limit"], page["offset"]) == (3, 1, 1)
@@ -328,8 +357,20 @@ def test_business_processes_are_unique_and_tracked(pestle):
         "POST", "/v1/pestle/business-processes", {"name": "PAYROLL"}, status=400
     )
     assert response["detail"] == "Business process already exists"
-    pestle.manage("POST", "/v1/pestle/business-processes", {"name": "  "}, status=400)
-    pestle.manage("POST", "/v1/pestle/business-processes", {"name": ""}, status=422)
+    assert pestle.manage(
+        "POST", "/v1/pestle/business-processes", {"name": "  "}, status=400
+    ) == {"detail": "name is required"}
+    assert pestle.manage(
+        "POST", "/v1/pestle/business-processes", {"name": ""}, status=422
+    ) == {
+        "detail": [
+            {
+                "type": "string_too_short",
+                "loc": ["body", "name"],
+                "msg": "String should have at least 1 character",
+            }
+        ]
+    }
 
     listed = pestle.read("GET", "/v1/pestle/business-processes")
     assert listed["total"] == 2
@@ -345,19 +386,21 @@ def test_business_processes_are_unique_and_tracked(pestle):
     assert renamed["name"] == "Payroll run"
     response = pestle.manage("PATCH", path, {"name": HOSTILE.upper()}, status=400)
     assert response["detail"] == "Business process already exists"
-    pestle.manage(
+    assert pestle.manage(
         "PATCH", "/v1/pestle/business-processes/nope", {"name": "X"}, status=400
-    )
-    pestle.manage(
+    ) == {"detail": "business_process_id must be a UUID"}
+    assert pestle.manage(
         "PATCH",
         f"/v1/pestle/business-processes/{uuid.uuid4()}",
         {"name": "X"},
         status=404,
-    )
+    ) == {"detail": "Business process not found"}
     history = pestle.read("GET", f"{path}/changelog")["items"]
     assert [entry["action"] for entry in history] == ["updated", "created"]
     assert pestle.manage("DELETE", path) == {"ok": True}
-    pestle.read("GET", f"{path}/changelog", status=404)
+    assert pestle.read("GET", f"{path}/changelog", status=404) == {
+        "detail": "Business process not found"
+    }
     assert (
         pestle.db.query(EntityChangelog)
         .filter_by(entity_id=uuid.UUID(payroll["id"]), action="deleted")
@@ -414,12 +457,12 @@ def test_items_link_business_processes_and_clauses_by_relevance(pestle):
         status=404,
     )
     assert response["detail"] == "Business process not found"
-    pestle.manage(
+    assert pestle.manage(
         "PATCH",
         f"{path}/business-processes",
         {"items": [{"business_process_id": sales["id"], "relevance_code": "urgent"}]},
         status=400,
-    )
+    ) == {"detail": "Unknown relevance_code"}
     assert pestle.db.query(PestleBusinessProcessRelevance).count() == 2
 
     clauses = pestle.read("GET", f"{path}/clauses")
@@ -431,9 +474,17 @@ def test_items_link_business_processes_and_clauses_by_relevance(pestle):
         status=404,
     )
     assert response["detail"] == "Clause not found"
-    pestle.manage(
+    assert pestle.manage(
         "PATCH", f"{path}/clauses", {"items": [{"clause_id": "nope"}]}, status=422
-    )
+    ) == {
+        "detail": [
+            {
+                "type": "uuid_parsing",
+                "loc": ["body", "items", 0, "clause_id"],
+                "msg": "Input should be a valid UUID, invalid character: found `n` at 0",
+            }
+        ]
+    }
     linked_clauses = pestle.manage(
         "PATCH",
         f"{path}/clauses",
@@ -468,8 +519,12 @@ def test_items_link_business_processes_and_clauses_by_relevance(pestle):
         for row in clause_view["items"]
     ] == [(item["id"], "high")]
     assert pestle.read("GET", f"/v1/clauses/{pestle.parties.id}/pestle")["items"] == []
-    pestle.read("GET", f"/v1/clauses/{uuid.uuid4()}/pestle", status=404)
-    pestle.read("GET", "/v1/clauses/nope/pestle", status=400)
+    assert pestle.read("GET", f"/v1/clauses/{uuid.uuid4()}/pestle", status=404) == {
+        "detail": "Clause not found"
+    }
+    assert pestle.read("GET", "/v1/clauses/nope/pestle", status=400) == {
+        "detail": "clause_id must be a UUID"
+    }
 
     history = pestle.read("GET", f"{path}/changelog")["items"]
     paths = {entry["request_path"] for entry in history}
@@ -517,7 +572,9 @@ def test_visualisations_summarise_items_and_links(pestle):
     ] == [("Payroll", "high")]
     empty = pestle.read("GET", "/v1/pestle/visualisations", framework="C")
     assert empty["items"] == [] and empty["clause_links"] == []
-    pestle.read("GET", "/v1/pestle/visualisations", framework="A B", status=400)
+    assert pestle.read(
+        "GET", "/v1/pestle/visualisations", framework="A B", status=400
+    ) == {"detail": "Invalid framework"}
 
 
 def test_clause_links_skip_blank_entries_and_keep_the_first_of_duplicates(pestle):

@@ -310,12 +310,18 @@ def test_a_replayed_submission_is_recorded_once(metrics):
     assert len(metrics.entries()) == 1
     # The same request sent to the measure's other address is the same
     # submission; signing the measurement again makes a new one.
-    assert (
-        metrics.post(str(metrics.measure.id), content=body, headers=headers).status_code
-        == 409
+    refused = metrics.post(str(metrics.measure.id), content=body, headers=headers)
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "This submission was already received"},
     )
     resigned = metrics.post(content=body, timestamp=headers["X-Keen-Timestamp"] + "0")
-    assert resigned.status_code == 403  # a timestamp far from now
+    assert (resigned.status_code, resigned.json()) == (
+        403,
+        {
+            "detail": "X-Keen-Timestamp is more than five minutes from Keen's clock; sign each submission as it is sent and keep the sender's clock synchronised"
+        },
+    )
     later = str(int(headers["X-Keen-Timestamp"]) + 1)
     assert metrics.post(content=body, timestamp=later).status_code == 200
     assert len(metrics.entries()) == 2
@@ -333,7 +339,10 @@ def test_a_submission_that_is_not_recorded_can_be_sent_again(metrics, monkeypatc
     assert switched.status_code == 200, switched.text
 
     off = metrics.post(content=body, headers=headers)
-    assert off.status_code == 404
+    assert (off.status_code, off.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
 
     restored = admin.put(
         "/v1/admin/features",
@@ -354,7 +363,10 @@ def test_submissions_wait_when_replays_cannot_be_checked(metrics, monkeypatch):
 
     refused = metrics.post()
 
-    assert refused.status_code == 503
+    assert (refused.status_code, refused.json()) == (
+        503,
+        {"detail": "Submissions cannot be checked for replay right now; retry later."},
+    )
     assert refused.headers["retry-after"] == "60"
     assert metrics.entries() == []
 
@@ -588,10 +600,22 @@ def test_only_measure_managers_handle_submission_secrets(metrics):
     anonymous = metrics.keen.client()
 
     for method in ("post", "delete"):
-        assert getattr(anonymous, method)(path).status_code == 401
-        assert getattr(reader, method)(path, headers=unsafe(reader)).status_code == 403
+        refused = getattr(anonymous, method)(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
+        refused = getattr(reader, method)(path, headers=unsafe(reader))
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "isms.manage permission required"},
+        )
         # Cookie-authenticated changes still need the CSRF token.
-        assert getattr(manager, method)(path).status_code == 403
+        refused = getattr(manager, method)(path)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "CSRF token missing or invalid"},
+        )
     assert metrics.post().status_code == 200
 
 
@@ -607,17 +631,26 @@ def test_quiz_and_unknown_measures_take_no_secret(metrics):
     metrics.db.commit()
 
     quiz = manager.post(_secret_path(metrics.measure), headers=unsafe(manager))
-    assert quiz.status_code == 409
+    assert (quiz.status_code, quiz.json()) == (
+        409,
+        {"detail": "This measure belongs to a quiz; change it from the quiz"},
+    )
     other_framework = manager.post(
         f"/v1/isms/effectiveness-measures/{metrics.elsewhere.id}/submission-secret",
         headers=unsafe(manager),
     )
-    assert other_framework.status_code == 404
+    assert (other_framework.status_code, other_framework.json()) == (
+        404,
+        {"detail": "Effectiveness measure not found"},
+    )
     missing = manager.post(
         f"/v1/isms/effectiveness-measures/{uuid.uuid4()}/submission-secret",
         headers=unsafe(manager),
     )
-    assert missing.status_code == 404
+    assert (missing.status_code, missing.json()) == (
+        404,
+        {"detail": "Effectiveness measure not found"},
+    )
 
 
 def test_a_secret_needs_the_integration_key(metrics, monkeypatch):
@@ -646,7 +679,7 @@ def test_deleting_a_measure_removes_its_secret(metrics):
         headers=unsafe(manager),
     )
 
-    assert deleted.status_code == 200, deleted.text
+    assert (deleted.status_code, deleted.json()) == (200, {"ok": True})
     metrics.db.expire_all()
     assert metrics.db.get(IsmsEffectivenessMeasureSecret, measure_id) is None
 

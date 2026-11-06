@@ -784,7 +784,10 @@ def test_a_pattern_over_its_budget_does_not_match_and_the_run_continues(lk, capl
     assert "error" not in result, result
     assert result["created_events"] == 2
     assert all(len(event.mappings) == 1 for event in lk.events())
-    assert "Mapping rule slow exceeded its pattern time budget" in caplog.text
+    assert [r.getMessage() for r in caplog.records] == [
+        "Mapping rule slow exceeded its pattern time budget and was treated as not "
+        "matching; simplify its pattern"
+    ]
     assert "AAAA" not in caplog.text
 
 

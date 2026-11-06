@@ -50,6 +50,7 @@ THRESHOLDS = {
     "keen.workstation.screen_lock_seconds": ("screen_lock", "seconds"),
     "keen.workstation.antivirus_signature_age_days": ("antivirus", "days"),
 }
+TARGETED = {check for check, _ in THRESHOLDS.values()}
 COVERAGE = "evidence.collection.completed"
 # Every KEEN catalogue defines the posture checks alike.
 POSTURE_CATALOGUES = [{"id": "keen", "version": v} for v in KEEN_VERSIONS]
@@ -113,12 +114,22 @@ def coverage(event):
     return {"collector": str(attrs.get("collector", "")), **lists}
 
 
-def _pointer(db, agent, event, key):
+def _pointer(db, agent, event, key, status=None):
+    """Point the stream at its latest observation, and date its failure.
+
+    The date is KEEN's own clock when the stream's current run of attention
+    results began, so a device clock cannot place a failure before a risk
+    that treats it. A coverage stream has no status.
+    """
     row = db.get(AgentPostureObservation, (agent.id, key))
     if row is not None:
         if event.timestamp <= row.observed_at:
             return
         row.event_id, row.observed_at = event.id, event.timestamp
+        if status is not None:
+            row.attention_since = posture_risks.failing_since(
+                row.attention_since, status, utc_now_naive()
+            )
     else:
         count = db.query(AgentPostureObservation).filter_by(agent_id=agent.id).count()
         if count >= MAX_STREAMS:
@@ -131,6 +142,9 @@ def _pointer(db, agent, event, key):
                 stream_key=key,
                 event_id=event.id,
                 observed_at=event.timestamp,
+                attention_since=None
+                if status is None
+                else posture_risks.failing_since(None, status, utc_now_naive()),
             )
         )
     db.flush()
@@ -144,7 +158,9 @@ def record_observation(db, agent, event_id):
     found = observation(event)
     if found is not None:
         key = hashlib.sha256(json.dumps(found["stream"]).encode()).hexdigest()
-        _pointer(db, agent, event, key)
+        # Only the checks with organisation targets read them.
+        targets = thresholds(db) if found["check"] in TARGETED else {}
+        _pointer(db, agent, event, key, evaluate(found, targets)[0])
         return
     run = coverage(event)
     if run is not None:
@@ -351,8 +367,10 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
         else []
     )
     grouped: dict[str, list[Event]] = {}
+    failing_from = {}
     for pointer, event in evidence:
         grouped.setdefault(pointer.agent_id, []).append(event)
+        failing_from[event.id] = pointer.attention_since
     targets = thresholds(db)
     now = utc_now_naive()
     # Recorded risks show only where risk management is enabled; their titles
@@ -379,6 +397,8 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
         checks = []
         for key, label in CHECKS.items():
             rows = []
+            # When each failing scope's failure began.
+            starts = []
             for event in grouped.get(agent.id, []):
                 o = observation(event)
                 if o is None or o["check"] != key:
@@ -398,6 +418,8 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
                         "event_id": str(event.id),
                     }
                 )
+                if status == "attention":
+                    starts.append(failing_from[event.id])
             states = {r["status"] for r in rows}
             # Conservative across scopes: one unencrypted mount or unlocked session
             # cannot be hidden by another passing observation.
@@ -420,8 +442,18 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
             if agent.health.get("posture_overflow"):
                 status = "unknown"
             risks = links.get((agent.id, "", key, ""), [])
+            # The check's failure is as new as its newest failing scope; a scope
+            # with no recorded start leaves it undated.
+            treated = posture_risks.settle(
+                risks,
+                max(starts)
+                if status == "attention" and starts and None not in starts
+                else None,
+            )
             if status == "attention" and any(r["accepted"] for r in risks):
                 status = "accepted"
+            elif status == "attention" and treated:
+                status = "treated"
             checks.append(
                 {
                     "check": key,

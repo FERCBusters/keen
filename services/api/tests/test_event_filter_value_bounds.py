@@ -34,6 +34,9 @@ def test_an_overlong_value_in_a_filter_list_is_refused(keen, monkeypatch, name):
     assert queried == []
     # A value at the bound is accepted.
     accepted = reader.get("/v1/events", params={name: f"ci,{longest}"})
-    assert accepted.status_code == 200, accepted.text
+    assert (accepted.status_code, accepted.json()) == (
+        200,
+        {"total": 0, "limit": 50, "offset": 0, "items": []},
+    )
     (filters,) = queried
     assert longest in getattr(filters, name + "s")

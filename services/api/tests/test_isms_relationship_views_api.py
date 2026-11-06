@@ -137,7 +137,10 @@ def test_measures_recorded_against_a_source_are_listed_for_it(isms):  # noqa: F8
         {"metric_value": 1, "source_type": "made-up-source"},
         status=400,
     )
-    assert invented["detail"].startswith("Invalid metric source type")
+    assert (
+        invented["detail"]
+        == "Invalid metric source type; choose an existing Keen source or other"
+    )
 
     listed = isms.manage("GET", "/v1/sources/loki/effectiveness-measures")
 

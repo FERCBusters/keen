@@ -269,20 +269,25 @@ def test_an_entry_keen_cannot_read_is_skipped_and_logged_once(caplog, entry, pro
 
 
 @pytest.mark.parametrize(
-    "condition",
+    "condition,problem",
     [
-        {"action_regex": "(a+)+"},
-        {"fields": [{"path": ["summary"], "operator": "regex", "value": "("}]},
+        (
+            {"action_regex": "(a+)+"},
+            "action_regex: Nested repetition can stall ingestion",
+        ),
+        (
+            {"fields": [{"path": ["summary"], "operator": "regex", "value": "("}]},
+            "fields: Invalid pattern: missing ), unterminated subpattern at position 0",
+        ),
     ],
     ids=["unsafe-pattern", "unsafe-field-pattern"],
 )
-def test_unsafe_patterns_skip_their_rule(caplog, condition):
+def test_unsafe_patterns_skip_their_rule(caplog, condition, problem):
     with caplog.at_level(logging.WARNING, logger="app.mapping.rules"):
         assert parse(rule(when=condition)) == []
 
     (record,) = caplog.records
-    key = next(iter(condition))
-    assert record.getMessage().startswith(f"Skipping mapping rule test: {key}: ")
+    assert record.getMessage() == f"Skipping mapping rule test: {problem}"
 
 
 def test_the_record_of_logged_problems_stays_bounded(monkeypatch, caplog):
@@ -364,17 +369,6 @@ def test_every_target_form_maps_to_explicit_framework_references(map_to, expecte
     assert matched({}, rule(map_to=map_to)) == expected
 
 
-def test_a_target_kind_is_recorded_for_its_mappings():
-    entry = rule(map_to=[{"ref": "9.2", "kind": "CLAUSE"}, {"ref": "9.2"}])
-
-    details = evaluate_by_framework({}, parse(entry), details=True)
-
-    assert [(hit["ref"], hit["kind"]) for hit in details["A"]] == [
-        ("9.2", "clause"),
-        ("9.2", None),
-    ]
-
-
 def test_multi_framework_and_duplicate_provenance_choose_highest_confidence():
     rules = parse(
         {
@@ -446,8 +440,8 @@ def test_collector_identity_roundtrip_and_other_collection_rejection(
     identity = collector_id(source, section, key)
     event = {"source": source, "raw_pointer": {source: info}}
     assert event_collector(event) == identity
-    assert matches_collector(identity, event)
-    assert not matches_collector(collector_id(source, section, "other"), event)
+    assert matches_collector(identity, event) is True
+    assert matches_collector(collector_id(source, section, "other"), event) is False
     pointer = collector_pointer_filter(identity)
     assert all(info[k] == v for k, v in pointer[source].items())
 
@@ -458,9 +452,12 @@ def test_a_rule_can_require_one_collection():
 
     assert matched(
         {"source": "loki", "raw_pointer": {"loki": {"query_name": "ssh"}}}, entry
-    )
-    assert not matched(
-        {"source": "loki", "raw_pointer": {"loki": {"query_name": "sudo"}}}, entry
+    ) == {"A": ["C1"]}
+    assert (
+        matched(
+            {"source": "loki", "raw_pointer": {"loki": {"query_name": "sudo"}}}, entry
+        )
+        == {}
     )
 
 
@@ -470,25 +467,48 @@ def test_webhook_and_owner_collection_identity():
         "source": "webhook:monitor",
         "raw_pointer": {"webhook": {"provider": "monitor"}},
     }
-    assert matches_collector(identity, event)
+    assert matches_collector(identity, event) is True
     assert collector_pointer_filter(identity) == event["raw_pointer"]
     for source in ["forgejo", "gitea"]:
         identity = collector_id(source, "organizations", "org")
-        assert matches_collector(
-            identity, {"source": source, "raw_pointer": {source: {"owner": "org"}}}
+        pointer = {source: {"owner": "org"}}
+        assert (
+            matches_collector(identity, {"source": source, "raw_pointer": pointer})
+            is True
         )
-        assert not matches_collector(
-            identity, {"source": "other", "raw_pointer": {source: {"owner": "org"}}}
+        assert (
+            matches_collector(identity, {"source": "other", "raw_pointer": pointer})
+            is False
         )
 
 
+# Evidence is untrusted: provenance that is no mapping, or GitHub provenance
+# naming no feed, organisation or repository, names no collection item.
 @pytest.mark.parametrize(
     "event",
     [
         {},
         {"source": "unknown"},
         {"source": "loki", "raw_pointer": []},
+        {"source": "loki", "raw_pointer": ["queries"]},
+        {"source": "loki", "raw_pointer": "queries"},
+        {"source": "loki", "raw_pointer": 7},
         {"source": "loki", "raw_pointer": {"loki": "bad"}},
+        {"source": "github", "raw_pointer": {"github": {"owner": "acme"}}},
+        {"source": "github", "raw_pointer": {"github": {"repo": "keen"}}},
+        {"source": "github", "raw_pointer": {"github": {}}},
+    ],
+    ids=[
+        "no-source",
+        "unknown-source",
+        "empty-list",
+        "list",
+        "text",
+        "number",
+        "text-provenance",
+        "owner-alone",
+        "repo-alone",
+        "github-empty",
     ],
 )
 def test_missing_provenance_is_not_an_identity(event):
@@ -570,16 +590,20 @@ def test_bookstack_conditions_read_the_raw_pointer_before_the_payload():
     }
 
     def matches(**when):
-        return bool(matched(event, rule(when=when)))
+        return matched(event, rule(when=when))
 
-    assert matches(bookstack_page_slug="access-control", bookstack_book_id=7)
-    assert not matches(bookstack_page_slug="superseded")
-    assert not matches(bookstack_book_id=9)
-    assert matches(bookstack_page_slug="policies-access-control")
+    assert matches(bookstack_page_slug="access-control", bookstack_book_id=7) == {
+        "A": ["C1"]
+    }
+    assert matches(bookstack_page_slug="superseded") == {}
+    assert matches(bookstack_book_id=9) == {}
+    assert matches(bookstack_page_slug="policies-access-control") == {"A": ["C1"]}
     # Without a book slug only the page's own slug is a candidate.
     alone = {"raw_pointer": {"bookstack": {"page_slug": "access-control"}}}
-    assert matched(alone, rule(when={"bookstack_page_slug_regex": "^access"}))
-    assert not matched(alone, rule(when={"bookstack_page_slug_regex": "-access"}))
+    assert matched(alone, rule(when={"bookstack_page_slug_regex": "^access"})) == {
+        "A": ["C1"]
+    }
+    assert matched(alone, rule(when={"bookstack_page_slug_regex": "-access"})) == {}
 
 
 @pytest.mark.parametrize(
@@ -718,11 +742,17 @@ def test_shared_rules_cannot_be_changed_by_a_caller(monkeypatch, counted_parses)
     serve(monkeypatch, {"rules": [rule(), rule(id="other")]})
     rules = load_rules("unused.yml")
     rules.pop()
-    with pytest.raises(dataclasses.FrozenInstanceError):
+    with pytest.raises(
+        dataclasses.FrozenInstanceError, match="^cannot assign to field 'confidence'$"
+    ):
         rules[0].confidence = 0.1
-    with pytest.raises(dataclasses.FrozenInstanceError):
+    with pytest.raises(
+        dataclasses.FrozenInstanceError, match="^cannot assign to field 'source'$"
+    ):
         rules[0].when.source = "anything"
-    with pytest.raises(dataclasses.FrozenInstanceError):
+    with pytest.raises(
+        dataclasses.FrozenInstanceError, match="^cannot assign to field 'ref'$"
+    ):
         rules[0].targets[0].ref = "C9"
 
     assert [r.id for r in load_rules("unused.yml")] == ["test", "other"]

@@ -133,36 +133,45 @@ def test_credential_report_waits_within_its_deadline(monkeypatch):
     monkeypatch.setattr(aws, "REPORT_PAUSE", 0.0)
     iam = FakeIam(states=("STARTED", "COMPLETE"))
     assert aws.credential_report(iam)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.credential_report(FakeIam(states=("STARTED",)), deadline=0.0)
 
 
 def test_oversized_and_overlong_reports_are_refused(monkeypatch):
     monkeypatch.setattr(aws, "REPORT_LIMIT", 10)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.credential_report(FakeIam())
     monkeypatch.setattr(aws, "REPORT_LIMIT", 16 * 1024 * 1024)
     monkeypatch.setattr(aws, "MAX_IDENTITIES", 2)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.credential_report(FakeIam())
 
 
 def test_authorisation_snapshots_must_be_complete(monkeypatch):
     monkeypatch.setattr(aws, "DETAIL_PAGES", 1)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.authorisation_details(FakeIam())
 
 
 def test_policy_documents_are_read_in_either_form():
-    assert aws.allows_everything(
-        {"Statement": {"Effect": "Allow", "Action": "*", "Resource": "*"}}
+    assert (
+        aws.allows_everything(
+            {"Statement": {"Effect": "Allow", "Action": "*", "Resource": "*"}}
+        )
+        is True
     )
-    assert aws.allows_everything(
-        "%7B%22Statement%22%3A%5B%7B%22Effect%22%3A%22Allow%22%2C%22Action%22%3A%22%2A%22%2C%22Resource%22%3A%22%2A%22%7D%5D%7D"
+    assert (
+        aws.allows_everything(
+            "%7B%22Statement%22%3A%5B%7B%22Effect%22%3A%22Allow%22%2C%22Action%22%3A%22%2A%22%2C%22Resource%22%3A%22%2A%22%7D%5D%7D"
+        )
+        is True
     )
-    assert not aws.allows_everything("{not json")
-    assert not aws.allows_everything(
-        {"Statement": [{"Effect": "Deny", "Action": "*", "Resource": "*"}]}
+    assert aws.allows_everything("{not json") is False
+    assert (
+        aws.allows_everything(
+            {"Statement": [{"Effect": "Deny", "Action": "*", "Resource": "*"}]}
+        )
+        is False
     )
 
 
@@ -178,7 +187,7 @@ def test_a_denied_read_marks_its_group_and_leaves_the_rest():
     assert found["logging.audit_trail"].status == "met"
     assert result.identities == []
     assert result.label == "acme-prod"
-    assert session.iam.closed
+    assert session.iam.closed is True
 
 
 # --- logging and storage ----------------------------------------------------
@@ -192,7 +201,7 @@ def test_audit_trail_needs_a_logging_multi_region_trail():
     check = aws.audit_trail(FakeSession(trails=off))
     assert check.status == "attention"
     assert check.detail == "No multi-region trail is logging (1 trail, 0 logging)"
-    assert off.closed
+    assert off.closed is True
 
 
 def test_organisation_trails_without_status_leave_logging_undetermined():
@@ -205,7 +214,7 @@ def test_organisation_trails_without_status_leave_logging_undetermined():
     check = aws.audit_trail(FakeSession(trails=org))
     assert check.status == "unknown" and check.reason == "permission_denied"
     own = FakeCloudTrail(fail={TRAIL: "AccessDenied"})
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^permission_denied$"):
         aws.audit_trail(FakeSession(trails=own))
 
 
@@ -385,11 +394,11 @@ def test_network_regions_come_from_the_setting(monkeypatch):
 def test_network_listings_and_regions_are_bounded(monkeypatch):
     monkeypatch.setattr(settings, "aws_regions", "")
     monkeypatch.setattr(aws, "NETWORK_PAGES", 1)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.network(NetworkSession(regions_fixture()))
     monkeypatch.setattr(aws, "NETWORK_PAGES", 50)
     monkeypatch.setattr(aws, "MAX_REGIONS", 1)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.network(NetworkSession(regions_fixture()))
 
 
@@ -531,9 +540,9 @@ def test_blank_keys_use_the_host_role_chain(monkeypatch, keys):
     assert (
         options["config"].connect_timeout == 10 and options["config"].read_timeout == 30
     )
-    assert client.closed
+    assert client.closed is True
     monkeypatch.setattr(settings, "aws_secret_access_key", "half")
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         aws._base_session()
 
 
@@ -569,26 +578,26 @@ def test_failed_role_assumption_is_a_reason_without_provider_text(monkeypatch, k
 def test_plain_http_endpoints_are_refused(monkeypatch, keys):
     boto = FakeBoto(endpoint="http://localhost:4566")
     monkeypatch.setattr(aws, "boto3", boto)
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         aws.account_session(aws._base_session(), None)
-    assert boto.sessions[0].clients[0][2].closed
+    assert boto.sessions[0].clients[0][2].closed is True
 
 
 def test_bad_settings_are_configuration_problems(monkeypatch, keys):
     monkeypatch.setattr(aws, "boto3", FakeBoto())
     monkeypatch.setattr(settings, "aws_region", "not a region")
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         aws.account_session(aws._base_session(), None)
     monkeypatch.setattr(settings, "aws_region", "us-east-1")
     monkeypatch.setattr(settings, "aws_external_id", "bad id!")
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         aws.account_session(aws._base_session(), f"arn:aws:iam::{ACCOUNT}:role/Keen")
     for value in (
         "arn:aws:iam::12:role/Keen",
         f"arn:aws:iam::{ACCOUNT}:role/A,arn:aws:iam::{ACCOUNT}:role/A",
     ):
         monkeypatch.setattr(settings, "aws_role_arns", value)
-        with pytest.raises(Unavailable):
+        with pytest.raises(Unavailable, match="^not_configured$"):
             aws.roles()
     monkeypatch.setattr(
         settings,
@@ -645,7 +654,7 @@ def test_collect_marks_an_unreachable_account_and_reads_the_others(monkeypatch, 
         "account_session",
         lambda *_: (_ for _ in ()).throw(Unavailable("not_configured")),
     )
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^not_configured$"):
         aws.collect()
 
 
@@ -726,7 +735,7 @@ def test_activity_reads_sign_in_regions_and_iam_changes(monkeypatch, keys):
     assert [e.id for e in entries] == ["b", "a"]
     regions = [r for s, r in session.made if s == "cloudtrail"]
     assert regions == [*aws.SIGNIN_REGIONS, "us-east-1"]
-    assert trails["us-east-1"].closed
+    assert trails["us-east-1"].closed is True
 
 
 def test_activity_reports_an_incomplete_window(monkeypatch, keys):
@@ -827,7 +836,7 @@ def test_unreadable_report_values_and_documents_are_tolerated():
     iam.content = report(default_rows()).decode()
     assert aws.credential_report(iam)
     iam.content = b"\xff\xfe"
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.credential_report(iam)
     assert aws._trail_detail("{not json") == {}
     assert aws._trail_detail("[]") == {}
@@ -848,7 +857,7 @@ def test_password_policy_and_alias_failures(monkeypatch):
         def get_account_password_policy(self):
             raise EndpointConnectionError(endpoint_url="https://iam.amazonaws.com")
 
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.password_policy(Broken())
     session = FakeSession(FakeIam(fail={"list_account_aliases": "AccessDenied"}))
     assert aws._alias(session) == ""
@@ -914,7 +923,7 @@ def test_trails_without_an_arn_and_s3_endpoint_failures():
         def get_public_access_block(self, AccountId):  # noqa: N803 - mirrors boto3
             raise EndpointConnectionError(endpoint_url="https://s3-control")
 
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         aws.public_access(FakeSession(FakeIam(), control=Broken()))
     group = {"IpPermissions": ["not a permission"]}
     assert aws.reaches(group, 22) is False

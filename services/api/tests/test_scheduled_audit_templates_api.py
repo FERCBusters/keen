@@ -129,7 +129,10 @@ def test_attendees_are_active_people_named_from_their_account(audits):  # noqa: 
             "Unknown or inactive attendee user",
         )
     unnamed = _send(audits, "POST", ROOT, _template(attendees=[{"role": "Observer"}]))
-    assert unnamed.status_code == 400, unnamed.text
+    assert (unnamed.status_code, unnamed.json()) == (
+        400,
+        {"detail": "attendee name is required"},
+    )
 
     row = _created(
         audits,

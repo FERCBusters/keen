@@ -18,25 +18,66 @@ def test_record_detail_permissions_and_missing_records(keen):
     keen.db.commit()
     for kind, record in [("people", person), ("vendors", vendor)]:
         path = f"/v1/isms/{kind}/{record.id}"
-        assert keen.client().get(path).status_code == 401
-        assert keen.client(keen.user()).get(path).status_code == 403
+        refused = keen.client().get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
+        refused = keen.client(keen.user()).get(path)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "isms.read permission required"},
+        )
         for code in ["isms.read", "risk.read", "isms.manage"]:
             response = keen.client(keen.user(code)).get(path)
             assert response.status_code == 200, response.text
             assert response.json()["name"] == record.name
             assert response.json()["assets"] == []
         reader = keen.client(keen.user("isms.read"))
-        assert reader.get(f"/v1/isms/{kind}/{uuid.uuid4()}").status_code == 404
-        assert reader.get(f"/v1/isms/{kind}/not-a-uuid").status_code == 422
+        refused = reader.get(f"/v1/isms/{kind}/{uuid.uuid4()}")
+        assert (refused.status_code, refused.json()) == (
+            404,
+            {"detail": "Record not found"},
+        )
+        malformed = reader.get(f"/v1/isms/{kind}/not-a-uuid")
+        assert (malformed.status_code, malformed.json()) == (
+            422,
+            {
+                "detail": [
+                    {
+                        "type": "uuid_parsing",
+                        "loc": [
+                            "path",
+                            "person_id" if kind == "people" else "vendor_id",
+                        ],
+                        "msg": "Input should be a valid UUID, invalid character: "
+                        "found `n` at 0",
+                    }
+                ]
+            },
+        )
 
 
 def test_named_quiz_history_never_uses_cohort_reader_permission(world):
     keen = world.keen
     person = world.students[0].person
     path = f"/v1/isms/people/{person.id}/quizzes"
-    assert keen.client().get(path).status_code == 401
-    for codes in [(), ("isms.read",), ("quiz.read", "isms.read"), ("quiz.manage",)]:
-        assert keen.client(keen.user(*codes)).get(path).status_code == 403
+    refused = keen.client().get(path)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
+    for codes, missing in [
+        ((), "isms.read"),
+        (("isms.read",), "quiz.manage"),
+        (("quiz.read", "isms.read"), "quiz.manage"),
+        (("quiz.manage",), "isms.read"),
+    ]:
+        refused = keen.client(keen.user(*codes)).get(path)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": f"{missing} permission required"},
+        )
     response = keen.client(keen.user("quiz.manage", "isms.read")).get(path)
     assert response.status_code == 200, response.text
     assert response.json()["items"] == []
@@ -109,9 +150,15 @@ def test_round_history_paginates_and_rejects_unbounded_offsets(world):
     assert not {r["round_id"] for r in first["items"]} & {
         r["round_id"] for r in second["items"]
     }
-    assert client.get(path + "?offset=-1").status_code == 400
-    assert client.get(path + "?assignments_offset=100001").status_code == 400
-    assert client.get(f"/v1/isms/people/{uuid.uuid4()}/quizzes").status_code == 404
+    refused = client.get(path + "?offset=-1")
+    assert (refused.status_code, refused.json()) == (400, {"detail": "Invalid offset"})
+    refused = client.get(path + "?assignments_offset=100001")
+    assert (refused.status_code, refused.json()) == (400, {"detail": "Invalid offset"})
+    refused = client.get(f"/v1/isms/people/{uuid.uuid4()}/quizzes")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Person not found"},
+    )
 
 
 @pytest.mark.parametrize("feature", ["people", "quizzes", "isms"])
@@ -122,7 +169,10 @@ def test_quiz_summary_obeys_feature_flags_even_for_admin(world, feature):
     response = keen.client(admin).get(
         f"/v1/isms/people/{world.students[0].person.id}/quizzes"
     )
-    assert response.status_code == 404
+    assert (response.status_code, response.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
 
 
 def test_person_and_vendor_detail_obey_separate_features(keen):
@@ -132,5 +182,9 @@ def test_person_and_vendor_detail_obey_separate_features(keen):
     admin = keen.user(role="admin")
     features.update(keen.db, admin, 0, {"people": False})
     client = keen.client(admin)
-    assert client.get(f"/v1/isms/people/{person.id}").status_code == 404
+    refused = client.get(f"/v1/isms/people/{person.id}")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
     assert client.get(f"/v1/isms/vendors/{vendor.id}").status_code == 200

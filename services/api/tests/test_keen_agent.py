@@ -70,6 +70,12 @@ def record(identity=None, body="package upgraded"):
     }
 
 
+MALFORMED = {
+    "code": 3,
+    "message": "Invalid OTLP JSON logs; maximum 64 records and bounded attributes",
+}
+
+
 def logs(doc):
     return doc["resourceLogs"][0]["scopeLogs"][0]["logRecords"]
 
@@ -133,6 +139,7 @@ def setup(monkeypatch):
 def test_full_success_dedup_identity_and_artifact(setup):
     client, factory, headers, info, stored, _ = setup
     doc = record(body="password=do-not-store")
+    before = utc_now_naive()
     for _ in range(2):
         r = client.post("/v1/otlp/logs", json=doc, headers=headers)
         assert r.status_code == 200, r.text
@@ -144,20 +151,29 @@ def test_full_success_dedup_identity_and_artifact(setup):
         assert (
             row.normalized_payload["fields"]["resource.host.name"] == "untrusted-name"
         )
-        assert "do-not-store" not in row.summary
-        assert db.get(KeenAgent, info["agent"]["id"]).last_seen
+        assert row.summary == "password=REDACTED"
+        assert (
+            before
+            <= db.get(KeenAgent, info["agent"]["id"]).last_seen
+            <= utc_now_naive()
+        )
     assert len(stored) == 1 and b"do-not-store" not in stored[0]
 
 
 def test_uuid_conflict_rolls_back_whole_batch(setup):
     c, f, h, _, _, _ = setup
     existing = record()
-    assert c.post("/v1/otlp/logs", json=existing, headers=h).status_code == 200
+    accepted = c.post("/v1/otlp/logs", json=existing, headers=h)
+    assert (accepted.status_code, accepted.json()) == (200, {})
     new = record()
     changed = copy.deepcopy(logs(existing)[0])
     changed["body"] = {"stringValue": "changed"}
     logs(new).append(changed)
-    assert c.post("/v1/otlp/logs", json=new, headers=h).status_code == 409
+    refused = c.post("/v1/otlp/logs", json=new, headers=h)
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"code": 6, "message": "Event UUID reused with different content"},
+    )
     with f() as db:
         assert db.query(Event).count() == 1
 
@@ -177,11 +193,16 @@ def test_storage_failure_rolls_back_and_retry(setup, monkeypatch):
         return original(**kw)
 
     monkeypatch.setattr(common, "put_bytes", fail)
-    assert c.post("/v1/otlp/logs", json=doc, headers=h).status_code == 500
+    failed = c.post("/v1/otlp/logs", json=doc, headers=h)
+    assert (failed.status_code, failed.json()) == (
+        500,
+        {"code": 13, "message": "Evidence persistence failed; retry the batch"},
+    )
     with f() as db:
         assert db.query(Event).count() == 0 and db.query(Artifact).count() == 0
     monkeypatch.setattr(common, "put_bytes", original)
-    assert c.post("/v1/otlp/logs", json=doc, headers=h).status_code == 200
+    retried = c.post("/v1/otlp/logs", json=doc, headers=h)
+    assert (retried.status_code, retried.json()) == (200, {})
     with f() as db:
         assert db.query(Event).count() == 2
 
@@ -201,7 +222,10 @@ def test_a_failed_batch_is_logged_without_its_error_text(setup, monkeypatch, cap
             content=body,
             headers={**h, "Content-Type": "application/json"},
         )
-    assert r.status_code == 500 and "retry the batch" in r.text
+    assert (r.status_code, r.json()) == (
+        500,
+        {"code": 13, "message": "Evidence persistence failed; retry the batch"},
+    )
     batch = hashlib.sha256(body).hexdigest()[:16]
     (logged,) = [x for x in caplog.records if x.name == "app.api.routes.agents"]
     assert logged.getMessage() == (
@@ -223,76 +247,122 @@ def test_rotation_revocation_and_no_token_disclosure(setup):
     replacement = c.post("/v1/admin/agents/" + identity + "/rotate", json={}).json()[
         "token"
     ]
-    assert c.post("/v1/otlp/logs", json=record(), headers=h).status_code == 401
+    retired = c.post("/v1/otlp/logs", json=record(), headers=h)
+    assert (retired.status_code, retired.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
+    )
     fresh = {"Authorization": "Bearer " + replacement}
-    assert c.post("/v1/otlp/logs", json=record(), headers=fresh).status_code == 200
-    assert c.post("/v1/admin/agents/" + identity + "/revoke").status_code == 200
-    assert c.post("/v1/otlp/logs", json=record(), headers=fresh).status_code == 401
-    assert (
-        c.post("/v1/admin/agents/" + identity + "/rotate", json={}).status_code == 409
+    accepted = c.post("/v1/otlp/logs", json=record(), headers=fresh)
+    assert (accepted.status_code, accepted.json()) == (200, {})
+    revoked = c.post("/v1/admin/agents/" + identity + "/revoke")
+    assert (revoked.status_code, revoked.json()) == (200, {"ok": True})
+    refused = c.post("/v1/otlp/logs", json=record(), headers=fresh)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
+    )
+    reactivated = c.post("/v1/admin/agents/" + identity + "/rotate", json={})
+    assert (reactivated.status_code, reactivated.json()) == (
+        409,
+        {"detail": "Revoked agents cannot be reactivated; register a new identity"},
     )
 
 
 def test_expiry_demo_admin_boundary_and_health(setup, monkeypatch):
     c, f, h, info, _, app = setup
-    assert (
-        c.post(
-            "/v1/agents/heartbeat",
-            json={"version": "0.1", "queued": 5, "sources": {"syslog": "healthy"}},
-            headers=h,
-        ).status_code
-        == 200
+    heartbeat = c.post(
+        "/v1/agents/heartbeat",
+        json={"version": "0.1", "queued": 5, "sources": {"syslog": "healthy"}},
+        headers=h,
+    )
+    assert (heartbeat.status_code, heartbeat.json()) == (
+        200,
+        {"ok": True, "catalogue": {"id": "keen", "version": "2026.11"}},
     )
     assert c.get("/v1/admin/agents").json()["agents"][0]["health"]["queued"] == 5
     app.dependency_overrides.pop(api.require_admin)
-    assert (
-        c.post("/v1/admin/agents", json={"name": "forbidden"}, headers=h).status_code
-        == 401
+    forbidden = c.post("/v1/admin/agents", json={"name": "forbidden"}, headers=h)
+    assert (forbidden.status_code, forbidden.json()) == (
+        401,
+        {"detail": "Not authenticated"},
     )
     with f() as db:
         a = db.get(KeenAgent, info["agent"]["id"])
         a.expires_at = utc_now_naive() - timedelta(seconds=1)
         db.commit()
-    assert c.post("/v1/otlp/logs", json=record(), headers=h).status_code == 401
+    expired = c.post("/v1/otlp/logs", json=record(), headers=h)
+    assert (expired.status_code, expired.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
+    )
     monkeypatch.setattr(agents_operations.settings, "demo_mode", True)
-    assert c.post("/v1/otlp/logs", json=record(), headers=h).status_code == 403
-    assert c.post("/v1/agents/heartbeat", json={}, headers=h).status_code == 403
+    demo = "Agent ingestion and credential management are disabled in demo environments"
+    logs_refused = c.post("/v1/otlp/logs", json=record(), headers=h)
+    assert (logs_refused.status_code, logs_refused.json()) == (
+        403,
+        {"code": 7, "message": demo},
+    )
+    heartbeat_refused = c.post("/v1/agents/heartbeat", json={}, headers=h)
+    assert (heartbeat_refused.status_code, heartbeat_refused.json()) == (
+        403,
+        {"detail": demo},
+    )
 
 
 def test_limits_compression_format_and_rate(setup, monkeypatch):
     c, f, h, _, _, _ = setup
-    assert c.post("/v1/otlp/logs", json=record()).status_code == 401
-    assert (
-        c.post(
-            "/v1/otlp/logs",
-            content=b"x",
-            headers={**h, "Content-Type": "application/x-protobuf"},
-        ).status_code
-        == 415
+    anonymous = c.post("/v1/otlp/logs", json=record())
+    assert (anonymous.status_code, anonymous.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
-    assert (
-        c.post(
-            "/v1/otlp/logs",
-            content=gzip.compress(json.dumps(record()).encode()),
-            headers={
-                **h,
-                "Content-Type": "application/json",
-                "Content-Encoding": "gzip",
-            },
-        ).status_code
-        == 200
+    protobuf = c.post(
+        "/v1/otlp/logs",
+        content=b"x",
+        headers={**h, "Content-Type": "application/x-protobuf"},
     )
-    for data in (b"x" * 1048577, gzip.compress(b"x" * 1048577)):
+    assert (protobuf.status_code, protobuf.json()) == (
+        415,
+        {
+            "code": 12,
+            "message": "This endpoint supports OTLP/HTTP JSON; "
+            "configure exporter encoding=json",
+        },
+    )
+    compressed = c.post(
+        "/v1/otlp/logs",
+        content=gzip.compress(json.dumps(record()).encode()),
+        headers={
+            **h,
+            "Content-Type": "application/json",
+            "Content-Encoding": "gzip",
+        },
+    )
+    assert (compressed.status_code, compressed.json()) == (200, {})
+    for data, message in (
+        (b"x" * 1048577, "Request exceeds limit"),
+        (gzip.compress(b"x" * 1048577), "Decompressed batch exceeds 1 MiB"),
+    ):
         headers = {**h, "Content-Type": "application/json"}
         if len(data) < 1048577:
             headers["Content-Encoding"] = "gzip"
-        assert c.post("/v1/otlp/logs", content=data, headers=headers).status_code == 413
+        oversized = c.post("/v1/otlp/logs", content=data, headers=headers)
+        assert (oversized.status_code, oversized.json()) == (
+            413,
+            {"code": 8, "message": message},
+        )
     doc = record()
     logs(doc).extend([copy.deepcopy(logs(doc)[0]) for _ in range(64)])
-    assert c.post("/v1/otlp/logs", json=doc, headers=h).status_code == 400
+    crowded = c.post("/v1/otlp/logs", json=doc, headers=h)
+    assert (crowded.status_code, crowded.json()) == (400, MALFORMED)
     monkeypatch.setattr(api, "fixed_window_allow", lambda *a, **k: (False, 20))
     r = c.post("/v1/otlp/logs", json=record(), headers=h)
-    assert r.status_code == 429 and r.headers["Retry-After"] == "20"
+    assert (r.status_code, r.json(), r.headers["Retry-After"]) == (
+        429,
+        {"code": 8, "message": "Rate limited"},
+        "20",
+    )
 
 
 def test_generic_otlp_canonical_identity_and_scoped_dedup():
@@ -311,14 +381,12 @@ def test_generic_otlp_canonical_identity_and_scoped_dedup():
 @pytest.mark.parametrize("body", [b"[]", b"{", b'{"resourceLogs":[null]}'])
 def test_malformed_otlp_rejected(setup, body):
     c, _, h, _, _, _ = setup
-    assert (
-        c.post(
-            "/v1/otlp/logs",
-            content=body,
-            headers={**h, "Content-Type": "application/json"},
-        ).status_code
-        == 400
+    refused = c.post(
+        "/v1/otlp/logs",
+        content=body,
+        headers={**h, "Content-Type": "application/json"},
     )
+    assert (refused.status_code, refused.json()) == (400, MALFORMED)
 
 
 def test_plain_mapping_reasons_explain_exact_values():
@@ -330,9 +398,11 @@ def test_plain_mapping_reasons_explain_exact_values():
     reasons = _plain_mismatch_reasons(
         event, {"action": "Build", "outcome": "failure", "severity": 5}
     )
-    assert len(reasons) == 3
-    assert "Build" in reasons[0] and "build" in reasons[0]
-    assert "failure" in reasons[1] and "failed" in reasons[1]
+    assert reasons == [
+        "Activity: the rule asks for 'Build'; this event has 'build'.",
+        "Result: the rule asks for 'failure'; this event has 'failed'.",
+        "Severity: the rule asks for '5'; this event has '4'.",
+    ]
 
 
 def test_webhook_artifact_metadata_excludes_all_credential_headers(monkeypatch):
@@ -382,17 +452,25 @@ def test_real_middleware_keeps_agent_paths_scoped(setup, monkeypatch):
     main.app.dependency_overrides[api.get_db] = db
     try:
         client = TestClient(main.app, raise_server_exceptions=False)
-        assert (
-            client.post("/v1/otlp/logs", json=record(), headers=headers).status_code
-            == 200
+        accepted = client.post("/v1/otlp/logs", json=record(), headers=headers)
+        assert (accepted.status_code, accepted.json()) == (200, {})
+        heartbeat = client.post("/v1/agents/heartbeat", json={}, headers=headers)
+        assert (heartbeat.status_code, heartbeat.json()) == (
+            200,
+            {"ok": True, "catalogue": {"id": "keen", "version": "2026.11"}},
         )
-        assert (
-            client.post("/v1/agents/heartbeat", json={}, headers=headers).status_code
-            == 200
+        anonymous = client.post("/v1/otlp/logs", json=record())
+        assert (anonymous.status_code, anonymous.json()) == (
+            401,
+            {"code": 16, "message": "Invalid agent credential"},
         )
-        assert client.post("/v1/otlp/logs", json=record()).status_code == 401
-        assert client.get("/v1/admin/agents", headers=headers).status_code == 401
-        assert client.get("/v1/events", headers=headers).status_code == 401
+        # An agent token is no session: it opens no other route.
+        for path in ("/v1/admin/agents", "/v1/events"):
+            refused = client.get(path, headers=headers)
+            assert (refused.status_code, refused.json()) == (
+                401,
+                {"detail": "Not authenticated"},
+            ), path
     finally:
         main.app.dependency_overrides.pop(api.get_db, None)
 
@@ -400,19 +478,15 @@ def test_real_middleware_keeps_agent_paths_scoped(setup, monkeypatch):
 def test_json_log_bodies_receive_field_redaction(setup):
     client, factory, headers, _, stored, _ = setup
     body = json.dumps({"msg": "connected", "db_password": "DO-NOT-STORE"})
-    assert (
-        client.post(
-            "/v1/otlp/logs", json=record(body=body), headers=headers
-        ).status_code
-        == 200
-    )
+    accepted = client.post("/v1/otlp/logs", json=record(body=body), headers=headers)
+    assert (accepted.status_code, accepted.json()) == (200, {})
     with factory() as db:
         row = db.query(Event).one()
         assert json.loads(row.normalized_payload["raw"]) == {
             "msg": "connected",
             "db_password": "REDACTED",
         }
-        assert "DO-NOT-STORE" not in row.summary
+        assert row.summary == '{"msg":"connected","db_password":"REDACTED"}'
     assert len(stored) == 1 and b"DO-NOT-STORE" not in stored[0]
 
 
@@ -434,5 +508,5 @@ def test_batches_are_stored_off_the_event_loop(setup, monkeypatch):
 
     monkeypatch.setattr(common, "put_bytes", put)
     r = client.post("/v1/otlp/logs", json=record(), headers=headers)
-    assert r.status_code == 200, r.text
+    assert (r.status_code, r.json()) == (200, {})
     assert on_loop == [False]

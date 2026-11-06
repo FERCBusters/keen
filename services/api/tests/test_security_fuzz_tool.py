@@ -17,19 +17,32 @@ spec.loader.exec_module(fuzz)
 
 
 @pytest.mark.parametrize(
-    "url",
+    "url,problem",
     [
-        "https://example.org",
-        "http://localhost",
-        "http://169.254.169.254",
-        "http://127.0.0.1@evil.example",
-        "http://127.0.0.1/api",
-        "ftp://127.0.0.1",
+        (
+            "https://example.org",
+            "'example.org' does not appear to be an IPv4 or IPv6 address",
+        ),
+        (
+            "http://localhost",
+            "'localhost' does not appear to be an IPv4 or IPv6 address",
+        ),
+        ("http://169.254.169.254", "Only literal loopback addresses are supported"),
+        (
+            "http://127.0.0.1@evil.example",
+            "Use an HTTP(S) loopback origin without credentials, query or fragment",
+        ),
+        ("http://127.0.0.1/api", "Put the API prefix in each manifest path"),
+        (
+            "ftp://127.0.0.1",
+            "Use an HTTP(S) loopback origin without credentials, query or fragment",
+        ),
     ],
 )
-def test_fuzzer_rejects_non_loopback_or_ambiguous_targets(url):
-    with pytest.raises(ValueError):
+def test_fuzzer_rejects_non_loopback_or_ambiguous_targets(url, problem):
+    with pytest.raises(ValueError) as refused:
         fuzz.target(url)
+    assert str(refused.value) == problem
 
 
 def test_offline_mutations_are_reproducible():

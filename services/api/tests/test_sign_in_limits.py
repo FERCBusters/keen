@@ -66,7 +66,11 @@ def test_repeated_failures_lock_a_username_even_for_the_right_password(signin):
     user = signin.user()
     # Case and surrounding spaces do not give an attacker fresh attempts.
     for variant in (user.username.upper(), f" {user.username}", f"{user.username} "):
-        assert signin.attempt(variant, "wrong-password").status_code == 401
+        refused = signin.attempt(variant, "wrong-password")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Invalid username or password"},
+        )
 
     locked = signin.attempt(user.username)
 
@@ -82,7 +86,11 @@ def test_repeated_failures_lock_a_username_even_for_the_right_password(signin):
 def test_one_address_cannot_spray_many_usernames(signin):
     user = signin.user()
     for n in range(5):
-        assert signin.attempt(f"guess-{n}", "wrong-password").status_code == 401
+        refused_2 = signin.attempt(f"guess-{n}", "wrong-password")
+        assert (refused_2.status_code, refused_2.json()) == (
+            401,
+            {"detail": "Invalid username or password"},
+        )
 
     refused = signin.attempt(user.username)
 
@@ -98,7 +106,11 @@ def test_limited_attempts_never_reach_password_verification(signin):
     verified = len(signin.verified)
 
     for password in ("wrong-password", PASSWORD):
-        assert signin.attempt(user.username, password).status_code == 429
+        refused = signin.attempt(user.username, password)
+        assert (refused.status_code, refused.json()) == (
+            429,
+            {"detail": "Too many login attempts. Please try again later."},
+        )
     assert len(signin.verified) == verified
 
 
@@ -168,7 +180,11 @@ def test_signing_in_replaces_a_session_planted_in_the_browser(signin):
     assert issued and issued != planted
     assert browser.get("/v1/auth/check").headers["x-keen-user"] == victim.username
     # The planted session is revoked rather than upgraded.
-    assert attacker.get("/v1/auth/check").status_code == 401
+    refused = attacker.get("/v1/auth/check")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 @pytest.mark.parametrize(
@@ -220,14 +236,25 @@ def test_a_blank_username_is_refused_before_any_work(signin, username):
 def test_oversized_credentials_are_refused_before_any_work(signin):
     user = signin.user()
 
-    for payload in (
-        {"username": "u" * 257, "password": PASSWORD},
-        {"username": user.username, "password": "p" * 1025},
+    for payload, field, most in (
+        ({"username": "u" * 257, "password": PASSWORD}, "username", 256),
+        ({"username": user.username, "password": "p" * 1025}, "password", 1024),
     ):
         refused = signin.keen_client.post(
             "/v1/auth/login", json=payload, headers={"Origin": BASE}
         )
-        assert refused.status_code == 422
+        assert (refused.status_code, refused.json()) == (
+            422,
+            {
+                "detail": [
+                    {
+                        "type": "string_too_long",
+                        "loc": ["body", field],
+                        "msg": f"String should have at most {most} characters",
+                    }
+                ]
+            },
+        )
     assert signin.verified == [] and signin.store.keys("keen:rl:login:*") == []
 
 
@@ -237,11 +264,18 @@ def test_an_account_named_unknown_has_its_own_limit(signin):
     user.username = "Unknown"
     signin.db.commit()
     for _ in range(3):
-        assert signin.attempt("Unknown", "wrong-password").status_code == 401
+        refused = signin.attempt("Unknown", "wrong-password")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Invalid username or password"},
+        )
 
     locked = signin.attempt("Unknown")
 
-    assert locked.status_code == 429
+    assert (locked.status_code, locked.json()) == (
+        429,
+        {"detail": "Too many login attempts. Please try again later."},
+    )
     assert not signin.session_set(locked)
 
 
@@ -261,11 +295,18 @@ def test_spellings_of_a_username_share_one_allowance(signin):
     (key,) = {login_limit_key(v) for v in variants}
     assert len(key) == len("keen:rl:login:user:") + 64 and "ada" not in key
     for variant in variants:
-        assert signin.attempt(variant, "wrong-password").status_code == 401
+        refused = signin.attempt(variant, "wrong-password")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Invalid username or password"},
+        )
 
     locked = signin.attempt("Ada Lovelace")
 
-    assert locked.status_code == 429
+    assert (locked.status_code, locked.json()) == (
+        429,
+        {"detail": "Too many login attempts. Please try again later."},
+    )
     assert not signin.session_set(locked)
 
 
@@ -282,7 +323,11 @@ def test_spellings_that_reach_one_directory_entry_share_one_allowance(
     state["bind"] = False
     entry = ("bind", "uid=alice,ou=People,dc=example")
     for name in ("alice", "alice.", "alice@"):
-        assert signin.attempt(name, "wrong", method="ldap").status_code == 401
+        refused = signin.attempt(name, "wrong", method="ldap")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Invalid username or password"},
+        )
     assert events.count(entry) == 3
 
     state["bind"] = True
@@ -318,9 +363,21 @@ def test_sign_in_attempts_are_audited_without_unmatched_usernames(signin):
     signin.db.commit()
     typed = "my-secret-password-in-the-wrong-box"
 
-    assert signin.attempt(user.username, "wrong-password").status_code == 401
-    assert signin.attempt(inactive.username).status_code == 401
-    assert signin.attempt(typed, "anything").status_code == 401
+    refused = signin.attempt(user.username, "wrong-password")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid username or password"},
+    )
+    refused = signin.attempt(inactive.username)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid username or password"},
+    )
+    refused = signin.attempt(typed, "anything")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid username or password"},
+    )
     assert signin.attempt(user.username).status_code == 200
 
     def outcome(query):

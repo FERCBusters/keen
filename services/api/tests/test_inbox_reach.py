@@ -29,7 +29,22 @@ def _choose_delivery(app, account, delivery, address):
         json={"notification_delivery": delivery},
         headers=unsafe(client),
     )
-    assert response.status_code == 200, response.text
+    assert (response.status_code, response.json()) == (
+        200,
+        {
+            "use_local_timezone": False,
+            "timezone": None,
+            "theme": "ink",
+            "date_format": "default",
+            "auto_apply_filters": False,
+            "source_colors": {},
+            "default_visualisation": None,
+            "landing_page": "/",
+            "default_framework": None,
+            "notification_delivery": "email",
+            "notification_email": True,
+        },
+    )
     return client
 
 

@@ -224,11 +224,13 @@ def test_events_outside_the_window_shape_last_seen_only(db, user):
 def test_other_sources_and_window_sizes_are_validated(db, user):
     add_events(db, hourly(5), source="other")
     assert run(db, user)["status"] == "no_events"
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError, match="^days must be between 7 and 365$"):
         run(db, user, days=3)
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError, match="^days must be between 7 and 365$"):
         run(db, user, days=1000)
-    with pytest.raises(DomainError):
+    with pytest.raises(
+        DomainError, match="^source must be between 1 and 64 characters$"
+    ):
         insights.source_insights(
             source_name="", framework=FW, db=db, user=user, now=NOW
         )
@@ -277,11 +279,11 @@ def test_event_control_suggestions_rank_the_catalogue_and_skip_mapped_refs(db, u
     assert result["unmapped"] is False
     assert result["already_mapped"] == ["BK-1"]
     assert "BK-1" not in [item["ref"] for item in result["items"]]
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError, match="^Event not found$"):
         event_control_suggestions(
             event_id=str(uuid.uuid4()), framework=FW, db=db, user=user
         )
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError, match="^event_id must be a UUID$"):
         event_control_suggestions(event_id="nope", framework=FW, db=db, user=user)
 
 
@@ -305,15 +307,39 @@ def test_insight_routes_need_events_read(keen):  # noqa: F811 - fixture imported
         f"/v1/events/{event_id}/control-suggestions?framework={FW}",
     ]
     for path in paths:
-        assert keen.client().get(path).status_code == 401
-        assert keen.client(keen.user()).get(path).status_code == 403
+        refused = keen.client().get(path)
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
+        refused = keen.client(keen.user()).get(path)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "events.read permission required"},
+        )
     reader = keen.client(keen.user("events.read"))
     insight = reader.get(paths[0])
     assert insight.status_code == 200, insight.text
     assert insight.json()["source"] == "ci"
     assert insight.json()["lifetime_events"] >= 1
-    assert reader.get(paths[0] + "&days=2").status_code == 400
-    assert reader.get(paths[0] + "&days=abc").status_code == 422
+    refused = reader.get(paths[0] + "&days=2")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "days must be between 7 and 365"},
+    )
+    refused = reader.get(paths[0] + "&days=abc")
+    assert (refused.status_code, refused.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "int_parsing",
+                    "loc": ["query", "days"],
+                    "msg": "Input should be a valid integer, unable to parse string as an integer",
+                }
+            ]
+        },
+    )
     suggestions = reader.get(paths[1])
     assert suggestions.status_code == 200, suggestions.text
     assert suggestions.json()["event_id"] == event_id

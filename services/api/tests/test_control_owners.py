@@ -126,4 +126,8 @@ def test_owners_find_what_they_own_under_my_controls(lab):
     ] * 3
     features.update(app.db, app.user(role="admin"), 1, {"controls": False})
     assert mine.get("/v1/me/controls").json() == {"items": []}
-    assert app.client().get("/v1/me/controls").status_code == 401
+    refused = app.client().get("/v1/me/controls")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )

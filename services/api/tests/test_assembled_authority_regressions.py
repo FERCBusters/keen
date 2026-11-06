@@ -10,7 +10,7 @@ import asyncio
 import json
 import time
 import uuid
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import fakeredis
 import pytest
@@ -187,7 +187,11 @@ def test_control_statistics_report_an_unsupported_range_as_a_bad_request(
     assert response.status_code == 400
     assert response.json()["detail"] == "The requested date range is not supported"
     plain = keen.client(keen.user())
-    assert plain.get("/v1/stats/controls").status_code == 200
+    answer = plain.get("/v1/stats/controls")
+    assert (answer.status_code, answer.json()) == (
+        200,
+        {"items": [], "stats_source": "evidence_withheld"},
+    )
     stats._stats_controls.assert_called_once()
     # Anonymous and inactive callers share the anonymous cache scope.
     inactive = keen.user()
@@ -202,13 +206,21 @@ def test_control_statistics_report_an_unsupported_range_as_a_bad_request(
 
 def test_event_aggregates_require_events_read(keen):
     plain = keen.client(keen.user())
-    assert plain.get("/v1/events").status_code == 403
+    refused = plain.get("/v1/events")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "events.read permission required"},
+    )
     for path in (
         "/v1/charts/event_volume_timeseries",
         "/v1/graph/control_source",
         "/v1/graph/clause_source",
     ):
-        assert plain.get(path).status_code == 403, path
+        refused = plain.get(path)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "events.read permission required"},
+        )
     summary = plain.get("/v1/stats/summary").json()
     assert summary["events"] is None
     assert summary["controls"]["with_evidence_in_scope"] is None
@@ -219,7 +231,11 @@ def test_event_aggregates_require_events_read(keen):
     )
 
     reader = keen.client(keen.user("events.read"))
-    assert reader.get("/v1/stats/summary").json()["events"] is not None
+    assert reader.get("/v1/stats/summary").json()["events"] == {
+        "total": 0,
+        "mapped": 0,
+        "unmapped": 0,
+    }
     if keen.postgres:
         for path in (
             "/v1/graph/control_source",
@@ -238,7 +254,7 @@ def _risk_owned_by_new_role(keen):
         json={"name": "Owner " + uuid.uuid4().hex[:6], "node_type": "role"},
         headers=unsafe(admin),
     )
-    assert node.status_code in (200, 201), node.text
+    assert node.status_code == 200, node.text
     risk = admin.post(
         "/v1/risks",
         json={
@@ -251,7 +267,7 @@ def _risk_owned_by_new_role(keen):
         },
         headers=unsafe(admin),
     )
-    assert risk.status_code in (200, 201), risk.text
+    assert risk.status_code == 200, risk.text
     return node.json()["id"], risk.json()["id"]
 
 
@@ -266,11 +282,21 @@ def test_isms_manager_cannot_join_or_remove_a_risk_owning_role(keen):
         json={"user_ids": [str(manager.id)]},
         headers=unsafe(client),
     )
-    assert join.status_code == 403, join.text
+    assert (join.status_code, join.json()) == (
+        403,
+        {
+            "detail": "risk.manage permission is required to change the members of a role that owns risks"
+        },
+    )
     assert client.get(f"/v1/risks/{risk_id}").status_code == 403
     assert client.get("/v1/me/risks").json().get("items", []) == []
     deleted = client.delete(f"/v1/isms/org-nodes/{node_id}", headers=unsafe(client))
-    assert deleted.status_code == 403
+    assert (deleted.status_code, deleted.json()) == (
+        403,
+        {
+            "detail": "risk.manage permission is required to delete a role that owns risks"
+        },
+    )
 
     # Ordinary organisation chart edits remain available.
     renamed = client.patch(
@@ -299,20 +325,38 @@ def test_isms_manager_can_manage_members_of_roles_without_risks(keen):
         json={"name": "Plain role", "node_type": "role"},
         headers=unsafe(client),
     )
-    assert node.status_code in (200, 201), node.text
+    assert node.status_code == 200, node.text
     updated = client.patch(
         f"/v1/isms/org-nodes/{node.json()['id']}",
         json={"user_ids": [str(manager.id)]},
         headers=unsafe(client),
     )
     assert updated.status_code == 200, updated.text
+    assert updated.json()["people"] == [
+        {
+            "relationship_type": "member",
+            "user": {
+                "id": str(manager.id),
+                "username": manager.username,
+                "email": None,
+            },
+        }
+    ]
 
 
 # --- Sign-out --------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/v1/auth/logout", "/v1/auth/oidc/logout"])
-def test_sign_out_fails_closed_when_revocation_fails(keen, monkeypatch, path):
+@pytest.mark.parametrize(
+    "path,signed_out",
+    [
+        ("/v1/auth/logout", (204, "")),
+        ("/v1/auth/oidc/logout", (200, '{"logout_url":"/login.html"}')),
+    ],
+)
+def test_sign_out_fails_closed_when_revocation_fails(
+    keen, monkeypatch, path, signed_out
+):
     client = keen.client(keen.user())
     sid = client.cookies.get(session_cookie_name())
     with monkeypatch.context() as patch:
@@ -325,10 +369,14 @@ def test_sign_out_fails_closed_when_revocation_fails(keen, monkeypatch, path):
     assert client.get("/v1/me").status_code == 200
 
     done = client.post(path, headers=unsafe(client))
-    assert done.status_code in (200, 204), done.text
+    assert (done.status_code, done.text) == signed_out
     replay = keen.client()
     replay.cookies.set(session_cookie_name(), sid)
-    assert replay.get("/v1/me").status_code == 401
+    refused = replay.get("/v1/me")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 # --- Absolute session lifetime ----------------------------------------------------
@@ -370,7 +418,10 @@ def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
     _age_session(keen, sid, 3600 - 120)
     # The first request also stores the session's permission snapshot.
     assert client.get("/v1/auth/check").status_code == 204
-    assert json.loads(keen.store.get(session_key(sid)))["authz_version"] is not None
+    assert (
+        json.loads(keen.store.get(session_key(sid)))["authz_version"]
+        == user.authz_version
+    )
     assert 0 < keen.store.ttl(session_key(sid)) <= 120
     assert client.get("/v1/me").status_code == 200
     assert 0 < keen.store.ttl(session_key(sid)) <= 120
@@ -432,7 +483,11 @@ def test_failed_webhook_persistence_releases_replay_claim(keen, monkeypatch):
     assert retried.status_code == 200, retried.text
     assert len(calls) == 2
     # A delivery that did persist is still rejected as a replay.
-    assert client.post(path, content=body, headers=headers).status_code == 400
+    refused = client.post(path, content=body, headers=headers)
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Potential replay attack detected: duplicate webhook payload"},
+    )
     assert len(calls) == 2
 
 
@@ -467,13 +522,20 @@ def test_webhook_allowances_are_per_built_in_provider_and_address(keen, monkeypa
     # without the secret, to any provider name, spend one refusals' allowance.
     shared = client_from("198.51.100.4")
     for index in range(100):
-        assert shared.post(f"/v1/webhooks/made-up-{index}/alert").status_code == 403
+        answer = shared.post(f"/v1/webhooks/made-up-{index}/alert")
+        assert (answer.status_code, answer.json()) == (
+            403,
+            {"detail": "Invalid webhook secret"},
+        )
     for path in ("/v1/webhooks/made-up-new/alert", "/v1/webhooks/monitor/alert"):
         refused = shared.post(path, headers={"X-Monitor-Secret": "wrong"})
         assert refused.status_code == 429 and refused.headers["Retry-After"]
     # A delivery whose secret verifies, from the same address, still lands.
     delivered = shared.post("/v1/webhooks/monitor/alert", content=b"{}", headers=good)
-    assert delivered.status_code == 200, delivered.text
+    assert (delivered.status_code, delivered.json()) == (
+        200,
+        {"ok": True, "event_id": "e"},
+    )
     assert len(stored) == 1
     # Verified deliveries have an allowance for each built-in provider.
     for index in range(100):
@@ -486,13 +548,14 @@ def test_webhook_allowances_are_per_built_in_provider_and_address(keen, monkeypa
     over = shared.post(
         "/v1/webhooks/cloudtrail_source_ip/a", content=b"{}", headers=good
     )
-    assert over.status_code == 429
-    assert (
-        shared.post(
-            "/v1/webhooks/monitor/alert", content=b'{"n": 1}', headers=good
-        ).status_code
-        == 200
+    assert (over.status_code, over.json()) == (
+        429,
+        {"detail": "Webhook rate limit exceeded"},
     )
+    answer = shared.post(
+        "/v1/webhooks/monitor/alert", content=b'{"n": 1}', headers=good
+    )
+    assert (answer.status_code, answer.json()) == (200, {"ok": True, "event_id": "e"})
     # The store holds the refusals' counter and one per provider used.
     assert sorted(keen.store.keys("keen:rl:webhook:*:ip:*")) == [
         "keen:rl:webhook:other:ip:198.51.100.4",
@@ -501,12 +564,16 @@ def test_webhook_allowances_are_per_built_in_provider_and_address(keen, monkeypa
     ]
     # Another address has its own allowances, and metric submissions without
     # a valid signature spend the refusals' allowance of their address.
-    assert (
-        client_from("198.51.100.5").post("/v1/webhooks/monitor/alert").status_code
-        == 403
+    answer = client_from("198.51.100.5").post("/v1/webhooks/monitor/alert")
+    assert (answer.status_code, answer.json()) == (
+        403,
+        {"detail": "Invalid webhook secret"},
     )
     metric = shared.post("/v1/webhooks/isms/effectiveness-metrics/m-1", content=b"{}")
-    assert metric.status_code == 429
+    assert (metric.status_code, metric.json()) == (
+        429,
+        {"detail": "Webhook rate limit exceeded"},
+    )
 
 
 # --- Metric webhook redaction ---------------------------------------------------
@@ -578,7 +645,10 @@ def test_metric_webhook_redacts_extracted_fields_and_history(keen, monkeypatch):
     )
     for value in secrets:
         assert value not in stored and value not in history, value
-    assert row.source_url.startswith("https://grafana.example/d?")
+    assert (
+        row.source_url
+        == "https://grafana.example/d?api_key=REDACTED#access_token=REDACTED"
+    )
 
 
 # --- Write-only integration credentials -----------------------------------------
@@ -620,34 +690,6 @@ def test_integration_secret_presentation_changes_require_reentry(keen, monkeypat
     assert resupplied.status_code == 200, resupplied.text
 
 
-def test_oauth_token_path_change_requires_reentry(keen, monkeypatch):
-    monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
-    client = keen.client(keen.user(role="admin"))
-    body = {
-        "name": "Synthetic OAuth",
-        "base_url": "https://api.example.test",
-        "auth_kind": "oauth_client_credentials",
-        "username": "synthetic-client",
-        "auth_options": {"token_path": "/oauth/token"},
-        "secret": "synthetic-client-secret",
-    }
-    created = client.post(
-        "/v1/admin/integrations/connections", json=body, headers=unsafe(client)
-    )
-    assert created.status_code == 200, created.text
-    response = client.put(
-        f"/v1/admin/integrations/connections/{created.json()['id']}",
-        json={
-            **body,
-            "secret": None,
-            "version": created.json()["version"],
-            "auth_options": {"token_path": "/echo"},
-        },
-        headers=unsafe(client),
-    )
-    assert response.status_code == 422, response.text
-
-
 # --- Audit trail -----------------------------------------------------------------
 
 
@@ -662,12 +704,9 @@ def test_oauth_token_path_change_requires_reentry(keen, monkeypatch):
 def test_audit_trail_omits_authorisation_codes(keen, path):
     keen.client().get(path, params={"code": "SYNTH-AUTH-CODE", "state": "SYNTH-STATE"})
     rows = keen.db.query(AuditLog).filter(AuditLog.path == path).all()
-    assert rows
-    assert all(
-        "SYNTH-AUTH-CODE" not in (r.query_string or "")
-        and "SYNTH-STATE" not in (r.query_string or "")
-        for r in rows
-    )
+    assert [(r.method, r.query_string, r.status_code) for r in rows] == [
+        ("GET", "code=REDACTED&state=REDACTED", 404)
+    ]
 
 
 def client_from(address):
@@ -695,8 +734,16 @@ def test_public_reads_leave_no_audit_records(keen):
             client.get(path)
     assert keen.db.query(AuditLog).filter(AuditLog.path.in_(public)).count() == 0
     # Other methods on those paths, and protected paths, are still recorded.
-    assert client.post("/v1/auth/methods").status_code in (401, 403, 405)
-    assert client.get("/v1/events").status_code == 401
+    refused = client.post("/v1/auth/methods")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
+    refused = client.get("/v1/events")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     assert audited(keen, path="/v1/auth/methods", method="POST") == 1
     assert audited(keen, path="/v1/events", client_ip="203.0.113.5") == 1
 
@@ -707,7 +754,11 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
 
     first, second = client_from("203.0.113.7"), client_from("203.0.113.8")
     for _ in range(30):
-        assert first.get("/v1/events").status_code == 401
+        refused = first.get("/v1/events")
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
     # Refusals of any other status draw on the same allowance.
     for _ in range(35):
         malformed = first.post(
@@ -715,8 +766,15 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
             content=b"{",
             headers={"Origin": BASE, "Content-Type": "application/json"},
         )
-        assert malformed.status_code == 400, malformed.text
-    assert second.get("/v1/events").status_code == 401
+        assert (malformed.status_code, malformed.json()) == (
+            400,
+            {"detail": "Request body must be valid JSON"},
+        )
+    refused = second.get("/v1/events")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     assert audited(keen, status_code=401, client_ip="203.0.113.7") == 30
     assert audited(keen, status_code=400, client_ip="203.0.113.7") == 30
     assert audited(keen, status_code=401, client_ip="203.0.113.8") == 1
@@ -732,17 +790,20 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
     )
     assert login.status_code == 200, login.text
     for _ in range(3):
-        assert signed_in.get("/v1/users").status_code == 403
+        refused = signed_in.get("/v1/users")
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Admin role required"},
+        )
     assert audited(keen, path="/v1/users", username=member.username) == 3
 
     # Public routes that succeed without any credential draw on the same
     # allowance, so signing out from a spent address adds no records.
     for _ in range(3):
-        assert first.post("/v1/auth/logout", headers={"Origin": BASE}).status_code < 400
-        assert (
-            first.post("/v1/auth/mfa/cancel", headers={"Origin": BASE}).status_code
-            < 400
-        )
+        signed_out = first.post("/v1/auth/logout", headers={"Origin": BASE})
+        assert (signed_out.status_code, signed_out.content) == (204, b"")
+        cancelled = first.post("/v1/auth/mfa/cancel", headers={"Origin": BASE})
+        assert (cancelled.status_code, cancelled.json()) == (200, {"ok": True})
         assert first.get("/v1/auth/logout", follow_redirects=False).status_code == 303
     assert audited(keen, path="/v1/auth/logout", client_ip="203.0.113.7") == 0
     assert audited(keen, path="/v1/auth/mfa/cancel", client_ip="203.0.113.7") == 0
@@ -785,7 +846,11 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
         first.post("/v1/webhooks/synthetic/a", json={}, headers=delivery).status_code
         == 200
     )
-    assert first.post("/v1/webhooks/synthetic/a", json={1: 2}).status_code == 403
+    refused = first.post("/v1/webhooks/synthetic/a", json={1: 2})
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Invalid webhook secret"},
+    )
     assert credentials == ["webhook:env:webhooks", None]
     for _ in range(3):
         request = StarletteRequest(
@@ -807,7 +872,11 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
     broken = Mock()
     broken.pipeline.side_effect = ConnectionError("synthetic outage")
     monkeypatch.setattr(main, "get_valkey", lambda: broken)
-    assert client_from("203.0.113.9").get("/v1/events").status_code == 401
+    refused = client_from("203.0.113.9").get("/v1/events")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     assert audited(keen, client_ip="203.0.113.9") == 0
 
 
@@ -815,8 +884,15 @@ def test_ipv6_refusals_share_one_audit_allowance_per_network(keen):
     """Addresses in one IPv6 /64 network draw on one allowance between them."""
     for host in range(1, 66):
         response = client_from(f"2001:db8:5:7::{host:x}").get("/v1/events")
-        assert response.status_code == 401
-    assert client_from("2001:db8:5:8::1").get("/v1/events").status_code == 401
+        assert (response.status_code, response.json()) == (
+            401,
+            {"detail": "Not authenticated"},
+        )
+    refused = client_from("2001:db8:5:8::1").get("/v1/events")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     keen.db.expire_all()
     recorded = keen.db.query(AuditLog).filter(AuditLog.client_ip.like("2001:db8:5:%"))
     assert recorded.filter(AuditLog.client_ip.like("2001:db8:5:7::%")).count() == 60
@@ -833,9 +909,16 @@ def test_evidence_paths_cannot_leave_the_origin(url):
     from app.services.admin import _validate_clause_evidence_url
     from app.services.audits.validation import clean_url
 
-    for validate in (clean_url, _validate_clause_evidence_url):
-        with pytest.raises(DomainError):
+    for validate, label in (
+        (clean_url, "evidence_url"),
+        (_validate_clause_evidence_url, "Evidence URLs"),
+    ):
+        with pytest.raises(DomainError) as refused:
             validate(url)
+        assert (refused.value.status_code, refused.value.detail) == (
+            400,
+            f"{label} must not contain backslashes or control characters",
+        )
     assert clean_url("/event.html?id=1") == "/event.html?id=1"
     assert _validate_clause_evidence_url("/clause.html?id=1") == "/clause.html?id=1"
 
@@ -851,40 +934,14 @@ def test_imported_upstream_urls_must_be_web_links(value):
 
     control = SimpleNamespace(meta={"upstream_url": value}, ref="", framework_slug="")
     assert control_upstream_url(control) is None
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError) as refused:
         _validate_upstream_url(value)
+    assert (refused.value.status_code, refused.value.detail) == (
+        400,
+        "upstream_url must start with http:// or https://",
+    )
     control.meta["upstream_url"] = "https://guidance.example/a"
     assert control_upstream_url(control) == "https://guidance.example/a"
-
-
-# --- SMTP credentials --------------------------------------------------------------
-
-
-def test_smtp_credentials_are_never_sent_without_tls(monkeypatch):
-    from app.services import mailer
-
-    for name, value in {
-        "smtp_host": "smtp.example.test",
-        "smtp_from_email": "keen@example.test",
-        "smtp_username": "synthetic-user",
-        "smtp_password": "synthetic-password",
-        "smtp_use_tls": False,
-        "smtp_use_ssl": False,
-    }.items():
-        monkeypatch.setattr(settings, name, value)
-    plain, secure = MagicMock(), MagicMock()
-    monkeypatch.setattr(mailer.smtplib, "SMTP", plain)
-    monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", secure)
-    with pytest.raises(RuntimeError, match="TLS"):
-        mailer.send_email(to_email="person@example.test", subject="s", body="b")
-    plain.assert_not_called()
-    secure.assert_not_called()
-
-    # Unauthenticated relays may still be used without TLS.
-    monkeypatch.setattr(settings, "smtp_username", "")
-    monkeypatch.setattr(settings, "smtp_password", "")
-    mailer.send_email(to_email="person@example.test", subject="s", body="b")
-    plain.return_value.__enter__.return_value.login.assert_not_called()
 
 
 def test_withheld_aggregates_never_reuse_a_readers_cache(keen):
@@ -899,8 +956,16 @@ def test_withheld_aggregates_never_reuse_a_readers_cache(keen):
     )
     keen.db.commit()
     reader = keen.client(keen.user("events.read"))
-    assert reader.get("/v1/stats/summary").json()["events"] is not None
-    assert reader.get("/v1/stats/controls").status_code == 200
+    assert reader.get("/v1/stats/summary").json()["events"] == {
+        "total": 1,
+        "mapped": 0,
+        "unmapped": 1,
+    }
+    answer = reader.get("/v1/stats/controls")
+    assert (answer.status_code, answer.json()) == (
+        200,
+        {"items": [], "stats_source": "control_evidence_stats"},
+    )
     plain = keen.client(keen.user())
     assert plain.get("/v1/stats/summary").json()["events"] is None
     assert plain.get("/v1/stats/summary").json()["stats_source"] == "evidence_withheld"
@@ -949,19 +1014,6 @@ def test_question_attachments_are_not_presented_as_event_evidence(
 # --- Password confirmation attempts per account -----------------------------
 
 
-def test_password_change_attempts_are_limited_per_account(keen, monkeypatch):
-    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 100)
-    monkeypatch.setattr(settings, "login_rate_limit_per_username", 2)
-    client = keen.client(keen.user())
-    wrong = {"current_password": "not-the-password", "new_password": "x" * 16}
-    for _ in range(2):
-        response = client.post("/v1/me/password", json=wrong, headers=unsafe(client))
-        assert response.status_code == 400, response.text
-    right = {"current_password": PASSWORD, "new_password": "y" * 16}
-    limited = client.post("/v1/me/password", json=right, headers=unsafe(client))
-    assert limited.status_code == 429, limited.text
-
-
 def test_sign_in_attempts_from_one_ipv6_network_share_one_allowance(keen, monkeypatch):
     # Every address in a client's /64 draws on the same per-address allowance;
     # another network, and an IPv4 client, keep their own.
@@ -1003,7 +1055,10 @@ def test_webhook_state_is_not_disclosed_before_secret_verification(keen, monkeyp
         f"/v1/webhooks/connections/{uuid.uuid4()}/synthetic/alert",
     ):
         response = client.post(path, content=b"{}", headers={"X-Webhook-Secret": "x"})
-        assert response.status_code == 403, (path, response.text)
+        assert (response.status_code, response.json()) == (
+            403,
+            {"detail": "Invalid webhook secret"},
+        )
     ingestion_pause.require_receiving.assert_not_called()
 
 
@@ -1125,17 +1180,25 @@ def test_invalid_json_and_validation_errors_fail_cleanly_without_echo(keen):
 def test_nul_characters_in_requests_are_refused_or_stored_safely(keen):
     user = keen.user("events.read")
     client = keen.client(user)
-    assert client.get("/v1/events", params={"q": "a\x00b"}).status_code == 400
-    assert client.get("/v1/events/a%00b").status_code == 400
+    refused = client.get("/v1/events", params={"q": "a\x00b"})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid request target"},
+    )
+    refused = client.get("/v1/events/a%00b")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid request target"},
+    )
     saved = client.post(
         "/v1/me/saved-searches",
         content=b'{"name": "synthetic\\u0000name", "url": "/events.html"}',
         headers={**unsafe(client), "Content-Type": "application/json"},
     )
-    assert saved.status_code in (200, 201), saved.text
-    assert "synthetic�name" in json.dumps(
-        client.get("/v1/me/saved-searches").json(), ensure_ascii=False
-    )
+    assert saved.status_code == 200, saved.text
+    assert [
+        (row["name"], row["url"]) for row in client.get("/v1/me/saved-searches").json()
+    ] == [("synthetic�name", "/events.html")]
 
 
 def test_json_bodies_are_bounded_and_decoded_off_the_event_loop(keen, monkeypatch):
@@ -1174,7 +1237,22 @@ def test_json_bodies_are_bounded_and_decoded_off_the_event_loop(keen, monkeypatc
     document = b'{"auto_apply_filters": true}'
     padded = document + b" " * (MAX_JSON_BODY - len(document))
     accepted = send(nobody, padded, "application/json")
-    assert accepted.status_code == 200, accepted.text
+    assert (accepted.status_code, accepted.json()) == (
+        200,
+        {
+            "use_local_timezone": False,
+            "timezone": None,
+            "theme": "ink",
+            "date_format": "default",
+            "auto_apply_filters": True,
+            "source_colors": {},
+            "default_visualisation": None,
+            "landing_page": "/",
+            "default_framework": None,
+            "notification_delivery": "app",
+            "notification_email": False,
+        },
+    )
     assert decoded == ["worker thread"]
 
     # A route's model is checked on the event loop at a cost for each value,
@@ -1200,19 +1278,27 @@ def test_json_bodies_are_bounded_and_decoded_off_the_event_loop(keen, monkeypatc
     decoded.clear()
     large = b'{"version": -1, "changes": {}, "note": "%s"}' % (b"x" * MAX_JSON_BODY)
     imported = send(admin, large, "application/json", "put", "/v1/admin/features")
-    assert imported.status_code == 422, imported.text
+    assert (imported.status_code, imported.json()) == (
+        422,
+        {
+            "detail": "Supply a configuration version and known boolean feature settings."
+        },
+    )
     assert decoded == ["worker thread"]
 
 
 def test_out_of_range_request_values_are_client_errors(keen):
     client = keen.client(keen.user("events.read", "isms.read", "audits.read"))
     huge = "9" * 30
-    assert client.get("/v1/isms/assets", params={"offset": huge}).status_code == 400
-    assert (
-        client.get(
-            "/v1/audits/scope-coverage", params={"end": "0001-01-01"}
-        ).status_code
-        == 400
+    refused = client.get("/v1/isms/assets", params={"offset": huge})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "A request value cannot be stored"},
+    )
+    refused = client.get("/v1/audits/scope-coverage", params={"end": "0001-01-01"})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "A request value is out of range"},
     )
     if keen.postgres:
         export = client.get(
@@ -1223,16 +1309,28 @@ def test_out_of_range_request_values_are_client_errors(keen):
         chart = client.get(
             "/v1/charts/event_volume_timeseries", params={"start_ts": "-1"}
         )
-        assert chart.status_code in (200, 400), chart.status_code
+        assert (chart.status_code, chart.json()) == (
+            400,
+            {
+                "detail": "The requested window needs more than 5000 daily buckets; narrow the date range"
+            },
+        )
 
 
 def test_document_managers_reach_the_bookstack_catalogue(keen, monkeypatch):
     monkeypatch.setattr(settings, "bookstack_enabled", False)
     manager = keen.client(keen.user("isms.manage"))
     response = manager.get("/v1/isms/bookstack-catalog", params={"kind": "books"})
-    assert response.status_code == 409, response.text
+    assert (response.status_code, response.json()) == (
+        409,
+        {"detail": "BookStack ingestion is disabled"},
+    )
     reader = keen.client(keen.user("isms.read"))
-    assert reader.get("/v1/isms/bookstack-catalog").status_code == 403
+    refused = reader.get("/v1/isms/bookstack-catalog")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "isms.manage permission required"},
+    )
 
 
 def test_hand_parsed_bodies_must_be_json_objects(keen, contract_db):
@@ -1250,11 +1348,15 @@ def test_hand_parsed_bodies_must_be_json_objects(keen, contract_db):
     contract_db.commit()
     path = f"/v1/events/{event.id}/questions"
     listed = client.post(path, json=["not", "an", "object"], headers=unsafe(client))
-    assert listed.status_code == 400, listed.text
+    assert (listed.status_code, listed.json()) == (
+        400,
+        {"detail": "Request body must be a JSON object"},
+    )
     form = client.post(
         path, data={"body": "synthetic \x00 question"}, headers=unsafe(client)
     )
-    assert form.status_code < 500, form.text
+    assert form.status_code == 200, form.text
+    assert sorted(form.json()) == ["post_id", "thread_id"]
 
 
 # --- Audit managers read what audits examine -----------------------------------
@@ -1290,7 +1392,10 @@ def test_audit_managers_read_events_and_isms_records_while_they_hold_it(keen):
             json={"title": "Not mine to write"},
             headers=unsafe(client),
         )
-        assert created.status_code == 403, created.text
+        assert (created.status_code, created.json()) == (
+            403,
+            {"detail": "isms.manage permission required"},
+        )
     reader = keen.client(keen.user("audits.read"))
     for path in reads:
         assert reader.get(path).status_code == 403, path

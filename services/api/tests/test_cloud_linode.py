@@ -241,7 +241,9 @@ def test_collect_reads_the_account(use):
     assert checks["network.firewall_coverage"].subjects == ["build-runner"]
     assert checks["network.databases"].subjects == ["open-db"]
     assert checks["resilience.backups"].subjects == ["build-runner"]
-    assert "by default" in checks["resilience.backups"].detail
+    assert checks["resilience.backups"].detail == (
+        "1 of 3 Linodes without backups; new Linodes get backups by default"
+    )
     # Cluster 8 has no access list endpoint, so its API is open.
     assert checks["kubernetes.control_plane"].subjects == [
         "old: no high availability, API open to every address"
@@ -293,7 +295,7 @@ def test_listings_are_bounded(use, monkeypatch):
 def test_activity_reads_sign_ins_and_events_in_the_window(use):
     api = use(Api())
     entries, complete = ln.activity(NOW - timedelta(hours=6), NOW)
-    assert complete
+    assert complete is True
     assert [(e.id, e.action, e.outcome) for e in entries] == [
         ("event:42", "linode_boot", "failure"),
         ("event:41", "firewall_update", "success"),
@@ -303,7 +305,10 @@ def test_activity_reads_sign_ins_and_events_in_the_window(use):
     [events] = [r for r in api.requests if r.url.path == "/v4/account/events"]
     window = json.loads(events.headers["X-Filter"])
     assert window["+order"] == "desc"
-    assert {"created": {"+lt": NOW.isoformat()}} in window["+and"]
+    assert window["+and"] == [
+        {"created": {"+gte": (NOW - timedelta(hours=6)).isoformat()}},
+        {"created": {"+lt": NOW.isoformat()}},
+    ]
 
 
 def test_refusals_carry_reasons_without_the_token(use):
@@ -361,7 +366,7 @@ def test_account_listings_are_bounded_and_identified(use, monkeypatch):
     assert by_key(scope.checks)["kubernetes.control_plane"].status == "unknown"
     data["/v4/account"] = {"euuid": "short"}
     use(Api(data))
-    with pytest.raises(Unavailable):
+    with pytest.raises(Unavailable, match="^unavailable$"):
         ln.collect()
 
 

@@ -72,14 +72,18 @@ def test_other_readers_cannot_reply_to_or_delete_someone_elses_question(question
     )
     api.identity["user"] = api.stranger
     assert request(api, "GET", "me/questions")["items"] == []
-    request(
-        api,
-        "POST",
-        f"questions/{created['thread_id']}/posts",
-        {"body": "Unauthorised"},
-        status=403,
-    )
-    request(api, "DELETE", f"questions/{created['thread_id']}", status=403)
+    assert (
+        request(
+            api,
+            "POST",
+            f"questions/{created['thread_id']}/posts",
+            {"body": "Unauthorised"},
+            status=403,
+        )
+    ) == {"detail": "Only admins or the thread author can reply"}
+    assert request(api, "DELETE", f"questions/{created['thread_id']}", status=403) == {
+        "detail": "question.delete permission required"
+    }
     assert api.db.query(EventQuestionPost).count() == 1
 
 
@@ -92,16 +96,20 @@ def test_admin_status_transitions_are_persisted(question_api, status):
     result = request(api, "PATCH", f"admin/questions/{thread}", {"status": status})
     assert result["status"] == status
     assert api.db.get(EventQuestionThread, uuid.UUID(thread)).status == status
-    request(
-        api, "PATCH", f"admin/questions/{thread}", {"status": "invalid"}, status=400
-    )
+    assert (
+        request(
+            api, "PATCH", f"admin/questions/{thread}", {"status": "invalid"}, status=400
+        )
+    ) == {"detail": "Invalid status"}
     assert api.db.get(EventQuestionThread, uuid.UUID(thread)).status == status
 
 
 @pytest.mark.parametrize("body", ["", "   "])
 def test_blank_questions_do_not_create_orphan_threads(question_api, body):
     api = question_api
-    request(api, "POST", f"events/{api.event.id}/questions", {"body": body}, status=400)
+    assert request(
+        api, "POST", f"events/{api.event.id}/questions", {"body": body}, status=400
+    ) == {"detail": "Body is required"}
     assert api.db.query(EventQuestionThread).count() == 0
     assert api.db.query(EventQuestionPost).count() == 0
 

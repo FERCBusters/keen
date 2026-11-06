@@ -157,7 +157,11 @@ def test_event_sampling_requires_events_read(
         if via_url
         else {"event_id": str(ids.event)}
     )
-    assert client.get(f"/v1/events/{ids.event}").status_code == 403
+    refused = client.get(f"/v1/events/{ids.event}")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "events.read permission required"},
+    )
     url = f"/v1/audits/{ids.audit}/evidence"
     denied = client.post(url, json=target)
     assert denied.status_code == 403, denied.text
@@ -177,10 +181,21 @@ def test_sampling_cannot_grant_itself_bookstack_snapshot_read(
     download_url = f"/v1/isms/bookstack-sections/{ids.section}/snapshot"
     sample_url = f"/v1/audits/{ids.audit}/evidence"
     target = {"entity_type": "bookstack_section", "entity_id": str(ids.section)}
-    assert client.get(download_url).status_code == 403
+    refused = client.get(download_url)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "ISMS or sampled-audit read permission required"},
+    )
     denied = client.post(sample_url, json=target)
-    assert denied.status_code == 403, denied.text
-    assert client.get(download_url).status_code == 403
+    assert (denied.status_code, denied.json()) == (
+        403,
+        {"detail": "Read access to the sampled source is required"},
+    )
+    refused = client.get(download_url)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "ISMS or sampled-audit read permission required"},
+    )
     with factory() as db:
         assert db.query(AuditEvidence).count() == 0
     grant(factory, ids.user, "isms.read")
@@ -199,7 +214,11 @@ def test_sampling_cannot_grant_itself_bookstack_snapshot_read(
         db.get(User, ids.user).authz_version += 1
         db.commit()
     assert client.get(download_url).status_code == 200
-    assert client.post(sample_url, json=target).status_code == 403
+    refused = client.post(sample_url, json=target)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Read access to the sampled source is required"},
+    )
 
 
 @pytest.mark.parametrize(
@@ -228,7 +247,10 @@ def test_sampling_other_sources_requires_their_read_permission(
         f"/v1/audits/{ids.audit}/evidence",
         json={"entity_type": entity_type, "entity_id": str(uuid.uuid4())},
     )
-    assert response.status_code == 403, response.text
+    assert (response.status_code, response.json()) == (
+        403,
+        {"detail": "Read access to the sampled source is required"},
+    )
     with factory() as db:
         assert db.query(AuditEvidence).count() == 0
 
@@ -384,7 +406,11 @@ def test_url_only_samples_also_require_events_read(
         "title": "External evidence",
         "entity_type": entity_type,
     }
-    assert client.post(url, json=target).status_code == 403
+    refused = client.post(url, json=target)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "events.read permission required"},
+    )
     with factory() as db:
         assert db.query(AuditEvidence).count() == 0
     grant(factory, ids.user, "events.read")
@@ -399,7 +425,11 @@ def test_url_only_samples_also_require_events_read(
         )
         db.get(User, ids.user).authz_version += 1
         db.commit()
-    assert client.post(url, json=target).status_code == 403
+    refused = client.post(url, json=target)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "audits.manage or audits.admin permission required"},
+    )
 
 
 @pytest.mark.parametrize(
@@ -412,7 +442,11 @@ def test_isms_sampling_requires_explicit_isms_read(
     grant(factory, ids.user, other_permission)
     url = f"/v1/audits/{ids.audit}/evidence"
     target = {"entity_type": "bookstack_section", "entity_id": str(ids.section)}
-    assert client.post(url, json=target).status_code == 403
+    refused = client.post(url, json=target)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Read access to the sampled source is required"},
+    )
     with factory() as db:
         assert db.query(AuditEvidence).count() == 0
     grant(factory, ids.user, "isms.read")
@@ -436,7 +470,10 @@ def test_audit_managers_sample_the_events_and_isms_records_they_read(
         refused = client.post(
             url, json={"entity_type": entity_type, "entity_id": str(uuid.uuid4())}
         )
-        assert refused.status_code == 403, (entity_type, refused.text)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Read access to the sampled source is required"},
+        )
     with factory() as db:
         assert db.query(AuditEvidence).count() == 2
 
@@ -494,7 +531,12 @@ def test_audit_manager_cannot_mutate_other_audits(
     audit_id, _ = other_audits
     suffix = suffix.replace("{id}", str(uuid.uuid4()))
     response = client.request(method, f"/v1/audits/{audit_id}{suffix}", json=payload)
-    assert response.status_code == 403, response.text
+    assert (response.status_code, response.json()) == (
+        403,
+        {
+            "detail": "Only the audit creator or an audit administrator can edit this audit"
+        },
+    )
     with factory() as db:
         assert db.get(Audit, audit_id).title == "Other audit"
         assert db.query(AuditEvidence).count() == 0
@@ -505,18 +547,24 @@ def test_report_upload_and_schedule_edit_require_audit_ownership(
 ):
     client, factory, _ = sampling_client
     audit_id, template_id = other_audits
-    assert (
-        client.post(
-            f"/v1/audits/{audit_id}/report",
-            files={"file": ("report.txt", b"Synthetic report", "text/plain")},
-        ).status_code
-        == 403
+    refused = client.post(
+        f"/v1/audits/{audit_id}/report",
+        files={"file": ("report.txt", b"Synthetic report", "text/plain")},
     )
-    assert (
-        client.patch(
-            f"/v1/audits/scheduled/{template_id}", json={"title": "Changed"}
-        ).status_code
-        == 403
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {
+            "detail": "Only the audit creator or an audit administrator can edit this audit"
+        },
+    )
+    refused = client.patch(
+        f"/v1/audits/scheduled/{template_id}", json={"title": "Changed"}
+    )
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {
+            "detail": "Only the audit creator or an audit administrator can edit this audit"
+        },
     )
     with factory() as db:
         assert db.get(Audit, audit_id).final_report_storage_uri is None
@@ -538,7 +586,11 @@ def test_audit_manager_runs_own_audit_but_cannot_delete_it(sampling_client):
         ).status_code
         == 200
     )
-    assert client.delete(f"/v1/audits/{ids.audit}").status_code == 403
+    refused = client.delete(f"/v1/audits/{ids.audit}")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "audits.admin permission required"},
+    )
     created = client.post(
         "/v1/audits", json={"title": "New own audit", "framework_slug": "audit-test"}
     )
@@ -560,7 +612,11 @@ def test_audit_manager_runs_own_audit_but_cannot_delete_it(sampling_client):
         ).status_code
         == 200
     )
-    assert client.delete(f"/v1/audits/scheduled/{template_id}").status_code == 403
+    refused = client.delete(f"/v1/audits/scheduled/{template_id}")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "audits.admin permission required"},
+    )
     with factory() as db:
         assert db.get(Audit, uuid.UUID(template_id)).title == "Own template edited"
 
@@ -594,18 +650,20 @@ def test_audit_administrator_can_edit_and_delete_but_still_needs_source_read(
         ).status_code
         == 200
     )
-    assert (
-        client.post(
-            f"/v1/audits/{audit_id}/evidence", json={"event_id": str(ids.event)}
-        ).status_code
-        == 403
+    refused = client.post(
+        f"/v1/audits/{audit_id}/evidence", json={"event_id": str(ids.event)}
     )
-    assert (
-        client.post(
-            f"/v1/audits/{audit_id}/evidence",
-            json={"entity_type": "bookstack_section", "entity_id": str(ids.section)},
-        ).status_code
-        == 403
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "events.read permission required"},
+    )
+    refused = client.post(
+        f"/v1/audits/{audit_id}/evidence",
+        json={"entity_type": "bookstack_section", "entity_id": str(ids.section)},
+    )
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Read access to the sampled source is required"},
     )
     assert client.delete(f"/v1/audits/scheduled/{template_id}").status_code == 200
     assert client.delete(f"/v1/audits/{audit_id}").status_code == 200

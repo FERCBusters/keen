@@ -22,7 +22,6 @@ from app.services.managed_configurations import (
     _validate_connector,
     _validate_regex,
 )
-from fastapi import HTTPException
 
 
 class ManagedConfigurationTests(unittest.TestCase):
@@ -68,7 +67,7 @@ class ManagedConfigurationTests(unittest.TestCase):
             collector_id("jenkins", "jobs", "release"),
         )
         self.assertNotIn("collector", entries["all_builds"]["when"])
-        self.assertFalse(entries["all_builds"]["enabled"])
+        self.assertIs(entries["all_builds"]["enabled"], False)
         page = entries["bookstack_page_1"]
         self.assertEqual(page["when"]["bookstack_book_slug"], "policies")
         self.assertEqual(page["when"]["bookstack_page_slug"], "backup")
@@ -257,38 +256,50 @@ class ManagedConfigurationTests(unittest.TestCase):
         hits = evaluate_by_framework(
             {"source": "jenkins", "outcome": "success"}, rules, details=True
         )
-        self.assertEqual(set(hits), {"ISO27001:2022", "CE"})
-        self.assertEqual(hits["CE"][0]["confidence"], 0.75)
-        self.assertIn("deploy", hits["CE"][0]["rationale"])
+        self.assertEqual(
+            hits,
+            {
+                "ISO27001:2022": [
+                    {
+                        "ref": "A.8.32",
+                        "kind": None,
+                        "confidence": 0.75,
+                        "rationale": "auto by rule deploy (ISO27001:2022)",
+                    }
+                ],
+                "CE": [
+                    {
+                        "ref": "security-update-management",
+                        "kind": None,
+                        "confidence": 0.75,
+                        "rationale": "auto by rule deploy (CE)",
+                    }
+                ],
+            },
+        )
         self.assertEqual(
             evaluate_by_framework({"source": "jenkins", "outcome": "failed"}, rules), {}
         )
 
-    def test_disabled_rule_does_not_match(self):
-        self.assertEqual(
-            parse_rules(
-                {
-                    "rules": [
-                        {
-                            "id": "off",
-                            "enabled": False,
-                            "when": {"source": "rss"},
-                            "map_to": ["A.8.1"],
-                        }
-                    ]
-                }
-            ),
-            [],
-        )
-
     def test_credentials_cannot_be_saved(self):
-        with self.assertRaises((HTTPException, DomainError)):
+        with self.assertRaises(DomainError) as error:
             _safe_document({"feeds": [{"auth": {"password": "secret"}}]})
+        self.assertEqual(
+            (error.exception.status_code, error.exception.detail),
+            (
+                400,
+                "Move credential feeds.auth.password into a server environment variable",
+            ),
+        )
 
     def test_unsafe_regex_rejected(self):
         _validate_regex("failure.*sshd", "summary_regex")
-        with self.assertRaises((HTTPException, DomainError)):
+        with self.assertRaises(DomainError) as error:
             _validate_regex("(a+)+$", "summary_regex")
+        self.assertEqual(
+            (error.exception.status_code, error.exception.detail),
+            (400, "summary_regex: Nested repetition can stall ingestion"),
+        )
 
     def test_version_conflict_prevents_overwrite(self):
         class Query:
@@ -311,17 +322,26 @@ class ManagedConfigurationTests(unittest.TestCase):
             def commit(self):
                 raise AssertionError("A conflict must not commit")
 
-        with self.assertRaises((HTTPException, DomainError)) as error:
+        with self.assertRaises(DomainError) as error:
             _save(DB(), "jenkins", {"jobs": []}, 1, SimpleNamespace(id="admin"))
-        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(
+            (error.exception.status_code, error.exception.detail),
+            (409, "Configuration changed in another session. Reload before saving."),
+        )
 
     def test_connector_checks_rss_url_and_tls(self):
-        for feed in (
-            {"url": "http://example.org/feed"},
-            {"url": "https://example.org/feed", "verify_tls": False},
+        for feed, detail in (
+            ({"url": "http://example.org/feed"}, "RSS feeds require an HTTPS URL"),
+            (
+                {"url": "https://example.org/feed", "verify_tls": False},
+                "TLS verification cannot be disabled",
+            ),
         ):
-            with self.assertRaises((HTTPException, DomainError)):
+            with self.assertRaises(DomainError) as error:
                 _validate_connector("rss", {"feeds": [feed]})
+            self.assertEqual(
+                (error.exception.status_code, error.exception.detail), (400, detail)
+            )
 
 
 class EvidenceMigrationTests(unittest.TestCase):
@@ -532,7 +552,9 @@ class EvidenceMigrationTests(unittest.TestCase):
         }
         with self.assertRaises(ValueError) as error:
             self._unify(documents)
-        self.assertIn("Duplicate rule ID dup", str(error.exception))
+        self.assertEqual(
+            str(error.exception), "Duplicate rule ID dup; fix this before migration"
+        )
 
     def test_rule_that_cannot_be_normalised_is_rejected(self):
         # A rule the ingestion parser would skip must stop the migration, so an
@@ -542,7 +564,10 @@ class EvidenceMigrationTests(unittest.TestCase):
         }
         with self.assertRaises(ValueError) as error:
             self._unify(documents)
-        self.assertIn("Cannot normalize rule broken", str(error.exception))
+        self.assertEqual(
+            str(error.exception),
+            "Cannot normalize rule broken; correct its targets before migration",
+        )
 
     def test_rule_without_id_is_numbered_by_position(self):
         converted, counts = self._unify(

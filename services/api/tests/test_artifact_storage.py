@@ -97,7 +97,7 @@ def test_local_artifacts_round_trip_privately(local):
     bucket, key = s3.parse_s3_uri(stored.uri)
     body = s3.get_object_stream(bucket, key)["Body"]
     assert b"".join(s3.iter_stream(body, chunk_size=4)) == b'{"ok": true}'
-    assert body.closed
+    assert body.closed is True
 
 
 class Recording(io.BytesIO):
@@ -158,13 +158,15 @@ def test_a_symlink_cannot_carry_writes_or_reads_outside_the_root(local):
             s3.parse_s3_uri(f"local://local/{key}")
         with pytest.raises(ValueError, match="Invalid local artifact path"):
             s3.get_object_stream("local://local", key)
-    assert not (local.outside / "new.txt").exists()
+    assert (local.outside / "new.txt").exists() is False
     assert secret.read_bytes() == b"outside the artifact root"
 
 
+@pytest.mark.parametrize("backend", ["local", "s3"])
 @pytest.mark.parametrize(
     "key",
     [
+        "",
         "/etc/passwd",
         "events/../../secret",
         "events/./a.json",
@@ -173,15 +175,22 @@ def test_a_symlink_cannot_carry_writes_or_reads_outside_the_root(local):
         "events/\x00a.json",
         "events/\x7fa.json",
         "events/a?query.json",
+        # A query string would let a key choose another S3 object version.
+        "events/a?versionId=bad",
         "events/a#fragment.json",
     ],
 )
-def test_hostile_keys_are_rejected_before_any_storage_work(local, key):
-    # Traversal, absolute, escaped and control-character keys never reach the
-    # filesystem: no file, directory or symlink is created anywhere.
-    with pytest.raises(ValueError, match="Invalid artifact key"):
+def test_hostile_keys_are_rejected_before_any_storage_work(request, backend, key):
+    # Empty, traversal, absolute, escaped and control-character keys reach
+    # neither backend: no file, directory or symlink is created anywhere, and
+    # Keen neither builds an S3 client nor asks the bucket for anything.
+    local = request.getfixturevalue("local")
+    bucket = request.getfixturevalue("bucket") if backend == "s3" else None
+    with pytest.raises(ValueError, match="^Invalid artifact key$"):
         s3.put_bytes(key, b"x", "text/plain")
     assert list(local.root.rglob("*")) == []
+    if bucket is not None:
+        assert (bucket.clients, bucket.calls) == ([], [])
 
 
 def test_deleting_from_an_unmounted_root_is_reported(local):

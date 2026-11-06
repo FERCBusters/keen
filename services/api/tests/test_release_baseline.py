@@ -146,6 +146,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0044_posture_risk_treatment",
         "0043_access_matrix_fields",
         "0042_access_matrix_approver",
         "0041_mfa_code_failures",
@@ -452,6 +453,58 @@ def test_access_matrix_status_and_hosting_accounts_are_removed():
             )
             assert added == "Pending Approval"
             conn.rollback()
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_closing_times_and_failure_starts_are_added_empty():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "treated_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    added = {
+        ("risks", "closed_at"),
+        ("agent_posture_observations", "attention_since"),
+    }
+
+    def present(conn):
+        rows = conn.execute(
+            text(
+                "SELECT table_name, column_name, is_nullable, data_type"
+                " FROM information_schema.columns WHERE table_schema = :schema"
+                " AND (table_name, column_name) IN"
+                " (('risks', 'closed_at'),"
+                " ('agent_posture_observations', 'attention_since'))"
+            ),
+            {"schema": schema},
+        )
+        return {(r[0], r[1]): (r[2], r[3]) for r in rows}
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0043_access_matrix_fields")
+            assert present(conn) == {}
+            command.upgrade(config, "0044_posture_risk_treatment")
+            # Nothing is dated yet: earlier closures and failures read as
+            # needing attention until they happen again.
+            assert present(conn) == dict.fromkeys(
+                added, ("YES", "timestamp without time zone")
+            )
+            command.downgrade(config, "0043_access_matrix_fields")
+            assert present(conn) == {}
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

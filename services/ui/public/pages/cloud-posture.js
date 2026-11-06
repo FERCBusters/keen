@@ -127,12 +127,13 @@ export function cloudPosture(host, allowed) {
         : '';
     cell.innerHTML = `${more}<ul class="list-unstyled mb-0">${check.subjects
       .map((s, index) => {
-        const accepted = s.risks?.some((r) => r.accepted);
+        // A resource with an accepted or treating risk needs no other.
+        const covered = s.treated || s.risks?.some((r) => r.accepted);
         const action =
-          data.can_create_risk && check.status !== 'met' && !accepted
+          data.can_create_risk && check.status !== 'met' && !covered
             ? ` <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-cloud-subject-risk="${index}">Create a risk</button>`
             : '';
-        return `<li class="mb-1"><span class="mono text-break">${esc(s.name)}</span>${action}${linkedRisks(s.risks, framework)}</li>`;
+        return `<li class="mb-1"><span class="mono text-break">${esc(s.name)}</span>${action}${linkedRisks(s.risks, framework, check.status)}</li>`;
       })
       .join('')}</ul>`;
     for (const button of cell.querySelectorAll('[data-cloud-subject-risk]'))
@@ -178,7 +179,7 @@ export function cloudPosture(host, allowed) {
           ? `<div><button type="button" class="btn btn-sm btn-link p-0" aria-expanded="false" data-cloud-subjects="${index}">${Number(check.subjects_total)} listed</button></div>`
           : '';
         const risks = showRisks
-          ? `<td>${linkedRisks(check.risks, framework)}${data.can_create_risk && check.status === 'attention' ? `<button type="button" class="btn btn-sm btn-outline-primary" data-cloud-risk="${index}">Create a risk</button>` : ''}</td>`
+          ? `<td>${linkedRisks(check.risks, framework, check.status)}${data.can_create_risk && check.status === 'attention' ? `<button type="button" class="btn btn-sm btn-outline-primary" data-cloud-risk="${index}">Create a risk</button>` : ''}</td>`
           : '';
         return `<tr><th scope="row">${esc(check.label)}</th><td>${postureBadge(check.status)}</td><td>${esc(detail)}${listed}</td><td class="text-nowrap">${evidence}</td>${risks}</tr><tr data-cloud-subject-row="${index}" hidden><td colspan="${showRisks ? 5 : 4}"></td></tr>`;
       })

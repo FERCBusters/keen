@@ -90,7 +90,7 @@ def test_existing_account_password_is_preserved(
     with bootstrap_db() as db:
         assert db.query(User).count() == 1
         assert db.get(User, user_id).password_hash == original_hash
-        assert verify_password("changed-account-password", original_hash)
+        assert verify_password("changed-account-password", original_hash) is True
 
 
 @pytest.mark.parametrize(
@@ -121,7 +121,9 @@ def test_fresh_bootstrap_creates_admin_once(bootstrap_db, monkeypatch):
     with bootstrap_db() as db:
         user = db.query(User).one()
         assert user.role == "admin" and user.is_active
-        assert verify_password("synthetic-bootstrap-password", user.password_hash)
+        assert (
+            verify_password("synthetic-bootstrap-password", user.password_hash) is True
+        )
 
 
 def test_no_credentials_or_hosted_mode_never_creates_an_account(monkeypatch):

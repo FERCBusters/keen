@@ -565,7 +565,7 @@ def _scaleway(now: datetime) -> list[ScopeResult]:
                 "identity.inactive": ("met", "0 of 3 users unused for 45 days or more"),
                 "credentials.key_age": (
                     "attention",
-                    "1 user or application hold API keys older than 90 days, of 4 "
+                    "1 user or application holds API keys older than 90 days, of 4 "
                     "live keys",
                     ["application/terraform"],
                 ),

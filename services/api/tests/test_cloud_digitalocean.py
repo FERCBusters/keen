@@ -190,7 +190,9 @@ def test_collect_reads_the_team(use):
     assert checks["resilience.backups"].subjects == ["staging-web"]
     assert checks["kubernetes.control_plane"].subjects == ["old: no high availability"]
     assert checks["findings"].status == "attention"
-    assert checks["findings"].detail.startswith("0 critical and 1 high")
+    assert (
+        checks["findings"].detail == "0 critical and 1 high findings in the latest scan"
+    )
     assert all(r.url.host == "api.digitalocean.com" for r in api.requests)
 
 
@@ -207,7 +209,7 @@ def test_the_scope_is_the_team_or_else_the_account(use):
     for bad in ("", "not-an-id", "g" * 40, "../v2/droplets"):
         data["/v2/account"]["account"]["uuid"] = bad
         use(Api(data))
-        with pytest.raises(Unavailable):
+        with pytest.raises(Unavailable, match="^unavailable$"):
             do.collect()
 
 
@@ -254,7 +256,7 @@ def test_listings_are_bounded_and_paging_links_are_not_followed(use, monkeypatch
 def test_activity_stops_at_the_window(use):
     use(Api(page_size=2))
     entries, complete = do.activity(NOW - timedelta(hours=6), NOW)
-    assert complete
+    assert complete is True
     assert [(e.id, e.action, e.outcome) for e in entries] == [
         ("action:8", "power_cycle", "failure"),
         ("action:9", "snapshot", "success"),

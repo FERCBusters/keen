@@ -81,13 +81,14 @@ def test_profile_key_hash_and_enrollment_scope(fleet):
     assert a["agent"]["enrollment_profile_id"] == p["profile"]["id"]
     assert "token" not in a and a["subject"] == {"type": "pairwise"}
     # The bootstrap key enrols; it never authenticates evidence.
-    assert (
-        c.post(
-            "/v1/otlp/logs",
-            json=record(),
-            headers={"Authorization": "Bearer " + p["bootstrap_key"]},
-        ).status_code
-        == 401
+    refused = c.post(
+        "/v1/otlp/logs",
+        json=record(),
+        headers={"Authorization": "Bearer " + p["bootstrap_key"]},
+    )
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"code": 16, "message": "Invalid agent credential"},
     )
     assert firewall(r.sim).status_code == 200
     with f() as db:
@@ -170,8 +171,9 @@ def test_agent_name_claims_are_serialised_on_postgres(contract_postgres_engine):
         agent_enrollment_operations.lock_agent_name(first, "prod-db-01")
         second.execute(text("SET LOCAL lock_timeout='100ms'"))
         # The same name in another case waits for the first claim to end ...
-        with pytest.raises(OperationalError):
+        with pytest.raises(OperationalError) as waited:
             agent_enrollment_operations.lock_agent_name(second, "PROD-DB-01")
+        assert waited.value.orig.pgcode == "55P03"  # lock_not_available
         second.rollback()
         # ... while another name proceeds, and the name is free once it ends.
         second.execute(text("SET LOCAL lock_timeout='100ms'"))
@@ -255,7 +257,11 @@ def test_expiry_network_limits_and_limiter_failure(fleet, monkeypatch):
         agent_enrollment_operations, "address_window_allow", lambda *a, **k: (False, 60)
     )
     assert enroll(c, p, agent=ready).status_code == 429
-    assert c.get("/v1/agents/server-key").status_code == 429
+    refused = c.get("/v1/agents/server-key")
+    assert (refused.status_code, refused.json()) == (
+        429,
+        {"detail": "Enrollment temporarily limited; retry later"},
+    )
 
 
 def test_admin_required_and_demo_block(fleet, monkeypatch):
@@ -266,17 +272,29 @@ def test_admin_required_and_demo_block(fleet, monkeypatch):
     ready.fetch_server_key(p["bootstrap_key"])
     monkeypatch.setattr(settings, "demo_mode", True)
     assert enroll(c, p, agent=ready).status_code == 403
-    assert c.get("/v1/agents/server-key").status_code == 403
+    refused = c.get("/v1/agents/server-key")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {
+            "detail": "Agent ingestion and credential management are disabled in demo environments"
+        },
+    )
     assert action(c, p, "rotate").status_code == 403
 
 
 def test_session_admin_required(setup):
     c, _, _, _, _, app = setup
     app.dependency_overrides.pop(api.require_admin)
-    assert c.get("/v1/admin/agent-enrollment-profiles").status_code in {401, 403}
-    assert c.post(
-        "/v1/admin/agent-enrollment-profiles", json={"name": "forbidden"}
-    ).status_code in {401, 403}
+    refused = c.get("/v1/admin/agent-enrollment-profiles")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
+    refused = c.post("/v1/admin/agent-enrollment-profiles", json={"name": "forbidden"})
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 def test_profile_revocation_checked_even_if_agent_flag_remains_enabled(fleet):
@@ -287,7 +305,11 @@ def test_profile_revocation_checked_even_if_agent_flag_remains_enabled(fleet):
         profile.state = "revoked"
         db.commit()
     assert firewall(sim).status_code == 401
-    assert sim.heartbeat().status_code == 401
+    refused = sim.heartbeat()
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Invalid agent credential"},
+    )
     assert sim.renew()[0].status_code == 401
 
 
@@ -349,9 +371,10 @@ def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
     import uuid
 
     assert action(c, p, "disable").status_code == 404
-    assert (
-        c.post(f"/v1/admin/agent-enrollment-profiles/{uuid.uuid4()}/pause").status_code
-        == 404
+    answer = c.post(f"/v1/admin/agent-enrollment-profiles/{uuid.uuid4()}/pause")
+    assert (answer.status_code, answer.json()) == (
+        404,
+        {"detail": "Enrollment profile not found"},
     )
     agent = SimAgent(c)
     agent.fetch_server_key(p["bootstrap_key"])
@@ -369,7 +392,10 @@ def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
             "nonce": secrets.token_urlsafe(32),
         }
         refused = agent.post_enrollment(p["bootstrap_key"], body)
-        assert refused.status_code == 401, credential
+        assert (refused.status_code, refused.json()) == (
+            401,
+            {"detail": "Invalid enrollment credential"},
+        )
     # The credential travels only inside the sealed body.
     body = {
         **agent.enrollment(p["bootstrap_key"]),
@@ -378,7 +404,10 @@ def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
     }
     del body["credential"]
     missing = agent.post_enrollment(p["bootstrap_key"], body)
-    assert missing.status_code == 400
+    assert (missing.status_code, missing.json()) == (
+        400,
+        {"detail": "Invalid enrollment request"},
+    )
     with f() as db:
         assert (
             db.query(KeenAgent)
@@ -393,7 +422,10 @@ def test_unknown_profiles_actions_and_credentials_are_refused(fleet):
         json={"nonce": secrets.token_urlsafe(32)},
         headers=manual,
     )
-    assert renewal.status_code == 401
+    assert (renewal.status_code, renewal.json()) == (
+        401,
+        {"detail": "Invalid agent credential"},
+    )
     assert c.post("/v1/otlp/logs", json=record(), headers=manual).status_code == 200
 
 
@@ -469,8 +501,9 @@ def test_profile_locks_serialize_revocation_on_postgres(
     ):
         authenticate(request, first, operation="otlp-logs", lock=True)
         second.execute(text("SET LOCAL lock_timeout='100ms'"))
-        with pytest.raises(OperationalError):
+        with pytest.raises(OperationalError) as waited:
             api.manage(ident, "revoke", request, Response(), second)
+        assert waited.value.orig.pgcode == "55P03"  # lock_not_available
         second.rollback()
         first.rollback()
         api.manage(ident, "revoke", request, Response(), second)
@@ -478,4 +511,7 @@ def test_profile_locks_serialize_revocation_on_postgres(
 
         with pytest.raises((HTTPException, DomainError)) as exc:
             authenticate(request, first, operation="otlp-logs", lock=True)
-        assert exc.value.status_code == 401
+        assert (exc.value.status_code, exc.value.detail) == (
+            401,
+            "Invalid agent credential",
+        )

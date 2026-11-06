@@ -49,7 +49,10 @@ def test_an_unreadable_public_subject_key_is_refused_and_kept(db, stored):
     db.add(UeuSettings(id=1, public_subject_key=sealed))
     db.flush()
 
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^The public subject key cannot be read with the configured KEEN_INTEGRATION_SECRET_KEY$",
+    ) as refused:
         public_subject_key(db)
 
     assert (refused.value.status_code, refused.value.detail) == (503, UNREADABLE)

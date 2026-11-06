@@ -36,6 +36,7 @@ from app.services.risks import (
     _replace_control_links,
     _risk_or_404,
     _risk_out,
+    set_treatment_status,
 )
 
 _CSV_COLUMNS = [
@@ -218,7 +219,10 @@ def rate_risk(*, risk_id: uuid.UUID, payload: RegisterRating, user, db: Session)
         raise DomainError(400, "Invalid treatment status")
     before = _register_out(db, row, "iso_27001_2022")
     for field, value in payload.model_dump().items():
-        setattr(row, field, value.strip() if isinstance(value, str) else value)
+        if field == "treatment_status":
+            set_treatment_status(row, value)
+        else:
+            setattr(row, field, value.strip() if isinstance(value, str) else value)
     row.threat_score = 1
     row.vulnerability_score = row.register_likelihood or 1
     row.impact_score = row.register_impact or 1
@@ -440,7 +444,8 @@ def import_register(
                 "transfer",
             } or status not in {"open", "in_progress", "awaiting_review", "closed"}:
                 raise ValueError("Invalid treatment strategy or status")
-            row.treatment_strategy, row.treatment_status = strategy, status
+            row.treatment_strategy = strategy
+            set_treatment_status(row, status)
             row.treatment_plan = (entry.get("treatment_plan") or "")[:20000]
             due = (entry.get("treatment_due_at") or "").strip()
             row.treatment_due_at = date.fromisoformat(due) if due else None

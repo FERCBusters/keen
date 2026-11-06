@@ -102,7 +102,11 @@ def test_signing_out_of_a_provider_session_names_the_providers_sign_out(
     assert response.json() == {"logout_url": f"{end_session}?{query}"}
     replay = keen.client()
     replay.cookies.set(session_cookie_name(), sid)
-    assert replay.get("/v1/me").status_code == 401
+    refused = replay.get("/v1/me")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
     # A session without an ID token returns to the provider's sign-out address.
     plain = keen.client(keen.user())
@@ -186,7 +190,10 @@ def test_directory_accounts_confirm_factor_management_with_the_directory(
     refused = start(PASSWORD)
     assert (refused.status_code, refused.json()["detail"]) == (401, "Invalid password")
     started = start("directory-password")
-    assert started.status_code == 200, started.text
+    assert (started.status_code, started.json()) == (
+        200,
+        {"mfa_required": True, "next": "/mfa.html"},
+    )
     assert asked == [
         (user.username, PASSWORD),
         (user.username, "directory-password"),

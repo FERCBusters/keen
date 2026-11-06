@@ -10,7 +10,6 @@ import httpx2
 import pytest
 from app.security import redaction, sso_http
 from app.security.errors import collection_error
-from app.services.errors import DomainError
 
 
 @pytest.mark.parametrize(
@@ -209,7 +208,9 @@ def test_ingestion_total_deadline_closes_stream(monkeypatch):
     source = Mock()
     source.__iter__ = Mock(return_value=iter([b"a"]))
     monkeypatch.setattr(http.time, "monotonic", lambda: 101)
-    with pytest.raises(TimeoutError):
+    with pytest.raises(
+        TimeoutError, match="^Ingestion response exceeded its time budget$"
+    ):
         list(http.LimitedStream(source, deadline=100))
     source.close.assert_called_once()
 
@@ -230,7 +231,7 @@ def test_custom_transport_total_deadline_closes_connection(monkeypatch):
     monkeypatch.setattr(transport, "PinnedHTTPS", lambda *a: connection)
     ticks = iter([0, 0, 2])
     monkeypatch.setattr(transport.time, "monotonic", lambda: next(ticks))
-    with pytest.raises(TimeoutError):
+    with pytest.raises(TimeoutError, match="^Request exceeded its time budget$"):
         transport.request("https://example.test/", timeout=1)
     assert response.read1.call_count == 1
     connection.close.assert_called_once()
@@ -280,7 +281,10 @@ def test_sso_provider_error_cannot_escape_as_traceback(monkeypatch):
         "_handle_oidc_callback",
         AsyncMock(side_effect=OAuth2Error(description="SECRET_VALUE")),
     )
-    with pytest.raises((HTTPException, DomainError)) as error:
+    with pytest.raises(
+        HTTPException,
+        match="^400: SSO verification failed; start sign-in again or contact an administrator$",
+    ) as error:
         asyncio.run(oidc.handle_callback(request, None, "oidc"))
     assert error.value.status_code == 400
     assert "SECRET_VALUE" not in error.value.detail

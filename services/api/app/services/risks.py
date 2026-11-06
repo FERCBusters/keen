@@ -72,6 +72,20 @@ TREATMENT_STRATEGIES = {"", "mitigate", "accept", "avoid", "transfer"}
 TREATMENT_STATUSES = {"open", "in_progress", "awaiting_review", "closed"}
 
 
+def set_treatment_status(risk: Risk, status: str) -> None:
+    """Set a risk's treatment status, and when it closed.
+
+    The closing time stays fixed while the risk stays closed and clears when
+    it reopens. Posture results compare it with when their failure began.
+    """
+    if status == "closed":
+        if risk.treatment_status != "closed":
+            risk.closed_at = _utcnow()
+    else:
+        risk.closed_at = None
+    risk.treatment_status = status
+
+
 class RiskCategoryPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
 
@@ -878,7 +892,7 @@ def _apply_payload(
         status = (payload.treatment_status or "open").strip().lower()
         if status not in TREATMENT_STATUSES:
             raise DomainError(400, "Invalid treatment status")
-        risk.treatment_status = status
+        set_treatment_status(risk, status)
     if is_create or "treatment_plan" in fields:
         risk.treatment_plan = clean_text(
             payload.treatment_plan,

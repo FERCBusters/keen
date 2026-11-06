@@ -25,6 +25,7 @@ from app.ingest.cloud.base import (
     Provider,
     ScopeResult,
     Unavailable,
+    agrees,
     api_timestamp,
     clip,
     guarded,
@@ -540,7 +541,7 @@ def directory(api: Azure, people: dict) -> list[Check]:
             CHECKS["identity.admins"],
             "info",
             f"{plural(len(holders), 'user, group or app', 'users, groups or apps')} "
-            "hold privileged Entra roles",
+            f"{agrees(len(holders), 'holds', 'hold')} privileged Entra roles",
             list(holders.values()),
         ),
         Check(
@@ -707,7 +708,8 @@ def owners(api: Azure, sub: str) -> Check:
         "identity.admins",
         "Owners",
         "info",
-        f"{plural(len(holders), 'principal')} hold Owner or User Access Administrator",
+        f"{plural(len(holders), 'principal')} {agrees(len(holders), 'holds', 'hold')} "
+        "Owner or User Access Administrator",
         list(holders.values()),
     )
 

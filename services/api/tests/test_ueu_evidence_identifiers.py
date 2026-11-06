@@ -51,7 +51,7 @@ def test_evidence_reusing_an_earlier_records_identifier_is_refused(keen):  # noq
         json=record(identity=identifier),
         headers={"Authorization": "Bearer " + info["token"]},
     )
-    assert plain.status_code == 200, plain.text
+    assert (plain.status_code, plain.json()) == (200, {})
     rotated = keen.client.post(
         f"/v1/admin/agents/{agent_id}/rotate",
         json={"expires_days": 30, "credential_type": "key"},

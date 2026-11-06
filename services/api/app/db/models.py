@@ -1187,6 +1187,9 @@ class Risk(Base):
     )
     treatment_plan: Mapped[str] = mapped_column(Text, nullable=False, default="")
     treatment_due_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # When the treatment status last became closed; empty while it is not.
+    # services.risks.set_treatment_status keeps the two together.
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     mitigator_context: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -3383,6 +3386,9 @@ class AgentPostureObservation(Base):
         index=True,
     )
     observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # When KEEN first received this stream's current run of attention results,
+    # by its own clock; empty while the stream meets its target.
+    attention_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class PostureRiskLink(Base):

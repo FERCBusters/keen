@@ -565,7 +565,11 @@ def test_sso_sign_in_attempts_are_audited(sso):
     assert sso.sign_in(sso.keen.client()).status_code == 403
     # A callback that never consumed a sign-in this browser began is no attempt.
     _, query = sso.authorize(sso.keen.client())
-    assert sso.finish(sso.keen.client(), query["state"]).status_code == 400
+    refused = sso.finish(sso.keen.client(), query["state"])
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "SSO browser verification failed; start sign-in again"},
+    )
 
     assert _sign_in_rows(sso) == [
         (user.username, {"method": ["oidc"], "outcome": ["signed-in"]}),

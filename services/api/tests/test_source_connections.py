@@ -188,7 +188,7 @@ def test_a_time_limit_ends_the_whole_run(monkeypatch):
         seen.append(sc.identity()["connection_id"])
         raise SoftTimeLimitExceeded()
 
-    with pytest.raises(SoftTimeLimitExceeded):
+    with pytest.raises(SoftTimeLimitExceeded, match=r"^SoftTimeLimitExceeded\(\)$"):
         run(Mock())
     # The run stops at the limit; later connections wait for the next run.
     assert seen == ["slow"]
@@ -235,7 +235,10 @@ def test_disabled_type_does_not_resolve_secrets(monkeypatch):
 
 def test_aws_named_connection_requires_own_credentials():
     with sc.connection_scope(connection("aws", "cloudwatch_logs")):
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError,
+            match="^This AWS connection requires its own access key and secret$",
+        ):
             sc.aws_credentials()
     with sc.connection_scope(
         connection(
@@ -254,7 +257,9 @@ def test_file_secrets_resolved_only_on_use(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("KEEN_SOURCE_CONNECTIONS_FILE", str(path))
     item = next(c for c in sc.connections(None, "loki") if c.managed_by == "file")
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="^A connection credential environment variable is missing$"
+    ):
         sc.resolve(item)
     monkeypatch.setenv("TEST_LOKI_PASSWORD", "secret")
     assert sc.resolve(item).credentials["password"] == "secret"
@@ -317,9 +322,10 @@ def test_connection_delete_keeps_evidence_identity(contract_db, monkeypatch):
     )
     contract_db.add(event)
     contract_db.commit()
-    from fastapi import HTTPException
 
-    with pytest.raises((HTTPException, DomainError)) as conflict:
+    with pytest.raises(
+        DomainError, match="^Connection changed; reload before saving$"
+    ) as conflict:
         api.delete(row["id"], row["version"] + 1, contract_db)
     assert conflict.value.status_code == 409
     api.delete(row["id"], row["version"], contract_db)
@@ -482,10 +488,9 @@ def test_loki_events_and_http_credentials_are_connection_scoped(
 
 def test_global_webhook_gate_includes_measurement_receipts(monkeypatch):
     from app.services.ingestion_pause import require_receiving
-    from fastapi import HTTPException
 
     monkeypatch.setattr(sc.deployment_settings, "webhooks_enabled", False)
-    with pytest.raises((HTTPException, DomainError)) as blocked:
+    with pytest.raises(DomainError, match="^Webhook ingestion is disabled$") as blocked:
         require_receiving(None, "webhooks")
     assert blocked.value.status_code == 503
 

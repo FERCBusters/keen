@@ -286,7 +286,7 @@ def test_values_are_replaced_so_statements_group_together(sql, expected):
 
 
 def test_the_command_line_needs_a_capture(tmp_path, capsys):
-    with pytest.raises(SystemExit) as stopped:
+    with pytest.raises(SystemExit, match="^2$") as stopped:
         report_tool.main([str(tmp_path)])
     assert stopped.value.code == 2
     capture(tmp_path)

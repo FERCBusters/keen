@@ -36,7 +36,9 @@ def test_supplier_rule_matches_only_preset_source():
     hits = evaluate_by_framework({"source": "rss", "system": FEED["system"]}, rules)
     assert set(hits["iso_27001_2022"]) == {"A.5.19", "A.5.22"}
     assert hits["KEEN-AF:1.0"] == ["TPM-2"]
-    assert not evaluate_by_framework({"source": "rss", "system": "Another feed"}, rules)
+    assert (
+        evaluate_by_framework({"source": "rss", "system": "Another feed"}, rules) == {}
+    )
 
 
 def test_seeding_the_preset_keeps_the_framework_rules_inherited(

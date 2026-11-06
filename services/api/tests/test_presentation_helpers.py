@@ -131,7 +131,10 @@ def test_control_justifications_accept_labels_and_identifiers(raw, expected):
 
 
 def test_unknown_control_justifications_are_rejected():
-    with pytest.raises(DomainError) as error:
+    with pytest.raises(
+        DomainError,
+        match="^justification must be one of: Best Practice, Result of Risk Assessment, Applicable but not Implemented, Limited Applicability$",
+    ) as error:
         presentation.validate_control_justification(HOSTILE)
     assert error.value.status_code == 400
     assert "Best Practice" in error.value.detail
@@ -144,13 +147,16 @@ def test_timezones_and_themes_are_validated():
         presentation.validate_timezone_name(" Australia/Melbourne ")
         == "Australia/Melbourne"
     )
-    with pytest.raises(DomainError):
+    with pytest.raises(
+        DomainError,
+        match="^Invalid timezone\\. Use an IANA name like 'Australia/Melbourne'\\.$",
+    ):
         presentation.validate_timezone_name("Mars/Olympus_Mons")
     assert presentation.validate_theme_id(None) is None
     assert presentation.validate_theme_id(" ") is None
     assert presentation.validate_theme_id("ocean-dark") == "ocean-dark"
     assert {"ink", "teal-dark"} <= presentation.theme_ids()
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError, match="^Invalid theme$"):
         presentation.validate_theme_id("dark")
 
 
@@ -174,37 +180,42 @@ def test_saved_search_urls_are_normalised(raw, expected):
 
 
 @pytest.mark.parametrize(
-    "raw",
+    "raw,problem",
     [
-        "",
-        "javascript:alert(1)",
-        "DATA:text/html,x",
-        "https://evil.example/",
-        "//evil.example/x",
-        "/x?" + "q=1&" * 600,
-        "/events.html\\..\\evil",
-        "/events.html?q=a\tb",
-        "/events.html?q=a\x7fb",
-        # Browsers resolve these dot segments to the path //evil.example/phish,
-        # which names another host.
-        "/.//evil.example/phish",
-        "/././/evil.example/phish",
-        ".//evil.example/phish",
-        "/%2e//evil.example/phish",
-        "/%2E//evil.example/phish?q=1",
-        "/%2e%2E//evil.example/phish",
-        "/.%2e//evil.example/phish",
-        "/%2e.//evil.example/phish",
-        "/x/..//evil.example/phish",
-        "/x/%2e%2e//evil.example/phish",
-        "/..//evil.example/phish",
-        "/events.html/..",
-        "/./events.html",
+        ("", "url is required"),
+        ("javascript:alert(1)", "Invalid saved search URL"),
+        ("DATA:text/html,x", "Invalid saved search URL"),
+        (
+            "https://evil.example/",
+            "Saved search URL must be a relative path (e.g. /events.html?q=...)",
+        ),
+        (
+            "//evil.example/x",
+            "Saved search URL must be a relative path (e.g. /events.html?q=...)",
+        ),
+        ("/x?" + "q=1&" * 600, "Saved search URL is too long"),
+        ("/events.html\\..\\evil", "Invalid saved search URL"),
+        ("/events.html?q=a\tb", "Invalid saved search URL"),
+        ("/events.html?q=a\x7fb", "Invalid saved search URL"),
+        ("/.//evil.example/phish", "Invalid saved search URL"),
+        ("/././/evil.example/phish", "Invalid saved search URL"),
+        (".//evil.example/phish", "Invalid saved search URL"),
+        ("/%2e//evil.example/phish", "Invalid saved search URL"),
+        ("/%2E//evil.example/phish?q=1", "Invalid saved search URL"),
+        ("/%2e%2E//evil.example/phish", "Invalid saved search URL"),
+        ("/.%2e//evil.example/phish", "Invalid saved search URL"),
+        ("/%2e.//evil.example/phish", "Invalid saved search URL"),
+        ("/x/..//evil.example/phish", "Invalid saved search URL"),
+        ("/x/%2e%2e//evil.example/phish", "Invalid saved search URL"),
+        ("/..//evil.example/phish", "Invalid saved search URL"),
+        ("/events.html/..", "Invalid saved search URL"),
+        ("/./events.html", "Invalid saved search URL"),
     ],
 )
-def test_unsafe_or_oversized_saved_search_urls_are_rejected(raw):
-    with pytest.raises(DomainError):
+def test_unsafe_or_oversized_saved_search_urls_are_rejected(raw, problem):
+    with pytest.raises(DomainError) as refused:
         presentation.normalize_saved_search_url(raw)
+    assert (refused.value.status_code, refused.value.detail) == (400, problem)
 
 
 @pytest.mark.parametrize(
@@ -336,7 +347,7 @@ def test_diary_links_allow_only_web_and_mail_links():
         with pytest.raises(DomainError) as error:
             presentation.validate_diary_link_url(bad)
         assert error.value.detail == detail
-    with pytest.raises(DomainError):
+    with pytest.raises(DomainError, match="^Unsupported link scheme: javascript$"):
         presentation.normalize_diary_links([{"url": "javascript:alert(1)"}])
 
 

@@ -170,11 +170,19 @@ def test_disabling_source_framework_changes_filters(api):
 )
 def test_route_permissions(api, path):
     api.identity["user"] = None
-    assert api.client.get(path).status_code == 401
+    refused = api.client.get(path)
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     api.identity["user"] = User(
         id=uuid.uuid4(), username="reader", role="normal", is_active=True
     )
-    assert api.client.get(path).status_code == 403
+    refused = api.client.get(path)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "events.read permission required"},
+    )
     api.identity["user"].effective_permission_codes = {"events.read"}
     assert api.client.get(path).status_code == 200
 
@@ -208,17 +216,19 @@ def test_crosswalk_crud_scope_conflict_and_admin_permission(api):
     assert response.status_code == 201, response.text
     link = response.json()
     assert link["rationale"] == "Reviewed"
-    assert (
-        api.client.post(
-            url, json={"source_control_id": str(api.b.id), "rationale": "Duplicate"}
-        ).status_code
-        == 409
+    refused = api.client.post(
+        url, json={"source_control_id": str(api.b.id), "rationale": "Duplicate"}
     )
-    assert (
-        api.client.delete(
-            f"/api/v1/controls/{api.c.id}/cross-framework/{link['id']}"
-        ).status_code
-        == 404
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": "This control link already exists"},
+    )
+    refused = api.client.delete(
+        f"/api/v1/controls/{api.c.id}/cross-framework/{link['id']}"
+    )
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Control link not found"},
     )
     assert api.client.delete(url + "/" + link["id"]).status_code == 204
     items = api.client.get(url).json()["items"]
@@ -226,11 +236,12 @@ def test_crosswalk_crud_scope_conflict_and_admin_permission(api):
     api.identity["user"] = User(
         id=uuid.uuid4(), username="reader", role="normal", is_active=True
     )
-    assert (
-        api.client.post(
-            url, json={"source_control_id": str(api.b.id), "rationale": "No"}
-        ).status_code
-        == 403
+    refused = api.client.post(
+        url, json={"source_control_id": str(api.b.id), "rationale": "No"}
+    )
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
     )
 
 
@@ -307,9 +318,10 @@ def test_export_leaves_out_a_control_removed_during_the_export(api, monkeypatch)
 
 
 def test_export_rejects_unknown_format(api):
-    assert (
-        api.client.get("/api/v1/events/export", params={"format": "html"}).status_code
-        == 400
+    refused = api.client.get("/api/v1/events/export", params={"format": "html"})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "format must be one of: csv, json, ndjson"},
     )
 
 

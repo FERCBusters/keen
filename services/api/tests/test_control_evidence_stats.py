@@ -282,7 +282,10 @@ def test_a_new_framework_selection_reads_fresh_counters(evidence, monkeypatch):
     key = make_cache_key(
         "stats:framework-event-counts", stats._framework_event_counts_cache_parts(FW)
     )
-    assert evidence.redis.get(key) is not None
+    assert (
+        evidence.redis.get(key)
+        == '{"mapped_events":2,"total_events":2,"unmapped_events":0}'
+    )
     admin = User(
         username=f"admin-{uuid.uuid4().hex[:8]}", password_hash="-", role="admin"
     )

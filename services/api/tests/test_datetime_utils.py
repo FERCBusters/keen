@@ -48,4 +48,4 @@ def test_no_deprecated_datetime_utc_methods():
                     "utcfromtimestamp",
                 }:
                     offenders.append(f"{path.relative_to(root)}:{node.lineno}")
-    assert not offenders, "\n".join(offenders)
+    assert offenders == [], "\n".join(offenders)

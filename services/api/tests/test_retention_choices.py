@@ -49,7 +49,10 @@ def test_preview_and_save_reject_unknown_identifiers_before_mutating(
             overrides=[dict(scope=scope, key=key, mode="count", value=5)]
         )
         for operation in (service.preview, service.set_policy):
-            with pytest.raises(DomainError) as caught:
+            with pytest.raises(
+                DomainError,
+                match=r"^Choose an existing source type or mapping rule\. Reload the page if the available values have changed\.$",
+            ) as caught:
                 operation(
                     payload=payload,
                     db=choices_db,

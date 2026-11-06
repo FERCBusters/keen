@@ -1,15 +1,13 @@
 """Mapping rules and collection identities over unusual evidence shapes.
 
-Evidence is untrusted: provenance that is not a mapping, GitHub provenance
-naming no feed, organisation or repository, field names the explorer cannot
-show, label values that are not text, labels nested beyond the walk's bound and
-payloads that cannot be written as JSON. Rules come from a missing file when
+Evidence is untrusted: field names the explorer cannot show, label values that
+are not text, labels nested beyond the walk's bound and payloads that cannot be
+written as JSON. Rules come from a missing file when
 no installation document exists.
 """
 
 from datetime import datetime
 
-from app.mapping.collector import collector_id, event_collector
 from app.mapping.fields import observed_fields
 from app.mapping.rules import evaluate_by_framework, load_rules, parse_rules
 from app.security.json_shape import MAX_DEPTH
@@ -25,26 +23,6 @@ def _rule(**when):
 
 def _matches(event, **when):
     return evaluate_by_framework(event, parse_rules({"rules": [_rule(**when)]}))
-
-
-def test_provenance_that_is_not_a_mapping_names_no_collection_item():
-    for pointer in (["queries"], "queries", 7):
-        assert event_collector({"source": "loki", "raw_pointer": pointer}) is None
-    assert event_collector(
-        {"source": "loki", "raw_pointer": {"loki": {"query_name": "auth"}}}
-    ) == collector_id("loki", "queries", "auth")
-
-
-def test_github_provenance_names_an_item_only_with_a_feed_organisation_or_repo():
-    def identity(info):
-        return event_collector({"source": "github", "raw_pointer": {"github": info}})
-
-    assert identity({"owner": "acme"}) is None
-    assert identity({"repo": "keen"}) is None
-    assert identity({}) is None
-    assert identity({"owner": "acme", "repo": "keen"}) == collector_id(
-        "github", "repos", "acme/keen"
-    )
 
 
 def test_field_names_the_explorer_cannot_show_are_left_out():

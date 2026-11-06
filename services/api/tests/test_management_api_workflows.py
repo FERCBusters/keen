@@ -139,15 +139,38 @@ def test_create_update_list_delete(api, path, payload, field, value):
     assert identifier not in {row["id"] for row in request(api, "GET", path)["items"]}
 
 
+# The permission each entity needs to read, change and delete its records.
+PERMISSIONS = {
+    "interested-parties": ("interested_parties.read",)
+    + ("interested_parties.manage",) * 2,
+    "pestle/items": ("pestle.read", "pestle.manage", "pestle.manage"),
+    "audits": ("audits.read", "audits.manage", "audits.admin"),
+    "risks": ("risk.read", "risk.manage", "risk.manage"),
+}
+
+
+def needed(path):
+    read, manage, delete = PERMISSIONS.get(
+        path, ("isms.read", "isms.manage", "isms.manage")
+    )
+    return [
+        {"detail": f"{code} permission required"} for code in (read, manage, delete)
+    ]
+
+
 @pytest.mark.parametrize("path,payload,field,value", ENTITIES)
 def test_access_is_denied_without_permission(api, path, payload, field, value):
+    read, manage, delete = needed(path)
     api.identity["user"] = api.reader
-    request(api, "GET", path, status=403)
-    request(api, "POST", path, payload, status=403)
-    request(api, "PATCH", f"{path}/{uuid.uuid4()}", {field: value}, status=403)
-    request(api, "DELETE", f"{path}/{uuid.uuid4()}", status=403)
+    assert request(api, "GET", path, status=403) == read
+    assert request(api, "POST", path, payload, status=403) == manage
+    assert (
+        request(api, "PATCH", f"{path}/{uuid.uuid4()}", {field: value}, status=403)
+        == manage
+    )
+    assert request(api, "DELETE", f"{path}/{uuid.uuid4()}", status=403) == delete
     api.identity["user"] = None
-    request(api, "GET", path, status=401)
+    assert request(api, "GET", path, status=401) == {"detail": "Not authenticated"}
 
 
 @pytest.mark.parametrize(
@@ -165,33 +188,62 @@ def test_read_permission_does_not_grant_write(api, path, permission):
     api.reader.effective_permission_codes = {permission}
     api.identity["user"] = api.reader
     request(api, "GET", path)
-    request(api, "DELETE", f"{path}/{uuid.uuid4()}", status=403)
+    assert (
+        request(api, "DELETE", f"{path}/{uuid.uuid4()}", status=403)
+        == (needed(path)[2])
+    )
 
 
 @pytest.mark.parametrize(
-    "path,payload",
+    "path,payload,detail",
     [
-        ("isms/objectives", {"requirement": "", "goal": "x"}),
-        ("isms/objectives", {"requirement": "x", "goal": "y", "status": "unknown"}),
+        (
+            "isms/objectives",
+            {"requirement": "", "goal": "x"},
+            "requirement is required",
+        ),
+        (
+            "isms/objectives",
+            {"requirement": "x", "goal": "y", "status": "unknown"},
+            "Invalid objective status",
+        ),
         (
             "isms/objectives",
             {"requirement": "x", "goal": "y", "owner_user_id": str(uuid.uuid4())},
+            "Unknown owner user",
         ),
-        ("isms/documents", {"title": "x", "document_type": "unknown"}),
-        ("isms/org-nodes", {"name": "x", "parent_id": str(uuid.uuid4())}),
-        ("isms/meetings", {"title": "Missing date"}),
-        ("pestle/items", {"type": "Invalid", "lens": "External", "item": "x"}),
-        ("pestle/items", {"type": "Legal", "lens": "Invalid", "item": "x"}),
+        (
+            "isms/documents",
+            {"title": "x", "document_type": "unknown"},
+            "Invalid document_type",
+        ),
+        (
+            "isms/org-nodes",
+            {"name": "x", "parent_id": str(uuid.uuid4())},
+            "Unknown parent",
+        ),
+        ("isms/meetings", {"title": "Missing date"}, "date is required"),
+        (
+            "pestle/items",
+            {"type": "Invalid", "lens": "External", "item": "x"},
+            "type must be a valid PESTLE(E) type",
+        ),
+        (
+            "pestle/items",
+            {"type": "Legal", "lens": "Invalid", "item": "x"},
+            "lens must be Internal or External",
+        ),
         (
             "audits",
             {"title": "x", "start_date": "2026-02-01", "end_date": "2026-01-01"},
+            "end_date cannot be before start_date",
         ),
-        ("audits", {"title": "x", "audit_type": "unknown"}),
+        ("audits", {"title": "x", "audit_type": "unknown"}, "Invalid audit_type"),
     ],
 )
-def test_invalid_create_is_rejected_without_adding_row(api, path, payload):
+def test_invalid_create_is_rejected_without_adding_row(api, path, payload, detail):
     before = request(api, "GET", path)["items"]
-    request(api, "POST", path, payload, status=400)
+    assert request(api, "POST", path, payload, status=400) == {"detail": detail}
     assert request(api, "GET", path)["items"] == before
 
 
@@ -216,20 +268,22 @@ def test_document_revision_scope_and_optimistic_lock(api):
         {"content_html": "<p>Version two</p>", "expected_content_version": 1},
     )
     assert updated["content_version"] == 2
-    request(
+    assert request(
         api,
         "PATCH",
         path,
         {"content_html": "<p>Stale</p>", "expected_content_version": 1},
         status=409,
-    )
+    ) == {"detail": "Document changed since it was opened. Reload before saving."}
     revisions = request(api, "GET", path + "/revisions")
     assert len(revisions) == 2
     assert (
         len(request(api, "GET", "isms/documents/" + second["id"] + "/revisions")) == 1
     )
-    assert "Version one" in request(api, "GET", path + "/revisions/1")["content_html"]
-    assert "Version two" in request(api, "GET", path)["content_html"]
+    assert request(api, "GET", path + "/revisions/1")["content_html"] == (
+        "<p>Version one</p>"
+    )
+    assert request(api, "GET", path)["content_html"] == "<p>Version two</p>"
 
 
 def test_interested_party_communications_controls_and_changelog(api):
@@ -251,25 +305,27 @@ def test_interested_party_communications_controls_and_changelog(api):
     path = "interested-parties/" + party["id"]
     assert len(party["controls"]) == 1
     assert party["communications"][0]["methods"] == ["Email"]
-    request(api, "POST", "interested-parties", body, status=400)
-    request(
+    assert request(api, "POST", "interested-parties", body, status=400) == {
+        "detail": "Interested party with this name and nature already exists"
+    }
+    assert request(
         api, "DELETE", "interested-parties/names/" + party["name"]["id"], status=400
-    )
-    request(
+    ) == {"detail": "Name is used by an interested party"}
+    assert request(
         api, "DELETE", "interested-parties/natures/" + party["nature"]["id"], status=400
-    )
+    ) == {"detail": "Nature is used by an interested party"}
     # The party is one organisation-wide record; each framework keeps its own
     # control links, so a control from B cannot be linked under A.
     viewed_in_b = request(api, "PATCH", path, {"framework": "B"})
     assert (viewed_in_b["framework"], viewed_in_b["controls"]) == ("B", [])
     assert len(request(api, "GET", path)["controls"]) == 1
-    request(
+    assert request(
         api,
         "PATCH",
         path + "/controls",
         {"controls": [str(api.controls[1].id)]},
         status=400,
-    )
+    ) == {"detail": f"Unknown control: {api.controls[1].id}"}
     linked_in_b = request(
         api,
         "PATCH",
@@ -284,7 +340,7 @@ def test_interested_party_communications_controls_and_changelog(api):
     assert request(api, "GET", path + "/communications")["items"] == []
     request(api, "PATCH", path + "/controls", {"controls": []})
     assert request(api, "GET", path + "/controls")["controls"] == []
-    assert len(request(api, "GET", path + "/changelog")["items"]) >= 3
+    assert len(request(api, "GET", path + "/changelog")["items"]) == 4
 
 
 @pytest.mark.parametrize("lookup", ["names", "natures"])
@@ -294,7 +350,9 @@ def test_party_lookup_normalization_duplicate_and_deletion(api, lookup):
     assert row["name"] == "Supplier"
     assert request(api, "POST", path, {"name": "supplier"})["id"] == row["id"]
     other = request(api, "POST", path, {"name": "Other"})
-    request(api, "PATCH", path + "/" + other["id"], {"name": "SUPPLIER"}, status=400)
+    assert request(
+        api, "PATCH", path + "/" + other["id"], {"name": "SUPPLIER"}, status=400
+    ) == {"detail": f"{lookup[:-1].capitalize()} already exists"}
     assert request(api, "GET", path, q="supp")["items"][0]["id"] == row["id"]
     request(api, "DELETE", path + "/" + row["id"])
 
@@ -326,10 +384,10 @@ def test_risk_scores_controls_owner_and_change_history(api):
     assert len(request(api, "GET", path + "/controls")["items"]) == 1
     request(api, "PATCH", path + "/controls", {"controls": [], "framework": "A"})
     assert request(api, "GET", path + "/controls")["items"] == []
-    assert len(request(api, "GET", path + "/changelog")["items"]) >= 2
+    assert len(request(api, "GET", path + "/changelog")["items"]) == 3
     assert request(api, "GET", "risks", q="Disclosure")["total"] == 1
     request(api, "DELETE", path)
-    request(api, "GET", path, status=404)
+    assert request(api, "GET", path, status=404) == {"detail": "Risk not found"}
 
 
 def test_asset_license_and_access_matrix_relationship_lifecycle(api):
@@ -407,10 +465,12 @@ def test_effectiveness_measure_metric_entry_scoping_and_updates(api):
     )
     assert entry["metric_unit"] == "%"
     assert request(api, "GET", path + "/metrics")["items"][0]["metric_value"] == 96
-    request(api, "GET", path, framework="B", status=404)
-    request(
+    assert request(api, "GET", path, framework="B", status=404) == {
+        "detail": "Effectiveness measure not found"
+    }
+    assert request(
         api, "POST", path + "/metrics", {"metric_value": 100}, framework="B", status=404
-    )
+    ) == {"detail": "Effectiveness measure not found"}
     metric_path = "isms/effectiveness-metrics/" + entry["id"]
     assert (
         request(api, "PATCH", metric_path, {"metric_value": 97})["metric_value"] == 97
@@ -451,14 +511,14 @@ def test_audit_child_resources_are_scoped_and_completed_audits_lock(api):
         path + "/evidence",
         {"evidence_url": "https://example.org/evidence", "title": "Review record"},
     )
-    for collection, row in [
-        ("attendees", attendee),
-        ("findings", finding),
-        ("evidence", evidence),
+    for collection, row, missing in [
+        ("attendees", attendee, "Attendee not found"),
+        ("findings", finding, "Finding not found"),
+        ("evidence", evidence, "Evidence not found"),
     ]:
-        request(
+        assert request(
             api, "DELETE", f"audits/{other['id']}/{collection}/{row['id']}", status=404
-        )
+        ) == {"detail": missing}
     request(
         api,
         "PATCH",
@@ -475,9 +535,11 @@ def test_audit_child_resources_are_scoped_and_completed_audits_lock(api):
     )
     assert detail["findings"][0]["status"] == "closed"
     request(api, "PATCH", path, {"status": "completed"})
-    request(
+    assert request(
         api, "POST", path + "/findings", {"kind": "ofi", "title": "New"}, status=409
-    )
+    ) == {
+        "detail": "This audit is completed and cannot be modified. Change its status back to Open or In progress before editing it."
+    }
     request(api, "PATCH", path, {"status": "open"})
     for collection, row in [
         ("attendees", attendee),
@@ -486,7 +548,7 @@ def test_audit_child_resources_are_scoped_and_completed_audits_lock(api):
     ]:
         request(api, "DELETE", f"{path}/{collection}/{row['id']}")
     detail = request(api, "GET", path)
-    assert not detail["attendees"] and not detail["findings"] and not detail["evidence"]
+    assert (detail["attendees"], detail["findings"], detail["evidence"]) == ([], [], [])
 
 
 @pytest.mark.parametrize("kind", ["major_nc", "minor_nc", "ofi", "best_practice"])
@@ -504,8 +566,11 @@ def test_audit_finding_kinds_roundtrip(api, kind):
         },
     )
     assert finding["kind"] == kind
-    assert "<script>" not in finding["description"]
-    request(api, "PATCH", path + "/" + finding["id"], {"status": "invalid"}, status=400)
+    # The script element goes; its text stays as inert text.
+    assert finding["description"] == "<p>Safeevil()</p>"
+    assert request(
+        api, "PATCH", path + "/" + finding["id"], {"status": "invalid"}, status=400
+    ) == {"detail": "Invalid status"}
 
 
 @pytest.mark.parametrize("recurrence", ["once", "monthly", "quarterly", "yearly"])
@@ -531,33 +596,45 @@ def test_scheduled_audit_template_roundtrip(api, recurrence):
 
 
 @pytest.mark.parametrize(
-    "path",
+    "path,malformed,missing",
     [
-        "isms/objectives",
-        "isms/documents",
-        "isms/assets",
-        "isms/effectiveness-measures",
-        "isms/meetings",
-        "risks",
-        "pestle/items",
-        "interested-parties",
-        "audits",
+        ("isms/objectives", "Objective id must be a UUID", "Objective not found"),
+        ("isms/documents", "Document id must be a UUID", "Document not found"),
+        ("isms/assets", "asset_id must be a UUID", "Asset not found"),
+        (
+            "isms/effectiveness-measures",
+            "Effectiveness measure id must be a UUID",
+            "Effectiveness measure not found",
+        ),
+        ("isms/meetings", "Meeting id must be a UUID", "Meeting not found"),
+        ("risks", "risk_id must be a UUID", "Risk not found"),
+        ("pestle/items", "pestle item id must be a UUID", "PESTLE(E) item not found"),
+        (
+            "interested-parties",
+            "interested_party_id must be a UUID",
+            "Interested party not found",
+        ),
+        ("audits", "audit_id must be a UUID", "Audit not found"),
     ],
 )
-@pytest.mark.parametrize(
-    "identifier,status", [("invalid", 400), (str(uuid.uuid4()), 404)]
-)
-def test_detail_identifiers_do_not_produce_server_errors(api, path, identifier, status):
-    request(api, "GET", f"{path}/{identifier}", status=status)
+def test_detail_identifiers_do_not_produce_server_errors(api, path, malformed, missing):
+    assert request(api, "GET", f"{path}/invalid", status=400) == {"detail": malformed}
+    assert request(api, "GET", f"{path}/{uuid.uuid4()}", status=404) == {
+        "detail": missing
+    }
 
 
 def test_org_parent_updates_reject_cycles_and_unknown_parents(api):
     url = "/api/v1/isms/org-nodes"
     a = api.client.post(url, json={"name": "A"}).json()
     b = api.client.post(url, json={"name": "B", "parent_id": a["id"]}).json()
-    for parent in [a["id"], b["id"], str(uuid.uuid4())]:
+    for parent, detail in [
+        (a["id"], "Parent relationship would contain a cycle"),
+        (b["id"], "Parent relationship would contain a cycle"),
+        (str(uuid.uuid4()), "Unknown parent"),
+    ]:
         response = api.client.patch(url + "/" + a["id"], json={"parent_id": parent})
-        assert response.status_code == 400, response.text
+        assert (response.status_code, response.json()) == (400, {"detail": detail})
     response = api.client.patch(url + "/" + b["id"], json={"parent_id": None})
     assert response.status_code == 200, response.text
 
@@ -582,10 +659,17 @@ def test_audit_report_download_sanitises_stored_filename(api, monkeypatch):
     response = api.client.get(f"/api/v1/audits/{row.id}/report")
     assert response.status_code == 200
     assert "x-evil" not in response.headers
-    assert "\r" not in response.headers["content-disposition"]
-    assert "%E5%93%81%E8%B3%AA" in response.headers["content-disposition"]
+    # The stored name's line break goes; its other characters are quoted.
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="??X-Evil: yes.pdf"; '
+        "filename*=UTF-8''%E5%93%81%E8%B3%AAX-Evil%3A%20yes.pdf"
+    )
     api.identity["user"] = api.reader
-    assert api.client.get(f"/api/v1/audits/{row.id}/report").status_code == 403
+    refused = api.client.get(f"/api/v1/audits/{row.id}/report")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Audit access required"},
+    )
 
 
 def test_objective_list_filters_and_partial_updates(api):
@@ -602,16 +686,25 @@ def test_objective_list_filters_and_partial_updates(api):
         "isms/objectives",
         {"requirement": "Protect records", "goal": "Encrypt backups"},
     )
-    request(
+    second = request(
         api,
         "POST",
         "isms/objectives",
         {"requirement": "Train staff", "goal": "Annual", "metric": "Attendance"},
     )
-    assert by_status("finished").status_code == 400
-    assert request(api, "GET", "isms/objectives", q="  backups ")["total"] == 1
-    assert request(api, "GET", "isms/objectives", q="attendance")["total"] == 1
-    assert request(api, "GET", "isms/objectives", q="nothing here")["total"] == 0
+    refused = by_status("finished")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid objective status"},
+    )
+
+    def found(text):
+        listed = request(api, "GET", "isms/objectives", q=text)
+        return listed["total"], [item["id"] for item in listed["items"]]
+
+    assert found("  backups ") == (1, [first["id"]])
+    assert found("attendance") == (1, [second["id"]])
+    assert found("nothing here") == (0, [])
     path = "isms/objectives/" + first["id"]
     changed = request(
         api,
@@ -631,8 +724,14 @@ def test_objective_list_filters_and_partial_updates(api):
     assert changed["requirement"] == "Protect records"
     assert [i["id"] for i in by_status("in_progress").json()["items"]] == [first["id"]]
     assert request(api, "PATCH", path, {"status": ""})["status"] == "not_started"
-    assert by_status("defined").json()["total"] == 2
-    request(api, "PATCH", path, {"status": "finished"}, status=400)
+    defined = by_status("defined").json()
+    assert (defined["total"], {item["id"] for item in defined["items"]}) == (
+        2,
+        {first["id"], second["id"]},
+    )
+    assert request(api, "PATCH", path, {"status": "finished"}, status=400) == {
+        "detail": "Invalid objective status"
+    }
     assert request(api, "GET", path)["status"] == "not_started"
 
 
@@ -708,12 +807,24 @@ def test_effectiveness_measures_are_scoped_to_their_framework(api):
         api, "POST", path + "/metrics", {"metric_value": 1, "source_type": "other"}
     )
     metric_path = "isms/effectiveness-metrics/" + entry["id"]
-    request(api, "PATCH", path, {"summary": "Renamed"}, framework="B", status=404)
-    request(api, "DELETE", path, framework="B", status=404)
-    request(api, "GET", path + "/metrics", framework="B", status=404)
-    request(api, "GET", metric_path, framework="B", status=404)
-    request(api, "PATCH", metric_path, {"metric_value": 2}, framework="B", status=404)
-    request(api, "DELETE", metric_path, framework="B", status=404)
+    assert request(
+        api, "PATCH", path, {"summary": "Renamed"}, framework="B", status=404
+    ) == {"detail": "Effectiveness measure not found"}
+    assert request(api, "DELETE", path, framework="B", status=404) == {
+        "detail": "Effectiveness measure not found"
+    }
+    assert request(api, "GET", path + "/metrics", framework="B", status=404) == {
+        "detail": "Effectiveness measure not found"
+    }
+    assert request(api, "GET", metric_path, framework="B", status=404) == {
+        "detail": "Effectiveness metric not found"
+    }
+    assert request(
+        api, "PATCH", metric_path, {"metric_value": 2}, framework="B", status=404
+    ) == {"detail": "Effectiveness metric not found"}
+    assert request(api, "DELETE", metric_path, framework="B", status=404) == {
+        "detail": "Effectiveness metric not found"
+    }
     assert request(api, "GET", path)["summary"] == "Agent coverage"
     assert request(api, "GET", metric_path)["metric_value"] == 1
     assert request(api, "GET", metric_path)["measure"]["id"] == measure["id"]
@@ -769,8 +880,12 @@ def test_metric_periods_with_one_bound_are_described(api):
 
 
 def test_isms_changelog_rejects_unknown_types_and_malformed_identifiers(api):
-    request(api, "GET", "isms/widget/" + str(uuid.uuid4()) + "/changelog", status=400)
-    request(api, "GET", "isms/objective/not-a-uuid/changelog", status=400)
+    assert request(
+        api, "GET", "isms/widget/" + str(uuid.uuid4()) + "/changelog", status=400
+    ) == {"detail": "Unknown ISMS entity type"}
+    assert request(api, "GET", "isms/objective/not-a-uuid/changelog", status=400) == {
+        "detail": "entity_id must be a UUID"
+    }
     objective = request(
         api, "POST", "isms/objectives", {"requirement": "R", "goal": "G"}
     )
@@ -846,7 +961,7 @@ def test_serializers_tolerate_missing_rows_and_refuse_unknown_entity_types():
     assert serializers._asset_subcategory_out(None) is None
     assert serializers._metric_entry_value_display(None) == ""
     assert serializers._metric_entry_out(None) is None
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(DomainError, match="^Unknown ISMS entity type$") as refused:
         serializers._entity_out(None, "widget", object(), "A")
     assert refused.value.status_code == 400
 

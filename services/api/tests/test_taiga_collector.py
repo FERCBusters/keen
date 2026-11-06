@@ -153,7 +153,10 @@ def test_login_and_token_priority_and_cache():
         patch.object(tg.settings, "taiga_password", ""),
         patch.object(tg, "connection_cache", return_value={}),
     ):
-        with pytest.raises(RuntimeError) as no_creds:
+        with pytest.raises(
+            RuntimeError,
+            match=r"^Taiga auth required but KEEN_TAIGA_USERNAME/KEEN_TAIGA_PASSWORD are not set \(or set KEEN_TAIGA_TOKEN to use a pre-generated token\)\.$",
+        ) as no_creds:
             tg._login_and_get_token()
     assert "KEEN_TAIGA_USERNAME" in str(no_creds.value)
 
@@ -180,7 +183,10 @@ def test_login_and_token_priority_and_cache():
             serving(empty_token),
             patch.object(tg, "connection_cache", return_value={}),
         ):
-            with pytest.raises(RuntimeError) as missing:
+            with pytest.raises(
+                RuntimeError,
+                match=r"^Taiga /api/v1/auth response missing auth_token field: keys=\[\]$",
+            ) as missing:
                 tg._login_and_get_token()
         assert "auth_token" in str(missing.value)
 
@@ -190,7 +196,7 @@ def test_base_client_rejects_unsafe_url():
         patch.object(tg, "is_safe_url", return_value=False),
         patch.object(tg.settings, "taiga_base_url", "https://taiga.example"),
     ):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="^Invalid or unsafe Taiga base URL$"):
             tg._base_client()
 
 
@@ -243,7 +249,8 @@ def test_ingest_project_timeline_unauthorised_refresh(db):
     assert responses["auth"] == 2
     assert responses["timeline"] == 2
     assert result["created_events"] == 1
-    store.assert_called()
+    assert store.call_count == 1
+    assert store.call_args.kwargs["external_id"] == "taiga:12:55"
 
 
 def test_ingest_project_timeline_no_id_fingerprint_and_skips(db):

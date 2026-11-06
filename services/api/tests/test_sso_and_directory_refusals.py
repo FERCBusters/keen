@@ -170,7 +170,9 @@ def test_a_callback_for_a_provider_without_an_issuer_contacts_no_one(
     contacted = []
     monkeypatch.setattr(oidc, "_new_client", lambda *a, **k: contacted.append(a))
 
-    with pytest.raises(HTTPException) as refused:
+    with pytest.raises(
+        HTTPException, match="^500: SSO issuer is not configured$"
+    ) as refused:
         asyncio.run(oidc._handle_oidc_callback("code", sso.db, provider, None))
 
     assert (refused.value.status_code, refused.value.detail) == (
@@ -268,7 +270,10 @@ def test_a_directory_address_too_long_to_name_its_accounts_is_unavailable(
     monkeypatch.setattr(settings, "ldap_url", "ldaps://" + "d" * 500 + ".example:636")
     store = ldap.get_valkey()
 
-    with pytest.raises(HTTPException) as refused:
+    with pytest.raises(
+        HTTPException,
+        match="^503: LDAP authentication unavailable; check directory configuration and connectivity$",
+    ) as refused:
         ldap.directory_identity("alice", "synthetic-user-password")
 
     assert refused.value.status_code == 503
@@ -305,7 +310,10 @@ def test_a_directory_account_created_concurrently_is_refused(
 
     monkeypatch.setattr(people, "ensure_person_for_user", provisioned_meanwhile)
 
-    with pytest.raises(HTTPException) as refused:
+    with pytest.raises(
+        HTTPException,
+        match="^409: Account was created concurrently; please sign in again$",
+    ) as refused:
         ldap.authenticate_ldap(contract_db, "alice", "synthetic-user-password")
 
     assert refused.value.status_code == 409

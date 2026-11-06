@@ -59,7 +59,11 @@ def test_the_mfa_summary_lists_factors_without_their_secrets(keen):  # noqa: F81
     for secret in ("synthetic-encrypted-totp-secret", "synthetic-public-key", "a" * 64):
         assert secret not in response.text
     assert response.headers["cache-control"] == "no-store"
-    assert keen.client().get("/v1/me/mfa").status_code == 401
+    refused = keen.client().get("/v1/me/mfa")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 def test_sso_linking_addresses_are_the_users_own(keen, monkeypatch):  # noqa: F811
@@ -94,7 +98,11 @@ def test_sso_linking_addresses_are_the_users_own(keen, monkeypatch):  # noqa: F8
             {"email": "z-ada@example.test", "verified_at": "2026-05-01T09:30:00"},
         ],
     }
-    assert keen.client().get("/v1/me/sso-emails").status_code == 401
+    refused = keen.client().get("/v1/me/sso-emails")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
 
 
 def test_requesting_a_linking_address_reveals_nothing_about_other_accounts(
@@ -141,7 +149,8 @@ def test_requesting_a_linking_address_reveals_nothing_about_other_accounts(
 
 def test_the_admin_page_gate_admits_administrators_only(keen):  # noqa: F811
     path = "/v1/auth/check-admin"
-    assert keen.client().get(path).status_code == 401
+    answer = keen.client().get(path)
+    assert (answer.status_code, answer.json()) == (401, {"detail": "Not authenticated"})
 
     # Audit managers, and a permission named after the retired audit trail
     # permission, are refused like any other account.

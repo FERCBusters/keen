@@ -15,7 +15,6 @@ from app.db.models import (
 )
 from app.services.errors import DomainError
 from app.services.managed_configurations import RestoreInput
-from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -77,7 +76,10 @@ def test_restore_changes_only_selected_rule_and_checks_conflicts(db):
     snapshot(db, 2, [rule("a", "Changed A"), rule("b")])
     snapshot(db, 3, [rule("a", "Changed A"), rule("b", "Keep B")])
     user = SimpleNamespace(id=None)
-    with pytest.raises((HTTPException, DomainError)) as exc:
+    with pytest.raises(
+        DomainError,
+        match=r"^Configuration changed in another session\. Reload before saving\.$",
+    ) as exc:
         restore_rule_revision("a", 1, RestoreInput(version=2), user, db)
     assert exc.value.status_code == 409
     db.rollback()
@@ -96,7 +98,9 @@ def test_unrelated_snapshot_cannot_be_restored_as_rule_revision(db):
     snapshot(db, 1, [rule("a")])
     snapshot(db, 2, [rule("a"), rule("b")])
     for identifier, version in [("b", 1), ("a", 2)]:
-        with pytest.raises((HTTPException, DomainError)) as exc:
+        with pytest.raises(
+            DomainError, match="^Revision not found for this rule$"
+        ) as exc:
             restore_rule_revision(
                 identifier,
                 version,
@@ -114,7 +118,7 @@ def test_delete_then_reuse_id_starts_new_history(db):
     assert [
         (r["revision"], r["version"]) for r in list_rule_revisions("a", db)["items"]
     ] == [(1, 3)]
-    with pytest.raises((HTTPException, DomainError)) as exc:
+    with pytest.raises(DomainError, match="^Revision not found for this rule$") as exc:
         restore_rule_revision(
             "a", 1, RestoreInput(version=3), SimpleNamespace(id=None), db
         )

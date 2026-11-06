@@ -320,7 +320,11 @@ def test_questions_about_missing_records_are_refused(qa, target, missing):
     malformed = qa.ask(client, target, target_id="not-a-uuid")
     assert malformed.status_code == 400
     assert malformed.json()["detail"] == "Invalid entity id"
-    assert client.get(qa.path(target, "not-a-uuid")).status_code == 400
+    refused = client.get(qa.path(target, "not-a-uuid"))
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid entity id"},
+    )
     assert qa.rows(EventQuestionThread) == []
 
 
@@ -370,7 +374,8 @@ def test_a_hidden_diary_entry_cannot_be_questioned(qa):
 
     asked = sighted.post(base, json={"body": "What changed?"}, headers=unsafe(sighted))
     assert asked.status_code == 200, asked.text
-    assert blind.get(base).status_code == 404
+    refused = blind.get(base)
+    assert (refused.status_code, refused.json()) == (404, {"detail": "Event not found"})
 
 
 # --- Feature switches -----------------------------------------------------------
@@ -643,8 +648,16 @@ def test_deleting_a_question_needs_question_delete_and_sight_of_the_record(qa):
     assert hidden.status_code == 403
     assert hidden.json()["detail"] == REFUSAL["risk"]
     assert len(qa.rows(EventQuestionThread)) == 1
-    assert delete(moderator, "not-a-uuid").status_code == 400
-    assert delete(moderator, uuid.uuid4()).status_code == 404
+    refused = delete(moderator, "not-a-uuid")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid thread id"},
+    )
+    refused = delete(moderator, uuid.uuid4())
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Thread not found"},
+    )
 
     assert delete(moderator).json() == {"thread_id": thread_id, "deleted": True}
 

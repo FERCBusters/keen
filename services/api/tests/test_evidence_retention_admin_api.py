@@ -152,8 +152,9 @@ def test_previews_count_only_what_a_policy_would_remove(lab):
         },
         status=422,
     )
-    assert invented["detail"].startswith(
-        "Choose an existing source type or mapping rule"
+    assert (
+        invented["detail"]
+        == "Choose an existing source type or mapping rule. Reload the page if the available values have changed."
     )
 
 
@@ -166,7 +167,13 @@ def test_a_purge_needs_a_policy_runs_one_at_a_time_and_can_be_cancelled(lab):
     unconfirmed = lab.call(
         "POST", "/purge", {"mode": "all", "confirmation": "purge evidence"}, 422
     )
-    assert unconfirmed["detail"]
+    assert unconfirmed["detail"] == [
+        {
+            "type": "literal_error",
+            "loc": ["body", "confirmation"],
+            "msg": "Input should be 'PURGE EVIDENCE'",
+        }
+    ]
     assert lab.sql("SELECT id FROM evidence_purge_jobs") == []
 
     queued = lab.call("POST", "/purge", PURGE_ALL, status=202)
@@ -181,7 +188,10 @@ def test_a_purge_needs_a_policy_runs_one_at_a_time_and_can_be_cancelled(lab):
     # A manual purge pauses collection until it finishes.
     assert lab.call("GET")["ingestion_pause"]["paused"] is True
     busy = lab.call("POST", "/purge", PURGE_ALL, status=409)
-    assert busy["detail"].startswith("A purge is already queued or running")
+    assert (
+        busy["detail"]
+        == "A purge is already queued or running; wait for it or cancel it first"
+    )
 
     assert lab.call("POST", "/cancel") == {"ok": True}
     assert [
@@ -248,8 +258,12 @@ def test_retention_controls_need_an_administrator(lab, method, path, body):
         lab.keen.user("events.read", "audits.admin", "risk.manage")
     )
     refused = reader.request(method, PATH + path, json=body, headers=unsafe(reader))
-    assert refused.status_code == 403
-    assert lab.keen.client().request(method, PATH + path, json=body).status_code == 401
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Admin role required"},
+    )
+    answer = lab.keen.client().request(method, PATH + path, json=body)
+    assert (answer.status_code, answer.json()) == (401, {"detail": "Not authenticated"})
     if method != "GET":
         # Administrators still need the CSRF token.
         response = lab.admin.request(method, PATH + path, json=body)

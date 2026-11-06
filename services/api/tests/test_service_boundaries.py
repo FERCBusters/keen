@@ -89,7 +89,10 @@ def test_domain_failure_keeps_status_headers_and_permission_gate():
     app.include_router(router)
     with TestClient(app) as client:
         denied = client.get("/protected")
-        assert denied.status_code == 403
+        assert (denied.status_code, denied.json()) == (
+            403,
+            {"detail": "Permission denied"},
+        )
         assert calls == []
         limited_response = client.get("/limited")
         assert limited_response.status_code == 429

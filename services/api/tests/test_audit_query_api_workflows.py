@@ -203,7 +203,11 @@ def test_attendees_read_their_own_audits_only(audits):
     ]  # no templates
     assert mine["items"][0]["my_attendee"]["role"] == "Observer"
     assert _get(app.client(app.user()), "/v1/me/audits")["items"] == []
-    assert app.client().get("/v1/me/audits").status_code == 401
+    refused = app.client().get("/v1/me/audits")
+    assert (refused.status_code, refused.json()) == (
+        401,
+        {"detail": "Not authenticated"},
+    )
     _get(attendee, "/v1/audits/not-a-uuid", expect=400)
     _get(attendee, f"/v1/audits/{uuid.uuid4()}", expect=404)
 
@@ -328,7 +332,11 @@ def test_scope_coverage_lists_isms_documents_for_isms_readers_only(audits):
     assembled = audits.keen
     # An audit reader without ISMS read access cannot open the register ...
     reader = assembled.client(assembled.user("audits.read"))
-    assert reader.get("/v1/isms/documents").status_code == 403
+    refused = reader.get("/v1/isms/documents")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "isms.read permission required"},
+    )
     # ... and coverage leaves its documents out, with their counts.
     coverage = _get(reader, "/v1/audits/scope-coverage", framework="A")
     assert coverage["summary"]["documents"] is None
@@ -388,7 +396,11 @@ def test_scoping_documents_needs_isms_read_and_refuses_guesses_alike(
     monkeypatch.setattr(permissions, "PERMISSION_IMPLICATIONS", {})
     outsider = assembled.user("audits.manage")
     client = assembled.client(outsider)
-    assert client.get("/v1/isms/documents").status_code == 403
+    refused = client.get("/v1/isms/documents")
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "isms.read permission required"},
+    )
     own = client.post(
         "/v1/audits",
         json={"title": "Own", "framework_slug": "A"},

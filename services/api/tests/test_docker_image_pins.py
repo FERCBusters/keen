@@ -419,7 +419,10 @@ def test_update_rewrites_only_the_digests_and_then_settles(tmp_path):
         "Each new index matches its digest and serves linux/amd64 and linux/arm64."
         in body
     )
-    assert message.startswith("Update pinned image digests\n\n- ")
+    assert (
+        message
+        == "Update pinned image digests\n\n- docker.io/library/python:3.12-slim: sha256:7b7057afca29 -> sha256:2ec01fb18b10 (3.12.11 -> 3.12.12)\n- docker.io/library/nginx:1.30-alpine: unpinned -> sha256:08fe71d0a5ef (1.30.6)\n"
+    )
     # One HEAD per tag, however often it appears; each new index is fetched
     # once to verify it and each old one once to describe it.
     assert sorted(hub.served) == sorted(
@@ -945,7 +948,7 @@ def test_workflow_actions_are_pinned_and_scripts_read_values_from_env():
     for path in sorted(WORKFLOWS.glob("*.yml")):
         for job_name, job in yaml.safe_load(path.read_text())["jobs"].items():
             if "uses" in job:
-                assert job["uses"].startswith("./.github/workflows/"), job_name
+                assert job["uses"] == "./.github/workflows/tests.yml", job_name
             for step in job.get("steps", []):
                 if "uses" in step:
                     assert re.fullmatch(

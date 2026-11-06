@@ -347,8 +347,13 @@ def test_section_routes_keep_their_permission_boundaries(books):
     outsider = books.keen.client(books.keen.user("events.read", "audits.read"))
     anonymous = books.keen.client()
 
-    assert outsider.get(PATH).status_code == 403
-    assert anonymous.get(PATH).status_code == 401
+    answer = outsider.get(PATH)
+    assert (answer.status_code, answer.json()) == (
+        403,
+        {"detail": "isms.read permission required"},
+    )
+    answer = anonymous.get(PATH)
+    assert (answer.status_code, answer.json()) == (401, {"detail": "Not authenticated"})
     refused = books.capture(status=403, client=books.reader)
     assert refused["detail"] == "isms.manage permission required"
     unprotected = books.manager.post(
@@ -369,5 +374,10 @@ def test_section_routes_keep_their_permission_boundaries(books):
         403,
         "ISMS or sampled-audit read permission required",
     )
-    assert anonymous.get(snapshot).status_code == 401
-    assert books.reader.get(f"{PATH}/{uuid.uuid4()}/snapshot").status_code == 404
+    answer = anonymous.get(snapshot)
+    assert (answer.status_code, answer.json()) == (401, {"detail": "Not authenticated"})
+    answer = books.reader.get(f"{PATH}/{uuid.uuid4()}/snapshot")
+    assert (answer.status_code, answer.json()) == (
+        404,
+        {"detail": "Policy section snapshot not found"},
+    )

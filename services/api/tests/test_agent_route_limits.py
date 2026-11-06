@@ -79,18 +79,24 @@ def test_a_response_sealed_while_keen_has_no_active_key_names_none(
 
 
 @pytest.mark.parametrize(
-    "path,operation,limit,refusal",
+    "path,operation,limit,unreadable,refusal",
     [
         (
             "/v1/otlp/logs",
             "otlp-logs",
             api.MAX_BODY,
+            {
+                "code": 3,
+                "message": "Invalid OTLP JSON logs; maximum 64 records and "
+                "bounded attributes",
+            },
             {"code": 8, "message": "Request exceeds limit"},
         ),
         (
             "/v1/agents/heartbeat",
             "heartbeat",
             api.HEALTH_BODY,
+            {"detail": "Invalid health report"},
             {"detail": "Request exceeds limit"},
         ),
     ],
@@ -101,6 +107,7 @@ def test_an_opened_body_is_bounded_whatever_the_sealing_allowance(
     path,
     operation,
     limit,
+    unreadable,
     refusal,
 ):
     agent, _ = enrolled(keen)
@@ -109,8 +116,9 @@ def test_an_opened_body_is_bounded_whatever_the_sealing_allowance(
     monkeypatch.setattr(
         server_keys, "SEALED_OVERHEAD", server_keys.SEALED_OVERHEAD + 64
     )
+    # A body at the limit is opened and read, and refused only as unreadable.
     within = agent.post(path, b" " * limit, operation)
-    assert within.status_code != 413, within.text
+    assert (within.status_code, within.json()) == (400, unreadable)
 
     refused = agent.post(path, b" " * (limit + 1), operation)
 

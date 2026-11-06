@@ -161,7 +161,10 @@ def test_source_connection_destination_change_requires_credentials(
         {"base_url": "https://collector.attacker.example", "username": "svc"},
         {"base_url": "https://git.example", "username": "svc", "auth_mode": "query"},
     ):
-        with pytest.raises(DomainError) as rejected:
+        with pytest.raises(
+            DomainError,
+            match="^Re-enter or clear the saved credentials when changing the endpoint, authentication mode or credential header$",
+        ) as rejected:
             edit(configuration=configuration, credentials={})
         assert rejected.value.status_code == 422
         assert "Re-enter or clear the saved credentials" in rejected.value.detail
@@ -223,7 +226,10 @@ def test_integration_origin_change_requires_credential(monkeypatch):
 
         # A new origin, or a new path on the same origin, moves the secret.
         for moved in ("https://other.example.org", "https://api.example.org/v2"):
-            with pytest.raises(DomainError) as rejected:
+            with pytest.raises(
+                DomainError,
+                match="^Supply a new credential when changing the connection base URL, credential header or parameter, or OAuth token path$",
+            ) as rejected:
                 save(base_url=moved)
             assert rejected.value.status_code == 422
         save(base_url="https://api.example.org/")  # the same destination

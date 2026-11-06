@@ -119,6 +119,6 @@ def test_a_linking_address_must_be_one_mailbox(keen, monkeypatch, address):  # n
         json={"email": "Person@Corp.Example"},
         headers=unsafe(client),
     )
-    assert accepted.status_code == 200, accepted.text
+    assert (accepted.status_code, accepted.json()) == (200, {"ok": True})
     (queued,) = keen.db.query(SecurityNotification).filter_by(user_id=user.id)
     assert queued.recipient == "person@corp.example"

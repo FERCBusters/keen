@@ -36,7 +36,7 @@ def test_lifespan_preserves_bootstrap_and_listener_cleanup(monkeypatch, failure)
                 raise RuntimeError("request failed")
 
     if failure in ("bootstrap", "request"):
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError, match=f"^{failure} failed$"):
             asyncio.run(exercise())
     else:
         asyncio.run(exercise())
@@ -45,5 +45,5 @@ def test_lifespan_preserves_bootstrap_and_listener_cleanup(monkeypatch, failure)
         if failure == "bootstrap"
         else ["start", "bootstrap", "serve", "stop"]
     )
-    assert not main.app.router.on_startup
-    assert not main.app.router.on_shutdown
+    assert main.app.router.on_startup == []
+    assert main.app.router.on_shutdown == []

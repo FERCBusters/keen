@@ -30,7 +30,7 @@ def test_saved_inputs_are_listed_section_by_section(admin):
             },
         },
     )
-    assert logs.status_code in (200, 201), logs.text
+    assert logs.status_code == 200, logs.text
     hook = admin.send(
         "POST",
         ROOT,
@@ -41,7 +41,7 @@ def test_saved_inputs_are_listed_section_by_section(admin):
             "inputs": {"providers": {"acme": {"secret_header": "X-Acme-Signature"}}},
         },
     )
-    assert hook.status_code in (200, 201), hook.text
+    assert hook.status_code == 200, hook.text
     shown = {c["name"]: c["inputs"] for c in admin.saved()}
     assert shown == {
         "Production logs": {

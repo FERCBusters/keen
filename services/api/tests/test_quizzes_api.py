@@ -284,17 +284,26 @@ def test_a_quiz_runs_from_creation_to_a_recorded_result(world):
 def test_reading_and_managing_follow_the_two_permissions(world):
     nobody = world.keen.client(world.keen.user())
     reader = world.reader
-    assert nobody.get(f"/v1/quizzes?framework={FW}").status_code == 403
+    refused_2 = nobody.get(f"/v1/quizzes?framework={FW}")
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {"detail": "quiz.read permission required"},
+    )
     refused = world.post(nobody, "/v1/quizzes", {"title": "No", "framework": FW})
     assert refused.status_code == 403
     assert refused.json()["detail"] == "quiz.manage permission required"
     assert reader.get(f"/v1/quizzes?framework={FW}").status_code == 200
-    assert (
-        world.post(reader, "/v1/quizzes", {"title": "No", "framework": FW}).status_code
-        == 403
+    refused_2 = world.post(reader, "/v1/quizzes", {"title": "No", "framework": FW})
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {"detail": "quiz.manage permission required"},
     )
     for path in ("/v1/quizzes/assignees",):
-        assert reader.get(path).status_code == 403
+        refused_2 = reader.get(path)
+        assert (refused_2.status_code, refused_2.json()) == (
+            403,
+            {"detail": "quiz.manage permission required"},
+        )
 
     quiz = world.ready(pass_mark=70)
     round_ = world.open_round(quiz)
@@ -304,13 +313,26 @@ def test_reading_and_managing_follow_the_two_permissions(world):
         f"/v1/quizzes/{quiz['id']}/grading",
         f"/v1/quizzes/{quiz['id']}/attempts/{attempt_id}",
     ):
-        assert reader.get(path).status_code == 403
-        assert nobody.get(path).status_code == 403
+        refused_2 = reader.get(path)
+        assert (refused_2.status_code, refused_2.json()) == (
+            403,
+            {"detail": "quiz.manage permission required"},
+        )
+        refused_2 = nobody.get(path)
+        assert (refused_2.status_code, refused_2.json()) == (
+            403,
+            {"detail": "quiz.manage permission required"},
+        )
     for path in (f"/v1/quizzes/{quiz['id']}", f"/v1/quizzes/{quiz['id']}/results"):
-        assert nobody.get(path).status_code == 403
-    assert (
-        world.patch(reader, f"/v1/quizzes/{quiz['id']}", {"title": "X"}).status_code
-        == 403
+        refused_2 = nobody.get(path)
+        assert (refused_2.status_code, refused_2.json()) == (
+            403,
+            {"detail": "quiz.read permission required"},
+        )
+    refused_2 = world.patch(reader, f"/v1/quizzes/{quiz['id']}", {"title": "X"})
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {"detail": "quiz.manage permission required"},
     )
 
     # Readers see the questions without their answers, and only the size of
@@ -346,8 +368,16 @@ def test_me_reports_quiz_permissions_and_the_feature_switches_quizzes_off(world)
     assert student.get("/v1/me/quizzes").status_code == 200
 
     features.update(world.db, world.keen.user(role="admin"), 0, {"quizzes": False})
-    assert world.manager.get(f"/v1/quizzes?framework={FW}").status_code == 404
-    assert student.get("/v1/me/quizzes").status_code == 404
+    refused = world.manager.get(f"/v1/quizzes?framework={FW}")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
+    refused = student.get("/v1/me/quizzes")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )
     assert world.manager.get("/v1/me").json()["can_manage_quizzes"] is False
     assert rounds_service.materialize_due_quiz_rounds(world.db)["enabled"] is False
     assert rounds_service.close_due_quiz_rounds(world.db)["enabled"] is False
@@ -371,12 +401,16 @@ def test_a_new_quiz_is_a_draft_with_its_own_measure(world):
     )
     assert folded.json()["title"] == "Phishing basics"
     untitled = world.post(world.manager, "/v1/quizzes", {"framework": FW})
-    assert untitled.status_code == 400
-    assert (
-        world.post(
-            world.manager, "/v1/quizzes", {"title": "  ", "framework": FW}
-        ).status_code
-        == 400
+    assert (untitled.status_code, untitled.json()) == (
+        400,
+        {"detail": "title is required"},
+    )
+    refused_2 = world.post(
+        world.manager, "/v1/quizzes", {"title": "  ", "framework": FW}
+    )
+    assert (refused_2.status_code, refused_2.json()) == (
+        400,
+        {"detail": "title is required"},
     )
     unknown = world.post(
         world.manager,
@@ -443,7 +477,10 @@ def test_a_new_quiz_is_a_draft_with_its_own_measure(world):
     framework = world.patch(
         world.manager, f"/v1/quizzes/{quiz['id']}", {"framework": "fw-elsewhere"}
     )
-    assert framework.status_code == 400
+    assert (framework.status_code, framework.json()) == (
+        400,
+        {"detail": "A quiz's framework cannot change"},
+    )
     for cleared in ("title", "page_size", "status"):
         response = world.patch(
             world.manager, f"/v1/quizzes/{quiz['id']}", {cleared: None}
@@ -476,7 +513,10 @@ def test_a_quiz_measure_changes_only_through_its_quiz(world):
             response.json()["detail"]
             == "This measure belongs to a quiz; change it from the quiz"
         )
-    with pytest.raises(DomainError) as refused:
+    with pytest.raises(
+        DomainError,
+        match="^This measure records its quiz's results; it takes no submissions$",
+    ) as refused:
         webhooks.record_metric(
             db=world.db,
             measure=world.db.get(
@@ -485,7 +525,10 @@ def test_a_quiz_measure_changes_only_through_its_quiz(world):
             payload={"framework": FW, "value": 50},
             context=ChangeContext(),
         )
-    assert refused.value.status_code == 409
+    assert (refused.value.status_code, refused.value.detail) == (
+        409,
+        "This measure records its quiz's results; it takes no submissions",
+    )
 
 
 def test_activating_needs_questions_and_questions_are_checked(world):
@@ -623,7 +666,7 @@ def test_a_quiz_people_have_sat_cannot_be_deleted(world):
     deleted = world.manager.delete(
         f"/v1/quizzes/{draft['id']}", headers=unsafe(world.manager)
     )
-    assert deleted.status_code == 200
+    assert (deleted.status_code, deleted.json()) == (200, {"ok": True})
     world.db.expire_all()
     assert (
         world.db.get(IsmsEffectivenessMeasure, uuid.UUID(draft["measure_id"])) is None
@@ -644,7 +687,10 @@ def test_a_quiz_people_have_sat_cannot_be_deleted(world):
     round_refused = world.manager.delete(
         f"/v1/quizzes/{quiz['id']}/rounds/{round_['id']}", headers=unsafe(world.manager)
     )
-    assert round_refused.status_code == 409
+    assert (round_refused.status_code, round_refused.json()) == (
+        409,
+        {"detail": "People have started this round; close it instead"},
+    )
     other = world.open_round(quiz)
     assert (
         world.manager.delete(
@@ -654,7 +700,7 @@ def test_a_quiz_people_have_sat_cannot_be_deleted(world):
         == 200
     )
     missing = world.manager.get(f"/v1/quizzes/{uuid.uuid4()}")
-    assert missing.status_code == 404
+    assert (missing.status_code, missing.json()) == (404, {"detail": "Quiz not found"})
 
 
 def test_archiving_closes_open_rounds_and_draft_is_only_for_new_quizzes(world):
@@ -662,7 +708,10 @@ def test_archiving_closes_open_rounds_and_draft_is_only_for_new_quizzes(world):
     round_ = world.open_round(quiz)
     path = f"/v1/quizzes/{quiz['id']}"
     draft = world.patch(world.manager, path, {"status": "draft"})
-    assert draft.status_code == 409
+    assert (draft.status_code, draft.json()) == (
+        409,
+        {"detail": "A quiz that has had rounds can be archived but not made a draft"},
+    )
     archived = world.patch(world.manager, path, {"status": "archived"}).json()
     assert archived["status"] == "archived"
     assert [r["status"] for r in archived["rounds"]] == ["closed"]
@@ -817,19 +866,17 @@ def test_assigning_accounts_and_roles_gives_everyone_a_people_record(world):
 
     quiz = world.ready(questions=QUESTIONS[:1], people=[])
     path = f"/v1/quizzes/{quiz['id']}/audience"
-    assert (
-        world.put(world.manager, path, {"user_ids": [str(retired.id)]}).status_code
-        == 400
+    refused = world.put(world.manager, path, {"user_ids": [str(retired.id)]})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Unknown or inactive account"},
     )
-    assert (
-        world.put(world.manager, path, {"person_ids": [str(uuid.uuid4())]}).status_code
-        == 400
-    )
-    assert (
-        world.put(
-            world.manager, path, {"org_node_ids": [str(uuid.uuid4())]}
-        ).status_code
-        == 400
+    refused = world.put(world.manager, path, {"person_ids": [str(uuid.uuid4())]})
+    assert (refused.status_code, refused.json()) == (400, {"detail": "Unknown person"})
+    refused = world.put(world.manager, path, {"org_node_ids": [str(uuid.uuid4())]})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Unknown organisation role"},
     )
     saved = world.put(
         world.manager,
@@ -905,11 +952,12 @@ def test_changing_the_audience_updates_open_rounds_and_invites_newcomers(world):
     }
     # Ben keeps his place because he has started; Ada leaves.
     assert people == {ben.person.id, cleo.person.id, dev.person.id}
-    assert (
-        world.post(
-            world.student_client(ada), f"/v1/me/quizzes/rounds/{round_['id']}/attempt"
-        ).status_code
-        == 404
+    refused = world.post(
+        world.student_client(ada), f"/v1/me/quizzes/rounds/{round_['id']}/attempt"
+    )
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Quiz round not found"},
     )
 
 
@@ -1041,24 +1089,18 @@ def test_round_dates_are_checked_and_moving_the_due_date_reminds_again(world):
         {"status": "open", "due_on": today.isoformat()},
     )
     assert reopened.json()["status"] == "open"
-    assert (
-        world.patch(
-            world.manager, f"{path}/{round_['id']}", {"status": None}
-        ).status_code
-        == 400
+    refused = world.patch(world.manager, f"{path}/{round_['id']}", {"status": None})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "status is required"},
     )
-    assert (
-        world.patch(
-            world.manager, f"{path}/{round_['id']}", {"due_on": None}
-        ).status_code
-        == 400
+    refused = world.patch(world.manager, f"{path}/{round_['id']}", {"due_on": None})
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "due_on is required"},
     )
-    assert (
-        world.patch(
-            world.manager, f"{path}/{uuid.uuid4()}", {"status": "closed"}
-        ).status_code
-        == 404
-    )
+    refused = world.patch(world.manager, f"{path}/{uuid.uuid4()}", {"status": "closed"})
+    assert (refused.status_code, refused.json()) == (404, {"detail": "Round not found"})
 
 
 # --- Sitting a round ------------------------------------------------------------------
@@ -1079,9 +1121,36 @@ def test_a_sitting_never_carries_the_answer_key_and_resumes_by_page(world):
     client = world.student_client(ada)
     start = f"/v1/me/quizzes/rounds/{round_['id']}/attempt"
     attempt = world.post(client, start).json()
-    assert {"correct", "explanation", "score", "points", "grade"}.isdisjoint(
-        _keys(attempt)
-    )
+    # The answer key, scores and grades appear at no depth.
+    assert _keys(attempt) == {
+        "answer",
+        "completed_at",
+        "description",
+        "due_on",
+        "id",
+        "kind",
+        "opens_on",
+        "option_id",
+        "options",
+        "page_count",
+        "page_size",
+        "pages_saved",
+        "position",
+        "prompt",
+        "question_count",
+        "questions",
+        "quiz_id",
+        "review",
+        "round_id",
+        "round_status",
+        "saved_at",
+        "score_visible",
+        "started_at",
+        "status",
+        "submitted_at",
+        "text",
+        "title",
+    }
     assert (attempt["status"], attempt["page_count"], attempt["pages_saved"]) == (
         "in_progress",
         2,
@@ -1143,7 +1212,19 @@ def test_a_sitting_never_carries_the_answer_key_and_resumes_by_page(world):
         bad = {"position": text_question["position"], "option_id": str(uuid.uuid4())}
         response = world.put(client, f"{base}/pages/{page}", {"answers": [bad]})
         assert response.json()["detail"] == "A written question is answered with text"
-    assert world.put(client, f"{base}/pages/-1", {"answers": []}).status_code == 422
+    refused = world.put(client, f"{base}/pages/-1", {"answers": []})
+    assert (refused.status_code, refused.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "greater_than_equal",
+                    "loc": ["path", "page"],
+                    "msg": "Input should be greater than or equal to 0",
+                }
+            ]
+        },
+    )
 
     saved = world.put(
         client, f"{base}/pages/0", {"answers": [answer(q) for q in first_page]}
@@ -1152,9 +1233,15 @@ def test_a_sitting_never_carries_the_answer_key_and_resumes_by_page(world):
     assert saved.json()["pages_saved"] == 1
     # Another person cannot read or change this attempt.
     other_client = world.student_client(ben)
-    assert other_client.get(base).status_code == 404
-    assert (
-        world.put(other_client, f"{base}/pages/0", {"answers": []}).status_code == 404
+    refused = other_client.get(base)
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Quiz attempt not found"},
+    )
+    refused = world.put(other_client, f"{base}/pages/0", {"answers": []})
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Quiz attempt not found"},
     )
     resumed = client.get(base).json()
     assert resumed["pages_saved"] == 1
@@ -1310,13 +1397,66 @@ def test_a_review_closes_once_the_quizs_next_round_opens(world):
         100.0,
         "gold",
     )
-    assert {"prompt", "options", "answer", "correct", "explanation"}.isdisjoint(
-        _keys(closed)
-    )
+    assert _keys(closed) == {
+        "completed_at",
+        "description",
+        "due_on",
+        "id",
+        "opens_on",
+        "page_count",
+        "page_size",
+        "pages_saved",
+        "pass_mark",
+        "passed",
+        "points",
+        "question_count",
+        "questions",
+        "quiz_id",
+        "review",
+        "reward",
+        "round_id",
+        "round_status",
+        "saved_at",
+        "score",
+        "score_visible",
+        "started_at",
+        "status",
+        "submitted_at",
+        "title",
+        "trophy",
+    }
     # Sitting the new round shows only the person's own saved answers.
     sitting = world.post(client, f"/v1/me/quizzes/rounds/{second['id']}/attempt").json()
     assert sitting["review"] is None
-    assert {"correct", "explanation"}.isdisjoint(_keys(sitting))
+    assert _keys(sitting) == {
+        "answer",
+        "completed_at",
+        "description",
+        "due_on",
+        "id",
+        "kind",
+        "opens_on",
+        "option_id",
+        "options",
+        "page_count",
+        "page_size",
+        "pages_saved",
+        "position",
+        "prompt",
+        "question_count",
+        "questions",
+        "quiz_id",
+        "review",
+        "round_id",
+        "round_status",
+        "saved_at",
+        "score_visible",
+        "started_at",
+        "status",
+        "submitted_at",
+        "text",
+        "title",
+    }
     # Closing the first round later never reopens its review; the newest
     # round's own review opens as the quiz allows.
     _close(world, quiz, first)
@@ -1342,7 +1482,35 @@ def test_a_review_waits_while_another_round_of_the_quiz_is_left_to_sit(world):
     client = world.student_client(ada)
     review = f"/v1/me/quizzes/attempts/{result['id']}"
     sitting = world.post(client, f"/v1/me/quizzes/rounds/{older['id']}/attempt").json()
-    assert {"correct", "explanation"}.isdisjoint(_keys(sitting))
+    assert _keys(sitting) == {
+        "answer",
+        "completed_at",
+        "description",
+        "due_on",
+        "id",
+        "kind",
+        "opens_on",
+        "option_id",
+        "options",
+        "page_count",
+        "page_size",
+        "pages_saved",
+        "position",
+        "prompt",
+        "question_count",
+        "questions",
+        "quiz_id",
+        "review",
+        "round_id",
+        "round_status",
+        "saved_at",
+        "score_visible",
+        "started_at",
+        "status",
+        "submitted_at",
+        "text",
+        "title",
+    }
     assert client.get(review).json()["review"] == "other_round"
     # With nothing left to sit, the newest round's review opens; the older
     # round's stays closed behind it.
@@ -1369,7 +1537,13 @@ def test_only_quiz_managers_move_the_account_of_someone_who_sits_quizzes(world):
     assert refused.json()["detail"] == (
         "Changing the Keen account of someone who sits quizzes needs quiz.manage"
     )
-    assert world.patch(isms, path, {"name": "Ada", "user_id": None}).status_code == 403
+    refused_2 = world.patch(isms, path, {"name": "Ada", "user_id": None})
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {
+            "detail": "Changing the Keen account of someone who sits quizzes needs quiz.manage"
+        },
+    )
     # Someone without quiz rounds is linked as before.
     linked = world.patch(
         isms,
@@ -1437,7 +1611,11 @@ def test_only_quiz_managers_change_who_holds_a_role_a_quiz_is_assigned_to(world)
     # someone from it or delete it, so cannot decide who sits the quiz.
     isms_user = assembled.user("isms.manage")
     isms = assembled.client(isms_user)
-    assert isms.get(f"/v1/quizzes/{quiz['id']}").status_code == 403
+    refused_2 = isms.get(f"/v1/quizzes/{quiz['id']}")
+    assert (refused_2.status_code, refused_2.json()) == (
+        403,
+        {"detail": "quiz.read permission required"},
+    )
     node = f"/v1/isms/org-nodes/{role.id}"
     for user_ids in ([ada.user.id, ben.user.id, isms_user.id], [ada.user.id]):
         refused = world.patch(isms, node, {"user_ids": [str(u) for u in user_ids]})
@@ -1448,15 +1626,25 @@ def test_only_quiz_managers_change_who_holds_a_role_a_quiz_is_assigned_to(world)
         )
     deleter = assembled.client(assembled.user("risk.manage"))
     refused = deleter.delete(node, headers=unsafe(deleter))
-    assert refused.status_code == 403, refused.text
-    assert "delete a role a quiz is assigned to" in refused.json()["detail"]
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {
+            "detail": "quiz.manage permission is required to delete a role a quiz is assigned "
+            "to"
+        },
+    )
     # Nor can it place someone in the role, move them out, or relink the
     # account of someone in it.
     people = "/v1/isms/people"
-    for path, payload in (
+    moving = (
+        "quiz.manage permission is required to move someone into or out of a role "
+        "a quiz is assigned to"
+    )
+    for path, payload, detail in (
         (
             f"{people}/{dev.person.id}",
             {"name": "Dev", "user_id": str(dev.user.id), "org_node_id": str(role.id)},
+            moving,
         ),
         (
             f"{people}/{cleo.person.id}",
@@ -1465,22 +1653,36 @@ def test_only_quiz_managers_change_who_holds_a_role_a_quiz_is_assigned_to(world)
                 "user_id": str(cleo.user.id),
                 "org_node_id": str(spare.id),
             },
+            moving,
         ),
-        (f"{people}/{cleo.person.id}", {"name": "Cleo", "user_id": str(cleo.user.id)}),
+        (
+            f"{people}/{cleo.person.id}",
+            {"name": "Cleo", "user_id": str(cleo.user.id)},
+            moving,
+        ),
         (
             f"{people}/{cleo.person.id}",
             {"name": "Cleo", "user_id": str(isms_user.id), "org_node_id": str(role.id)},
+            "quiz.manage permission is required to change the Keen account of "
+            "someone in a role a quiz is assigned to",
         ),
     ):
         refused = world.patch(isms, path, payload)
-        assert refused.status_code == 403, (payload, refused.text)
-        assert "a role a quiz is assigned to" in refused.json()["detail"]
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": detail},
+        ), payload
     created = world.post(
         isms,
         people,
         {"name": "Eve", "user_id": str(isms_user.id), "org_node_id": str(role.id)},
     )
-    assert created.status_code == 403, created.text
+    assert (created.status_code, created.json()) == (
+        403,
+        {
+            "detail": "quiz.manage permission is required to move someone into or out of a role a quiz is assigned to"
+        },
+    )
     # Deleting someone in the role would also take them out of the quiz.
     refused = isms.delete(f"{people}/{cleo.person.id}", headers=unsafe(isms))
     assert refused.status_code == 403, refused.text
@@ -1490,7 +1692,7 @@ def test_only_quiz_managers_change_who_holds_a_role_a_quiz_is_assigned_to(world)
     )
     assert members() == before
     assert db.query(IsmsPerson).filter_by(user_id=isms_user.id).count() == 0
-    assert db.get(IsmsOrgNode, role.id) is not None
+    assert db.get(IsmsOrgNode, role.id).name == "Engineering"
 
     # Other edits of the role, and roles no quiz is assigned to, stay with ISMS
     # managers.
@@ -1539,7 +1741,7 @@ def test_only_quiz_managers_delete_someone_who_sits_a_quiz(world):
     assert refused.json()["detail"] == (
         "Deleting someone who sits quizzes needs quiz.manage"
     )
-    assert world.db.get(IsmsPerson, ada.person.id) is not None
+    assert world.db.get(IsmsPerson, ada.person.id).name == "Ada"
     # Someone with no quizzes stays with ISMS managers.
     other = f"/v1/isms/people/{ben.person.id}"
     assert isms.delete(other, headers=unsafe(isms)).status_code == 204
@@ -1552,11 +1754,20 @@ def test_only_participants_of_an_open_round_can_sit_it(world):
     quiz = world.ready(people=[ada])
     round_ = world.open_round(quiz)
     start = f"/v1/me/quizzes/rounds/{round_['id']}/attempt"
-    assert world.post(world.student_client(ben), start).status_code == 404
+    refused_2 = world.post(world.student_client(ben), start)
+    assert (refused_2.status_code, refused_2.json()) == (
+        404,
+        {"detail": "Quiz round not found"},
+    )
     unlinked = world.keen.client(world.keen.user())
     refused = world.post(unlinked, start)
-    assert refused.status_code == 409
-    assert "not linked to a People record" in refused.json()["detail"]
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {
+            "detail": "Your account is not linked to a People record yet; ask an ISMS manager to "
+            "link it"
+        },
+    )
     assert unlinked.get("/v1/me/quizzes").json()["linked"] is False
 
     today = today_for_schedule()
@@ -1678,8 +1889,32 @@ def test_grading_is_blind_in_half_points_and_never_of_your_own_answers(
         world.put(world.manager, grade, {"grade": 3.3}).json()["detail"]
         == "Grades run from 1 to 5 in half points"
     )
-    assert world.put(world.manager, grade, {"grade": 6}).status_code == 422
-    assert world.put(world.manager, grade, {"grade": 0.5}).status_code == 422
+    refused_2 = world.put(world.manager, grade, {"grade": 6})
+    assert (refused_2.status_code, refused_2.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "less_than_equal",
+                    "loc": ["body", "grade"],
+                    "msg": "Input should be less than or equal to 5",
+                }
+            ]
+        },
+    )
+    refused_2 = world.put(world.manager, grade, {"grade": 0.5})
+    assert (refused_2.status_code, refused_2.json()) == (
+        422,
+        {
+            "detail": [
+                {
+                    "type": "greater_than_equal",
+                    "loc": ["body", "grade"],
+                    "msg": "Input should be greater than or equal to 1",
+                }
+            ]
+        },
+    )
     choice_answer = world.db.query(QuizAnswer).filter_by(kind="choice").first()
     refused = world.put(
         world.manager,
@@ -1693,7 +1928,10 @@ def test_grading_is_blind_in_half_points_and_never_of_your_own_answers(
         f"/v1/quizzes/{other_quiz['id']}/answers/{item['answer_id']}/grade",
         {"grade": 3},
     )
-    assert foreign.status_code == 404
+    assert (foreign.status_code, foreign.json()) == (
+        404,
+        {"detail": "Answer not found"},
+    )
 
     graded = world.put(
         world.manager, grade, {"grade": 2.5, "feedback": "Name one sign"}
@@ -1788,7 +2026,7 @@ def test_readers_see_a_round_only_once_it_describes_a_group(world):
     assert open_view["rounds"] == [] and open_view["hidden_rounds"] == 1
     assert open_view["summary"]["responses"] == 0 and open_view["questions"] == []
     hidden = world.reader.get(f"{results}?round_id={round_['id']}")
-    assert hidden.status_code == 404
+    assert (hidden.status_code, hidden.json()) == (404, {"detail": "Round not found"})
     # Two completed responses stay with quiz.manage even once the round closes.
     _close(world, quiz, round_)
     assert world.reader.get(results).json()["rounds"] == []
@@ -1904,8 +2142,13 @@ def test_a_round_waits_for_its_last_grade_and_a_recorded_round_stays_closed(worl
         f"/v1/quizzes/{quiz['id']}/rounds/{round_['id']}",
         {"status": "open"},
     )
-    assert reopened.status_code == 409
-    assert reopened.json()["detail"].startswith("This round's result is recorded")
+    assert (reopened.status_code, reopened.json()) == (
+        409,
+        {
+            "detail": "This round's result is recorded; start a new round for anyone who missed "
+            "it"
+        },
+    )
     assert [e.metric_value for e in _entries(world)] == [pytest.approx(93.33)]
 
 
@@ -1920,11 +2163,10 @@ def test_a_manager_reads_each_attempt_in_full(world):
     assert detail["review"] == "shown" and detail["score_visible"] is True
     assert all(q["answer_id"] for q in detail["questions"])
     other = world.ready(title="Other", people=[ada])
-    assert (
-        world.manager.get(
-            f"/v1/quizzes/{other['id']}/attempts/{attempt.id}"
-        ).status_code
-        == 404
+    refused = world.manager.get(f"/v1/quizzes/{other['id']}/attempts/{attempt.id}")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Quiz attempt not found"},
     )
 
 
@@ -1962,7 +2204,11 @@ def test_the_list_shows_each_quiz_with_its_all_time_average(world):
         3,
     )
     assert world.manager.get("/v1/quizzes?framework=fw-elsewhere").json()["items"] == []
-    assert world.manager.get("/v1/quizzes?framework=bad%20slug").status_code == 400
+    refused = world.manager.get("/v1/quizzes?framework=bad%20slug")
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "Invalid framework"},
+    )
 
 
 # --- The worker ------------------------------------------------------------------------------
@@ -2166,7 +2412,10 @@ def test_the_calendar_shows_rounds_and_scheduled_openings(world):
     backwards = world.reader.get(
         f"/v1/quizzes/calendar?framework={FW}&start=2026-05-02&end=2026-05-01"
     )
-    assert backwards.status_code == 400
+    assert (backwards.status_code, backwards.json()) == (
+        400,
+        {"detail": "end cannot be before start"},
+    )
     wide = world.reader.get(
         f"/v1/quizzes/calendar?framework={FW}&start=2026-01-01&end=2027-06-01"
     )

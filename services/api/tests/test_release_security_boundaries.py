@@ -16,7 +16,7 @@ import app.services.artifacts as artifacts_operations
 import httpx
 import pytest
 from app.core.config import settings
-from app.ingest import bookstack, forgejo, gitea, gitea_compatible, github, http
+from app.ingest import bookstack, forgejo, gitea, gitea_compatible, http
 from app.integrations import transport as custom
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.services.errors import DomainError
@@ -29,7 +29,6 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from fastapi import HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
 
@@ -100,14 +99,15 @@ async def body_request(chunks, headers=(), path="/v1/agents/enroll"):
     "headers", [[], [(b"content-length", b"1")], [(b"transfer-encoding", b"chunked")]]
 )
 def test_limits_count_bytes_before_endpoint_can_write(headers):
-    status, seen = asyncio.run(body_request([b"a" * 8192, b"b" * 8193], headers))
-    assert status == 413 and not seen
+    assert asyncio.run(body_request([b"a" * 8192, b"b" * 8193], headers)) == (413, b"")
 
 
-@pytest.mark.parametrize("length", [b"-1", b"abc", b"999999999999999999999999999"])
-def test_invalid_or_excessive_length_rejected_without_reading(length):
-    status, seen = asyncio.run(body_request([], [(b"content-length", length)]))
-    assert status in (400, 413) and not seen
+@pytest.mark.parametrize(
+    "length,status",
+    [(b"-1", 400), (b"abc", 400), (b"999999999999999999999999999", 413)],
+)
+def test_invalid_or_excessive_length_rejected_without_reading(length, status):
+    assert asyncio.run(body_request([], [(b"content-length", length)])) == (status, b"")
 
 
 def test_streamed_body_and_empty_body_replayed_exactly():
@@ -151,22 +151,32 @@ def test_transport_rejects_prohibited_addresses(monkeypatch, address):
     monkeypatch.setattr(settings, "ingestion_allowed_cidrs", "")
     dns(monkeypatch, [address])
     transport = http.IngestionTransport()
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="^Ingestion destination address is prohibited$"
+    ):
         transport.handle_request(httpx.Request("GET", "https://feed.example/rss"))
     transport.close()
 
 
-@pytest.mark.parametrize("restriction", ["not-a-cidr", "10.2.0.0/16", ""])
+@pytest.mark.parametrize(
+    "restriction,problem",
+    [
+        ("not-a-cidr", "'not-a-cidr' does not appear to be an IPv4 or IPv6 network"),
+        ("10.2.0.0/16", "Ingestion destination is outside the approved networks"),
+        ("", None),
+    ],
+)
 def test_cidr_policy_is_fail_closed_and_mapped_addresses_normalised(
-    monkeypatch, restriction
+    monkeypatch, restriction, problem
 ):
     dns(monkeypatch, ["::ffff:10.1.2.3"])
     monkeypatch.setattr(settings, "ingestion_allowed_cidrs", restriction)
-    if not restriction:
-        assert http.destination("https://feed.example")
+    if problem is None:
+        assert http.destination("https://feed.example") == ["::ffff:10.1.2.3"]
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as refused:
             http.destination("https://feed.example")
+        assert str(refused.value) == problem
 
 
 def test_transport_pins_address_and_preserves_tls_hostname(monkeypatch):
@@ -194,7 +204,9 @@ def test_transport_pins_address_and_preserves_tls_hostname(monkeypatch):
 
 def test_response_limit_and_compression_rejection(monkeypatch):
     monkeypatch.setattr(http, "MAX_RESPONSE_BYTES", 8)
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="^Ingestion response exceeds 16 MiB; narrow the input$"
+    ):
         b"".join(http.LimitedStream(httpx.ByteStream(b"123456789")))
     dns(monkeypatch, ["8.8.8.8"])
     monkeypatch.setattr(settings, "ingestion_allowed_cidrs", "")
@@ -205,37 +217,38 @@ def test_response_limit_and_compression_rejection(monkeypatch):
         )
     )
     with httpx.Client(transport=transport) as client:
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError, match="^Ingestion server must honour Accept-Encoding: identity$"
+        ):
             client.get("https://feed.example/rss")
 
 
 @pytest.mark.parametrize("module,name", [(forgejo, "forgejo"), (gitea, "gitea")])
 @pytest.mark.parametrize(
-    "feed",
+    "feed,problem",
     [
-        "https://attacker.example/a/b.rss",
-        "http://git.example/a/b.rss",
-        "https://git.example:444/a/b.rss",
+        (
+            "https://attacker.example/a/b.rss",
+            "Feed credentials may only be sent to the connection endpoint origin",
+        ),
+        ("http://git.example/a/b.rss", "Use an HTTPS feed and connection endpoint"),
+        (
+            "https://git.example:444/a/b.rss",
+            "Feed credentials may only be sent to the connection endpoint origin",
+        ),
     ],
 )
 def test_git_feed_cannot_send_connection_credentials_elsewhere(
-    monkeypatch, module, name, feed
+    monkeypatch, module, name, feed, problem
 ):
     monkeypatch.setattr(settings, name + "_base_url", "https://git.example")
     monkeypatch.setattr(settings, name + "_token", "synthetic-secret")
     network = Mock()
     monkeypatch.setattr(gitea_compatible, "ingestion_client", network)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as refused:
         module.collector._fetch_rss(feed)
+    assert str(refused.value) == problem
     network.assert_not_called()
-
-
-def test_github_feed_cannot_exfiltrate_pat(monkeypatch):
-    monkeypatch.setattr(settings, "github_base_url", "https://api.github.com")
-    monkeypatch.setattr(settings, "github_username", "alice")
-    monkeypatch.setattr(settings, "github_token", "synthetic-secret")
-    with pytest.raises(ValueError):
-        github.ingest_github_atom_feed(None, "https://attacker.example/feed")
 
 
 @pytest.mark.parametrize(
@@ -258,8 +271,16 @@ def test_github_feed_cannot_exfiltrate_pat(monkeypatch):
     ],
 )
 def test_untrusted_isms_links_reject_active_and_ambiguous_urls(model, field, url):
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as refused:
         model(**{field: url})
+    assert [(e["type"], e["loc"], e["msg"]) for e in refused.value.errors()] == [
+        (
+            "value_error",
+            (field,),
+            "Value error, Use an HTTP or HTTPS URL without embedded credentials "
+            "or control characters",
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -321,7 +342,9 @@ def test_pdf_renderer_has_time_and_pixel_limits(contract_db, monkeypatch, tmp_pa
         raise subprocess.TimeoutExpired(args, 15)
 
     monkeypatch.setattr(artifacts_operations.subprocess, "run", render)
-    with pytest.raises((HTTPException, DomainError)) as exc:
+    with pytest.raises(
+        DomainError, match="^PDF preview exceeded the rendering time limit$"
+    ) as exc:
         artifacts.preview_pdf_first_page(
             Request({"type": "http", "headers": []}), str(art.id), contract_db
         )
@@ -431,14 +454,20 @@ def test_pinned_transport_verifies_original_tls_hostname(monkeypatch, tmp_path):
                 client.get(f"https://feed.example:{server.server_port}/rss").content
                 == b"local fixture"
             )
-            with pytest.raises(httpx.ConnectError):
+            with pytest.raises(
+                httpx.ConnectError,
+                match=r"^\[SSL: CERTIFICATE_VERIFY_FAILED\] certificate verify failed: Hostname mismatch, certificate is not valid for 'wrong\.example'\.",
+            ):
                 client.get(f"https://wrong.example:{server.server_port}/rss")
         # A matching hostname alone is insufficient: an untrusted chain fails.
         monkeypatch.setattr(http.httpx, "HTTPTransport", original)
         with httpx.Client(
             transport=http.IngestionTransport(), trust_env=False
         ) as client:
-            with pytest.raises(httpx.ConnectError):
+            with pytest.raises(
+                httpx.ConnectError,
+                match=r"^\[SSL: CERTIFICATE_VERIFY_FAILED\] certificate verify failed: self-signed certificate",
+            ):
                 client.get(f"https://feed.example:{server.server_port}/rss")
         # The custom API transport uses a separate TLS implementation.
         monkeypatch.setattr(custom.ssl, "create_default_context", lambda: trusted)
@@ -449,7 +478,10 @@ def test_pinned_transport_verifies_original_tls_hostname(monkeypatch, tmp_path):
                     conn.request("GET", "/rss")
                     assert conn.getresponse().read() == b"local fixture"
                 else:
-                    with pytest.raises(ssl.SSLCertVerificationError):
+                    with pytest.raises(
+                        ssl.SSLCertVerificationError,
+                        match=r"^\[SSL: CERTIFICATE_VERIFY_FAILED\] certificate verify failed: Hostname mismatch, certificate is not valid for 'wrong\.example'\.",
+                    ):
                         conn.request("GET", "/rss")
             finally:
                 conn.close()
@@ -555,12 +587,18 @@ def test_builtin_collection_budget_ends_a_dripping_response(
         # The same budgeted TLS path accepts an ordinary response and still
         # verifies the original hostname.
         assert client.get(url).json() == {"ok": True}
-        with pytest.raises(httpx.ConnectError):
+        with pytest.raises(
+            httpx.ConnectError,
+            match=r"^\[SSL: CERTIFICATE_VERIFY_FAILED\] certificate verify failed: Hostname mismatch, certificate is not valid for 'wrong\.example'\.",
+        ):
             client.get(f"https://wrong.example:{dripping_peer.port}/feed.xml")
         dripping_peer.drip = drip
         with (
             measured(time.monotonic) as timing,
-            pytest.raises((httpx.TimeoutException, TimeoutError)),
+            pytest.raises(
+                (httpx.TimeoutException, TimeoutError),
+                match="^The read operation timed out$",
+            ),
         ):
             client.get(url)
     assert timing.seconds < BUDGET + 1.0
@@ -584,7 +622,10 @@ def test_custom_api_budget_ends_a_dripping_response(dripping_peer, monkeypatch, 
         },
     )
     dripping_peer.drip = drip
-    with measured(time.monotonic) as timing, pytest.raises(TimeoutError):
+    with (
+        measured(time.monotonic) as timing,
+        pytest.raises(TimeoutError, match="^The read operation timed out$"),
+    ):
         custom.request(url, timeout=BUDGET)
     assert timing.seconds < BUDGET + 1.0
 

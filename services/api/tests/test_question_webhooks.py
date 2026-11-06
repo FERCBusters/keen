@@ -339,7 +339,9 @@ def test_send_created_webhooks_retry_on_429_and_5xx():
     config = make_config(slack_urls=["https://hooks.slack.example/429"])
     with (
         patch.object(qw, "secure_http_client", fake_client),
-        pytest.raises(qw._TemporarySendError) as info,
+        pytest.raises(
+            qw._TemporarySendError, match="^slack temporary failure: HTTP 429$"
+        ) as info,
     ):
         qw.send_question_created_webhooks(config, PAYLOAD)
     assert "temporary failure" in str(info.value) and "429" in str(info.value)
@@ -348,7 +350,9 @@ def test_send_created_webhooks_retry_on_429_and_5xx():
     config = make_config(generic_urls=["https://gw.example/503"])
     with (
         patch.object(qw, "secure_http_client", fake_client),
-        pytest.raises(qw._TemporarySendError),
+        pytest.raises(
+            qw._TemporarySendError, match="^generic temporary failure: HTTP 503$"
+        ),
     ):
         qw.send_question_created_webhooks(config, PAYLOAD)
 
@@ -381,12 +385,18 @@ def test_send_created_webhooks_network_failures_raise():
         client.stream.return_value = stream
         return contextlib.nullcontext(client)
 
-    with pytest.raises(qw._TemporarySendError):
+    with pytest.raises(
+        qw._TemporarySendError,
+        match="^slack delivery failed; check connectivity and configuration$",
+    ):
         config = make_config(slack_urls=["https://hooks.slack.example/x"])
         with patch.object(qw, "secure_http_client", failing_client):
             qw.send_question_created_webhooks(config, PAYLOAD)
 
-    with pytest.raises(qw._TemporarySendError):
+    with pytest.raises(
+        qw._TemporarySendError,
+        match="^Generic webhook delivery failed; check connectivity and configuration$",
+    ):
         config = make_config(generic_urls=["https://gw.example/x"])
         with patch.object(qw, "secure_http_client", failing_client):
             qw.send_question_created_webhooks(config, PAYLOAD)
