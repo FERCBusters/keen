@@ -31,6 +31,7 @@ from typing import Any, overload
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
+from app.security.mcp_tokens import is_secret
 from app.security.regex import scan_pattern
 
 REDACTED = "REDACTED"
@@ -97,6 +98,9 @@ DEFAULT_SENSITIVE_KEYS: set[str] = {
 }
 
 _URL_RE = scan_pattern(r'https?://[^\s"\'<>]+', re.IGNORECASE)
+# Tokens, codes and consent keys Keen issues to MCP clients, wherever they
+# appear (app.security.mcp_tokens): a referrer or a pasted URL can carry one.
+_MCP_SECRET_RE = scan_pattern(r"(?:kat|krt|kac|kcr)_[A-Za-z0-9_-]{43}")
 
 # Measured workstation-posture facts whose names contain a sensitive-key
 # substring ("password", "signature") but which hold a boolean, a count or a
@@ -289,7 +293,9 @@ def redact_query_string(
         return None
     parts: list[tuple[str, str]] = []
     for k, v in parse_qsl(qs, keep_blank_values=True):
-        if (is_sensitive_key(k) or _normalize_key(k) in extra_keys) and v:
+        if (
+            is_sensitive_key(k) or _normalize_key(k) in extra_keys or is_secret(v)
+        ) and v:
             parts.append((k, REDACTED))
         else:
             parts.append((k, v))
@@ -344,7 +350,7 @@ def redact_str(s: str | None) -> str | None:
         return redact_url(m.group(0))
 
     txt = _URL_RE.sub(_url_sub, txt)
-    return txt
+    return _MCP_SECRET_RE.sub(REDACTED, txt)
 
 
 def redact_obj(obj: Any) -> Any:
