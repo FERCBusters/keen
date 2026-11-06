@@ -215,11 +215,13 @@ def test_child_timeout_kills_and_reaps_without_inheriting_secrets(monkeypatch):
 
     monkeypatch.setattr(imap.subprocess, "Popen", popen)
     monkeypatch.setattr(imap, "WORKER_TIMEOUT", 0.1)
-    with pytest.raises(
-        subprocess.TimeoutExpired,
-        match=r"^Command '\['/home/claude/run/keen/services/api/\.venv/bin/python', '-c', 'import time;time\.sleep\(10\)'\]' timed out after 0\.1 seconds$",
-    ):
+    with pytest.raises(subprocess.TimeoutExpired) as stopped:
         imap.fetch({}, None)
+    # The child the worker started, stopped at the worker's own deadline.
+    assert (stopped.value.cmd, stopped.value.timeout) == (
+        [sys.executable, "-c", "import time;time.sleep(10)"],
+        0.1,
+    )
     assert processes[0].poll() is not None
 
 
