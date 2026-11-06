@@ -105,9 +105,6 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _URI_LIMIT = 2048
 
 
-SECRET_PREFIXES = (ACCESS_PREFIX, REFRESH_PREFIX, CODE_PREFIX, CONSENT_PREFIX)
-
-
 def new_secret(prefix: str) -> str:
     return prefix + secrets.token_urlsafe(_SECRET_BYTES)
 
@@ -124,11 +121,6 @@ def well_formed(value: str, prefix: str) -> bool:
         and len(body) == _SECRET_LENGTH
         and _URLSAFE.issuperset(body)
     )
-
-
-def is_secret(value: str) -> bool:
-    """Whether ``value`` is a token, code or consent key Keen issues."""
-    return any(well_formed(value, prefix) for prefix in SECRET_PREFIXES)
 
 
 def readable_scopes(held: set[str]) -> list[str]:
