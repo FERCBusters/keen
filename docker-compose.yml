@@ -2,7 +2,7 @@
 # Docker image pins workflow keep the digests current.
 services:
   postgres:
-    image: postgres:16@sha256:933463a6c8eba2b9f5cd414138738cd8d5519cd2c471214c222652f547a66a32
+    image: postgres:16@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
     # Keen's dashboard queries are short, so JIT compilation costs more than it
     # saves. Size the buffer cache, sort memory and planner costs to the host;
     # see .env.example. Parallel queries share memory through /dev/shm.
