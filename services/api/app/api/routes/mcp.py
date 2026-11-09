@@ -122,11 +122,33 @@ class _Delegated(Response):
         await self.app(scope, receive, send)
 
 
-@router.post("/v1/mcp", summary="MCP Streamable HTTP endpoint (OAuth bearer token)")
-async def mcp_endpoint():
+def _mcp_endpoint() -> Response:
     if runtime.mcp_app is None:
         raise HTTPException(404, "Not Found")
     return _Delegated(runtime.mcp_app)
+
+
+# Streamable HTTP uses POST for client messages, GET for the server-to-client
+# event stream and DELETE to end a session. Each must reach FastMCP's app: it
+# checks the bearer on the methods it serves and refuses the others with 405,
+# which an MCP client reads as "no event stream". Keen's browser middleware
+# answers 401, which the client instead reads as an expired token and refreshes
+# on every connection until a rotated refresh token is reused.
+@router.post("/v1/mcp", summary="MCP Streamable HTTP endpoint (OAuth bearer token)")
+async def mcp_endpoint():
+    return _mcp_endpoint()
+
+
+@router.get("/v1/mcp", summary="MCP Streamable HTTP event stream (OAuth bearer token)")
+async def mcp_event_stream():
+    return _mcp_endpoint()
+
+
+@router.delete(
+    "/v1/mcp", summary="MCP Streamable HTTP session end (OAuth bearer token)"
+)
+async def mcp_session_end():
+    return _mcp_endpoint()
 
 
 def _enabled() -> None:

@@ -206,6 +206,18 @@ test('ISMS request failures remain visible', async (t) => {
   assert.match(ui.el('status').textContent, /Failed to load ISMS.*Offline/);
 });
 
+test('the small-screen ISMS menu opens the sections and closes on selection', async (t) => {
+  const ui = await fixture(t);
+  const menu = ui.el('isms-navigation-toggle');
+  assert.equal(menu.getAttribute('aria-expanded'), 'false');
+  menu.click();
+  assert.equal(ui.el('ismsTabs').classList.contains('admin-nav-open'), true);
+  assert.equal(menu.getAttribute('aria-expanded'), 'true');
+  ui.el('ismsTabs').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.equal(ui.el('ismsTabs').classList.contains('admin-nav-open'), false);
+  assert.equal(menu.getAttribute('aria-expanded'), 'false');
+});
+
 for (const [tab, id] of [
   ['documents', 'documentsRows'],
   ['meetings', 'meetingsRows'],

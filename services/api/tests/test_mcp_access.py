@@ -204,6 +204,8 @@ def test_every_mcp_route_answers_404_while_mcp_is_off(keen, monkeypatch):
             ("POST", "/v1/oauth/register"),
             ("POST", "/v1/oauth/revoke"),
             ("POST", "/v1/mcp"),
+            ("GET", "/v1/mcp"),
+            ("DELETE", "/v1/mcp"),
         ):
             assert client.request(method, path).status_code == 404, path
         client.post(
@@ -251,6 +253,36 @@ def test_discovery_documents_name_keen_as_issuer_and_public_clients_only(mcp):
         'resource_metadata="https://keen.example/.well-known/oauth-protected-resource/api/v1/mcp"'
         in challenge.headers["www-authenticate"]
     )
+
+
+def test_every_streamable_http_method_reaches_fastmcp(mcp):
+    # Streamable HTTP's event stream (GET) and session end (DELETE) must reach
+    # FastMCP rather than Keen's browser middleware. Its 401 is indistinguishable
+    # from an expired token to an MCP client, which then refreshes and reuses its
+    # rotated refresh token until the grant is revoked.
+    browser_auth_refusal = '{"detail":"Not authenticated"}'
+    for method in ("GET", "DELETE"):
+        anonymous = mcp.client.request(method, "/v1/mcp", headers=MCP_HEADERS)
+        assert anonymous.text != browser_auth_refusal, method
+    # FastMCP runs statelessly here, so it refuses GET (no server event stream)
+    # and checks the bearer on DELETE itself.
+    get = mcp.client.request("GET", "/v1/mcp", headers=MCP_HEADERS)
+    assert get.status_code == 405
+    delete = mcp.client.request("DELETE", "/v1/mcp", headers=MCP_HEADERS)
+    assert delete.status_code == 401 and "www-authenticate" in delete.headers
+
+    connection = mcp.connect(mcp.keen.user("isms.read"), ["isms.read"])
+    for method in ("GET", "DELETE"):
+        answer = mcp.client.request(
+            method,
+            "/v1/mcp",
+            headers={
+                **MCP_HEADERS,
+                "Authorization": "Bearer " + connection.access_token,
+            },
+        )
+        assert answer.text != browser_auth_refusal, method
+    assert inner("/v1/isms/swot", connection.access_token).status_code == 200
 
 
 def test_registration_makes_every_client_public_and_names_it_safely(mcp):

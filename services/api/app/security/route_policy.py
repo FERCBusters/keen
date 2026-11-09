@@ -28,6 +28,14 @@ PUBLIC_HTTP_ROUTES = {
         "/.well-known/oauth-protected-resource/api/v1/mcp",
         "/.well-known/oauth-authorization-server/api/v1/oauth",
         "/v1/oauth/authorize",
+        # Streamable HTTP's server-to-client event stream. FastMCP either checks
+        # the bearer or refuses it with 405; a browser-auth 401 makes MCP clients
+        # refresh their tokens on every connection.
+        "/v1/mcp",
+    ),
+    "DELETE": (
+        # Streamable HTTP ends a session with DELETE; FastMCP checks the bearer.
+        "/v1/mcp",
     ),
     "POST": (
         "/v1/auth/oidc/logout",

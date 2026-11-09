@@ -307,7 +307,9 @@ POLICY = {
     "POST /v1/oauth/token": PUBLIC,
     "POST /v1/oauth/register": PUBLIC,
     "POST /v1/oauth/revoke": PUBLIC,
+    "GET /v1/mcp": PUBLIC,
     "POST /v1/mcp": PUBLIC,
+    "DELETE /v1/mcp": PUBLIC,
     # --- Session checks used by nginx before serving pages -------------------------
     "GET /v1/auth/check": SIGNED_IN,
     "GET /v1/auth/check-admin": ADMIN,

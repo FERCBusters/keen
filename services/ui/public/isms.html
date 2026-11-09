@@ -28,19 +28,24 @@
 </div>
 </div>
 <div class="alert alert-info" id="status" style="display:none;" role="status"></div>
-<ul class="nav nav-tabs mb-3" id="ismsTabs" role="tablist">
-<li class="nav-item" role="presentation"><button class="nav-link active" data-bs-target="#overviewPane" data-bs-toggle="tab" id="overviewTab" role="tab" type="button">Overview</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#swotPane" data-bs-toggle="tab" id="swotTab" data-feature="swot" role="tab" type="button">SWOT analysis</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#objectivesPane" data-bs-toggle="tab" id="objectivesTab" data-feature="objectives" role="tab" type="button">Objectives</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#documentsPane" data-bs-toggle="tab" id="documentsTab" data-feature="documents" role="tab" type="button">Policies &amp; processes</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#orgPane" data-bs-toggle="tab" id="orgTab" data-feature="organisation" role="tab" type="button">Organisation chart</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#assetsPane" data-bs-toggle="tab" id="assetsTab" data-feature="assets" role="tab" type="button">Asset matrix</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#accessControlPane" data-bs-toggle="tab" id="accessControlTab" data-feature="access_control" role="tab" type="button">Access control matrix</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#effectivenessPane" data-bs-toggle="tab" id="effectivenessTab" data-feature="effectiveness" role="tab" type="button">Effectiveness measures</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#meetingsPane" data-bs-toggle="tab" id="meetingsTab" data-feature="meetings" role="tab" type="button">Minutes of meetings</button></li>
-<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#soaPane" data-bs-toggle="tab" id="soaTab" data-feature="soa" role="tab" type="button">SoA</button></li>
+<div class="admin-tab-layout isms-tab-layout d-flex flex-column flex-lg-row gap-3">
+<button class="btn btn-outline-primary d-lg-none" id="isms-navigation-toggle" type="button" aria-controls="ismsTabs" aria-expanded="false">ISMS menu</button>
+<ul class="nav nav-pills flex-column admin-tab-nav isms-tab-nav" id="ismsTabs" role="tablist" aria-orientation="vertical">
+<li class="admin-nav-label" role="presentation">Workspace</li>
+<li class="nav-item" role="presentation"><button class="nav-link active" data-bs-target="#overviewPane" data-bs-toggle="tab" id="overviewTab" role="tab" type="button"><i class="bi bi-grid" aria-hidden="true"></i> Overview</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#swotPane" data-bs-toggle="tab" id="swotTab" data-feature="swot" role="tab" type="button"><i class="bi bi-diagram-3" aria-hidden="true"></i> SWOT analysis</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#objectivesPane" data-bs-toggle="tab" id="objectivesTab" data-feature="objectives" role="tab" type="button"><i class="bi bi-bullseye" aria-hidden="true"></i> Objectives</button></li>
+<li class="admin-nav-label" role="presentation">Records</li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#documentsPane" data-bs-toggle="tab" id="documentsTab" data-feature="documents" role="tab" type="button"><i class="bi bi-journal-text" aria-hidden="true"></i> Policies &amp; processes</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#orgPane" data-bs-toggle="tab" id="orgTab" data-feature="organisation" role="tab" type="button"><i class="bi bi-diagram-2" aria-hidden="true"></i> Organisation chart</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#assetsPane" data-bs-toggle="tab" id="assetsTab" data-feature="assets" role="tab" type="button"><i class="bi bi-box-seam" aria-hidden="true"></i> Asset matrix</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#accessControlPane" data-bs-toggle="tab" id="accessControlTab" data-feature="access_control" role="tab" type="button"><i class="bi bi-shield-lock" aria-hidden="true"></i> Access control matrix</button></li>
+<li class="admin-nav-label" role="presentation">Assurance</li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#effectivenessPane" data-bs-toggle="tab" id="effectivenessTab" data-feature="effectiveness" role="tab" type="button"><i class="bi bi-speedometer2" aria-hidden="true"></i> Effectiveness measures</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#meetingsPane" data-bs-toggle="tab" id="meetingsTab" data-feature="meetings" role="tab" type="button"><i class="bi bi-calendar2-check" aria-hidden="true"></i> Minutes of meetings</button></li>
+<li class="nav-item" role="presentation"><button class="nav-link" data-bs-target="#soaPane" data-bs-toggle="tab" id="soaTab" data-feature="soa" role="tab" type="button"><i class="bi bi-list-check" aria-hidden="true"></i> SoA</button></li>
 </ul>
-<div class="tab-content">
+<div class="tab-content flex-grow-1" id="ismsTabContent">
 <section class="tab-pane fade show active" id="overviewPane" role="tabpanel" tabindex="0">
 <div class="row g-3" id="overviewCards"></div>
 </section>
@@ -125,6 +130,7 @@
 <section class="tab-pane fade" id="soaPane" role="tabpanel" tabindex="0">
 <div class="card"><div class="card-header"><div class="fw-bold">Statement of Applicability</div><div class="small-muted">The SoA now lives under ISMS and includes read-only tabs for ISMS entities.</div></div><div class="card-body"><a class="btn btn-primary" data-nav-fw="1" href="/statement-of-applicability.html">Open Statement of Applicability</a></div></div>
 </section>
+</div>
 </div>
 </main>
 <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>

@@ -2560,6 +2560,18 @@ for (const btn of Array.from(document.querySelectorAll('#ismsTabs [data-bs-toggl
   });
 }
 
+const ismsTabs = document.getElementById('ismsTabs');
+const ismsNavigationToggle = document.getElementById('isms-navigation-toggle');
+
+ismsNavigationToggle.addEventListener('click', () => {
+  const open = ismsTabs.classList.toggle('admin-nav-open');
+  ismsNavigationToggle.setAttribute('aria-expanded', String(open));
+});
+ismsTabs.addEventListener('shown.bs.tab', () => {
+  ismsTabs.classList.remove('admin-nav-open');
+  ismsNavigationToggle.setAttribute('aria-expanded', 'false');
+});
+
 load()
   .then(() => activateInitialTab())
   .catch((e) => toast(status, `Failed to load ISMS: ${errorText(e)}`, 'danger'));
