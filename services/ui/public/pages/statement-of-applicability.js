@@ -512,10 +512,10 @@ function renderIsmsOrgAssets() {
       assets
         .map(
           (a) =>
-            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '-')}</td><td>${esc(a.subcategory_name || '-')}</td><td>${esc(a.license || '-')}</td><td>${esc(a.owner_org_node?.name || '-')}</td><td>${esc(a.register_held_by_org_node?.name || '-')}</td><td>${controlBadges(a.controls, framework)}</td><td>${clauseBadges(a.clauses, framework)}</td></tr>`,
+            `<tr><td class="fw-semibold">${esc(a.asset || a.name || 'Asset')}</td><td>${esc(a.category?.name || a.category_name || '-')}</td><td>${esc(a.subcategory_name || '-')}</td><td>${esc(a.license || '-')}</td><td>${esc(a.owner_org_node?.name || '-')}</td><td>${controlBadges(a.controls, framework)}</td><td>${clauseBadges(a.clauses, framework)}</td></tr>`,
         )
         .join('') ||
-      `<tr><td colspan="8" class="p-4 small-muted">${soa.can_view_isms ? 'No ISMS assets yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
+      `<tr><td colspan="7" class="p-4 small-muted">${soa.can_view_isms ? 'No ISMS assets yet.' : 'You do not have permission to view ISMS.'}</td></tr>`;
   }
 }
 

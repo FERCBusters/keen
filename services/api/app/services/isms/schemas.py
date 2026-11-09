@@ -64,7 +64,6 @@ class AssetPayload(IsmsLinksPayload):
     license_id: uuid.UUID | None = None
     license_name: str | None = Field(default=None, max_length=256)
     owner_org_node_id: uuid.UUID | None = None
-    register_held_by_org_node_id: uuid.UUID | None = None
     description: str | None = Field(default=None, max_length=20000)
 
 

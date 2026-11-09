@@ -1100,12 +1100,6 @@ class RiskAsset(Base):
         nullable=True,
         index=True,
     )
-    register_held_by_org_node_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("isms_org_nodes.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -1122,9 +1116,6 @@ class RiskAsset(Base):
     license_entity = relationship("IsmsLicense", back_populates="assets")
     vendor = relationship("IsmsVendor", back_populates="assets")
     owner_org_node = relationship("IsmsOrgNode", foreign_keys=[owner_org_node_id])
-    register_held_by_org_node = relationship(
-        "IsmsOrgNode", foreign_keys=[register_held_by_org_node_id]
-    )
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     risks = relationship("Risk", back_populates="asset")
 
@@ -4327,4 +4318,151 @@ class QuizAnswer(Base):
             name="ck_quiz_answers_points",
         ),
         UniqueConstraint("attempt_id", "position", name="uq_quiz_answer_position"),
+    )
+
+
+# -----------------------------------------------------------------------------
+# AI agent access (MCP). See app.security.mcp_tokens and app.services.mcp_oauth.
+# -----------------------------------------------------------------------------
+
+
+class McpClient(Base):
+    """An MCP client application that registered itself (RFC 7591).
+
+    Every client is public: it proves possession with PKCE, never a secret.
+    """
+
+    __tablename__ = "mcp_clients"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    client_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    client_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    # The registered metadata as returned to the client, without credentials.
+    info: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+
+
+class McpGrant(Base):
+    """One person's consent for one client, and the scopes it granted."""
+
+    __tablename__ = "mcp_grants"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    client_pk: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mcp_clients.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    scopes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # The account's session and second-factor versions at consent. Deactivating
+    # the account advances the first; changing or resetting its password or
+    # second factors advances the second. Either ends the grant permanently.
+    session_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    mfa_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    client = relationship("McpClient")
+
+
+class McpConsentRequest(Base):
+    """A client's authorisation request, waiting for a person to answer it."""
+
+    __tablename__ = "mcp_consent_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    client_pk: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mcp_clients.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # None when the client named no scopes; the person then chooses from all.
+    scopes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    code_challenge: Mapped[str] = mapped_column(String(128), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    redirect_uri_provided_explicitly: Mapped[bool] = mapped_column(
+        Boolean, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+    client = relationship("McpClient")
+
+
+class McpAuthorizationCode(Base):
+    __tablename__ = "mcp_authorization_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    grant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mcp_grants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    code_challenge: Mapped[str] = mapped_column(String(128), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    redirect_uri_provided_explicitly: Mapped[bool] = mapped_column(
+        Boolean, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    grant = relationship("McpGrant")
+
+
+class McpToken(Base):
+    """An access or refresh token, kept only as its digest."""
+
+    __tablename__ = "mcp_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    grant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("mcp_grants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    scopes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    # A refresh token is used once; presenting it again revokes its grant.
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    grant = relationship("McpGrant")
+
+    __table_args__ = (
+        CheckConstraint("kind in ('access','refresh')", name="ck_mcp_tokens_kind"),
     )

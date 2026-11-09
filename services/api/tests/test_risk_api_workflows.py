@@ -930,7 +930,6 @@ def test_subcategories_are_unique_within_their_category(reg):
 
 def test_assets_carry_licences_owners_and_descriptions(reg):
     team = _org_node(reg.db, "Finance", node_type="team")
-    holder = _org_node(reg.db, "Records office", node_type="team")
     create = "/v1/risks/assets"
     crm = reg.manage(
         "POST",
@@ -941,7 +940,6 @@ def test_assets_carry_licences_owners_and_descriptions(reg):
             "subcategory_name": "SaaS",
             "license_name": "Enterprise seat",
             "owner_org_node_id": str(team.id),
-            "register_held_by_org_node_id": str(holder.id),
             "description": HOSTILE,
         },
     )
@@ -956,7 +954,6 @@ def test_assets_carry_licences_owners_and_descriptions(reg):
         "name": "Finance",
         "node_type": "team",
     }
-    assert crm["register_held_by_org_node"]["name"] == "Records office"
     assert crm["description"] == HOSTILE
     assert crm["category"]["name"] == "Software"
     assert crm["subcategory"]["name"] == "SaaS"
@@ -1439,7 +1436,6 @@ def test_asset_edits_move_ownership_between_organisational_nodes(reg):
         {
             "name": "Ledger",
             "owner_org_node_id": str(other.id),
-            "register_held_by_org_node_id": str(team.id),
         },
     )
     assert moved["owner_org_node"] == {
@@ -1447,7 +1443,6 @@ def test_asset_edits_move_ownership_between_organisational_nodes(reg):
         "name": "Operations",
         "node_type": "team",
     }
-    assert moved["register_held_by_org_node"]["name"] == "Finance"
     unknown = reg.manage(
         "PATCH",
         f"{create}/{asset['id']}",

@@ -610,7 +610,6 @@ class DemoSeeder:
                     "license_id": license_obj.id if license_obj else None,
                     "vendor_id": vendor.id if vendor else None,
                     "owner_org_node_id": owner.id,
-                    "register_held_by_org_node_id": org_nodes["isms_owner"].id,
                     "description": spec["description"],
                     "created_by_user_id": self.user.id,
                 },

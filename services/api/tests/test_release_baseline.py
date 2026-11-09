@@ -146,6 +146,8 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0046_asset_owner_only",
+        "0045_mcp_oauth",
         "0044_posture_risk_treatment",
         "0043_access_matrix_fields",
         "0042_access_matrix_approver",

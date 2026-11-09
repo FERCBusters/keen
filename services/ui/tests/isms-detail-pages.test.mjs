@@ -397,7 +397,6 @@ test('assets show classification, owners and risk counts', async (t) => {
   assert.equal(ui.el('assetTitle').textContent, row.asset);
   assert.match(ui.el('assetMeta').textContent, /^Data · PII · Proprietary · updated/);
   assert.equal(ui.el('assetOwner').textContent, 'Finance');
-  assert.equal(ui.el('assetRegister').textContent, '-');
   assert.equal(ui.el('assetRiskCount').textContent, '3');
   assert.equal(ui.el('assetClauses').textContent, '-');
   const body = await sample(ui, posted, 'sampleAssetAudit');

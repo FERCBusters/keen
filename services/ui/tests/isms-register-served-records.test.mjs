@@ -58,15 +58,13 @@ test('an organisation node names its parent, and a top-level node sits under Roo
   assert.equal(ui.el('orgRows').querySelector('img'), null);
 });
 
-test('assets show their owner and register holder, and licences without a description show a dash', async (t) => {
+test('assets show their owner, and licences without a description show a dash', async (t) => {
   const finance = orgNode('n1', 'Finance <ops>');
   const records = {
     assets: [
       assetRecord('a1', 'Payroll', {
         owner_org_node: finance,
         owner_org_node_id: 'n1',
-        register_held_by_org_node: orgNode('n2', 'Records office'),
-        register_held_by_org_node_id: 'n2',
       }),
       assetRecord('a2', 'Spare laptop'),
     ],
@@ -87,15 +85,8 @@ test('assets show their owner and register holder, and licences without a descri
     [...ui.el('assetsRows').querySelectorAll('tr')[row].querySelectorAll('td')].map(
       (cell) => cell.textContent,
     );
-  assert.deepEqual(cells(0).slice(0, 6), [
-    'Payroll',
-    'Data',
-    'Databases',
-    '-',
-    'Finance <ops>',
-    'Records office',
-  ]);
-  assert.deepEqual(cells(1).slice(4, 6), ['-', '-']);
+  assert.deepEqual(cells(0).slice(0, 5), ['Payroll', 'Data', 'Databases', '-', 'Finance <ops>']);
+  assert.deepEqual(cells(1).slice(4, 5), ['-']);
   const licences = [...ui.el('licensesRows').querySelectorAll('tr')].map((row) =>
     [...row.querySelectorAll('td')].slice(0, 3).map((cell) => cell.textContent.trim()),
   );

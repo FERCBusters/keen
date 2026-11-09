@@ -62,7 +62,6 @@ function renderAsset(row) {
   $('assetSubcategory').textContent = asset.subcategory_name || '-';
   $('assetLicense').textContent = asset.license_name || asset.license || '-';
   $('assetOwner').textContent = asset.owner_org_node?.name || '-';
-  $('assetRegister').textContent = asset.register_held_by_org_node?.name || '-';
   $('assetRiskCount').textContent = Number(asset.risk_count || 0);
   $('assetUpdated').textContent = fmtTs(asset.updated_at);
   $('assetControls').innerHTML = controlBadges(asset.controls, framework);

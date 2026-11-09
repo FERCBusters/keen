@@ -240,6 +240,11 @@ OBJECT_RULES = {
         "record, reads it without isms.read; linked documents then appear by title only."
     ),
     "POST /v1/me/inbox/{item_id}/read": "The notification must belong to the account.",
+    "DELETE /v1/me/mcp/grants/{grant_id}": "The connection must belong to the account.",
+    "POST /v1/me/mcp/consent": (
+        "Grants only read scopes the account can already read, within those the "
+        "client requested."
+    ),
     "GET /v1/me/inbox": (
         "Each notification is shown only while the account can open its record."
     ),
@@ -293,6 +298,18 @@ POLICY = {
     "POST /v1/webhooks/{provider}/{event_type}": PUBLIC,
     "POST /v1/webhooks/connections/{connection_id}/{provider}/{event_type}": PUBLIC,
     "POST /v1/webhooks/isms/effectiveness-metrics/{metric_key}": PUBLIC,
+    # AI agent access (MCP): OAuth discovery, the SDK's OAuth endpoints, which
+    # check PKCE, codes and tokens themselves, and the MCP endpoint, which admits
+    # only a current access token. Each answers 404 while MCP is off.
+    "GET /.well-known/oauth-protected-resource/api/v1/mcp": PUBLIC,
+    "GET /.well-known/oauth-authorization-server/api/v1/oauth": PUBLIC,
+    "GET /v1/oauth/authorize": PUBLIC,
+    "POST /v1/oauth/token": PUBLIC,
+    "POST /v1/oauth/register": PUBLIC,
+    "POST /v1/oauth/revoke": PUBLIC,
+    "GET /v1/mcp": PUBLIC,
+    "POST /v1/mcp": PUBLIC,
+    "DELETE /v1/mcp": PUBLIC,
     # --- Session checks used by nginx before serving pages -------------------------
     "GET /v1/auth/check": SIGNED_IN,
     "GET /v1/auth/check-admin": ADMIN,
@@ -734,6 +751,10 @@ POLICY = {
     "POST /v1/me/inbox/read-all": SIGNED_IN,
     "GET /v1/me/inbox/summary": SIGNED_IN,
     "POST /v1/me/inbox/{item_id}/read": SIGNED_IN,
+    "GET /v1/me/mcp": SIGNED_IN,
+    "POST /v1/me/mcp/consent/view": SIGNED_IN,
+    "POST /v1/me/mcp/consent": SIGNED_IN,
+    "DELETE /v1/me/mcp/grants/{grant_id}": SIGNED_IN,
     "GET /v1/me/isms-assets": SIGNED_IN,
     "GET /v1/me/isms-meetings": SIGNED_IN,
     "GET /v1/me/isms-objectives": SIGNED_IN,

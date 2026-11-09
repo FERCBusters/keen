@@ -116,10 +116,8 @@ const lists = {
         subcategory_name: 'Laptops',
         license: 'Owned',
         owner_org_node: { name: 'IT' },
-        register_held_by_org_node: [{ name: 'Org' }, { name: 'Finance' }],
       },
       is_owner: true,
-      is_register_holder: true,
     },
     { name: 'Shared drive', description: 'Team files', relationship: 'Custodian' },
   ],
@@ -417,7 +415,7 @@ test("ISMS meetings, objectives, roles and assets list the user's responsibiliti
   const assets = [...ui.el('myIsmsAssetsTbody').querySelectorAll('tr')];
   assert.match(
     assets[0].textContent,
-    /Laptop fleet[\s\S]*Hardware \/ Laptops[\s\S]*Owned[\s\S]*Owner, Register holder[\s\S]*IT[\s\S]*Org → Finance/,
+    /Laptop fleet[\s\S]*Hardware \/ Laptops[\s\S]*Owned[\s\S]*Owner[\s\S]*IT/,
   );
   assert.match(assets[1].textContent, /Shared drive[\s\S]*Team files[\s\S]*-[\s\S]*Custodian/);
   assert.equal(

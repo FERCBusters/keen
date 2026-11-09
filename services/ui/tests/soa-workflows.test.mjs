@@ -169,7 +169,6 @@ const soa = () => ({
       subcategory_name: 'Laptops',
       license: 'Owned',
       owner_org_node: { name: 'IT' },
-      register_held_by_org_node: { name: 'Finance' },
     },
     { name: 'Named asset' },
     {},
@@ -409,7 +408,7 @@ test('ISMS objectives, documents, measures, organisation and assets are listed',
   assert.match(orgs[0], /^Security Board dana/);
   assert.match(orgs[1], /^Org node Root/);
   const assets = rowTexts(ui, 'ismsAssetsRows');
-  assert.match(assets[0], /^Laptop fleet Hardware Laptops Owned IT Finance/);
+  assert.match(assets[0], /^Laptop fleet Hardware Laptops Owned IT/);
   assert.match(assets[1], /^Named asset - - - - -/);
   assert.match(assets[2], /^Asset/);
 });

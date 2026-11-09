@@ -8,6 +8,8 @@ ceremony and Origin. Keep the contract tests aligned with this small inventory.
 
 from starlette.routing import compile_path
 
+from app.security.mcp_tokens import INNER_ROUTES
+
 PUBLIC_HTTP_ROUTES = {
     # API documentation and the OpenAPI schema require a signed-in session.
     "GET": (
@@ -20,6 +22,20 @@ PUBLIC_HTTP_ROUTES = {
         "/v1/auth/sso/{provider_key}/start",
         "/v1/auth/sso/{provider_key}/callback",
         "/v1/agents/server-key",
+        # MCP's OAuth discovery documents and authorisation endpoint: the
+        # authorisation endpoint sends a browser to the consent page, which
+        # requires a signed-in session (app/api/routes/mcp.py).
+        "/.well-known/oauth-protected-resource/api/v1/mcp",
+        "/.well-known/oauth-authorization-server/api/v1/oauth",
+        "/v1/oauth/authorize",
+        # Streamable HTTP's server-to-client event stream. FastMCP either checks
+        # the bearer or refuses it with 405; a browser-auth 401 makes MCP clients
+        # refresh their tokens on every connection.
+        "/v1/mcp",
+    ),
+    "DELETE": (
+        # Streamable HTTP ends a session with DELETE; FastMCP checks the bearer.
+        "/v1/mcp",
     ),
     "POST": (
         "/v1/auth/oidc/logout",
@@ -45,6 +61,12 @@ PUBLIC_HTTP_ROUTES = {
         "/v1/auth/mfa/recovery/regenerate",
         "/v1/auth/mfa/finish",
         "/v1/auth/mfa/cancel",
+        # The OAuth endpoints check PKCE, codes and tokens themselves; the MCP
+        # endpoint admits only a current access token (FastMCP's bearer check).
+        "/v1/oauth/token",
+        "/v1/oauth/register",
+        "/v1/oauth/revoke",
+        "/v1/mcp",
     ),
 }
 _COMPILED = {
@@ -88,6 +110,10 @@ _PERMISSION_WRITES = {
         # A person marks only their own notifications as read.
         "/v1/me/inbox/{item_id}/read",
         "/v1/me/inbox/read-all",
+        # A person answers consent requests as themselves; the operation grants
+        # no more than the account can read.
+        "/v1/me/mcp/consent/view",
+        "/v1/me/mcp/consent",
     ),
     "PATCH": (
         "/v1/pestle/items/{item_id}",
@@ -108,6 +134,8 @@ _PERMISSION_WRITES = {
         "/v1/stories/{story_id}",
         "/v1/stories/{story_id}/items/{item_id}",
         "/v1/stories/{story_id}/comments/{comment_id}",
+        # A person revokes only their own MCP connections.
+        "/v1/me/mcp/grants/{grant_id}",
     ),
 }
 _PERMISSION_WRITE_PATTERNS = {
@@ -142,3 +170,12 @@ def gated_write_permission(request):
         if method == allowed and pattern.fullmatch(path):
             return code
     return None
+
+
+_MCP_TOOL_ROUTES = tuple(compile_path(path)[0] for path in INNER_ROUTES)
+
+
+def is_mcp_tool_route(request):
+    """Whether an MCP tool's in-process request names a route the tools read."""
+    path = policy_path(request)
+    return any(pattern.fullmatch(path) for pattern in _MCP_TOOL_ROUTES)

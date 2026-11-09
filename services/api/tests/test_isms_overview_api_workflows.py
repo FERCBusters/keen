@@ -115,7 +115,6 @@ def isms(keen):  # noqa: F811 - fixture imported above
             "subcategory_name": "Databases",
             "license_id": licence["id"],
             "owner_org_node_id": role["id"],
-            "register_held_by_org_node_id": analyst["id"],
         },
     )
     unowned_asset = manage(
@@ -343,9 +342,7 @@ def test_personal_views_show_only_the_signed_in_users_records(isms):
     }
 
     assets = _send(member, "GET", "/v1/me/isms-assets")["items"]
-    assert [(a["name"], a["is_owner"], a["is_register_holder"]) for a in assets] == [
-        ("Payroll database", True, True)
-    ]
+    assert [(a["name"], a["is_owner"]) for a in assets] == [("Payroll database", True)]
 
     stranger = app.client(app.user())
     for path in (

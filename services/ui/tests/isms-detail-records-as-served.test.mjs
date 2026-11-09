@@ -1,7 +1,6 @@
 // ISMS detail pages with records as the API serves them: assets with their
-// register holder and risks, objectives for managers and readers, documents
-// without an upload, access rows whose service was deleted, and controls
-// without a title.
+// owner and risks, objectives for managers and readers, documents without an
+// upload, access rows whose service was deleted, and controls without a title.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
@@ -64,7 +63,7 @@ const riskRow = (id, title, fields = {}) => ({
   ...fields,
 });
 
-test('an asset names its owner and register holder and its licence', async (t) => {
+test('an asset names its owner and its licence', async (t) => {
   const row = assetRecord('x1', 'Payroll', {
     license_id: 'l1',
     license: 'Enterprise',
@@ -72,8 +71,6 @@ test('an asset names its owner and register holder and its licence', async (t) =
     license_entity: licence('l1', 'Enterprise'),
     owner_org_node: orgNode('n1', 'Finance'),
     owner_org_node_id: 'n1',
-    register_held_by_org_node: orgNode('n2', 'Records <office>'),
-    register_held_by_org_node_id: 'n2',
   });
   const { ui } = await detail(t, 'isms-asset', { path: '/api/v1/isms/assets/x1', row });
   assert.equal(
@@ -82,7 +79,6 @@ test('an asset names its owner and register holder and its licence', async (t) =
   );
   assert.equal(ui.el('assetSubcategory').textContent, 'Databases');
   assert.equal(ui.el('assetOwner').textContent, 'Finance');
-  assert.equal(ui.el('assetRegister').textContent, 'Records <office>');
 });
 
 test("an asset's risks show only the treatment details they have, and load once", async (t) => {

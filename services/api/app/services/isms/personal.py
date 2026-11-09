@@ -135,12 +135,7 @@ def my_isms_assets(*, framework: str, user: User, db: Session):
         return {"framework": fw, "items": []}
     rows = (
         db.query(RiskAsset)
-        .filter(
-            or_(
-                RiskAsset.owner_org_node_id.in_(node_ids),
-                RiskAsset.register_held_by_org_node_id.in_(node_ids),
-            )
-        )
+        .filter(RiskAsset.owner_org_node_id.in_(node_ids))
         .order_by(func.lower(RiskAsset.name).asc())
         .all()
     )
@@ -149,12 +144,6 @@ def my_isms_assets(*, framework: str, user: User, db: Session):
     for row in rows:
         out = _asset_out(db, row, fw)
         owner_id = str(row.owner_org_node_id) if row.owner_org_node_id else None
-        register_id = (
-            str(row.register_held_by_org_node_id)
-            if row.register_held_by_org_node_id
-            else None
-        )
         out["is_owner"] = owner_id in node_id_set
-        out["is_register_holder"] = register_id in node_id_set
         items.append(out)
     return {"framework": fw, "items": items}
