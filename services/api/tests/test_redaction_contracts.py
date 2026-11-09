@@ -294,6 +294,26 @@ def test_mailbox_headers_from_a_mail_collector_are_masked_whole(monkeypatch):
     assert fields.external_id == "<id@example.test>"
 
 
+def test_mail_address_headers_are_always_masked():
+    headers = {
+        "from": "Miguel Jacq <mig@example.test>",
+        "to": '"Smith, Bob" <bob@example.test>, carol@example.test',
+        "cc": "=?UTF-8?Q?Dr_Miguel_Jacq?= <dave@example.test>",
+        "bcc": "",
+        "reply-to": "Miguel Jacq",
+        "subject": "Re: access review for erin@example.test",
+    }
+
+    assert r.mask_mail_address_headers(headers) == {
+        "from": "[MASKED_EMAIL]",
+        "to": "[MASKED_EMAIL]",
+        "cc": "[MASKED_EMAIL]",
+        "bcc": "",
+        "reply-to": "[MASKED_EMAIL]",
+        "subject": "Re: access review for erin@example.test",
+    }
+
+
 @pytest.mark.parametrize(
     "key,value",
     [

@@ -9,7 +9,7 @@ import time
 from email import policy
 from email.parser import BytesHeaderParser
 
-from app.security.redaction import redact_str
+from app.security.redaction import mask_mail_address_headers, redact_str
 from app.security.regex import scan_pattern
 
 from .mime import body_part, decode_body, structure
@@ -177,13 +177,18 @@ def collect(config, cursor, allowed_cidrs):
             if len(header) >= 16384 or header.count(b"\n") > 200:
                 raise ValueError("IMAP headers exceed limit")
             parsed = BytesHeaderParser(policy=policy.default).parsebytes(header)
+            # Address headers are masked before the character limit can split an
+            # address, whether or not optional event-data masking is enabled.
+            headers = mask_mail_address_headers(
+                {
+                    name: redact_str(str(parsed.get(name, "")))
+                    for name in ("subject", "from", "to", "date", "message-id")
+                }
+            )
             item = {
                 "uid": uid,
                 "message_size": size,
-                "headers": {
-                    name: redact_str(str(parsed.get(name, "")))[:2048]
-                    for name in ("subject", "from", "to", "date", "message-id")
-                },
+                "headers": {name: value[:2048] for name, value in headers.items()},
                 "body": None,
                 "body_omitted_reason": "disabled",
                 "body_truncated": False,

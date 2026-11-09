@@ -414,6 +414,38 @@ def mask_event_data_str(s: str | None) -> str | None:
     return txt
 
 
+# Address headers name people, so a mail collector masks them whether or not
+# optional event-data masking is enabled. RFC 5322 defines these mailbox fields.
+MAIL_ADDRESS_HEADERS = frozenset(
+    {
+        "from",
+        "to",
+        "cc",
+        "bcc",
+        "reply-to",
+        "sender",
+        "return-path",
+        "resent-from",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+    }
+)
+
+
+def mask_mail_address_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Replace mail address headers whole, hiding both names and addresses.
+
+    A display name identifies the person as much as the address does, and a
+    malformed or encoded name must not survive an address-only pattern.
+    """
+    result = dict(headers)
+    for name, value in headers.items():
+        if name.lower() in MAIL_ADDRESS_HEADERS and value:
+            result[name] = MASKED_EMAIL
+    return result
+
+
 def mask_event_data_obj(obj: Any) -> Any:
     """Recursively mask IP/email substrings in strings contained in an object.
 

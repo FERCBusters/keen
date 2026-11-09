@@ -74,6 +74,38 @@ def test_a_part_offered_as_a_download_is_never_a_message_body():
     assert body_part(mixed)["section"] == "2"
 
 
+class AddressPeer(Peer):
+    def uid(self, command, *args):
+        if command == "FETCH" and "HEADER.FIELDS" in args[1]:
+            data = (
+                b"Subject: Test report\r\n"
+                b"From: Alice <alice@example.test>\r\n"
+                b"To: Bob <bob@example.test>, carol@example.test\r\n"
+                b"Cc: dave@example.test\r\n\r\n"
+            )
+            section = args[1].split("BODY.PEEK[", 1)[1].split("]", 1)[0]
+            return "OK", [
+                (
+                    f"1 (UID {args[0]} BODY[{section}]<0> {{{len(data)}}}".encode(),
+                    data,
+                ),
+                b")",
+            ]
+        return super().uid(command, *args)
+
+
+def test_address_headers_are_masked_whether_or_not_masking_is_enabled(monkeypatch):
+    monkeypatch.setattr(worker, "Client", AddressPeer)
+
+    result = worker.collect(CONFIG, {"uidvalidity": 7, "last_uid": 1}, "")
+
+    (item,) = result["items"]
+    assert item["headers"]["from"] == "[MASKED_EMAIL]"
+    assert item["headers"]["to"] == "[MASKED_EMAIL]"
+    assert "cc" not in item["headers"]
+    assert item["headers"]["subject"] == "Test report"
+
+
 class DownloadOnlyPeer(Peer):
     def uid(self, command, *args):
         if command == "FETCH" and "BODYSTRUCTURE" in args[1]:

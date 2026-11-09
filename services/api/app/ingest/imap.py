@@ -18,6 +18,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.imap_support.config import configuration
+from app.security.redaction import mask_mail_address_headers
 from app.services.ingestion_pause import pausable
 
 WORKER_TIMEOUT = 55
@@ -165,6 +166,7 @@ def ingest_imap_all(db):
         ]
     created = 0
     for item in result["items"]:
+        item["headers"] = mask_mail_address_headers(item["headers"])
         key = f"{identity}:{result['uidvalidity']}:{item['uid']}"
         digest = hashlib.sha256(key.encode()).hexdigest()
         payload = {

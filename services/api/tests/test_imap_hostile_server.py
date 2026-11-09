@@ -282,8 +282,10 @@ def test_full_collection_with_hostile_tls_responses(peer, attack):
             assert result["last_uid"] == 2
             assert result["items"][0]["body"] == "abc"
             assert result["items"][0]["headers"]["subject"] == "Report"
+            sender = result["items"][0]["headers"]["from"]
+            assert sender == "[MASKED_EMAIL]"
             if attack == "long-from":
-                assert len(result["items"][0]["headers"]["from"]) > 128
+                assert "a" * 250 not in sender
         else:
             with pytest.raises(ValueError, match=f"^{REFUSALS[attack]}$"):
                 worker.collect(config, {"uidvalidity": 7, "last_uid": 1}, "")
@@ -488,8 +490,9 @@ def test_server_header_cannot_overflow_event_display_columns(
     from app.db.models import Event, IngestionCursor
     from app.ingest import common, connections, imap
 
-    # Long but bounded header; short email addresses also expand under masking.
-    sender = "a@b.co, " * 100
+    # A long display label and its address are replaced whole, even while
+    # optional event-data masking is off.
+    sender = "prefix " * 40 + "a@b.co"
     host = ".".join(["a" * 60] * 3)
     monkeypatch.setattr(settings, "imap_enabled", True)
     monkeypatch.setattr(settings, "demo_mode", False)
@@ -524,12 +527,10 @@ def test_server_header_cannot_overflow_event_display_columns(
     assert len(event.system) <= Event.__table__.c.system.type.length
     assert contract_db.query(IngestionCursor).one().meta["last_uid"] == 2
     original = event.normalized_payload["mail"]["headers"]["from"]
-    assert len(original) > 128
+    assert original == "[MASKED_EMAIL]"
     assert json.loads(blobs[0])["mail"]["headers"]["from"] == original
-    if masking == "true":
-        assert "a@b.co" not in original and "a@b.co" not in event.actor
-    else:
-        assert original == sender
+    assert "a@b.co" not in original and "prefix" not in original
+    assert "a@b.co" not in event.actor and "prefix" not in event.actor
 
 
 @pytest.mark.parametrize("max_chars", [4000, 65536])
