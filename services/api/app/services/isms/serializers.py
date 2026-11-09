@@ -299,14 +299,6 @@ def _asset_out(
         "owner_org_node_id": (
             str(row.owner_org_node_id) if row.owner_org_node_id else None
         ),
-        "register_held_by_org_node": _org_node_out(
-            row.register_held_by_org_node, include_people=False
-        ),
-        "register_held_by_org_node_id": (
-            str(row.register_held_by_org_node_id)
-            if row.register_held_by_org_node_id
-            else None
-        ),
         "description": row.description or "",
         "risk_count": len(row.risks or []),
         "created_at": row.created_at.isoformat() if row.created_at else None,

@@ -525,7 +525,6 @@ test('an asset takes its category, subcategory, licence and owner', async (t) =>
       subcategory_id: 'sub3',
       license_id: 'l1',
       owner_org_node_id: 'n1',
-      register_held_by_org_node_id: null,
       description: '',
       controls: [],
       clauses: [],

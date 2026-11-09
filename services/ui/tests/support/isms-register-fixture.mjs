@@ -155,8 +155,6 @@ export const asset = (id, name, fields = {}) => ({
   license_entity: null,
   owner_org_node: null,
   owner_org_node_id: null,
-  register_held_by_org_node: null,
-  register_held_by_org_node_id: null,
   description: '',
   risk_count: 0,
   created_at: at,

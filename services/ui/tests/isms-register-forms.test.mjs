@@ -158,14 +158,12 @@ test('a new asset without a licence or owner sends neither', async (t) => {
       subcategory_id: saved.body.subcategory_id,
       license_id: saved.body.license_id,
       owner_org_node_id: saved.body.owner_org_node_id,
-      register_held_by_org_node_id: saved.body.register_held_by_org_node_id,
     },
     {
       category_id: 'cat1',
       subcategory_id: 'sub1',
       license_id: null,
       owner_org_node_id: null,
-      register_held_by_org_node_id: null,
     },
   );
 });

@@ -239,9 +239,6 @@ def create_asset(
         category_id=category.id,
         subcategory_id=subcategory.id,
         owner_org_node_id=org_node_or_400(db, payload.owner_org_node_id),
-        register_held_by_org_node_id=org_node_or_400(
-            db, payload.register_held_by_org_node_id
-        ),
         description=clean_text(payload.description, max_len=20000),
         created_by_user_id=user.id,
         created_at=_utcnow(),
@@ -386,10 +383,6 @@ def update_asset(
         row.license = license_row.name if license_row else ""
     if "owner_org_node_id" in fields:
         row.owner_org_node_id = org_node_or_400(db, payload.owner_org_node_id)
-    if "register_held_by_org_node_id" in fields:
-        row.register_held_by_org_node_id = org_node_or_400(
-            db, payload.register_held_by_org_node_id
-        )
     if "description" in fields:
         row.description = clean_text(payload.description, max_len=20000)
     row.updated_at = _utcnow()

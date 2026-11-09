@@ -32,7 +32,6 @@ NOISE = frozenset(
         "nature_id",
         "license_id",
         "owner_org_node_id",
-        "register_held_by_org_node_id",
         "justification_options",
         "can_view_risks",
         "can_view_pestle",

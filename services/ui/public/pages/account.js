@@ -764,7 +764,6 @@ function peopleBadges(items = []) {
 function orgNodeLabel(node) {
   if (!node) return '';
   if (typeof node === 'string') return node.trim();
-  if (Array.isArray(node)) return orgPathLabel(node);
   if (typeof node === 'object') {
     return String(node.name || node.title || node.username).trim();
   }
@@ -827,11 +826,8 @@ function myIsmsRoleRow(item) {
 }
 
 function assetRoleLabel(item) {
-  const roles = [];
-  if (item?.is_owner) roles.push('Owner');
-  if (item?.is_register_holder) roles.push('Register holder');
-  // Each listed asset is owned or held by one of the person's roles.
-  return roles.join(', ') || item?.relationship;
+  // Each listed asset is owned by one of the person's roles.
+  return item?.is_owner ? 'Owner' : item?.relationship;
 }
 
 function myIsmsAssetRow(item) {
@@ -847,7 +843,6 @@ function myIsmsAssetRow(item) {
     <td>${esc(asset.license || '-')}</td>
     <td><span class="badge text-bg-light">${esc(assetRoleLabel(item))}</span></td>
     <td class="small-muted">${esc(orgNodeLabel(asset.owner_org_node) || '-')}</td>
-    <td class="small-muted">${esc(orgNodeLabel(asset.register_held_by_org_node) || '-')}</td>
     <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="${esc(ismsUrl('assets'))}">Open</a></td>
   </tr>`;
 }

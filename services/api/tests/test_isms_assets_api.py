@@ -215,8 +215,8 @@ def test_a_licence_in_use_cannot_be_deleted(reg):
 # --- Assets -------------------------------------------------------------------------
 
 
-def test_an_asset_records_its_place_licence_and_owners(reg):
-    owner, custodian = reg.node("Database owner"), reg.node("Register custodian")
+def test_an_asset_records_its_place_licence_and_owner(reg):
+    owner = reg.node("Database owner")
     data = reg.category("Data", "Databases")
     databases = next(s for s in data["subcategories"] if s["name"] == "Databases")
     seat = reg.manage("POST", "licenses", {"name": "Enterprise seat"})
@@ -230,7 +230,6 @@ def test_an_asset_records_its_place_licence_and_owners(reg):
             "subcategory_id": databases["id"],
             "license_id": seat["id"],
             "owner_org_node_id": owner,
-            "register_held_by_org_node_id": custodian,
             "description": "  Salaries  ",
         },
     )
@@ -245,7 +244,6 @@ def test_an_asset_records_its_place_licence_and_owners(reg):
         "license_id": seat["id"],
         "license": "Enterprise seat",
         "owner_org_node_id": owner,
-        "register_held_by_org_node_id": custodian,
         "description": "Salaries",
         "risk_count": 0,
     }
@@ -263,7 +261,6 @@ ASSET_FIELDS = (
     "license_id",
     "license",
     "owner_org_node_id",
-    "register_held_by_org_node_id",
     "description",
     "risk_count",
 )
@@ -348,11 +345,6 @@ def test_an_asset_name_is_unique_within_its_subcategory(reg):
             400,
             "Unknown organisation chart node",
         ),
-        (
-            {"register_held_by_org_node_id": "00000000-0000-0000-0000-000000000000"},
-            400,
-            "Unknown organisation chart node",
-        ),
     ],
     ids=[
         "no-name",
@@ -361,7 +353,6 @@ def test_an_asset_name_is_unique_within_its_subcategory(reg):
         "blank-subcategory",
         "unknown-licence",
         "unknown-owner",
-        "unknown-custodian",
     ],
 )
 def test_invalid_assets_are_refused_on_create_and_update(reg, change, status, detail):
@@ -550,7 +541,7 @@ def test_the_risk_register_refuses_unknown_organisation_chart_nodes_too(reg):
     )
     updated = risks.patch(
         f"/v1/risks/assets/{held['id']}",
-        json={**body, "name": held["name"], "register_held_by_org_node_id": unknown},
+        json={**body, "name": held["name"], "owner_org_node_id": unknown},
         headers=unsafe(risks),
     )
 

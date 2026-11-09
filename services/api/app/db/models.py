@@ -1100,12 +1100,6 @@ class RiskAsset(Base):
         nullable=True,
         index=True,
     )
-    register_held_by_org_node_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("isms_org_nodes.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -1122,9 +1116,6 @@ class RiskAsset(Base):
     license_entity = relationship("IsmsLicense", back_populates="assets")
     vendor = relationship("IsmsVendor", back_populates="assets")
     owner_org_node = relationship("IsmsOrgNode", foreign_keys=[owner_org_node_id])
-    register_held_by_org_node = relationship(
-        "IsmsOrgNode", foreign_keys=[register_held_by_org_node_id]
-    )
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     risks = relationship("Risk", back_populates="asset")
 

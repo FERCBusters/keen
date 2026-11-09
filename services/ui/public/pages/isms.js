@@ -930,7 +930,6 @@ function populateEditForm(kind, item) {
     renderLicenseOptions();
     $('assetLicense').value = item.license_id || '';
     $('assetOwner').value = item.owner_org_node_id || '';
-    $('assetRegister').value = item.register_held_by_org_node_id || '';
     $('assetDescription').value = item.description || '';
     setSelectValues($('assetControls'), itemControls(item));
     setSelectValues($('assetClauses'), itemClauses(item));
@@ -1404,7 +1403,6 @@ function renderAssets() {
     <td>${esc(a.subcategory_name || '-')}</td>
     <td>${esc(licenseLabel(a.license_name || a.license))}</td>
     <td>${esc(a.owner_org_node?.name || '-')}</td>
-    <td>${esc(a.register_held_by_org_node?.name || '-')}</td>
     <td class="wrap small-muted">${esc(shorten(a.description || '', 160) || '-')}</td>
     <td>${Number(a.risk_count || 0)}</td>
     <td>${controlBadges(a.controls, framework)}</td><td>${clauseBadges(a.clauses, framework)}</td>${actionsHtml('asset', a.id)}
@@ -1791,8 +1789,8 @@ function populateForms() {
       (meta.document_types || []).map((x) => ({ id: x, name: x })),
       { label: 'name' },
     );
-  // A node without a parent sits at the root; an asset without an owner or
-  // register holder has none.
+  // A node without a parent sits at the root; an asset without an owner has
+  // none.
   const orgOpts = (blankLabel) =>
     optionList(meta.org_nodes, {
       label: (n) => `${n.name} (${n.node_type})`,
@@ -1800,7 +1798,7 @@ function populateForms() {
       blankLabel,
     });
   $('orgParent').innerHTML = orgOpts('Root');
-  for (const id of ['assetOwner', 'assetRegister']) $(id).innerHTML = orgOpts('-');
+  $('assetOwner').innerHTML = orgOpts('-');
   const controlOpts = optionList(meta.controls, {
     label: (c) => `${c.ref} ${c.title || ''}`.trim(),
   });
@@ -2298,7 +2296,6 @@ onIsmsSubmit('assetForm', async (ev) => {
       subcategory_id: $('assetSubcategory').value,
       license_id: $('assetLicense').value || null,
       owner_org_node_id: $('assetOwner').value || null,
-      register_held_by_org_node_id: $('assetRegister').value || null,
       description: $('assetDescription').value,
       ...selectedLinkPayload('asset'),
     },

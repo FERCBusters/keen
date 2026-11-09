@@ -104,7 +104,6 @@ class RiskAssetPayload(BaseModel):
     license_id: uuid.UUID | None = None
     license_name: str | None = Field(default=None, max_length=256)
     owner_org_node_id: uuid.UUID | None = None
-    register_held_by_org_node_id: uuid.UUID | None = None
     description: str | None = Field(default=None, max_length=20000)
 
 
@@ -418,9 +417,6 @@ def _asset_or_create(
         owner_org_node_id=org_node_or_400(
             db, getattr(payload, "owner_org_node_id", None)
         ),
-        register_held_by_org_node_id=org_node_or_400(
-            db, getattr(payload, "register_held_by_org_node_id", None)
-        ),
         description=clean_text(getattr(payload, "description", None), max_len=20000),
         created_at=_utcnow(),
         updated_at=_utcnow(),
@@ -572,14 +568,6 @@ def _asset_out(asset: RiskAsset | None) -> dict[str, Any]:
             str(asset.owner_org_node_id) if asset and asset.owner_org_node_id else None
         ),
         "owner_org_node": _org_node_summary(asset.owner_org_node if asset else None),
-        "register_held_by_org_node_id": (
-            str(asset.register_held_by_org_node_id)
-            if asset and asset.register_held_by_org_node_id
-            else None
-        ),
-        "register_held_by_org_node": _org_node_summary(
-            asset.register_held_by_org_node if asset else None
-        ),
         "description": asset.description if asset else "",
         "created_at": (
             asset.created_at.isoformat() if asset and asset.created_at else None
@@ -1294,10 +1282,6 @@ def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Ses
         row.license = license_row.name if license_row else ""
     if "owner_org_node_id" in fields:
         row.owner_org_node_id = org_node_or_400(db, payload.owner_org_node_id)
-    if "register_held_by_org_node_id" in fields:
-        row.register_held_by_org_node_id = org_node_or_400(
-            db, payload.register_held_by_org_node_id
-        )
     if "description" in fields:
         row.description = clean_text(payload.description, max_len=20000)
     row.updated_at = _utcnow()

@@ -61,8 +61,6 @@ _CHANGE_FIELD_LABELS = {
     "owner_org_node": "Owner",
     "owner_org_node_id": "Owner",
     "people": "People",
-    "register_held_by_org_node": "Detailed asset register held by",
-    "register_held_by_org_node_id": "Detailed asset register held by",
     "requirement": "Requirement",
     "resource_requirements_text": "Resource requirements text",
     "resource_users": "Resource users",
