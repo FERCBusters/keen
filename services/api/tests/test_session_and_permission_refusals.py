@@ -20,6 +20,7 @@ import pytest
 from app.core.config import settings
 from app.db.models import Group, Permission, User
 from app.security import client_ip, permissions, roles
+from app.security import sign_in_throttle as throttle
 from app.security.auth import _remote_user_from_headers, create_user
 from app.security.passwords import hash_password, verify_password
 from app.security.rate_limit import fixed_window_allow, fixed_window_spend
@@ -400,8 +401,10 @@ def test_an_untrusted_proxy_is_reported_once_when_two_requests_race(
 
 def test_control_characters_never_give_a_username_its_own_allowance(signin):
     user = signin.user()
-    for variant in (f"{user.username}\x07", f"\x1b{user.username}", user.username):
-        refused = signin.attempt(variant, "wrong-password")
+    variants = (f"{user.username}\x07", f"\x1b{user.username}", user.username)
+    # Every spelling spends the one account throttle's free failures.
+    for n in range(throttle.FREE_FAILURES + 1):
+        refused = signin.attempt(variants[n % len(variants)], "wrong-password")
         assert (refused.status_code, refused.json()) == (
             401,
             {"detail": "Invalid username or password"},

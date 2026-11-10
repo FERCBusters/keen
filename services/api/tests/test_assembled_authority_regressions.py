@@ -1018,7 +1018,6 @@ def test_sign_in_attempts_from_one_ipv6_network_share_one_allowance(keen, monkey
     # Every address in a client's /64 draws on the same per-address allowance;
     # another network, and an IPv4 client, keep their own.
     monkeypatch.setattr(settings, "login_rate_limit_per_ip", 3)
-    monkeypatch.setattr(settings, "login_rate_limit_per_username", 0)
 
     def attempt(address):
         return client_from(address).post(

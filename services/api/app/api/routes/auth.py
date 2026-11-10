@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.db.session import get_db
 from app.schemas import LoginPayload
+from app.security import sign_in_throttle as throttle
 from app.security.auth import (
     ROLE_ADMIN,
     clear_session_cookie,
@@ -39,11 +40,7 @@ from app.security.oidc import (
     sso_attempt,
     sso_binding_cookie,
 )
-from app.security.rate_limit import (
-    address_window_allow,
-    fixed_window_allow,
-    login_limit_key,
-)
+from app.security.rate_limit import address_window_allow
 from app.security.rate_limit import client_ip as _client_ip
 from app.security.sessions import get_session, revoke_session
 from app.services import login as login_service
@@ -82,58 +79,57 @@ def login(
     ):
         raise HTTPException(status_code=404, detail="Login method is disabled")
 
-    # Defense-in-depth: rate limit login attempts (also enforce at reverse proxy).
-    # Fail closed on Redis unavailability to prevent brute force attacks.
+    # Sign-in throttling (app/security/sign_in_throttle.py, shared with
+    # OSPMAE): a browser that has proved this account's password is heard
+    # whatever an attacker does elsewhere; every other browser draws on the
+    # per-address allowance and the account's growing waits. Fails closed
+    # while Valkey is unavailable.
+    key = throttle.name_key(payload.username)
     try:
         r = get_valkey()
-        window = settings.login_rate_limit_window_seconds
-        per_ip = settings.login_rate_limit_per_ip
-        per_user = settings.login_rate_limit_per_username
-
-        # An allowance of zero or less is unlimited: the limiter allows it
-        # without counting.
-        ok, retry = address_window_allow(
-            r, "login", _client_ip(request), per_ip, window, fail_closed=True
+        device = throttle.recognised_device(
+            r, request.cookies.get(throttle.device_cookie_name()), key
         )
-        if not ok:
-            resp = JSONResponse(
-                {"detail": "Too many login attempts. Please try again later."},
-                status_code=429,
+        if device is None:
+            # An allowance of zero or less is unlimited: the limiter allows it
+            # without counting.
+            ok, retry = address_window_allow(
+                r,
+                "login",
+                _client_ip(request),
+                settings.login_rate_limit_per_ip,
+                settings.login_rate_limit_window_seconds,
+                fail_closed=True,
             )
-            resp.headers["Retry-After"] = str(retry)
-            return resp
-
-        # Every username draws on an allowance; the payload refuses blank ones.
-        ok, retry = fixed_window_allow(
-            r,
-            login_limit_key(payload.username),
-            per_user,
-            window,
-            fail_closed=True,
-        )
-        if not ok:
-            resp = JSONResponse(
-                {"detail": "Too many login attempts. Please try again later."},
-                status_code=429,
-            )
-            resp.headers["Retry-After"] = str(retry)
-            return resp
+            if ok:
+                ok, retry = throttle.reserve_unrecognised_attempt(r, key)
+            if not ok:
+                return _limited(retry)
     except Exception:
-        # If Redis is unavailable, fail closed and deny login.
-        resp = JSONResponse(
+        return JSONResponse(
             {"detail": "Service temporarily unavailable. Please try again later."},
             status_code=503,
         )
-        return resp
 
     context = change_context(request)
-    user = login_service.authenticate_password(
-        db,
-        context,
-        username=payload.username,
-        password=payload.password,
-        method=payload.method,
-    )
+    try:
+        user = login_service.authenticate_password(
+            db,
+            context,
+            username=payload.username,
+            password=payload.password,
+            method=payload.method,
+            recognised=device is not None,
+        )
+    except DomainError:
+        if device is not None:
+            throttle.device_failed(r, device)
+        raise
+
+    # The password is proven: the account's count ends, and this browser is
+    # recognised for it from now on (its previous token retired).
+    throttle.clear_throttle(r, key)
+    token = throttle.issue_device(r, user_id=str(user.id), key=key, replaces=device)
 
     from app.security import mfa
 
@@ -144,7 +140,9 @@ def login(
         )
         account_id = user.id
         try:
-            return mfa.start(db, user, request)
+            response = mfa.start(db, user, request)
+            throttle.set_device_cookie(response, token)
+            return response
         except HTTPException:
             # The password was right, so the refusal names the account.
             login_service.record_refused_sign_in(
@@ -155,7 +153,15 @@ def login(
                 outcome="mfa-refused",
             )
             raise
-    return complete_local_login(db, user, request)
+    response = complete_local_login(db, user, request)
+    throttle.set_device_cookie(response, token)
+    return response
+
+
+def _limited(retry: int) -> JSONResponse:
+    resp = JSONResponse({"detail": throttle.LIMITED}, status_code=429)
+    resp.headers["Retry-After"] = str(max(1, int(retry)))
+    return resp
 
 
 def complete_local_login(

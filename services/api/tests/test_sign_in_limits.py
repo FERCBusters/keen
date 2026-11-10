@@ -1,9 +1,12 @@
 """Password sign-in limits and equal-cost failures through the assembled application.
 
-Sign-in attempts are limited per client address and per username before any
-password is verified, and the limit fails closed when its store is
-unavailable. Unknown, deactivated and directory-backed accounts cost the same
-password verification as a real local account.
+The sign-in throttle (app/security/sign_in_throttle.py, shared with OSPMAE)
+hears a browser that has proved an account's password whatever an attacker
+does elsewhere; every other browser draws on a per-address allowance and the
+account's growing waits, decided before any password is verified, and the
+throttle fails closed when its store is unavailable. Unknown, deactivated and
+directory-backed accounts cost the same password verification as a real
+local account.
 """
 
 from urllib.parse import parse_qs
@@ -13,8 +16,9 @@ from app.api.routes import auth as auth_routes
 from app.core.config import settings
 from app.db.models import AuditLog
 from app.security import auth
+from app.security import sign_in_throttle as throttle
 from app.security.auth import cookie_name as session_cookie_name
-from app.security.rate_limit import login_limit_key, login_name
+from app.security.rate_limit import login_name
 
 # Imported fixtures: the assembled application with an in-memory session store,
 # and a fake directory server.
@@ -31,8 +35,7 @@ LIMITED = "Too many login attempts. Please try again later."
 @pytest.fixture
 def signin(keen, monkeypatch):  # noqa: F811 - fixture imported above
     monkeypatch.setattr(settings, "login_rate_limit_window_seconds", 300)
-    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 5)
-    monkeypatch.setattr(settings, "login_rate_limit_per_username", 3)
+    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 100)
     monkeypatch.setattr(settings, "ldap_enabled", False)
     verified = []
     real_verify = auth.verify_password
@@ -62,28 +65,173 @@ def signin(keen, monkeypatch):  # noqa: F811 - fixture imported above
     return keen
 
 
-def test_repeated_failures_lock_a_username_even_for_the_right_password(signin):
-    user = signin.user()
-    # Case and surrounding spaces do not give an attacker fresh attempts.
-    for variant in (user.username.upper(), f" {user.username}", f"{user.username} "):
-        refused = signin.attempt(variant, "wrong-password")
+def _attack(signin, username, failures=throttle.FREE_FAILURES + 1):
+    """Wrong passwords from fresh, unrecognised browsers."""
+    for n in range(failures):
+        refused = signin.attempt(username, f"wrong-password-{n}")
         assert (refused.status_code, refused.json()) == (
             401,
             {"detail": "Invalid username or password"},
         )
 
-    locked = signin.attempt(user.username)
 
-    assert locked.status_code == 429
-    assert locked.json()["detail"] == LIMITED
-    assert 0 < int(locked.headers["retry-after"]) <= 300
-    assert not signin.session_set(locked)
+def test_unrecognised_browsers_wait_even_with_the_right_password(signin):
+    user = signin.user()
+    # Case and surrounding spaces do not give an attacker fresh attempts.
+    for variant in (user.username.upper(), f" {user.username}", f"{user.username} "):
+        refused = signin.attempt(variant, "wrong-password")
+        assert refused.status_code == 401
+    _attack(signin, user.username, throttle.FREE_FAILURES + 1 - 3)
+
+    held = signin.attempt(user.username)
+
+    assert held.status_code == 429
+    assert held.json()["detail"] == LIMITED
+    assert 0 < int(held.headers["retry-after"]) <= throttle.FIRST_WAIT_SECONDS
+    assert not signin.session_set(held)
     # Another account from the same address is unaffected.
     other = signin.user()
     assert signin.attempt(other.username).status_code == 200
 
 
-def test_one_address_cannot_spray_many_usernames(signin):
+def test_a_recognised_browser_signs_in_while_the_account_is_under_attack(signin):
+    user = signin.user()
+    owner = signin.client()
+    assert signin.attempt(user.username, client=owner).status_code == 200
+    _attack(signin, user.username)
+    assert signin.attempt(user.username).status_code == 429
+
+    verified = len(signin.verified)
+    signed_in = signin.attempt(user.username, client=owner)
+
+    assert signed_in.status_code == 200, signed_in.text
+    assert signin.session_set(signed_in)
+    assert len(signin.verified) == verified + 1
+    # Its success ends the account's count for every browser.
+    assert (
+        signin.store.get(f"keen:login:failures:{throttle.name_key(user.username)}")
+        is None
+    )
+    assert signin.attempt(user.username).status_code == 200
+
+
+def test_device_cookie_shape_rotation_and_scope(signin):
+    user = signin.user()
+    other = signin.user()
+    owner = signin.client()
+    first = signin.attempt(user.username, client=owner)
+    cookie = next(
+        c
+        for c in first.headers.get_list("set-cookie")
+        if c.startswith(throttle.device_cookie_name() + "=")
+    )
+    assert throttle.device_cookie_name() == "__Host-keen_device"
+    for part in ("httponly", "secure", "samesite=strict", "path=/"):
+        assert part in cookie.lower()
+    assert "domain=" not in cookie.lower()
+    old = owner.cookies.get(throttle.device_cookie_name())
+    assert signin.attempt(user.username, client=owner).status_code == 200
+    new = owner.cookies.get(throttle.device_cookie_name())
+    assert new != old
+    # Only digests are stored, and the retired token no longer counts.
+    devices = signin.store.keys("keen:login:device:*")
+    assert devices == [f"keen:login:device:{throttle._token_hash(new)}"]
+    assert old not in " ".join(devices) and new not in " ".join(devices)
+
+    # Recognition speaks only for the name it signed in with.
+    _attack(signin, other.username)
+    assert signin.attempt(other.username, client=owner).status_code == 429
+
+
+def test_five_wrong_passwords_end_a_browsers_recognition(signin):
+    user = signin.user()
+    owner = signin.client()
+    assert signin.attempt(user.username, client=owner).status_code == 200
+    for _ in range(throttle.DEVICE_FAILURES):
+        assert signin.attempt(user.username, "wrong", client=owner).status_code == 401
+    assert signin.store.keys("keen:login:device:*") == []
+    # The account's own count was untouched while the browser was recognised.
+    key = f"keen:login:failures:{throttle.name_key(user.username)}"
+    assert signin.store.get(key) is None
+    assert signin.attempt(user.username, "wrong", client=owner).status_code == 401
+    assert signin.store.get(key) == "1"
+
+
+def test_recognised_browsers_skip_the_address_allowance(signin, monkeypatch):
+    user = signin.user()
+    owner = signin.client()
+    assert signin.attempt(user.username, client=owner).status_code == 200
+    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 2)
+    for n in range(2):
+        signin.attempt(f"guess-{n}", "wrong")
+    assert signin.attempt("guess-x", "wrong").status_code == 429
+    assert signin.attempt(user.username, client=owner).status_code == 200
+
+
+def test_the_wait_schedule_and_ceiling(signin):
+    r = signin.store
+    key = throttle.name_key("schedule")
+    for _ in range(throttle.FREE_FAILURES):
+        assert throttle.reserve_unrecognised_attempt(r, key) == (True, 0)
+    waits = []
+    for _ in range(9):
+        assert throttle.reserve_unrecognised_attempt(r, key) == (True, 0)
+        allowed, retry = throttle.reserve_unrecognised_attempt(r, key)
+        assert allowed is False
+        waits.append(retry)
+        r.delete(f"keen:login:gate:{key}")  # the wait elapses
+    assert waits == [30, 60, 120, 240, 480, 960, 1920, 3600, 3600]
+    # Refused attempts are not counted as failures.
+    assert r.get(f"keen:login:failures:{key}") == str(throttle.FREE_FAILURES + 9)
+    ttl = r.ttl(f"keen:login:failures:{key}")
+    assert throttle.FORGET_FAILURES_AFTER_SECONDS - 5 <= ttl
+    r.set(f"keen:login:failures:{key}", throttle.FAILURE_CEILING)
+    r.delete(f"keen:login:gate:{key}")
+    assert throttle.reserve_unrecognised_attempt(r, key) == (
+        False,
+        throttle.MAX_WAIT_SECONDS,
+    )
+    assert r.get(f"keen:login:failures:{key}") == str(throttle.FAILURE_CEILING)
+    assert [throttle.wait_seconds(n) for n in (0, 4, 5, 11, 12, 99)] == [
+        0,
+        0,
+        30,
+        1920,
+        3600,
+        3600,
+    ]
+
+
+def test_an_account_keeps_its_newest_recognised_browsers(signin):
+    r = signin.store
+    tokens = [
+        throttle.issue_device(r, user_id="u1", key="k")
+        for _ in range(throttle.DEVICES_PER_ACCOUNT + 2)
+    ]
+    assert len(r.keys("keen:login:device:*")) == throttle.DEVICES_PER_ACCOUNT
+    assert throttle.recognised_device(r, tokens[0], "k") is None
+    assert throttle.recognised_device(r, tokens[-1], "k")
+    assert throttle.recognised_device(r, tokens[-1], "other") is None
+    assert throttle.recognised_device(r, "x" * 129, "k") is None
+    throttle.revoke_account_devices(r, "u1", keep=throttle._token_hash(tokens[-1]))
+    assert len(r.keys("keen:login:device:*")) == 1
+
+
+def test_password_changes_and_resets_end_recognition(signin, monkeypatch):
+    from app.services.me import end_password_recognition
+
+    user = signin.user()
+    owner = signin.client()
+    assert signin.attempt(user.username, client=owner).status_code == 200
+    _attack(signin, user.username)
+    end_password_recognition(str(user.id), username=user.username)
+    assert signin.store.keys("keen:login:device:*") == []
+    # A reset also clears the name's throttle.
+    assert signin.attempt(user.username).status_code == 200
+
+
+def test_one_address_cannot_spray_many_usernames(signin, monkeypatch):
+    monkeypatch.setattr(settings, "login_rate_limit_per_ip", 5)
     user = signin.user()
     for n in range(5):
         refused_2 = signin.attempt(f"guess-{n}", "wrong-password")
@@ -101,8 +249,7 @@ def test_one_address_cannot_spray_many_usernames(signin):
 
 def test_limited_attempts_never_reach_password_verification(signin):
     user = signin.user()
-    for _ in range(3):
-        signin.attempt(user.username, "wrong-password")
+    _attack(signin, user.username)
     verified = len(signin.verified)
 
     for password in ("wrong-password", PASSWORD):
@@ -125,7 +272,7 @@ def test_sign_in_fails_closed_when_the_limit_cannot_be_checked(
 
     monkeypatch.setattr(
         auth_routes,
-        "get_valkey" if failure == "store" else "fixed_window_allow",
+        "get_valkey" if failure == "store" else "address_window_allow",
         offline,
     )
 
@@ -230,6 +377,7 @@ def test_a_blank_username_is_refused_before_any_work(signin, username):
     # No allowance is drawn on, no password is derived and nothing is audited.
     assert signin.verified == []
     assert signin.store.keys("keen:rl:login:*") == []
+    assert signin.store.keys("keen:login:*") == []
     assert signin.db.query(AuditLog).filter_by(path="/action/sign-in").count() == 0
 
 
@@ -256,6 +404,7 @@ def test_oversized_credentials_are_refused_before_any_work(signin):
             },
         )
     assert signin.verified == [] and signin.store.keys("keen:rl:login:*") == []
+    assert signin.store.keys("keen:login:*") == []
 
 
 def test_an_account_named_unknown_has_its_own_limit(signin):
@@ -263,12 +412,7 @@ def test_an_account_named_unknown_has_its_own_limit(signin):
     user = signin.user()
     user.username = "Unknown"
     signin.db.commit()
-    for _ in range(3):
-        refused = signin.attempt("Unknown", "wrong-password")
-        assert (refused.status_code, refused.json()) == (
-            401,
-            {"detail": "Invalid username or password"},
-        )
+    _attack(signin, "Unknown")
 
     locked = signin.attempt("Unknown")
 
@@ -291,10 +435,10 @@ def test_spellings_of_a_username_share_one_allowance(signin):
         "Ada​  Love­lace",
     ]
     assert {login_name(v) for v in variants} == {"ada lovelace"}
-    # The allowance is keyed by a digest, so no typed name is stored in Valkey.
-    (key,) = {login_limit_key(v) for v in variants}
-    assert len(key) == len("keen:rl:login:user:") + 64 and "ada" not in key
-    for variant in variants:
+    # The throttle is keyed by a digest, so no typed name is stored in Valkey.
+    (key,) = {throttle.name_key(v) for v in variants}
+    assert len(key) == 64 and "ada" not in key
+    for variant in variants * 2:
         refused = signin.attempt(variant, "wrong-password")
         assert (refused.status_code, refused.json()) == (
             401,
@@ -318,28 +462,89 @@ def test_spellings_that_reach_one_directory_entry_share_one_allowance(
     # The directory resolves each of these names to the same entry; the
     # username limit alone would give each its own allowance.
     monkeypatch.setattr(settings, "ldap_enabled", True)
-    monkeypatch.setattr(settings, "login_rate_limit_per_username", 3)
     state, events, _ = directory
     state["bind"] = False
     entry = ("bind", "uid=alice,ou=People,dc=example")
-    for name in ("alice", "alice.", "alice@"):
+    # Two failures per spelling keep each name's own throttle free, while the
+    # entry's shared throttle reaches its first wait.
+    for name in ("alice", "alice.", "alice@") * 2:
         refused = signin.attempt(name, "wrong", method="ldap")
         assert (refused.status_code, refused.json()) == (
             401,
             {"detail": "Invalid username or password"},
         )
-    assert events.count(entry) == 3
+    assert events.count(entry) == 6
 
     state["bind"] = True
     locked = signin.attempt("ALICE_", "password", method="ldap")
 
-    # A spent entry is answered as a wrong password, so the answer cannot show
+    # A held entry is answered as a wrong password, so the answer cannot show
     # that this spelling reached an entry, and the password is never tried
     # against the directory.
     wrong = signin.attempt("nobody-here", "password", method="ldap")
     assert locked.status_code == wrong.status_code == 401
     assert locked.json() == wrong.json()
-    assert events.count(entry) == 3 and not signin.session_set(locked)
+    assert events.count(entry) == 6 and not signin.session_set(locked)
+
+
+def test_a_recognised_browser_reaches_a_held_directory_entry(
+    signin,
+    directory,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "ldap_enabled", True)
+    state, events, _ = directory
+    entry = ("bind", "uid=alice,ou=People,dc=example")
+    owner = signin.client()
+    state["bind"] = True
+    assert (
+        signin.attempt("alice", "password", method="ldap", client=owner).status_code
+        == 200
+    )
+    state["bind"] = False
+    for name in ("alice.", "alice@") * 3:
+        assert signin.attempt(name, "wrong", method="ldap").status_code == 401
+    state["bind"] = True
+    held = signin.attempt("alice@", "password", method="ldap")
+    assert held.status_code == 401 and not signin.session_set(held)
+    binds = events.count(entry)
+
+    # The owner's browser is recognised for its own spelling, so the held
+    # entry does not keep the account's owner out.
+    signed_in = signin.attempt("alice", "password", method="ldap", client=owner)
+
+    assert signed_in.status_code == 200, signed_in.text
+    assert signin.session_set(signed_in)
+    assert events.count(entry) == binds + 1
+
+
+def test_the_device_cookie_is_host_bound_only_when_it_can_be(monkeypatch):
+    monkeypatch.setattr(settings, "cookie_secure", True)
+    monkeypatch.setattr(settings, "cookie_domain", "")
+    assert throttle.device_cookie_name() == "__Host-keen_device"
+    monkeypatch.setattr(settings, "cookie_domain", "example.org")
+    assert throttle.device_cookie_name() == "keen_device"
+    monkeypatch.setattr(settings, "cookie_domain", "")
+    monkeypatch.setattr(settings, "cookie_secure", False)
+    assert throttle.device_cookie_name() == "keen_device"
+
+
+def test_revoking_an_unknown_browser_changes_nothing(signin):
+    r = signin.store
+    r.zadd("keen:login:devices:someone", {"kept": 1.0})
+    throttle.revoke_device(r, "unknown-device")
+    assert r.zrange("keen:login:devices:someone", 0, -1) == ["kept"]
+
+
+def test_a_store_outage_does_not_stop_a_password_change(monkeypatch):
+    from app.services import me
+
+    def unavailable():
+        raise ConnectionError("valkey down")
+
+    monkeypatch.setattr(me, "get_valkey", unavailable)
+    # Recognition then expires on its own, which grants no access.
+    assert me.end_password_recognition("00000000-0000-0000-0000-000000000000") is None
 
 
 # --- Sign-in audit rows ---------------------------------------------------------

@@ -516,7 +516,7 @@ def test_password_change_is_refused_for_directory_and_proxy_accounts(keen, monke
 
 def test_password_change_attempts_are_rate_limited_per_user(keen, monkeypatch):  # noqa: F811
     monkeypatch.setattr(settings, "login_rate_limit_per_ip", 100)
-    monkeypatch.setattr(settings, "login_rate_limit_per_username", 2)
+    monkeypatch.setattr(settings, "password_change_rate_limit_per_account", 2)
     user = keen.user()
     client = keen.client(user)
     original = user.password_hash

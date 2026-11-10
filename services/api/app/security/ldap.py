@@ -17,30 +17,34 @@ from app.core.config import settings
 from app.core.email_address import single_mailbox
 from app.core.valkey import get_valkey
 from app.db.models import User, UserIdentity
-from app.security.rate_limit import fixed_window_allow
+from app.security import sign_in_throttle as throttle
 from app.security.regex import scan_pattern
 
 
-def _entry_allowed(issuer, subject) -> bool:
+def _entry_key(issuer, subject) -> str:
+    entry = hashlib.sha256(f"{issuer}\0{subject}".encode()).hexdigest()
+    return f"ldap:{entry}"
+
+
+def _entry_allowed(issuer, subject, *, recognised: bool) -> bool:
     """Count a password tried against the directory entry a search matched.
 
-    Directories match a name regardless of case, width and spacing, so the
-    username limit alone gives each spelling its own allowance. Every spelling
-    that reaches the same entry shares this one. A spent allowance is answered
-    as a wrong password, so it cannot show that a spelling reached an entry.
+    Directories match a name regardless of case, width and spacing beyond
+    Keen's own comparison, so every spelling that reaches one entry shares
+    one throttle of the sign-in policy's shape (app/security/sign_in_throttle.py).
+    A browser recognised for the typed name skips it, as it skips the name's.
+    A held attempt is answered as a wrong password, so it cannot show that a
+    spelling reached an entry.
     """
-    entry = hashlib.sha256(f"{issuer}\0{subject}".encode()).hexdigest()
-    allowed, _ = fixed_window_allow(
-        get_valkey(),
-        f"keen:rl:login:ldap:{entry}",
-        settings.login_rate_limit_per_username,
-        settings.login_rate_limit_window_seconds,
-        fail_closed=True,
+    if recognised:
+        return True
+    allowed, _ = throttle.reserve_unrecognised_attempt(
+        get_valkey(), _entry_key(issuer, subject)
     )
     return allowed
 
 
-def directory_identity(username, password):
+def directory_identity(username, password, *, recognised: bool = False):
     if (
         not settings.ldap_enabled
         or not username
@@ -153,11 +157,12 @@ def directory_identity(username, password):
         issuer = f"ldap:{url.scheme}://{url.hostname.lower()}:{url.port or (636 if url.scheme == 'ldaps' else 389)}"
         if len(issuer) > 512:
             raise ValueError("LDAP URL too long")
-        if not _entry_allowed(issuer, subject):
+        if not _entry_allowed(issuer, subject, recognised=recognised):
             return None
         bound = connect(entry.entry_dn, password)
         if bound is None:
             return None
+        throttle.clear_throttle(get_valkey(), _entry_key(issuer, subject))
         return {
             "issuer": issuer,
             "subject": subject,
@@ -176,8 +181,8 @@ def directory_identity(username, password):
                 connection.unbind()
 
 
-def authenticate_ldap(db, username, password):
-    identity = directory_identity(username, password)
+def authenticate_ldap(db, username, password, *, recognised: bool = False):
+    identity = directory_identity(username, password, recognised=recognised)
     if not identity:
         return None
     row = (

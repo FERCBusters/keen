@@ -587,7 +587,7 @@ def change_my_password(
         )
         # A session holder must not be able to test many current passwords by
         # spreading attempts across addresses.
-        per_user = settings.login_rate_limit_per_username
+        per_user = settings.password_change_rate_limit_per_account
         if ok:
             ok, retry = fixed_window_allow(
                 r,
@@ -642,4 +642,23 @@ def change_my_password(
     enqueue(db, user, "password-changed", ip=context.client_ip)
     db.add(user)
     db.commit()
+    end_password_recognition(str(user.id))
     return {"ok": True}
+
+
+def end_password_recognition(user_id: str, *, username: str | None = None) -> None:
+    """A changed or reset password ends every browser's recognition for the
+    account; a reset also clears the sign-in throttle of its name.
+
+    Each browser is recognised again after its next correct password. A store
+    outage leaves recognition to expire on its own, which grants no access.
+    """
+    from app.security import sign_in_throttle as throttle
+
+    try:
+        r = get_valkey()
+        throttle.revoke_account_devices(r, user_id)
+        if username is not None:
+            throttle.clear_throttle(r, throttle.name_key(username))
+    except Exception:
+        pass

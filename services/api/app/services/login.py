@@ -62,7 +62,13 @@ def _attempted_account(db, username: str, method: str) -> User | None:
 
 
 def authenticate_password(
-    db, context: ChangeContext, *, username: str, password: str, method: str
+    db,
+    context: ChangeContext,
+    *,
+    username: str,
+    password: str,
+    method: str,
+    recognised: bool = False,
 ) -> User:
     """Verify a local or directory password, auditing a rejection.
 
@@ -70,7 +76,7 @@ def authenticate_password(
     username names an account, and all of them receive the same answer.
     """
     if method == "ldap":
-        user = authenticate_ldap(db, username, password)
+        user = authenticate_ldap(db, username, password, recognised=recognised)
     else:
         user = authenticate_user(db, username, password)
     if user is None:

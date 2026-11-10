@@ -45,12 +45,11 @@ def test_an_audit_without_a_final_report_has_none_to_download(
 # --- Sign-in allowances -------------------------------------------------------------
 
 
-def test_a_zero_address_allowance_leaves_only_the_username_allowance(
+def test_a_zero_address_allowance_leaves_only_the_account_throttle(
     keen,  # noqa: F811 - fixture imported above
     monkeypatch,
 ):
     monkeypatch.setattr(settings, "login_rate_limit_per_ip", 0)
-    monkeypatch.setattr(settings, "login_rate_limit_per_username", 1)
     client = keen.client()
 
     def attempt(username):
@@ -60,9 +59,12 @@ def test_a_zero_address_allowance_leaves_only_the_username_allowance(
             headers={"Origin": BASE},
         ).status_code
 
-    # One address may try any number of usernames, each within its own allowance.
+    # One address may try any number of usernames, each under its own
+    # throttle: five free failures, then a wait before the next is heard.
     assert [attempt(f"someone-{n}") for n in range(4)] == [401] * 4
+    assert [attempt("someone-0") for _ in range(5)] == [401] * 5
     assert attempt("someone-0") == 429
+    assert attempt("someone-1") == 401
 
     # An address allowance of one refuses the address's second attempt.
     monkeypatch.setattr(settings, "login_rate_limit_per_ip", 1)

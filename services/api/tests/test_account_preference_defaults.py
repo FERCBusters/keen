@@ -84,7 +84,7 @@ def test_attempts_refused_by_the_address_limit_spend_no_account_allowance(
     monkeypatch,
 ):
     monkeypatch.setattr(settings, "login_rate_limit_per_ip", 2)
-    monkeypatch.setattr(settings, "login_rate_limit_per_username", 5)
+    monkeypatch.setattr(settings, "password_change_rate_limit_per_account", 5)
     user = keen.user()
     client = keen.client(user)
     body = {"current_password": "wrong", "new_password": "another-synthetic-passphrase"}

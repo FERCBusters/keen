@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import ipaddress
 import unicodedata
 from typing import Tuple
@@ -15,7 +14,6 @@ __all__ = [
     "client_ip",
     "fixed_window_allow",
     "fixed_window_spend",
-    "login_limit_key",
     "login_name",
 ]
 
@@ -64,16 +62,6 @@ def login_name(username: str) -> str:
     )
     visible = "".join(c for c in folded if not _ignorable(c))
     return " ".join(visible.split())
-
-
-def login_limit_key(username: str) -> str:
-    """The Valkey key of the per-username sign-in allowance a username draws on.
-
-    The key holds a digest of the name's compared form, so its size is fixed
-    and a password typed into the username field never appears in it.
-    """
-    digest = hashlib.sha256(login_name(username).encode()).hexdigest()
-    return f"keen:rl:login:user:{digest}"
 
 
 def address_allowance(address: str | None) -> str | None:

@@ -391,4 +391,7 @@ def set_user_password_admin(
     db.add(target)
     bump_authz_versions(db, [target.id])
     db.commit()
+    from app.services.me import end_password_recognition
+
+    end_password_recognition(str(target.id), username=target.username)
     return {"ok": True}

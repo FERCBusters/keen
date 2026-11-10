@@ -746,7 +746,8 @@ class Settings(BaseSettings):
     # These are defense-in-depth; a reverse proxy should still enforce limits.
     login_rate_limit_window_seconds: int = Field(default=300)  # 5 minutes
     login_rate_limit_per_ip: int = Field(default=30)
-    login_rate_limit_per_username: int = Field(default=15)
+    # Current-password checks for password changes, per signed-in account.
+    password_change_rate_limit_per_account: int = Field(default=15)
 
     @field_validator("event_data_masking")
     @classmethod
