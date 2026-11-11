@@ -1007,7 +1007,9 @@ def test_suggestion_routes_are_for_administrators(keen, monkeypatch):  # noqa: F
     db.commit()
     events(db, 6)
     db.commit()
-    suggestions.refresh_suggestions(db, now=datetime.now())
+    # The events are dated from the fixed NOW, so the refresh uses that clock;
+    # the wall clock would leave them outside the look-back window.
+    suggestions.refresh_suggestions(db, now=NOW)
     db.commit()
     queued = []
     monkeypatch.setattr(tasks.backfill_rule_task, "delay", queued.append)
@@ -1088,7 +1090,9 @@ def test_the_home_page_points_administrators_at_suggestions(keen):  # noqa: F811
     db.commit()
     events(db, 6)
     db.commit()
-    suggestions.refresh_suggestions(db, now=datetime.now())
+    # The events are dated from the fixed NOW, so the refresh uses that clock;
+    # the wall clock would leave them outside the look-back window.
+    suggestions.refresh_suggestions(db, now=NOW)
     db.commit()
     admin = keen.client(keen.user(role="admin"))
 
