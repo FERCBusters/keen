@@ -147,8 +147,9 @@ class Mcp:
         return answer.json()["result"]
 
 
-def inner(path, token, method="GET"):
-    """Ask the application as an MCP tool does, with the token in the ASGI scope."""
+def inner(path, token, method="GET", **request):
+    """Ask the application as an MCP tool does, with the token in the ASGI scope;
+    ``request`` holds httpx's json, files or params."""
     from app import main
 
     async def marked(scope, receive, send):
@@ -157,7 +158,7 @@ def inner(path, token, method="GET"):
     async def ask():
         transport = httpx.ASGITransport(app=marked, client=("203.0.113.5", 0))
         async with httpx.AsyncClient(transport=transport, base_url=BASE) as client:
-            return await client.request(method, path)
+            return await client.request(method, path, **request)
 
     return asyncio.run(ask())
 
@@ -238,7 +239,7 @@ def test_discovery_documents_name_keen_as_issuer_and_public_clients_only(mcp):
     resource = mcp.client.get("/.well-known/oauth-protected-resource/api/v1/mcp").json()
     assert resource["resource"] == RESOURCE
     assert resource["authorization_servers"] == [BASE + "/api/v1/oauth"]
-    assert resource["scopes_supported"] == list(mcp_tokens.SCOPES)
+    assert resource["scopes_supported"] == mcp_tokens.offered_scopes(write=False)
     metadata = mcp.client.get(
         "/.well-known/oauth-authorization-server/api/v1/oauth"
     ).json()
@@ -604,31 +605,45 @@ def test_revocation_ends_the_grant_behind_either_token(mcp):
 # --- What a connection may read ---------------------------------------------------
 
 
-def test_inner_requests_are_read_only_and_never_administrators(mcp):
+def test_inner_requests_reach_tool_routes_only_and_never_as_administrators(mcp):
     admin = mcp.keen.user(role="admin")
     connection = mcp.connect(admin, ["isms.read"])
     token = connection.access_token
     assert inner("/v1/isms/swot", token).status_code == 200
+    # HEAD is a GET without its body.
+    assert inner("/v1/isms/swot", token, "HEAD").status_code in (200, 405)
     assert inner("/v1/risks", token).status_code == 403
-    # Tools read their own routes only.
-    for path in (
-        "/v1/admin/audit",
-        "/v1/users",
-        "/v1/me",
-        "/v1/auth/check",
-        "/v1/me/mcp",
-        "/v1/risks/not-a-uuid",
+    # Tools ask their own routes only.
+    for method, path in (
+        ("GET", "/v1/admin/audit"),
+        ("GET", "/v1/users"),
+        ("GET", "/v1/me"),
+        ("GET", "/v1/auth/check"),
+        ("GET", "/v1/me/mcp"),
+        ("GET", "/v1/risks/not-a-uuid"),
+        ("OPTIONS", "/v1/isms/swot"),
+        ("PUT", "/v1/isms/swot"),
+        ("DELETE", f"/v1/isms/swot/{uuid.uuid4()}"),
+        ("POST", "/v1/users"),
+        ("PATCH", "/v1/admin/settings"),
     ):
-        refused = inner(path, token)
-        assert refused.json() == {"detail": "MCP tools do not read this route"}, path
+        refused = inner(path, token, method)
+        assert refused.json() == {"detail": "MCP tools do not use this route"}, path
     # The account is an administrator; the connection acts with no role.
     user, record = mcp_oauth.scoped_user(mcp.db, token)
     assert user.effective_role == "normal"
     assert user.effective_permission_codes == {"isms.read"}
     assert record.grant_id == str(mcp.db.query(McpGrant).one().id)
-    for method in ("POST", "PUT", "PATCH", "DELETE"):
-        refused = inner("/v1/isms/swot", token, method)
-        assert refused.json() == {"detail": "MCP connections are read-only"}
+    # Changes wait for KEEN_MCP_WRITE_ENABLED, whatever the connection holds.
+    for method, path in (
+        ("POST", "/v1/isms/swot"),
+        ("PATCH", f"/v1/isms/swot/{uuid.uuid4()}"),
+        ("POST", "/v1/risks/import"),
+    ):
+        refused = inner(path, token, method)
+        assert refused.json() == {
+            "detail": "This Keen accepts no changes from AI apps"
+        }, path
     assert inner("/v1/isms/swot", "kat_" + "c" * 43).status_code == 401
     # Inner responses mint no CSRF cookie.
     assert "keen_csrf" not in inner("/v1/isms/swot", token).headers.get(

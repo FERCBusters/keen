@@ -235,6 +235,8 @@ class KeenOAuthProvider(OAuthProvider):
             expires_at=_timestamp(record.expires_at),
             resource=service.mcp_url(),
             subject=record.user_id,
+            # Import plans belong to the connection, which outlives a token.
+            claims={"grant": record.grant_id},
         )
 
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:

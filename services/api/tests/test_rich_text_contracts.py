@@ -3,7 +3,7 @@
 from html.parser import HTMLParser
 
 import pytest
-from app.security.rich_text import sanitize_rich_text_html
+from app.security.rich_text import plain_text_html, sanitize_rich_text_html
 
 
 class Tags(HTMLParser):
@@ -97,3 +97,33 @@ def test_entities_strike_void_tags_and_plain_text():
     assert sanitize_rich_text_html("<strike>x</strike><br/><hr/>") == "<s>x</s><br><hr>"
     assert sanitize_rich_text_html("plain & text") == "plain & text"
     assert sanitize_rich_text_html(None) == ""
+
+
+def test_plain_text_becomes_rich_text_the_sanitiser_keeps_unchanged():
+    text = (
+        "# Access control\r\n"
+        "Who may reach what,\n"
+        "and why <script>alert(1)</script> & how.\n"
+        "\n"
+        "- Least privilege\n"
+        "* Reviewed quarterly\n"
+        "1. Request\n"
+        "2) Approve\n"
+        "Closing words\r"
+        "####### Not a heading\n"
+        "\n\n"
+        "-not an item"
+    )
+    html = plain_text_html(text)
+    assert html == (
+        "<h1>Access control</h1>"
+        "<p>Who may reach what,<br>"
+        "and why &lt;script&gt;alert(1)&lt;/script&gt; &amp; how.</p>"
+        "<ul><li>Least privilege</li><li>Reviewed quarterly</li></ul>"
+        "<ol><li>Request</li><li>Approve</li></ol>"
+        "<p>Closing words<br>####### Not a heading</p>"
+        "<p>-not an item</p>"
+    )
+    assert sanitize_rich_text_html(html) == html
+    assert plain_text_html("") == ""
+    assert plain_text_html("###### Six") == "<h6>Six</h6>"

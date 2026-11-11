@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -61,6 +61,7 @@ from app.services.isms.mutations import (
     license_or_create_by_name,
     org_node_or_400,
 )
+from app.services.record_imports import IMPORT_ROWS, import_rows, row_payload
 from app.services.risk_mitigator import analyse_risk_mitigation
 from app.services.text import clean_text, split_filter_values, uuid_filter_values
 
@@ -1487,6 +1488,78 @@ def insert_risk(
         request_path=request_path,
     )
     return risk
+
+
+class RiskImportPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rows: list[dict[str, Any]] = Field(min_length=1, max_length=IMPORT_ROWS)
+    # Check every row and keep nothing, unless the caller asks to save.
+    dry_run: bool = True
+
+
+# What a row of an import may set: the fields a person fills in for a risk.
+RISK_IMPORT_FIELDS = (
+    "asset_id",
+    "asset_name",
+    "category_id",
+    "category_name",
+    "subcategory_id",
+    "subcategory_name",
+    "title",
+    "threat_summary",
+    "risk_types",
+    "affected",
+    "register_likelihood",
+    "register_impact",
+    "register_residual_likelihood",
+    "register_residual_impact",
+    "treatment_strategy",
+    "treatment_status",
+    "treatment_plan",
+    "treatment_due_at",
+    "risk_owner_role_id",
+    "risk_owner_user_id",
+    "risk_owner_username",
+    "note",
+    "controls",
+    "library_template_id",
+)
+
+
+def import_risks(*, payload: RiskImportPayload, framework: str, user, db: Session):
+    """Add many risks at once, all or none; a dry run checks them and keeps none."""
+    fw = framework_parameter(framework)
+
+    def add(row: dict[str, Any]) -> dict[str, Any]:
+        risk = insert_risk(
+            payload=row_payload(
+                RiskUpsertPayload, row, RISK_IMPORT_FIELDS, {"framework": fw}
+            ),
+            user=user,
+            db=db,
+            request_path="/v1/risks/import",
+        )
+        out = _risk_out(db, risk, framework=fw, include_controls=True)
+        return {
+            key: out[key]
+            for key in (
+                "display",
+                "asset",
+                "risk_types",
+                "risk_score",
+                "residual_risk_score",
+                "treatment_strategy",
+                "treatment_status",
+            )
+        } | {
+            "category": (out["category"] or {}).get("name"),
+            "subcategory": (out["subcategory"] or {}).get("name"),
+            "owner": out["risk_owner"]["name"],
+            "controls": [control["ref"] for control in out["controls"] or []],
+            "affected": [item["label"] for item in out["affected"]],
+        }
+
+    return import_rows(db, payload.rows, add, dry_run=payload.dry_run)
 
 
 def get_risk(

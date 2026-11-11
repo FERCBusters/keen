@@ -46,13 +46,21 @@ test('connected apps are listed as text with their reach and dates', async (t) =
     data: {
       enabled: true,
       mcp_url: 'https://keen.example/api/v1/mcp',
-      grants: [grant(), grant({ id: 'g2', scopes: [], last_used_at: null })],
+      grants: [
+        grant(),
+        grant({ id: 'g2', scopes: [], last_used_at: null }),
+        grant({
+          id: 'g3',
+          scopes: ['isms.read', 'isms.manage', 'events.read', 'rules.write'],
+          changes: ['isms.manage', 'rules.write'],
+        }),
+      ],
     },
   });
   assert.equal(ui.el('mcpCard').hidden, false);
   assert.equal(ui.el('mcpUrl').value, 'https://keen.example/api/v1/mcp');
   assert.equal(ui.el('mcpStatus').textContent, 'Connected AI apps:');
-  const [first, second] = ui.el('mcpGrants').children;
+  const [first, second, third] = ui.el('mcpGrants').children;
   assert.equal(first.querySelector('.fw-semibold').textContent, '<b>Claude</b>');
   assert.equal(first.querySelector('b'), null);
   assert.equal(
@@ -61,6 +69,10 @@ test('connected apps are listed as text with their reach and dates', async (t) =
   );
   assert.match(second.textContent, /Reads: frameworks and controls only\./);
   assert.match(second.textContent, /last used never/);
+  assert.match(
+    third.textContent,
+    /Reads: isms\.read, events\.read\. Adds and updates: isms\.manage, rules\.write\. Approved/,
+  );
 });
 
 test('no connected apps says so', async (t) => {
@@ -74,7 +86,7 @@ test('revoking asks first, removes the connection and reloads the list', async (
     data: { enabled: true, mcp_url: 'u', grants: [grant()] },
     confirm: (options) => {
       assert.equal(options.title, 'Revoke AI connection');
-      assert.match(options.message, /Revoke <b>Claude<\/b>\?/);
+      assert.match(options.message, /Revoke <b>Claude<\/b>\? It stops using Keen at once/);
       return answer;
     },
     remove: async (u, state) => {
@@ -198,6 +210,89 @@ test('the request is shown as text, with the scopes the client asked for chosen'
   );
   assert.equal(ui.el('consentScopes').querySelector('label').textContent, 'ISMS records');
   assert.equal(ui.el('consentNoScopes').hidden, true);
+});
+
+const CHANGING = {
+  ...VIEW,
+  scopes: [
+    ...VIEW.scopes,
+    { scope: 'risk.read', description: 'Risks', requested: false },
+    {
+      scope: 'isms.manage',
+      description: 'Add ISMS records',
+      requested: true,
+      changes: true,
+      includes: 'isms.read',
+    },
+    {
+      scope: 'risk.manage',
+      description: 'Add risks',
+      requested: false,
+      changes: true,
+      includes: 'risk.read',
+    },
+    {
+      scope: 'rules.write',
+      description: 'Add mapping rules',
+      requested: false,
+      changes: true,
+      includes: 'pestle.read',
+    },
+  ],
+};
+
+test('changes are offered apart and start unticked, whatever the app asked', async (t) => {
+  const ui = await consent(t, { view: () => structuredClone(VIEW) });
+  assert.equal(ui.el('consentChangesSet').hidden, true);
+  assert.equal(ui.el('consentWants').textContent, 'wants to read Keen as you.');
+
+  const changing = await consent(t, {
+    view: () => structuredClone(CHANGING),
+    answer: () => ({ redirect: 'http://127.0.0.1:33418/callback?code=kac_x' }),
+  });
+  assert.equal(changing.el('consentChangesSet').hidden, false);
+  assert.equal(changing.el('consentWants').textContent, 'wants to read and change Keen as you.');
+  const reads = [...changing.el('consentScopes').querySelectorAll('input')];
+  assert.deepEqual(
+    reads.map((box) => box.value),
+    ['isms.read', 'events.read', 'risk.read'],
+  );
+  const boxes = [...changing.el('consentChanges').querySelectorAll('input')];
+  assert.deepEqual(
+    boxes.map((box) => [box.value, box.checked]),
+    [
+      ['isms.manage', false],
+      ['risk.manage', false],
+      ['rules.write', false],
+    ],
+  );
+  // Ticking a change ticks and holds its read scope; unticking releases it.
+  const risks = changing.el('scope-risk-read');
+  const manage = changing.el('scope-risk-manage');
+  manage.checked = true;
+  manage.dispatchEvent(new changing.window.Event('change'));
+  assert.equal(risks.checked, true);
+  assert.equal(risks.disabled, true);
+  manage.checked = false;
+  manage.dispatchEvent(new changing.window.Event('change'));
+  assert.equal(risks.checked, true);
+  assert.equal(risks.disabled, false);
+  // A change whose read scope is not offered changes nothing else.
+  const rules = changing.el('scope-rules-write');
+  rules.checked = true;
+  rules.dispatchEvent(new changing.window.Event('change'));
+  manage.checked = true;
+  manage.dispatchEvent(new changing.window.Event('change'));
+  changing
+    .el('consentForm')
+    .dispatchEvent(new changing.window.Event('submit', { cancelable: true }));
+  await settle(() => changing.navigations.length === 1);
+  assert.deepEqual(changing.posted[1].body.scopes, [
+    'isms.read',
+    'risk.read',
+    'risk.manage',
+    'rules.write',
+  ]);
 });
 
 test('an account without readable scopes is told so', async (t) => {

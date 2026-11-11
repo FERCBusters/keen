@@ -40,7 +40,7 @@ from app.security.csrf import (
 )
 from app.security.demo import DemoExpiryMiddleware
 from app.security.headers import SecurityHeadersMiddleware
-from app.security.mcp_tokens import INNER_TOKEN
+from app.security.mcp_tokens import ADMIN_SCOPES, INNER_TOKEN
 from app.security.permissions import (
     ensure_session_authorization_current,
     has_permission,
@@ -51,10 +51,11 @@ from app.security.regex import scan_pattern
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.security.roles import attach_effective_role, lock_admin_changes
 from app.security.route_policy import (
+    NOT_A_TOOL_ROUTE,
     gated_write_permission,
-    is_mcp_tool_route,
     is_permission_checked_write,
     is_public_request,
+    mcp_tool_route_scope,
     policy_path,
 )
 from app.services.errors import DomainError
@@ -182,9 +183,16 @@ async def csrf_middleware(request: Request, call_next):
     if is_public_request(request):
         return await call_next(request)
 
-    # Only enforce CSRF for authenticated browser sessions.
+    # Only enforce CSRF for authenticated browser sessions. An MCP tool's
+    # in-process request carries its connection's token in the ASGI scope,
+    # which no browser can set, and no cookie.
     user = getattr(request.state, "user", None)
-    if user and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+    mcp = getattr(request.state, "mcp_client", None) is not None
+    if (
+        user
+        and not mcp
+        and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
+    ):
         if not csrf_valid(request):
             return JSONResponse(
                 {"detail": "CSRF token missing or invalid"}, status_code=403
@@ -195,11 +203,7 @@ async def csrf_middleware(request: Request, call_next):
     # Browsers signed in by a trusted proxy have no Keen sign-in response to
     # carry the CSRF cookie, and a browser may lose the cookie before its
     # session ends; either receives a token with this response.
-    if (
-        user
-        and getattr(request.state, "mcp_client", None) is None
-        and not get_csrf_token_from_request(request)
-    ):
+    if user and not mcp and not get_csrf_token_from_request(request):
         try:
             set_csrf_cookie(response, generate_csrf_token())
         except Exception:
@@ -231,33 +235,49 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# Reads one MCP connection may make each minute through the tools.
+# Reads and changes one MCP connection may make each minute through the tools.
 _MCP_READS_PER_MINUTE = 600
+_MCP_WRITES_PER_MINUTE = 120
 
 
 def _mcp_user(db, request: Request, token: str) -> User | JSONResponse | None:
     """The account an MCP tool's in-process request acts as, narrowed to its
     connection's scopes; a refusal; or None when the token is not current.
 
-    Only app.api.mcp.tools sets the token in the ASGI scope; a client cannot.
+    Only app.api.mcp tools set the token in the ASGI scope; a client cannot.
+    A request reaches only a route the tools use (INNER_ROUTES); a change needs
+    KEEN_MCP_WRITE_ENABLED and the route's change scope, and only the
+    mapping-rule routes act with the administrator role, for an administrator
+    who granted that scope.
     """
-    if request.method.upper() not in {"GET", "HEAD"}:
+    reading = request.method.upper() in {"GET", "HEAD"}
+    needed = mcp_tool_route_scope(request)
+    # Every change route names its change scope; one that named none would
+    # be refused here rather than left to the route.
+    if needed == NOT_A_TOOL_ROUTE or (needed is None and not reading):
         return JSONResponse(
-            {"detail": "MCP connections are read-only"}, status_code=403
+            {"detail": "MCP tools do not use this route"}, status_code=403
         )
-    if not is_mcp_tool_route(request):
+    if not reading and not settings.mcp_write_enabled:
         return JSONResponse(
-            {"detail": "MCP tools do not read this route"}, status_code=403
+            {"detail": "This Keen accepts no changes from AI apps"}, status_code=403
         )
     found = scoped_user(db, token)
     if found is None:
         return None
     user, record = found
+    if needed is not None and needed not in (user.effective_permission_codes or ()):
+        return JSONResponse(
+            {"detail": f"This connection was not granted {needed}"}, status_code=403
+        )
+    if needed in ADMIN_SCOPES:
+        # granted_scopes kept this scope only for a current administrator.
+        user.effective_role = ROLE_ADMIN
     # One allowance for the connection, however often its token is refreshed.
     allowed, retry_after = fixed_window_allow(
         get_valkey(),
-        f"keen:rl:mcp-reads:{record.grant_id}",
-        _MCP_READS_PER_MINUTE,
+        f"keen:rl:mcp-{'reads' if reading else 'writes'}:{record.grant_id}",
+        _MCP_READS_PER_MINUTE if reading else _MCP_WRITES_PER_MINUTE,
         60,
         fail_closed=True,
     )

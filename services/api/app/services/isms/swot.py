@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from datetime import date
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,6 +12,7 @@ from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import AuditSwotScope, IsmsSwot, IsmsSwotLink, User
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
+from app.services.record_imports import IMPORT_ROWS, import_rows, row_payload
 
 from .access import can_manage_isms, can_read_isms
 from .common import _by_id_or_404, _record
@@ -238,6 +239,20 @@ def list_items(
 
 
 def save_item(*, payload, framework, user, db, context, item_id=None):
+    row = write_item(
+        payload=payload,
+        framework=framework,
+        user=user,
+        db=db,
+        context=context,
+        item_id=item_id,
+    )
+    db.commit()
+    return output(db, row, framework_parameter(framework), user)
+
+
+def write_item(*, payload, framework, user, db, context, item_id=None):
+    """Add or change one SWOT item with its links and history; no commit."""
     require_access(db, user, write=True)
     fw = framework_parameter(framework)
     if item_id and "links" in payload.model_fields_set:
@@ -357,8 +372,49 @@ def save_item(*, payload, framework, user, db, context, item_id=None):
         user,
         context,
     )
-    db.commit()
-    return output(db, row, fw, user)
+    return row
+
+
+class SwotImportPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rows: list[dict[str, Any]] = Field(min_length=1, max_length=IMPORT_ROWS)
+    # Check every row and keep nothing, unless the caller asks to save.
+    dry_run: bool = True
+
+
+# What a row of an import may set: an item's own fields and its framework
+# links. Relationships to other records and versions belong to single saves.
+SWOT_IMPORT_FIELDS = (
+    "title",
+    "description",
+    "response",
+    "kind",
+    "significance",
+    "status",
+    "parent_id",
+    "owner_user_id",
+    "start_date",
+    "target_date",
+    "controls",
+    "clauses",
+)
+
+
+def import_items(*, payload, framework, user, db, context):
+    """Add many SWOT items at once, all or none; a dry run keeps none."""
+    require_access(db, user, write=True)
+
+    def add(row):
+        item = write_item(
+            payload=row_payload(SwotPayload, row, SWOT_IMPORT_FIELDS),
+            framework=framework,
+            user=user,
+            db=db,
+            context=context,
+        )
+        return {key: getattr(item, key) for key in ("title", "kind", "significance")}
+
+    return import_rows(db, payload.rows, add, dry_run=payload.dry_run)
 
 
 def delete_item(*, item_id, expected_version, user, db, context):

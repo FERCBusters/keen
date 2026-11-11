@@ -6,6 +6,7 @@ import tempfile
 import anyio
 from starlette.responses import JSONResponse
 
+from app.core.config import settings
 from app.security.regex import scan_pattern
 
 MAX_BODY = 40 * 1024 * 1024
@@ -21,6 +22,8 @@ MAX_JSON_VALUES = 20_000
 # ISMS document files and audit final reports accept a single file up to this
 # size; their operations check the file itself against the same figure.
 MAX_FILE_UPLOAD = 100 * 1024 * 1024
+# An MCP call while connections may add records (app.api.mcp.changes).
+MCP_WRITE_BODY = 6 * 1024 * 1024
 # A signed effectiveness-metric submission.
 MAX_METRIC_SUBMISSION = 256 * 1024
 # Room for the multipart boundary and part headers around that one file.
@@ -49,11 +52,13 @@ def body_limit(path):
     if _FILE_UPLOADS.fullmatch(path):
         return MAX_FILE_UPLOAD + _MULTIPART_ROOM
     # MCP clients' OAuth requests are small forms and JSON documents, which the
-    # MCP SDK parses on the event loop; MCP calls carry short tool arguments.
+    # MCP SDK parses on the event loop; MCP calls carry short tool arguments,
+    # unless connections may add records: then a call can carry a document
+    # (a file of up to 4 MiB, base64-encoded) or the rows of an import.
     if path.startswith("/v1/oauth/"):
         return 16 * 1024
     if path == "/v1/mcp":
-        return 256 * 1024
+        return MCP_WRITE_BODY if settings.mcp_write_enabled else 256 * 1024
     return MAX_BODY
 
 

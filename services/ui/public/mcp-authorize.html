@@ -6,10 +6,11 @@
     <h1 class="h3">Connect an AI app to Keen</h1>
     <p id="consentStatus" role="status">Loading the request</p>
     <form id="consentForm" hidden>
-      <p class="mb-1"><strong id="consentClient"></strong> wants to read Keen as you.</p>
+      <p class="mb-1"><strong id="consentClient"></strong> <span id="consentWants">wants to read Keen as you.</span></p>
       <p class="small text-body-secondary">The app chose this name; Keen cannot confirm it. After you answer, your browser returns to <code id="consentRedirect"></code>.</p>
       <div class="alert alert-warning">Approve only if you started this connection from your own AI app in the last few minutes. A link someone sent you could let them read Keen as you.</div>
-      <fieldset class="mb-3"><legend class="h6">What it may read</legend><div id="consentScopes"></div><p id="consentNoScopes" class="small text-body-secondary" hidden>Your account has none of the permissions these records need.</p><p class="small text-body-secondary mb-0">Every connection can also read frameworks, controls and the Statement of Applicability. It can change nothing, never reads more than your account can, and loses any access your account loses.</p></fieldset>
+      <fieldset class="mb-3"><legend class="h6">What it may read</legend><div id="consentScopes"></div><p id="consentNoScopes" class="small text-body-secondary" hidden>Your account has none of the permissions these records need.</p><p class="small text-body-secondary mb-0">Every connection can also read frameworks, controls and the Statement of Applicability. It never reads or changes more than your account can, and loses any access your account loses.</p></fieldset>
+      <fieldset id="consentChangesSet" class="mb-3" hidden><legend class="h6">What it may change</legend><div class="alert alert-warning small mb-2">Tick these only to let the app add and update records as you. Each change is recorded in the record's history under your name, and the app can delete nothing. Ticking one lets it read those records too.</div><div id="consentChanges"></div></fieldset>
       <p class="small text-body-secondary">The app renews its access hourly for up to 90 days. Revoke it at any time from Account, Security.</p>
       <div class="d-flex gap-2"><button id="consentApprove" class="btn btn-primary" type="submit">Approve</button><button id="consentRefuse" class="btn btn-outline-secondary" type="button">Refuse</button></div>
     </form>

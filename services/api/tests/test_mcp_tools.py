@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 from app.api.mcp import runtime, tools
+from app.core.config import settings
 from app.security.mcp_tokens import INNER_TOKEN, SCOPES
 from fastmcp.exceptions import ToolError
 from starlette.requests import Request
@@ -297,7 +298,14 @@ def test_inner_requests_carry_the_token_in_the_scope_only(inner):
         (404, b'{"detail": "Risk not found"}', "Risk not found"),
         (404, b"[]", "Keen has no such record"),
         (422, b'{"detail": [{"loc": ["q"]}]}', r"refused the request \(422\)$"),
+        (
+            422,
+            b'{"detail": [{"loc": ["body", "rows", 0], "msg": "Field required"}, '
+            b'{"loc": [], "msg": "Too many"}, "junk"]}',
+            r"\(422\): rows\.0: Field required; value: Too many$",
+        ),
         (400, b'{"detail": "framework is unknown"}', r"\(400\): framework is unknown"),
+        (429, b"{}", "too many requests; wait a minute"),
     ],
 )
 def test_refusals_become_tool_errors_without_upstream_bodies(
@@ -317,3 +325,38 @@ def test_a_non_json_refusal_and_optional_refusals(inner):
     inner(404, b"{}")
     with pytest.raises(ToolError):
         run(tools._get("/v1/x", optional=True))
+
+
+def test_changes_are_sent_as_json_or_files_and_refusals_name_the_change(inner):
+    app = inner(201, b'{"id": "r1"}')
+    assert run(tools._ask("POST", "/v1/risks", body={"a": 1})) == {"id": "r1"}
+    scope = app.scopes[0]
+    assert scope["method"] == "POST"
+    assert dict(scope["headers"])[b"content-type"] == b"application/json"
+    app = inner(200, b"{}")
+    run(
+        tools._ask(
+            "POST", "/v1/isms/documents/x/file", files={"file": ("a.txt", b"x", "t")}
+        )
+    )
+    content_type = dict(app.scopes[0]["headers"])[b"content-type"]
+    assert content_type.startswith(b"multipart/form-data")
+    inner(204, b"")
+    assert run(tools._ask("PATCH", "/v1/x", body={})) is None
+    inner(403, b'{"detail": "isms.manage permission required"}')
+    with pytest.raises(ToolError, match=r"may not change that \(isms\.manage"):
+        run(tools._ask("POST", "/v1/x", body={}))
+
+
+def test_the_overview_says_whether_the_connection_may_make_changes(api, monkeypatch):
+    api.answers["/v1/statement-of-applicability"] = {}
+    api.scopes = ["isms.read", "isms.manage"]
+    monkeypatch.setattr(settings, "mcp_write_enabled", False)
+    overview = run(tools.keen_overview())
+    assert list(overview["granted_scopes"]) == ["isms.read"]
+    assert overview["access"] == "read-only" and "changes" not in overview
+    monkeypatch.setattr(settings, "mcp_write_enabled", True)
+    overview = run(tools.keen_overview())
+    assert list(overview["granted_scopes"]) == ["isms.read", "isms.manage"]
+    assert overview["access"] == "read and change"
+    assert "never delete a record" in overview["changes"]

@@ -5,6 +5,7 @@ history.replaceState(null, '', location.pathname);
 const status = document.getElementById('consentStatus');
 const form = document.getElementById('consentForm');
 const scopes = document.getElementById('consentScopes');
+const changes = document.getElementById('consentChanges');
 // The API returns the app's registered redirect URI; never navigate to a scheme
 // that would run or read something in this page's context.
 const REFUSED = new Set(['javascript:', 'data:', 'vbscript:', 'file:', 'blob:', 'about:']);
@@ -25,7 +26,7 @@ function leave(target) {
 async function answer(approve) {
   for (const button of form.querySelectorAll('button')) button.disabled = true;
   try {
-    const chosen = [...scopes.querySelectorAll('input:checked')].map((box) => box.value);
+    const chosen = [...form.querySelectorAll('input:checked')].map((box) => box.value);
     const result = await apiPost('/api/v1/me/mcp/consent', { request, approve, scopes: chosen });
     form.hidden = true;
     leave(result.redirect);
@@ -34,24 +35,50 @@ async function answer(approve) {
     for (const button of form.querySelectorAll('button')) button.disabled = false;
   }
 }
+function checkbox(scope) {
+  const wrap = document.createElement('div');
+  wrap.className = 'form-check';
+  const box = document.createElement('input');
+  box.className = 'form-check-input';
+  box.type = 'checkbox';
+  box.id = 'scope-' + scope.scope.replace(/[^a-z_]/g, '-');
+  box.value = scope.scope;
+  // A change starts unticked, whatever the app asked for: the person turns it on.
+  box.checked = scope.requested && !scope.changes;
+  const label = document.createElement('label');
+  label.className = 'form-check-label';
+  label.htmlFor = box.id;
+  label.textContent = scope.description;
+  wrap.append(box, label);
+  return { wrap, box };
+}
 function render(view) {
   document.getElementById('consentClient').textContent = view.client_name;
   document.getElementById('consentRedirect').textContent = view.redirect_host;
-  for (const scope of view.scopes) {
-    const wrap = document.createElement('div');
-    wrap.className = 'form-check';
-    const box = document.createElement('input');
-    box.className = 'form-check-input';
-    box.type = 'checkbox';
-    box.id = 'scope-' + scope.scope.replace(/[^a-z_]/g, '-');
-    box.value = scope.scope;
-    box.checked = scope.requested;
-    const label = document.createElement('label');
-    label.className = 'form-check-label';
-    label.htmlFor = box.id;
-    label.textContent = scope.description;
-    wrap.append(box, label);
+  const reads = new Map();
+  for (const scope of view.scopes.filter((item) => !item.changes)) {
+    const { wrap, box } = checkbox(scope);
+    reads.set(scope.scope, box);
     scopes.append(wrap);
+  }
+  const offered = view.scopes.filter((item) => item.changes);
+  for (const scope of offered) {
+    const { wrap, box } = checkbox(scope);
+    // A change scope brings its read scope, so that box stays ticked with it.
+    const read = reads.get(scope.includes);
+    box.addEventListener('change', () => {
+      if (!read) return;
+      if (box.checked) read.checked = true;
+      read.disabled = [...changes.querySelectorAll('input:checked')].some(
+        (other) => reads.get(other.dataset.includes) === read,
+      );
+    });
+    box.dataset.includes = scope.includes;
+    changes.append(wrap);
+  }
+  document.getElementById('consentChangesSet').hidden = offered.length === 0;
+  if (offered.some((item) => item.requested)) {
+    document.getElementById('consentWants').textContent = 'wants to read and change Keen as you.';
   }
   document.getElementById('consentNoScopes').hidden = view.scopes.length > 0;
   status.textContent = 'Review this request.';

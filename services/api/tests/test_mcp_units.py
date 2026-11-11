@@ -12,13 +12,16 @@ from app.security import mcp_tokens
 from app.security.mcp_tokens import (
     ACCESS_PREFIX,
     SCOPES,
+    WRITE_SCOPES,
     configured_redirect_problem,
+    grantable_scopes,
     granted_scopes,
     is_loopback_redirect,
     new_secret,
-    readable_scopes,
+    offered_scopes,
     redirect_allowed,
     well_formed,
+    with_read_scopes,
 )
 from pydantic import ValidationError
 
@@ -38,23 +41,108 @@ def test_secrets_are_random_prefixed_and_checked_by_shape():
 
 
 def test_scopes_never_exceed_what_the_account_can_read():
-    assert readable_scopes({"*"}) == list(SCOPES)
-    assert readable_scopes(set()) == []
+    reads = ["isms.read", "risk.read", "pestle.read", "events.read"]
+    assert grantable_scopes({"*"}, write=False) == reads
+    assert grantable_scopes(set(), write=False) == []
     # Keen lets risk readers read the ISMS registers too, but a connection
     # carries only its own domain's code, which admits no more than they hold.
-    assert readable_scopes({"risk.manage"}) == ["risk.read"]
-    assert readable_scopes({"isms.manage", "pestle.read"}) == [
+    assert grantable_scopes({"risk.manage"}, write=False) == ["risk.read"]
+    assert grantable_scopes({"isms.manage", "pestle.read"}, write=False) == [
         "isms.read",
         "pestle.read",
     ]
-    assert readable_scopes({"events.read", "quiz.read"}) == ["events.read"]
+    assert grantable_scopes({"events.read", "quiz.read"}, write=False) == [
+        "events.read"
+    ]
     assert (
         granted_scopes(
-            ["events.read", "risk.read", "isms.manage", "unknown"], {"isms.read"}
+            ["events.read", "risk.read", "isms.manage", "unknown"],
+            {"isms.read"},
+            write=True,
         )
         == []
     )
-    assert granted_scopes(["risk.read", "isms.read"], {"isms.read"}) == ["isms.read"]
+    assert granted_scopes(["risk.read", "isms.read"], {"isms.read"}, write=True) == [
+        "isms.read"
+    ]
+
+
+def test_change_scopes_need_the_switch_and_that_domains_manage_permission():
+    assert grantable_scopes({"*"}, write=True) == list(SCOPES)
+    # Readers are offered no change scope, whatever the switch says.
+    readers = {"isms.read", "risk.read", "pestle.read", "events.read"}
+    assert grantable_scopes(readers, write=True) == sorted(
+        readers, key=list(SCOPES).index
+    )
+    # Managing one domain grants changes to that domain alone.
+    assert grantable_scopes({"risk.manage"}, write=True) == [
+        "risk.read",
+        "risk.manage",
+    ]
+    assert grantable_scopes({"isms.manage"}, write=True) == [
+        "isms.read",
+        "isms.manage",
+    ]
+    # Mapping rules: administrators only, whatever codes an account holds.
+    every_code = {code for _, codes in SCOPES.values() for code in codes}
+    assert "rules.write" not in grantable_scopes(every_code, write=True)
+    assert granted_scopes(["rules.write"], {"*"}, write=False) == []
+    assert granted_scopes(["rules.write"], {"*"}, write=True) == ["rules.write"]
+    # The switch off leaves even an administrator with reads only.
+    assert granted_scopes(list(SCOPES), {"*"}, write=False) == list(
+        offered_scopes(write=False)
+    )
+    assert not set(offered_scopes(write=False)) & set(WRITE_SCOPES)
+    assert offered_scopes(write=True) == list(SCOPES)
+
+
+def test_a_change_scope_brings_its_read_scope():
+    assert with_read_scopes(["risk.manage"]) == ["risk.read", "risk.manage"]
+    assert with_read_scopes(["rules.write", "isms.read"]) == [
+        "isms.read",
+        "events.read",
+        "rules.write",
+    ]
+    assert with_read_scopes([]) == []
+    for change, read in WRITE_SCOPES.items():
+        assert read in SCOPES and change in SCOPES
+        # A change scope is granted by nothing short of its read scope's.
+        assert SCOPES[change][1] <= SCOPES[read][1] or not SCOPES[change][1]
+
+
+def test_inner_routes_exist_and_change_nothing_they_should_not():
+    """Every route a tool may ask has an access rule (so is served: another test
+    compares the rules with the routes) admitting its scope; nothing deletes;
+    administration is limited to the mapping-rule routes, behind the
+    administrators' scope."""
+    policy = _policy()
+    for (method, path), scope in mcp_tokens.INNER_ROUTES.items():
+        rule = policy.POLICY[f"{method} {path.replace(':uuid}', '}')}"]
+        if scope in mcp_tokens.ADMIN_SCOPES:
+            assert rule.kind == "admin", (method, path)
+        elif scope is not None:
+            assert frozenset({scope}) in rule.alternatives, (method, path)
+    domains = {
+        "isms.manage": "/v1/isms/",
+        "risk.manage": "/v1/risks",
+        "pestle.manage": "/v1/pestle/",
+        "rules.write": "/v1/admin/",
+    }
+    for (method, path), scope in mcp_tokens.INNER_ROUTES.items():
+        assert method in {"GET", "POST", "PATCH", "PUT"}, (method, path)
+        if path.startswith("/v1/admin/"):
+            assert scope == "rules.write", path
+            assert "mapping-rules" in path or path.endswith("evidence-event-samples")
+        if method != "GET":
+            assert scope in WRITE_SCOPES, (method, path)
+        if scope is not None:
+            assert path.startswith(domains[scope]), (method, path, scope)
+    assert {s for s in mcp_tokens.INNER_ROUTES.values() if s} == set(WRITE_SCOPES)
+    for word in ("settings", "users", "roles", "frameworks/", "tokens", "api-keys"):
+        assert not any(
+            word in path and method != "GET" for method, path in mcp_tokens.INNER_ROUTES
+        ), word
+    assert mcp_tokens.ADMIN_SCOPES == {"rules.write"}
 
 
 def _policy():
@@ -109,35 +197,72 @@ def test_the_detector_finds_a_scope_that_would_admit_too_much(monkeypatch):
     assert narrower
 
 
+_UUID = "00000000-0000-4000-8000-000000000000"
+_ASKING = {"_get": "GET", "_send": None, "_ask": None}
+
+
+def inner_route_allowed(method: str, path: str) -> bool:
+    """Whether an in-process request for ``method`` and ``path`` may run."""
+    from starlette.routing import compile_path
+
+    return any(
+        method == allowed and compile_path(pattern)[0].fullmatch(path)
+        for allowed, pattern in mcp_tokens.INNER_ROUTES
+    )
+
+
+def _literal(node) -> str | None:
+    import ast
+
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        # An f-string: each placeholder is a record's UUID.
+        return "".join(
+            part.value if isinstance(part, ast.Constant) else _UUID
+            for part in node.values
+        )
+    return None
+
+
 def test_tools_ask_only_the_routes_inner_requests_may_reach():
     import ast
 
-    from app.api.mcp import tools
-    from starlette.routing import compile_path
+    from app.api.mcp import changes, tools
 
-    allowed = [compile_path(path)[0] for path in mcp_tokens.INNER_ROUTES]
-    source = Path(tools.__file__).read_text()
-    asked = []
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "_get":
-            target = node.args[0]
-            if isinstance(target, ast.Constant):
-                asked.append(target.value)
+    asked: list[tuple[str, str]] = []
+    for module in (tools, changes):
+        for node in ast.walk(ast.parse(Path(module.__file__).read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if name not in _ASKING or not node.args:
+                continue
+            method = _ASKING[name]
+            if method is None:
+                if len(node.args) < 2 or _literal(node.args[0]) is None:
+                    continue
+                method, target = _literal(node.args[0]), node.args[1]
             else:
-                # An f-string: each placeholder is a record's UUID.
-                asked.append(
-                    "".join(
-                        part.value
-                        if isinstance(part, ast.Constant)
-                        else "00000000-0000-4000-8000-000000000000"
-                        for part in target.values
-                    )
-                )
-    assert len(asked) >= 15
-    for path in asked:
-        assert any(pattern.fullmatch(path) for pattern in allowed), path
+                target = node.args[0]
+            path = _literal(target)
+            if path is not None:
+                asked.append((method, path))
+    # Paths the change tools build from their tables.
+    for kind in changes.KINDS.values():
+        asked += [("POST", kind.path), ("PATCH", f"{kind.path}/{_UUID}")]
+        if kind.whole:
+            asked.append(("GET", kind.whole.format(id=_UUID)))
+    asked += [("GET", path) for _, path, _, _ in changes._CHOICES.values()]
+    asked += [("POST", path) for _, path, _ in changes._IMPORTS.values()]
+    assert len(asked) >= 50
+    for method, path in asked:
+        assert inner_route_allowed(method, path), (method, path)
     # Identifiers must be UUIDs: the inner routes take no other.
-    assert not any(p.fullmatch("/v1/risks/../admin") for p in allowed)
+    assert not inner_route_allowed("GET", "/v1/risks/../admin")
+    assert not inner_route_allowed("DELETE", f"/v1/risks/{_UUID}")
+    assert not inner_route_allowed("PATCH", "/v1/risks/not-a-uuid")
 
 
 def test_keen_secrets_are_redacted_wherever_they_appear():

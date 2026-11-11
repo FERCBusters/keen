@@ -28,6 +28,8 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
+from app.security.regex import scan_pattern
+
 # Formatting tags permitted in stored rich text. Kept in sync with the
 # client-side RICH_TEXT_ALLOWED_TAGS / MINUTES_ALLOWED_HTML_TAGS allowlists.
 RICH_TEXT_ALLOWED_TAGS: frozenset[str] = frozenset(
@@ -158,3 +160,62 @@ def rich_text_has_text(value: str | None) -> bool:
     finder.feed(value or "")
     finder.close()
     return finder.found
+
+
+_TEXT_HEADING = scan_pattern(r"(#{1,6})\s+(.*)")
+_TEXT_ITEM = scan_pattern(r"(?:([-*])|\d{1,4}[.)])\s+(.*)")
+
+
+def plain_text_html(text: str) -> str:
+    """Rich text from plain text, read the way Keen writes documents as text.
+
+    Blank lines separate paragraphs, a line starting ``#`` to ``######`` is a
+    heading, and lines starting ``-``, ``*`` or a number such as ``1.`` form a
+    list; every other character is text, escaped. The result holds only tags
+    the sanitiser keeps.
+    """
+    blocks: list[str] = []
+    paragraph: list[str] = []
+    items: list[str] = []
+    listing = ""
+
+    def close_paragraph() -> None:
+        if paragraph:
+            blocks.append("<p>" + "<br>".join(paragraph) + "</p>")
+            paragraph.clear()
+
+    def close_list() -> None:
+        nonlocal listing
+        if items:
+            blocks.append(f"<{listing}>" + "".join(items) + f"</{listing}>")
+            items.clear()
+        listing = ""
+
+    for raw in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw.strip()
+        heading = _TEXT_HEADING.fullmatch(line)
+        item = _TEXT_ITEM.fullmatch(line)
+        if not line:
+            close_paragraph()
+            close_list()
+        elif heading:
+            close_paragraph()
+            close_list()
+            level = len(heading.group(1))
+            blocks.append(
+                f"<h{level}>{escape(heading.group(2), quote=False)}</h{level}>"
+            )
+        elif item:
+            close_paragraph()
+            # A bullet starts an unordered list, a number an ordered one.
+            kind = "ul" if item.group(1) else "ol"
+            if listing != kind:
+                close_list()
+                listing = kind
+            items.append(f"<li>{escape(item.group(2), quote=False)}</li>")
+        else:
+            close_list()
+            paragraph.append(escape(line, quote=False))
+    close_paragraph()
+    close_list()
+    return "".join(blocks)

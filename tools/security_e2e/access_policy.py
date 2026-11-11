@@ -119,6 +119,7 @@ AFFECTED_RULE = (
 OBJECT_RULES = {
     "GET /v1/risks/{risk_id}": "Members of the risk's owning organisation role can read it.",
     "POST /v1/risks": AFFECTED_RULE,
+    "POST /v1/risks/import": AFFECTED_RULE,
     "PATCH /v1/risks/{risk_id}": AFFECTED_RULE,
     "POST /v1/pestle/items": AFFECTED_RULE,
     "PATCH /v1/pestle/items/{item_id}": AFFECTED_RULE,
@@ -246,8 +247,9 @@ OBJECT_RULES = {
     "POST /v1/me/inbox/{item_id}/read": "The notification must belong to the account.",
     "DELETE /v1/me/mcp/grants/{grant_id}": "The connection must belong to the account.",
     "POST /v1/me/mcp/consent": (
-        "Grants only read scopes the account can already read, within those the "
-        "client requested."
+        "Grants only scopes the account's own permissions cover, within those the "
+        "client requested: read scopes, change scopes while KEEN_MCP_WRITE_ENABLED "
+        "is set, and the mapping-rules scope for administrators."
     ),
     "GET /v1/me/inbox": (
         "Each notification is shown only while the account can open its record."
@@ -619,6 +621,7 @@ POLICY = {
     "GET /v1/isms/meta": ISMS_READ,
     "GET /v1/isms/swot": ISMS_READ,
     "POST /v1/isms/swot": ISMS_MANAGE,
+    "POST /v1/isms/swot/import": ISMS_MANAGE,
     "GET /v1/isms/swot-choices/{target_type}": ISMS_READ,
     "GET /v1/isms/swot/{item_id}": ISMS_READ,
     "PATCH /v1/isms/swot/{item_id}": ISMS_MANAGE,
@@ -696,6 +699,7 @@ POLICY = {
     # --- Risks ---------------------------------------------------------------------
     "GET /v1/risks": RISK_READ,
     "POST /v1/risks": RISK_MANAGE,
+    "POST /v1/risks/import": RISK_MANAGE,
     "GET /v1/risks/assets": RISK_READ,
     "POST /v1/risks/assets": RISK_MANAGE,
     "DELETE /v1/risks/assets/{asset_id}": RISK_MANAGE,

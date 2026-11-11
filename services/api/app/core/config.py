@@ -385,6 +385,11 @@ class Settings(BaseSettings):
     # the MCP endpoint, its OAuth endpoints and the consent page answer 404, and
     # access tokens issued while it was on stop working.
     mcp_enabled: bool = Field(default=False)
+    # Whether connections may also add and update records, within scopes each
+    # person approves and never beyond their own permissions. Off unless set,
+    # and ignored while MCP is off: consent then offers read scopes only, the
+    # change tools are not listed, and grants keep their change scopes unused.
+    mcp_write_enabled: bool = Field(default=False)
     # Redirect URIs an MCP client may register, besides loopback http
     # callbacks (http://127.0.0.1, http://[::1] and http://localhost on any
     # port), which local clients such as Claude Code and Claude Desktop use.

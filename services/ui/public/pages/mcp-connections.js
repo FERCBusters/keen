@@ -14,8 +14,11 @@ function row(grant) {
   name.textContent = grant.client_name;
   const detail = document.createElement('div');
   detail.className = 'small text-body-secondary';
+  const changes = grant.changes || [];
+  const reads = grant.scopes.filter((scope) => !changes.includes(scope));
   detail.textContent =
-    `Returns to ${grant.redirect_host}. Reads: ${grant.scopes.join(', ') || 'frameworks and controls only'}. ` +
+    `Returns to ${grant.redirect_host}. Reads: ${reads.join(', ') || 'frameworks and controls only'}. ` +
+    (changes.length ? `Adds and updates: ${changes.join(', ')}. ` : '') +
     `Approved ${day(grant.created_at)}, last used ${day(grant.last_used_at)}, ends ${day(grant.expires_at)}.`;
   text.append(name, detail);
   const button = document.createElement('button');
@@ -26,7 +29,7 @@ function row(grant) {
     if (
       !(await confirmAction({
         title: 'Revoke AI connection',
-        message: `Revoke ${grant.client_name}? It stops reading Keen at once and must ask you again to reconnect.`,
+        message: `Revoke ${grant.client_name}? It stops using Keen at once and must ask you again to reconnect.`,
         confirmLabel: 'Revoke',
       }))
     )

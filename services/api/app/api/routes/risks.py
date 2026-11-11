@@ -14,6 +14,7 @@ from app.services.risks import (
     RiskAssetPayload,
     RiskCategoryPayload,
     RiskControlLinksPayload,
+    RiskImportPayload,
     RiskMitigatorAnalysePayload,
     RiskSubcategoryPayload,
     RiskUpsertPayload,
@@ -247,6 +248,17 @@ def create_risk(
     return service.create_risk(
         payload=payload, context=change_context(request), user=user, db=db
     )
+
+
+@router.post("/v1/risks/import")
+def import_risks(
+    payload: RiskImportPayload,
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_risk_manage),
+    db: Session = Depends(get_db),
+):
+    "Add up to 500 risks at once, all or none; a dry run checks them only."
+    return service.import_risks(payload=payload, framework=framework, user=user, db=db)
 
 
 @router.get("/v1/risks/{risk_id}")

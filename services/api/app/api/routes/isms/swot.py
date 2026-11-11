@@ -78,6 +78,24 @@ def create_swot(
     )
 
 
+@router.post("/v1/isms/swot/import")
+def import_swot(
+    payload: service.SwotImportPayload,
+    request: Request,
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
+    "Add up to 500 SWOT items at once, all or none; a dry run checks them only."
+    return service.import_items(
+        payload=payload,
+        framework=framework,
+        user=user,
+        db=db,
+        context=change_context(request),
+    )
+
+
 @router.get("/v1/isms/swot/{item_id}")
 def get_swot(
     item_id: str,

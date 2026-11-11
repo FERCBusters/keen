@@ -172,10 +172,21 @@ def gated_write_permission(request):
     return None
 
 
-_MCP_TOOL_ROUTES = tuple(compile_path(path)[0] for path in INNER_ROUTES)
+_MCP_TOOL_ROUTES = tuple(
+    (method, compile_path(path)[0], scope)
+    for (method, path), scope in INNER_ROUTES.items()
+)
+# An in-process request no MCP tool makes.
+NOT_A_TOOL_ROUTE = "not-a-tool-route"
 
 
-def is_mcp_tool_route(request):
-    """Whether an MCP tool's in-process request names a route the tools read."""
-    path = policy_path(request)
-    return any(pattern.fullmatch(path) for pattern in _MCP_TOOL_ROUTES)
+def mcp_tool_route_scope(request):
+    """The scope an MCP tool's in-process request to this route needs: a scope,
+    None when the tool and route decide, or NOT_A_TOOL_ROUTE."""
+    method, path = request.method.upper(), policy_path(request)
+    if method == "HEAD":
+        method = "GET"
+    for allowed, pattern, scope in _MCP_TOOL_ROUTES:
+        if method == allowed and pattern.fullmatch(path):
+            return scope
+    return NOT_A_TOOL_ROUTE

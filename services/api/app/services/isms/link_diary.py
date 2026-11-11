@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -388,6 +389,35 @@ def _revise_entry(
     return True
 
 
+# Session key holding the diary writes a block of saves deferred.
+_DEFERRED = "keen_deferred_link_diary"
+
+
+@contextmanager
+def deferred_link_diary(db: Session):
+    """Collect the diary writes the saves inside the block would make.
+
+    A diary entry stores an artifact, which a rolled-back transaction would
+    leave behind, so an import that may still be rolled back records its
+    entries only once its rows are accepted. Yields the deferred writes, for
+    write_deferred_link_diary.
+    """
+    pending: list[tuple[str, uuid.UUID, User | None, str | None]] = []
+    db.info[_DEFERRED] = pending
+    try:
+        yield pending
+    finally:
+        db.info.pop(_DEFERRED, None)
+
+
+def write_deferred_link_diary(
+    db: Session, pending: list[tuple[str, uuid.UUID, User | None, str | None]]
+) -> None:
+    """Make the diary writes deferred_link_diary collected, each record once."""
+    for entity_type, entity_id, user, actor in dict.fromkeys(pending):
+        sync_entity_link_diary(db, entity_type, entity_id, user, actor=actor)
+
+
 def sync_entity_link_diary(
     db: Session,
     entity_type: str,
@@ -404,6 +434,10 @@ def sync_entity_link_diary(
     A collector that writes links names itself as ``actor`` in place of a user.
     """
 
+    pending = db.info.get(_DEFERRED)
+    if pending is not None:
+        pending.append((entity_type, entity_id, user, actor))
+        return
     entity_type = _record_type(entity_type)
     entity_id = uuid.UUID(str(entity_id))
     actor = getattr(user, "username", None) or actor or None

@@ -2,7 +2,8 @@
 
 The OAuth protocol is the MCP SDK's (app.api.mcp adapts it); this module keeps
 its records. A person approves a client's request on Keen's consent page,
-which creates a grant of read scopes; the client then holds a one-hour access
+which creates a grant of the scopes they tick: read scopes, and change scopes
+while KEEN_MCP_WRITE_ENABLED is set. The client then holds a one-hour access
 token and a refresh token that rotates on every use. Presenting a used code or
 refresh token again revokes the grant, since only a copy could do that.
 """
@@ -41,12 +42,14 @@ from app.security.mcp_tokens import (
     REFRESH_PREFIX,
     REFRESH_TOKEN_SECONDS,
     SCOPES,
+    WRITE_SCOPES,
     digest,
+    grantable_scopes,
     granted_scopes,
     new_secret,
-    readable_scopes,
     redirect_allowed,
     well_formed,
+    with_read_scopes,
 )
 from app.security.permissions import get_effective_permission_codes
 from app.services.errors import DomainError
@@ -233,7 +236,7 @@ def consent_view(db: Session, *, secret: str, user: User) -> dict:
     """What the consent page shows the signed-in person."""
     request = _consent_request(db, secret)
     requested = request.scopes if request.scopes is not None else list(SCOPES)
-    offered = readable_scopes(_held(db, user))
+    offered = grantable_scopes(_held(db, user), write=settings.mcp_write_enabled)
     return {
         "client_name": request.client.client_name,
         "redirect_uri": request.redirect_uri,
@@ -241,11 +244,16 @@ def consent_view(db: Session, *, secret: str, user: User) -> dict:
         "registered_at": request.client.created_at.isoformat(),
         "expires_at": request.expires_at.isoformat(),
         "mcp_url": mcp_url(),
+        # Change scopes are listed apart and start unticked: a person turns
+        # each on, whatever the app asked for.
         "scopes": [
             {
                 "scope": code,
                 "description": SCOPES[code][0],
                 "requested": code in requested,
+                "changes": code in WRITE_SCOPES,
+                # The read scope a change scope brings with it.
+                "includes": WRITE_SCOPES.get(code),
             }
             for code in offered
         ],
@@ -270,8 +278,9 @@ def answer_consent(
 ) -> dict:
     """Approve or refuse a request; return where the browser goes next.
 
-    Approval grants the chosen scopes the account can read, within those the
-    client asked for. The request is answered once.
+    Approval grants the chosen scopes the account may grant, within those the
+    client asked for; a change scope brings its read scope. The request is
+    answered once.
     """
     request = _consent_request(db, secret, lock=True)
     redirect = {"state": request.state, "iss": issuer_url()}
@@ -284,12 +293,16 @@ def answer_consent(
             )
         }
     requested = request.scopes if request.scopes is not None else list(SCOPES)
-    chosen = [code for code in scopes if code in requested]
+    held, write = _held(db, user), settings.mcp_write_enabled
+    chosen = granted_scopes(
+        [code for code in scopes if code in requested], held, write=write
+    )
     now = utc_now_naive()
     grant = McpGrant(
         user_id=user.id,
         client_pk=request.client_pk,
-        scopes=granted_scopes(chosen, _held(db, user)),
+        # The read scope of each change scope granted, which the account holds.
+        scopes=granted_scopes(with_read_scopes(chosen), held, write=write),
         session_version=user.session_version,
         mfa_version=user.mfa_version,
         expires_at=now + timedelta(seconds=GRANT_SECONDS),
@@ -506,16 +519,19 @@ def revoke_token(db: Session, token: str) -> None:
 def scoped_user(db: Session, token: str) -> tuple[User, TokenRecord] | None:
     """The account behind a current access token, narrowed to its scopes.
 
-    The account acts with no role and with only the read permissions that both
-    the token's scopes and its current permissions allow. Returns the account
-    and the token's record.
+    The account acts with no role and with only the permissions that both the
+    token's scopes and its current permissions allow; change scopes count only
+    while KEEN_MCP_WRITE_ENABLED is set. Returns the account and the token's
+    record.
     """
     record = access_token(db, token)
     if record is None:
         return None
     user = db.get(User, uuid.UUID(record.user_id))
     assert user is not None  # access_token checked the account is active
-    allowed = granted_scopes(record.scopes, _held(db, user))
+    allowed = granted_scopes(
+        record.scopes, _held(db, user), write=settings.mcp_write_enabled
+    )
     user.effective_role = ROLE_NORMAL
     user.effective_permission_codes = set(allowed)
     return user, record
@@ -548,6 +564,8 @@ def grants_for(db: Session, *, user: User) -> dict:
                 "client_name": grant.client.client_name,
                 "redirect_host": urlsplit(grant.client.info["redirect_uris"][0]).netloc,
                 "scopes": list(grant.scopes),
+                # The scopes that add and update records.
+                "changes": [code for code in grant.scopes if code in WRITE_SCOPES],
                 "created_at": grant.created_at.isoformat(),
                 "last_used_at": grant.last_used_at.isoformat()
                 if grant.last_used_at
