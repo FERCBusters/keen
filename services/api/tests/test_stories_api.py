@@ -815,7 +815,7 @@ NEW_KINDS = (
     (
         "vendor",
         "vendor",
-        "Vendor",
+        "Vendor / 3rd party",
         "Example Hosting",
         "/vendor.html?id={}",
     ),

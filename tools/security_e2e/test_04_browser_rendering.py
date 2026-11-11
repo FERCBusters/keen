@@ -114,10 +114,9 @@ def test_hostile_text_is_inert_for_read_only_roles(
             "cia",
             "library",
             "pestle",
-            "party",
             "objective",
         ),
-        "isms_reader": ("objective", "document", "meeting", "isms"),
+        "isms_reader": ("objective", "document", "meeting", "isms", "folder", "vendor"),
         "audit_reader": ("audit", "audits"),
     }[role]
     findings = []

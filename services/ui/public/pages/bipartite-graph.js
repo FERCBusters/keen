@@ -1,6 +1,6 @@
 // Drawing helpers shared by the bipartite relationship graphs: risks to
-// controls, clauses to PESTLE(E) items and interested parties to their related
-// items. Each graph keeps its own layout, colours and tooltips.
+// controls and clauses to PESTLE(E) items. Each graph keeps its own layout,
+// colours and tooltips.
 import { esc } from '/app.js';
 
 // Wraps a label onto at most `maxLines` lines of about `maxChars`, ending with

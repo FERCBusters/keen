@@ -153,11 +153,6 @@ def test_risk_tools_project_the_register_and_need_the_risk_scope(api):
         (tools.list_swot, "/v1/isms/swot", "isms.read"),
         (tools.list_objectives, "/v1/isms/objectives", "isms.read"),
         (tools.list_assets, "/v1/isms/assets", "isms.read"),
-        (
-            tools.list_interested_parties,
-            "/v1/interested-parties",
-            "interested_parties.read",
-        ),
         (tools.list_pestle_items, "/v1/pestle/items", "pestle.read"),
     ],
 )
@@ -169,13 +164,10 @@ def test_register_listings_need_their_scope(api, tool, path, scope):
         run(tool())
 
 
-def test_swot_and_parties_pass_their_filters(api):
+def test_swot_passes_its_filters(api):
     api.answers["/v1/isms/swot"] = {"items": []}
     run(tools.list_swot(kind="threat", q="supplier"))
     assert api.calls[-1][2]["kind"] == "threat" and api.calls[-1][2]["q"] == "supplier"
-    api.answers["/v1/interested-parties"] = {"items": []}
-    run(tools.list_interested_parties())
-    assert api.calls[-1][2]["q"] is None
 
 
 def test_documents_list_excerpts_and_return_their_text(api):

@@ -7,20 +7,16 @@ framework; a framework the run does not seed is left out.
 
 from datetime import datetime, timedelta
 
-from app.db.models import (
-    InterestedParty,
-    InterestedPartyName,
-    Risk,
-    RiskInterestedParty,
-)
-from demo_catalogue import ensure_vendor
+from app.db.models import AffectedLink, Risk
+from demo_catalogue import PEOPLE, ensure_vendor, seed_people
 
 C, IN, AV = "Confidentiality", "Integrity", "Availability"
 
 # key: title, asset, CIA types, threat summary, (likelihood, impact, residual
 # likelihood, residual impact), treatment strategy, status, plan, days until
 # the treatment is due (negative when already past), owner role (None: the
-# seeding user), control references per framework, and who the risk affects.
+# seeding user), control references per framework, and the people and third
+# parties the risk affects.
 RISKS = {
     "admin_access": dict(
         title="Unauthorised administrative access to hosting",
@@ -55,7 +51,7 @@ RISKS = {
             "iso_27001_2022": ["A.5.34", "A.8.3", "A.8.12", "A.8.24"],
             "soc2_tsc": ["C1.1", "CC6.1"],
         },
-        affects=["Customers", "Regulators"],
+        affects=["Customers", "Data protection regulator"],
     ),
     "release_defect": dict(
         title="Faulty release disrupts evidence collection",
@@ -89,7 +85,7 @@ RISKS = {
             "iso_27001_2022": ["A.5.3", "A.5.30", "A.6.3", "A.6.5"],
             "soc2_tsc": ["CC1.4"],
         },
-        affects=["Staff"],
+        affects=["Jordan Example", "Morgan Example"],
     ),
     "ransomware": dict(
         title="Ransomware on production hosts",
@@ -124,7 +120,7 @@ RISKS = {
             "soc2_tsc": ["CC6.1", "CC1.4"],
             "pci_dss_v4": ["5.4", "12.6"],
         },
-        affects=["Staff"],
+        affects=["Jordan Example", "Morgan Example"],
     ),
     "public_bucket": dict(
         title="Customer data bucket exposed publicly",
@@ -141,7 +137,7 @@ RISKS = {
             "iso_27001_2022": ["A.5.23", "A.8.3", "A.8.9", "A.8.12"],
             "soc2_tsc": ["CC6.1", "CC6.7"],
         },
-        affects=["Customers", "Regulators"],
+        affects=["Customers", "Data protection regulator"],
     ),
     "lost_laptop": dict(
         title="Lost or stolen laptop",
@@ -157,7 +153,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.6.7", "A.7.9", "A.8.1", "A.8.24"],
         },
-        affects=["Staff"],
+        affects=["Jordan Example", "Morgan Example"],
     ),
     "leaver_access": dict(
         title="Former staff keep system access",
@@ -175,7 +171,7 @@ RISKS = {
             "soc2_tsc": ["CC6.2", "CC6.3"],
             "pci_dss_v4": ["8.2"],
         },
-        affects=["Customers", "Staff"],
+        affects=["Customers", "Jordan Example"],
     ),
     "unpatched_vulnerability": dict(
         title="Unpatched internet-facing vulnerability exploited",
@@ -211,8 +207,7 @@ RISKS = {
             "soc2_tsc": ["C1.1"],
             "pci_dss_v4": ["3.2", "3.5", "4.2", "6.4", "11.6", "12.5"],
         },
-        affects=["Customers", "Regulators"],
-        vendors=["Example Payments"],
+        affects=["Customers", "Data protection regulator", "Example Payments"],
     ),
     "supply_chain": dict(
         title="Malicious dependency enters the build pipeline",
@@ -261,7 +256,7 @@ RISKS = {
         due=None,
         owner="isms_owner",
         controls={"iso_27001_2022": ["A.5.29", "A.7.5", "A.7.11"]},
-        affects=["Staff"],
+        affects=["Jordan Example", "Morgan Example"],
     ),
     "denial_of_service": dict(
         title="Denial of service on the customer portal",
@@ -278,8 +273,7 @@ RISKS = {
             "iso_27001_2022": ["A.5.19", "A.8.6", "A.8.14", "A.8.20"],
             "soc2_tsc": ["A1.1"],
         },
-        affects=["Customers"],
-        vendors=["Example Hosting"],
+        affects=["Customers", "Example Hosting"],
     ),
     "insider_export": dict(
         title="Insider exports customer records",
@@ -296,7 +290,7 @@ RISKS = {
             "iso_27001_2022": ["A.5.3", "A.6.4", "A.8.12", "A.8.15", "A.8.16"],
             "soc2_tsc": ["CC6.7"],
         },
-        affects=["Customers", "Regulators"],
+        affects=["Customers", "Data protection regulator"],
     ),
     "supplier_breach": dict(
         title="Hosting supplier security breach",
@@ -314,8 +308,7 @@ RISKS = {
             "soc2_tsc": ["CC9.2"],
             "pci_dss_v4": ["12.8"],
         },
-        affects=["Customers", "Managed hosting provider"],
-        vendors=["Example Hosting"],
+        affects=["Customers", "Example Hosting"],
     ),
     "budget_reduction": dict(
         title="Security roadmap slips after a budget reduction",
@@ -329,7 +322,7 @@ RISKS = {
         due=30,
         owner="isms_owner",
         controls={"iso_27001_2022": ["A.5.1", "A.5.4"]},
-        affects=["Staff"],
+        affects=["Jordan Example", "Morgan Example"],
     ),
     "audit_nonconformity": dict(
         title="Certification audit raises a major nonconformity",
@@ -360,20 +353,14 @@ RISKS = {
         due=120,
         owner="isms_owner",
         controls={"iso_27001_2022": ["A.5.19", "A.5.22", "A.5.30"]},
-        affects=["Staff"],
-        vendors=["Example Identity Services"],
+        affects=["Jordan Example", "Morgan Example", "Example Identity Services"],
     ),
 }
 
 
 def seed_risks(seeder, assets, org_nodes):
     """Seed the register; returns the risks by key for stories."""
-    parties = {
-        name.name: party
-        for party, name in seeder.db.query(InterestedParty, InterestedPartyName)
-        .join(InterestedPartyName, InterestedPartyName.id == InterestedParty.name_id)
-        .filter(InterestedPartyName.name.like(seeder.prefix + " %"))
-    }
+    people = seed_people(seeder)
     risks = {}
     for key, spec in RISKS.items():
         owner = org_nodes[spec["owner"]] if spec["owner"] else None
@@ -408,16 +395,11 @@ def seed_risks(seeder, assets, org_nodes):
         for framework, refs in spec["controls"].items():
             seeder.link_risk_controls(risk, refs, framework)
         for name in spec["affects"]:
-            party = parties.get(seeder.label(name))
-            if party is not None:
-                seeder.ensure_link(
-                    RiskInterestedParty,
-                    {"risk_id": risk.id, "interested_party_id": party.id},
-                )
-        for name in spec.get("vendors", ()):
-            vendor = ensure_vendor(seeder, name)
-            seeder.ensure_link(
-                RiskInterestedParty, {"risk_id": risk.id, "vendor_id": vendor.id}
+            target = (
+                {"person_id": people[name].id}
+                if name in dict(PEOPLE)
+                else {"vendor_id": ensure_vendor(seeder, name).id}
             )
+            seeder.ensure_link(AffectedLink, {"risk_id": risk.id, **target})
         risks[key] = risk
     return risks

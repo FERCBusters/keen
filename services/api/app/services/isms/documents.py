@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import BinaryIO
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive as _utcnow
@@ -70,30 +70,67 @@ def _save_document_revision(db: Session, row: IsmsDocument, user: User) -> None:
     )
 
 
+def _folder_out(row: IsmsDocumentFolder, document_count: int = 0) -> dict:
+    return {
+        "id": str(row.id),
+        "name": row.name,
+        "parent_id": str(row.parent_id) if row.parent_id else None,
+        "document_count": document_count,
+    }
+
+
 def list_document_folders(*, user: User, db: Session):
+    counts: dict[uuid.UUID | None, int] = {
+        folder_id: count
+        for folder_id, count in db.query(
+            IsmsDocument.folder_id, func.count(IsmsDocument.id)
+        )
+        .filter(IsmsDocument.folder_id.isnot(None))
+        .group_by(IsmsDocument.folder_id)
+    }
     return [
-        {
-            "id": str(row.id),
-            "name": row.name,
-            "parent_id": str(row.parent_id) if row.parent_id else None,
-        }
+        _folder_out(row, counts.get(row.id, 0))
         for row in db.query(IsmsDocumentFolder).order_by(IsmsDocumentFolder.name).all()
     ]
+
+
+def _folder_name(
+    db: Session,
+    name: str,
+    parent: uuid.UUID | None,
+    folder_id: uuid.UUID | None = None,
+) -> str:
+    """The folder name, refused when blank or when a sibling already has it.
+
+    Called after validate_parent, whose lock serialises folder changes.
+    """
+    name = clean_text(
+        name, max_len=256, required=True, label="Folder name", single_line=True
+    )
+    sibling = db.query(IsmsDocumentFolder.id).filter(
+        func.lower(IsmsDocumentFolder.name) == name.lower(),
+        IsmsDocumentFolder.parent_id.is_(None)
+        if parent is None
+        else IsmsDocumentFolder.parent_id == parent,
+    )
+    if folder_id is not None:
+        sibling = sibling.filter(IsmsDocumentFolder.id != folder_id)
+    if sibling.first() is not None:
+        raise DomainError(
+            status_code=409, detail="A folder with that name is already here"
+        )
+    return name
 
 
 def create_document_folder(*, payload: DocumentFolderPayload, user: User, db: Session):
     parent = _document_folder(db, payload.parent_id)
     validate_parent(db, IsmsDocumentFolder, parent)
-    row = IsmsDocumentFolder(name=payload.name.strip(), parent_id=parent)
-    if not row.name:
-        raise DomainError(status_code=400, detail="Folder name is required")
+    row = IsmsDocumentFolder(
+        name=_folder_name(db, payload.name, parent), parent_id=parent
+    )
     db.add(row)
     db.commit()
-    return {
-        "id": str(row.id),
-        "name": row.name,
-        "parent_id": str(parent) if parent else None,
-    }
+    return _folder_out(row)
 
 
 def update_document_folder(
@@ -104,16 +141,11 @@ def update_document_folder(
         raise DomainError(status_code=404, detail="Folder not found")
     parent = _document_folder(db, payload.parent_id)
     validate_parent(db, IsmsDocumentFolder, parent, row.id)
-    row.name = payload.name.strip()
-    if not row.name:
-        raise DomainError(status_code=400, detail="Folder name is required")
+    row.name = _folder_name(db, payload.name, parent, row.id)
     row.parent_id = parent
     db.commit()
-    return {
-        "id": str(row.id),
-        "name": row.name,
-        "parent_id": str(parent) if parent else None,
-    }
+    count = db.query(IsmsDocument.id).filter(IsmsDocument.folder_id == row.id).count()
+    return _folder_out(row, count)
 
 
 def delete_document_folder(*, folder_id: uuid.UUID, user: User, db: Session):

@@ -39,8 +39,6 @@ PERMISSIONS = (
     "isms.manage",
     "pestle.read",
     "pestle.manage",
-    "interested_parties.read",
-    "interested_parties.manage",
     "audits.read",
     "audits.manage",
     "audits.admin",
@@ -89,8 +87,8 @@ ADMIN = Rule("admin")
 # by test_01 (documentation) and test_02 (WebSocket).
 OUTSIDE = Rule("outside")
 
-# risk.read and risk.manage extend to the ISMS, PESTLE(E) and interested-party
-# registers (SECURITY.md); audits.admin and audits.manage include audit reads.
+# risk.read and risk.manage extend to the ISMS and PESTLE(E) registers
+# (SECURITY.md); audits.admin and audits.manage include audit reads.
 EVENTS_READ = any_of("events.read")
 RISK_READ = any_of("risk.read", "risk.manage")
 RISK_MANAGE = any_of("risk.manage")
@@ -98,10 +96,6 @@ ISMS_READ = any_of("isms.read", "isms.manage", "risk.read", "risk.manage")
 ISMS_MANAGE = any_of("isms.manage", "risk.manage")
 PESTLE_READ = any_of("pestle.read", "pestle.manage", "risk.read", "risk.manage")
 PESTLE_MANAGE = any_of("pestle.manage", "risk.manage")
-PARTIES_READ = any_of(
-    "interested_parties.read", "interested_parties.manage", "risk.read", "risk.manage"
-)
-PARTIES_MANAGE = any_of("interested_parties.manage", "risk.manage")
 AUDITS_READ = any_of("audits.read", "audits.manage", "audits.admin")
 AUDITS_MANAGE = any_of("audits.manage", "audits.admin")
 AUDITS_ADMIN = any_of("audits.admin")
@@ -114,10 +108,20 @@ STORIES_MANAGE = any_of("stories.manage", "stories.admin")
 QUIZ_READ = any_of("quiz.read", "quiz.manage")
 QUIZ_MANAGE = any_of("quiz.manage")
 
+AFFECTED_RULE = (
+    "Naming a person, vendor or asset as affected needs ISMS read access, and "
+    "adding a person or vendor by name needs ISMS manage access; links the "
+    "record already holds can stay without either."
+)
+
 # Additional object rules. The matrix probe account owns nothing, so these
 # operations are checked with their permission gate only.
 OBJECT_RULES = {
     "GET /v1/risks/{risk_id}": "Members of the risk's owning organisation role can read it.",
+    "POST /v1/risks": AFFECTED_RULE,
+    "PATCH /v1/risks/{risk_id}": AFFECTED_RULE,
+    "POST /v1/pestle/items": AFFECTED_RULE,
+    "PATCH /v1/pestle/items/{item_id}": AFFECTED_RULE,
     "PATCH /v1/isms/org-nodes/{node_id}": (
         "Changing members of a role that owns risks needs risk.manage, and of a "
         "role a quiz is assigned to, quiz.manage."
@@ -191,7 +195,7 @@ OBJECT_RULES = {
     "GET /v1/isms/bookstack-sections/{section_id}/snapshot": (
         "Audit readers can also download snapshots sampled into an audit."
     ),
-    "GET /v1/statement-of-applicability": "Risk, PESTLE(E) and party sections follow their read permissions.",
+    "GET /v1/statement-of-applicability": "Risk and PESTLE(E) sections follow their read permissions.",
     "GET /v1/stats/summary": "Evidence totals need events.read.",
     "GET /v1/stories/{story_id}": (
         "Each item is shown only when the account can read the referenced record; "
@@ -498,7 +502,6 @@ POLICY = {
     "GET /v1/controls/{control_id}/effectiveness-measures": ISMS_READ,
     "GET /v1/controls/{control_id}/evidence": EVENTS_READ,
     "GET /v1/controls/{control_id}/evidence/summary": EVENTS_READ,
-    "GET /v1/controls/{control_id}/interested-parties": PARTIES_READ,
     "GET /v1/controls/{control_id}/isms": ISMS_READ,
     "GET /v1/isms/control-requirements": ISMS_READ,
     "GET /v1/controls/{control_id}/risks": RISK_READ,
@@ -662,27 +665,8 @@ POLICY = {
     "DELETE /v1/isms/vendors/{vendor_id}": ISMS_MANAGE,
     "PATCH /v1/isms/vendors/{vendor_id}": ISMS_MANAGE,
     "GET /v1/isms/{entity_type}/{entity_id}/changelog": ISMS_READ,
-    # --- Interested parties --------------------------------------------------------
-    "GET /v1/interested-parties": PARTIES_READ,
-    "POST /v1/interested-parties": PARTIES_MANAGE,
-    "GET /v1/interested-parties/meta": SIGNED_IN,
-    "GET /v1/interested-parties/names": PARTIES_READ,
-    "POST /v1/interested-parties/names": PARTIES_MANAGE,
-    "DELETE /v1/interested-parties/names/{name_id}": PARTIES_MANAGE,
-    "PATCH /v1/interested-parties/names/{name_id}": PARTIES_MANAGE,
-    "GET /v1/interested-parties/natures": PARTIES_READ,
-    "POST /v1/interested-parties/natures": PARTIES_MANAGE,
-    "DELETE /v1/interested-parties/natures/{nature_id}": PARTIES_MANAGE,
-    "PATCH /v1/interested-parties/natures/{nature_id}": PARTIES_MANAGE,
-    "GET /v1/interested-parties/visualisations": PARTIES_READ,
-    "DELETE /v1/interested-parties/{party_id}": PARTIES_MANAGE,
-    "GET /v1/interested-parties/{party_id}": PARTIES_READ,
-    "PATCH /v1/interested-parties/{party_id}": PARTIES_MANAGE,
-    "GET /v1/interested-parties/{party_id}/changelog": PARTIES_READ,
-    "GET /v1/interested-parties/{party_id}/communications": PARTIES_READ,
-    "PATCH /v1/interested-parties/{party_id}/communications": PARTIES_MANAGE,
-    "GET /v1/interested-parties/{party_id}/controls": PARTIES_READ,
-    "PATCH /v1/interested-parties/{party_id}/controls": PARTIES_MANAGE,
+    # --- Who and what risks and PESTLE(E) factors affect ---------------------------
+    "GET /v1/affected/options": ISMS_READ,
     # --- PESTLE(E) -----------------------------------------------------------------
     "GET /v1/pestle/business-processes": PESTLE_READ,
     "POST /v1/pestle/business-processes": PESTLE_MANAGE,
@@ -735,7 +719,6 @@ POLICY = {
     "DELETE /v1/risks/subcategories/{subcategory_id}": RISK_MANAGE,
     "PATCH /v1/risks/subcategories/{subcategory_id}": RISK_MANAGE,
     "GET /v1/risks/users": RISK_MANAGE,
-    "GET /v1/risks/parties": RISK_MANAGE,
     "DELETE /v1/risks/{risk_id}": RISK_MANAGE,
     "GET /v1/risks/{risk_id}": RISK_READ,
     "PATCH /v1/risks/{risk_id}": RISK_MANAGE,

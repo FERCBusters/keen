@@ -6,10 +6,13 @@ clause views all have something to show.
 """
 
 from app.db.models import (
+    AffectedLink,
     PestleBusinessProcessRelevance,
     PestleClauseRelevance,
     PestleItem,
+    RiskAsset,
 )
+from demo_catalogue import PEOPLE, ensure_vendor, seed_people
 
 # (type, lens, issue, rationale, overall relevance,
 #  {business process: relevance}, {clause: relevance})
@@ -206,8 +209,63 @@ ITEMS = (
 )
 
 
+# Who and what each factor affects: people and third parties by name, assets
+# by their seeded name.
+AFFECTS = {
+    "Government buyers require Cyber Essentials Plus for new contracts.": (
+        "Customers",
+    ),
+    "Supplier price rises pressure tooling and monitoring coverage.": (
+        "Example Hosting",
+    ),
+    "Customers expect clear privacy notices and rapid incident communication.": (
+        "Customers",
+        "Data protection regulator",
+        "Casey Example",
+    ),
+    "Hybrid working increases the use of home networks and shared spaces.": (
+        "Jordan Example",
+        "Morgan Example",
+        "asset:Staff Laptops",
+    ),
+    "Cloud platform changes introduce configuration drift risk.": (
+        "Example Hosting",
+        "Sam Example",
+    ),
+    "Retention and breach-notification obligations require reliable records.": (
+        "Data protection regulator",
+        "Casey Example",
+    ),
+    "Customer contracts for card-handling services must state PCI DSS responsibilities.": (
+        "Customers",
+        "Example Payments",
+    ),
+    "Proposed cyber resilience legislation extends incident reporting to managed service providers.": (
+        "Example Hosting",
+    ),
+    "Employee monitoring must stay proportionate and transparent.": (
+        "Jordan Example",
+        "Morgan Example",
+    ),
+}
+
+
+def _affected_target(seeder, people, name):
+    if name.startswith("asset:"):
+        asset = (
+            seeder.db.query(RiskAsset)
+            .filter_by(name=seeder.label(name.removeprefix("asset:")))
+            .first()
+        )
+        return {"asset_id": asset.id} if asset else None
+    if name in dict(PEOPLE):
+        return {"person_id": people[name].id}
+    return {"vendor_id": ensure_vendor(seeder, name).id}
+
+
 def seed_pestle(seeder, processes):
     levels = seeder.relevance_levels
+    people = seed_people(seeder)
     for typ, lens, item, rationale, overall, process_links, clause_links in ITEMS:
         row = seeder.upsert(
             PestleItem,
@@ -235,3 +293,7 @@ def seed_pestle(seeder, processes):
                 {"pestle_item_id": row.id, "clause_id": clause.id},
                 {"relevance_id": levels[relevance].id},
             )
+        for name in AFFECTS.get(item, ()):
+            target = _affected_target(seeder, people, name)
+            if target:
+                seeder.ensure_link(AffectedLink, {"pestle_item_id": row.id, **target})

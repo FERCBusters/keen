@@ -22,7 +22,7 @@ function risk(overrides = {}) {
     register_residual_likelihood: 2,
     register_residual_impact: 3,
     note: 'Review quarterly',
-    interested_parties: [
+    affected: [
       {
         kind: 'person',
         id: 'p1',
@@ -155,7 +155,7 @@ test('risk details render scores, types, controls and mitigator context as text'
   // The kind badge, then one badge per security property.
   assert.equal(ui.el('riskTypes').querySelectorAll('.badge').length, 3);
   assert.match(ui.el('riskTypes').textContent, /CIA.*Confidentiality.*<b>Integrity<\/b>/s);
-  // Affected parties link only to paths inside Keen; other hrefs are plain badges.
+  // Who a risk affects links only to paths inside Keen; other hrefs are plain badges.
   const parties = ui.el('riskParties');
   assert.equal(parties.querySelector('b'), null);
   assert.equal(
@@ -196,11 +196,11 @@ test('risk details render scores, types, controls and mitigator context as text'
   assert.match(swot.textContent, /Explore in SWOT analysis \(1\)/);
 });
 
-test('affected parties never link to another host, whatever path they name', async (t) => {
-  const party = (id, href) => ({ kind: 'group', id, label: 'Party ' + id, href });
+test('records a risk affects never link to another host, whatever path they name', async (t) => {
+  const party = (id, href) => ({ kind: 'vendor', id, label: 'Party ' + id, href });
   const { ui } = await riskPage(t, {
     risk: risk({
-      interested_parties: [
+      affected: [
         // Its dot segments resolve to "//evil.example/phish" once the framework is added.
         party('dots', '/.//evil.example/phish'),
         party('encoded', '/%2e//evil.example/phish'),
@@ -215,7 +215,7 @@ test('affected parties never link to another host, whatever path they name', asy
   const parties = ui.el('riskParties');
   assert.deepEqual(
     [...parties.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
-    [['Party local', '/isms.html?tab=people&framework=A']],
+    [['Vendor / 3rd party: Party local', '/isms.html?tab=people&framework=A']],
   );
   assert.equal(parties.querySelectorAll('span.badge').length, 6);
 });
@@ -346,8 +346,8 @@ test('risk managers delete a risk after confirming it and return to the register
   assert.equal(asked[0].danger, true);
   assert.equal(
     asked[0].message,
-    'Delete “<img src=x onerror=alert(1)>Payroll DB - Ransomware”? Its links to controls, ' +
-      'interested parties and posture checks are removed with it.',
+    'Delete “<img src=x onerror=alert(1)>Payroll DB - Ransomware”? Its links to controls and ' +
+      'posture checks, and to the people, vendors / 3rd parties and assets it affects, are removed with it.',
   );
 
   const refused = await riskPage(t, { deleteFail: true, globals: { location } });

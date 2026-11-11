@@ -1195,192 +1195,235 @@ def test_a_general_risk_has_a_title_and_no_cia_associations(reg):
     assert changelog["items"][0]["entity_title"] == "Payroll data leaves the building"
 
 
-def test_a_risk_names_the_parties_it_affects(reg):
-    from app.db.models import (
-        InterestedParty,
-        InterestedPartyName,
-        InterestedPartyNature,
-        IsmsPerson,
-        IsmsVendor,
-    )
+def _directory(db):
+    from app.db.models import IsmsPerson, IsmsVendor
 
-    db = reg.db
-    name = InterestedPartyName(name="Customers")
-    nature = InterestedPartyNature(name="External")
-    db.add_all([name, nature])
-    db.flush()
-    party = InterestedParty(name_id=name.id, nature_id=nature.id)
     person = IsmsPerson(name="Dana", position="DPO", email="dana@example.test")
     vendor = IsmsVendor(
         name="Cloud host",
         contact="support@cloud.example",
         website="https://cloud.example",
     )
-    db.add_all([party, person, vendor])
+    regulator = IsmsVendor(
+        name="Privacy Commissioner",
+        description="Regulator   for personal data, told of notifiable breaches "
+        + "within thirty days of the organisation becoming aware of them.",
+    )
+    category = RiskCategory(name="Data")
+    db.add_all([person, vendor, regulator, category])
+    db.flush()
+    subcategory = RiskAssetSubcategory(category_id=category.id, name="Databases")
+    db.add(subcategory)
+    db.flush()
+    asset = RiskAsset(
+        name="Customer database", category_id=category.id, subcategory_id=subcategory.id
+    )
+    db.add(asset)
     db.commit()
+    return SimpleNamespace(
+        person=person, vendor=vendor, regulator=regulator, asset=asset
+    )
+
+
+def test_a_risk_names_the_people_third_parties_and_assets_it_affects(reg):
+    from app.db.models import IsmsPerson, IsmsVendor
+
+    db = reg.db
+    rows = _directory(db)
 
     created = _create(
         reg,
-        interested_parties=[
-            {"interested_party_id": str(party.id)},
-            {"person_id": str(person.id)},
-            {"vendor_id": str(vendor.id)},
-            {"vendor_id": str(vendor.id)},  # repeated references collapse
-            # A party that does not exist yet is created along the way, and a
-            # name with a nature that already exists is reused.
-            {"name": "Regulator", "nature": "External"},
-            {"name": "Customers", "nature": "external"},
+        affected=[
+            {"person_id": str(rows.person.id)},
+            {"vendor_id": str(rows.vendor.id)},
+            {"vendor_id": str(rows.vendor.id)},  # repeated references collapse
+            {"asset_id": str(rows.asset.id)},
+            {"vendor_id": str(rows.regulator.id)},
+            # A third party or person not yet recorded is added by name, and a
+            # name already recorded is reused whatever its case.
+            {"new_vendor": "  Customers  "},
+            {"new_vendor": "cloud HOST"},
+            {"new_person": "Sam"},
+            {"new_person": "dana"},
         ],
     )
-    parties = created["interested_parties"]
-    # Labels carry a position or website, never an email address or contact.
-    assert [(p["kind"], p["label"], p["detail"]) for p in parties] == [
-        ("interested_party", "Customers", "External"),
+    affected = created["affected"]
+    # Details carry a position, description or website, never an email
+    # address or contact; long descriptions are shortened.
+    assert [(a["kind"], a["label"], a["detail"]) for a in affected] == [
         ("person", "Dana", "DPO"),
         ("vendor", "Cloud host", "https://cloud.example"),
-        ("interested_party", "Regulator", "External"),
+        ("asset", "Customer database", "Data › Databases"),
+        (
+            "vendor",
+            "Privacy Commissioner",
+            "Regulator for personal data, told of notifiable breaches within thirty days of…",
+        ),
+        ("vendor", "Customers", ""),
+        ("person", "Sam", ""),
     ]
-    assert "dana@example.test" not in str(parties)
-    assert "support@cloud.example" not in str(parties)
-    assert parties[0]["id"] == str(party.id)
-    assert parties[0]["href"] == f"/interested_party.html?id={party.id}"
-    # The new interested party is a first-class record in the framework.
-    listed = reg.read("GET", "/v1/interested-parties", params={"framework": "A"})
-    assert sorted(p["name"]["name"] for p in listed["items"]) == [
-        "Customers",
-        "Regulator",
+    assert "dana@example.test" not in str(affected)
+    assert "support@cloud.example" not in str(affected)
+    assert [a["kind_label"] for a in affected[:3]] == [
+        "Person",
+        "Vendor / 3rd party",
+        "Asset",
     ]
-    regulator = next(p for p in listed["items"] if p["name"]["name"] == "Regulator")
-    assert regulator["id"] == parties[3]["id"]
-    # The change history names the parties, and a later edit replaces them.
+    assert [a["href"] for a in affected[:3]] == [
+        f"/person.html?id={rows.person.id}",
+        f"/vendor.html?id={rows.vendor.id}",
+        f"/isms-asset.html?id={rows.asset.id}",
+    ]
+    # Records added by name are ordinary register entries.
+    assert db.query(IsmsVendor).filter_by(name="Customers").one().description == ""
+    sam = db.query(IsmsPerson).filter_by(name="Sam").one()
+    assert (sam.user_id, sam.org_node_id) == (None, None)
+    assert db.query(IsmsPerson).count() == 2
+    # The change history names the records, and a later edit replaces them.
     changelog = reg.read("GET", f"/v1/risks/{created['id']}/changelog")
-    created_state = changelog["items"][0]
-    assert created_state["action"] == "created"
+    assert changelog["items"][0]["action"] == "created"
     updated = reg.manage(
         "PATCH",
         f"/v1/risks/{created['id']}",
-        {"framework": "A", "interested_parties": [{"person_id": str(person.id)}]},
+        {"framework": "A", "affected": [{"person_id": str(rows.person.id)}]},
     )
-    assert [p["kind"] for p in updated["interested_parties"]] == ["person"]
+    assert [a["kind"] for a in updated["affected"]] == ["person"]
     changelog = reg.read("GET", f"/v1/risks/{created['id']}/changelog")
     change = next(
-        c
-        for c in changelog["items"][0]["changes"]
-        if c["field"] == "interested_parties"
+        c for c in changelog["items"][0]["changes"] if c["field"] == "affected"
     )
-    assert change["label"] == "Affected parties"
+    assert change["label"] == "Affected"
     assert change["after"] == ["Dana (person)"]
-    # An edit that does not mention parties leaves them alone.
+    # An edit that does not mention them leaves them alone.
     reg.manage("PATCH", f"/v1/risks/{created['id']}", {"framework": "A", "note": "n"})
     assert [
-        p["kind"]
-        for p in reg.read("GET", f"/v1/risks/{created['id']}")["interested_parties"]
+        a["kind"] for a in reg.read("GET", f"/v1/risks/{created['id']}")["affected"]
     ] == ["person"]
-    # Deleting the person removes the link but not the risk.
-    db.delete(db.get(IsmsPerson, person.id))
-    db.commit()
-    assert reg.read("GET", f"/v1/risks/{created['id']}")["interested_parties"] == []
+    # Risk readers see who a risk affects in the list too.
+    listed = reg.read("GET", "/v1/risks", params={"framework": "A"})
+    assert [a["label"] for a in listed["items"][0]["affected"]] == ["Dana"]
 
 
 @pytest.mark.parametrize(
-    "party,detail",
+    "ref,detail",
     [
-        ({}, "Each affected party names one interested party"),
-        ({"person_id": str(uuid.uuid4()), "name": "x", "nature": "y"}, "names one"),
-        ({"interested_party_id": str(uuid.uuid4())}, "Unknown interested party"),
+        ({}, "Each affected record names one person, vendor or asset"),
+        ({"person_id": str(uuid.uuid4()), "new_vendor": "x"}, "names one"),
         ({"person_id": str(uuid.uuid4())}, "Unknown person"),
-        ({"vendor_id": str(uuid.uuid4())}, "Unknown vendor"),
-        ({"name": "Regulator"}, "A new interested party needs a nature"),
+        ({"vendor_id": str(uuid.uuid4())}, "Unknown vendor / 3rd party"),
+        ({"asset_id": str(uuid.uuid4())}, "Unknown asset"),
+        ({"new_person": "   "}, "Person name is required"),
+        ({"new_vendor": ""}, "Vendor name is required"),
     ],
 )
-def test_affected_parties_are_checked(reg, party, detail):
-    response = reg.manage(
-        "POST", "/v1/risks", _risk_body(interested_parties=[party]), status=400
-    )
+def test_affected_records_are_checked(reg, ref, detail):
+    from app.db.models import IsmsPerson, IsmsVendor
+
+    response = reg.manage("POST", "/v1/risks", _risk_body(affected=[ref]), status=400)
     assert detail in response["detail"]
     # Nothing was created along the way.
     assert reg.read("GET", "/v1/risks", params={"framework": "A"})["items"] == []
-    assert (
-        reg.read("GET", "/v1/interested-parties", params={"framework": "A"})["items"]
-        == []
-    )
+    assert reg.db.query(IsmsPerson).count() == reg.db.query(IsmsVendor).count() == 0
 
 
-def test_the_wizard_lists_who_a_risk_can_affect(reg):
-    from app.db.models import (
-        InterestedParty,
-        InterestedPartyName,
-        InterestedPartyNature,
-        IsmsPerson,
-        IsmsVendor,
-    )
+def test_a_risk_names_at_most_a_hundred_records(reg):
+    rows = _directory(reg.db)
+    refs = [{"person_id": str(rows.person.id)}] * 101
+    reg.manage("POST", "/v1/risks", _risk_body(affected=refs), status=422)
 
-    db = reg.db
-    name = InterestedPartyName(name="Customers")
-    other = InterestedPartyName(name="Staff")
-    nature = InterestedPartyNature(name="External")
-    internal = InterestedPartyNature(name="Internal")
-    db.add_all([name, other, nature, internal])
-    db.flush()
-    db.add_all(
-        [
-            InterestedParty(name_id=name.id, nature_id=nature.id),
-            InterestedParty(name_id=other.id, nature_id=internal.id),
-            IsmsPerson(name="Dana", position="DPO", email="dana@example.test"),
-            IsmsVendor(name="Cloud host", contact="support@cloud.example"),
-        ]
-    )
-    db.commit()
-    options = reg.manage("GET", "/v1/risks/parties", params={"framework": "A"})
-    # Interested parties are organisation-wide, so every one is offered.
-    assert [(p["label"], p["detail"]) for p in options["interested_parties"]] == [
-        ("Customers", "External"),
-        ("Staff", "Internal"),
-    ]
+
+def test_the_wizard_lists_who_and_what_a_risk_can_affect(reg):
+    rows = _directory(reg.db)
+    options = reg.manage("GET", "/v1/affected/options")
     # Names only: no addresses or contacts leave the directory through here.
     assert options["people"] == [
         {
-            "id": options["people"][0]["id"],
+            "id": str(rows.person.id),
             "kind": "person",
             "label": "Dana",
             "detail": "DPO",
         }
     ]
-    assert options["vendors"][0]["label"] == "Cloud host"
+    assert [v["label"] for v in options["vendors"]] == [
+        "Cloud host",
+        "Privacy Commissioner",
+    ]
     assert "contact" not in options["vendors"][0]
-    assert options["natures"] == ["External", "Internal"]
-    narrowed = reg.manage(
-        "GET", "/v1/risks/parties", params={"framework": "A", "q": "dan"}
-    )
-    assert (
-        narrowed["interested_parties"],
-        [p["label"] for p in narrowed["people"]],
-    ) == (
-        [],
-        ["Dana"],
-    )
-    # Reading risks is not enough to browse the directory.
-    reg.read("GET", "/v1/risks/parties", params={"framework": "A"}, status=403)
+    assert options["assets"] == [
+        {
+            "id": str(rows.asset.id),
+            "kind": "asset",
+            "label": "Customer database",
+            "detail": "Data › Databases",
+        }
+    ]
+    assert options["can_add"] == {"person": True, "vendor": True}
+    # The search reads names and the detail shown beside them.
+    narrowed = reg.manage("GET", "/v1/affected/options", params={"q": "REGULATOR"})
+    assert (narrowed["people"], narrowed["assets"]) == ([], [])
+    assert [v["label"] for v in narrowed["vendors"]] == ["Privacy Commissioner"]
+    # Risk readers read the registers, but only managers add to them.
+    read = reg.read("GET", "/v1/affected/options")
+    assert read["can_add"] == {"person": False, "vendor": False}
+    assert len(read["people"]) == 1
+    # Without ISMS read access the registers are not listed.
+    other = reg.keen.user("pestle.manage", "events.read")
+    reg.as_user(other)("GET", "/v1/affected/options", status=403)
 
 
-# --- Bounds the schema does not already enforce ------------------------------------
-
-
-def test_party_searches_need_a_bounded_query_and_a_framework(reg, monkeypatch):
-    """A search term over 256 characters is refused; an empty framework is refused."""
+def test_affected_searches_need_a_bounded_query(reg):
+    """A search term over 256 characters is refused."""
     too_long = reg.manage(
-        "GET",
-        "/v1/risks/parties",
-        params={"framework": "A", "q": "x" * 257},
-        status=400,
+        "GET", "/v1/affected/options", params={"q": "x" * 257}, status=400
     )
     assert too_long["detail"] == "q is too long"
 
-    from app.core.config import settings
 
-    monkeypatch.setattr(settings, "default_framework_slug", "")
-    blank = reg.manage("GET", "/v1/risks/parties", params={"framework": ""}, status=400)
-    assert blank["detail"] == "framework is required"
+def test_switched_off_registers_are_neither_listed_nor_named(reg):
+    from app.services import features
+
+    rows = _directory(reg.db)
+    created = _create(reg, affected=[{"vendor_id": str(rows.vendor.id)}])
+    features.update(reg.db, reg.manager, 0, {"vendors": False, "people": False})
+    options = reg.manage("GET", "/v1/affected/options")
+    assert (options["people"], options["vendors"]) == ([], [])
+    assert options["can_add"] == {"person": False, "vendor": False}
+    assert len(options["assets"]) == 2
+    refused = reg.manage(
+        "POST",
+        "/v1/risks",
+        _risk_body(affected=[{"new_person": "Sam"}]),
+        status=400,
+    )
+    assert refused["detail"] == "Person records are disabled by an administrator"
+    refused = reg.manage(
+        "PATCH",
+        f"/v1/risks/{created['id']}",
+        {
+            "framework": "A",
+            "affected": [
+                {"vendor_id": str(rows.vendor.id)},
+                {"vendor_id": str(rows.regulator.id)},
+            ],
+        },
+        status=400,
+    )
+    assert refused["detail"] == (
+        "Vendor / 3rd party records are disabled by an administrator"
+    )
+    # A link the risk already holds stays.
+    kept = reg.manage(
+        "PATCH",
+        f"/v1/risks/{created['id']}",
+        {
+            "framework": "A",
+            "affected": [
+                {"vendor_id": str(rows.vendor.id)},
+                {"asset_id": str(rows.asset.id)},
+            ],
+        },
+    )
+    assert [a["label"] for a in kept["affected"]] == ["Cloud host", "Customer database"]
 
 
 # --- Licences and ownership on assets -------------------------------------------------
@@ -1453,50 +1496,30 @@ def test_asset_edits_move_ownership_between_organisational_nodes(reg):
     assert reg.db.get(RiskAsset, uuid.UUID(asset["id"])).owner_org_node_id == other.id
 
 
-# --- Parties whose records are gone ---------------------------------------------------
+# --- Records that are gone ------------------------------------------------------------
 
 
-def test_affected_parties_whose_records_are_gone_are_left_out(reg):
-    """A link to a deleted vendor or interested party is omitted from the risk."""
-    from app.db.models import (
-        InterestedParty,
-        InterestedPartyName,
-        InterestedPartyNature,
-        IsmsVendor,
-        RiskInterestedParty,
-    )
+def test_links_go_with_the_records_they_name(reg):
+    """Deleting a person, vendor or asset removes its links; the risk remains."""
+    from app.db.models import AffectedLink, IsmsPerson, IsmsVendor
 
     db = reg.db
-    name = InterestedPartyName(name="Customers")
-    nature = InterestedPartyNature(name="External")
-    db.add_all([name, nature])
-    db.flush()
-    party = InterestedParty(name_id=name.id, nature_id=nature.id)
-    vendor = IsmsVendor(name="Cloud host", website="https://cloud.example")
-    db.add_all([party, vendor])
-    db.commit()
+    if db.get_bind().dialect.name != "postgresql":
+        pytest.skip("The database removes the links (ON DELETE CASCADE)")
+    rows = _directory(db)
     created = _create(
         reg,
-        interested_parties=[
-            {"interested_party_id": str(party.id)},
-            {"vendor_id": str(vendor.id)},
+        affected=[
+            {"person_id": str(rows.person.id)},
+            {"vendor_id": str(rows.vendor.id)},
         ],
     )
-    assert [p["kind"] for p in created["interested_parties"]] == [
-        "interested_party",
-        "vendor",
-    ]
-
-    db.delete(db.get(IsmsVendor, vendor.id))
-    db.delete(db.get(InterestedParty, party.id))
+    db.delete(db.get(IsmsVendor, rows.vendor.id))
+    db.delete(db.get(IsmsPerson, rows.person.id))
     db.commit()
     db.expire_all()
-
-    assert reg.read("GET", f"/v1/risks/{created['id']}")["interested_parties"] == []
-    # Whatever the database did with the link rows, the risk itself remains.
-    assert db.query(RiskInterestedParty).filter_by(
-        risk_id=uuid.UUID(created["id"])
-    ).count() in (0, 2)
+    assert reg.read("GET", f"/v1/risks/{created['id']}")["affected"] == []
+    assert db.query(AffectedLink).count() == 0
     assert db.get(Risk, uuid.UUID(created["id"])) is not None
 
 

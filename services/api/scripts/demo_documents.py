@@ -864,7 +864,7 @@ DOCUMENTS = {
             ),
             (
                 "Context",
-                "The scope reflects the PESTLE(E) analysis and the needs of customers, staff, regulators and suppliers recorded as interested parties.",
+                "The scope reflects the PESTLE(E) analysis and the needs of the customers, staff, regulators and suppliers each factor names as affected.",
             ),
         ],
     ),

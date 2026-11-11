@@ -217,14 +217,9 @@ const chips = (ui) =>
 
 // --- Documents ---------------------------------------------------------------------
 
-test('a written document is saved with its tags, a new folder and its links', async (t) => {
+test('a written document is saved with its tags, the open folder and its links', async (t) => {
   const ui = await isms(t, 'documents', {
-    respond: (method, u, body) => {
-      if (u.pathname === '/api/v1/isms/document-folders') {
-        ui.folders.push({ id: 'f1', name: body.name, parent_id: null });
-        return { id: 'f1', name: body.name };
-      }
-    },
+    folders: [{ id: 'f1', name: 'Policies', parent_id: null, document_count: 0 }],
   });
   await settle(() => ui.el('documentsRows').textContent.includes('Security policy'));
   // A document's control opens on the control's Requirements tab.
@@ -232,8 +227,12 @@ test('a written document is saved with its tags, a new folder and its links', as
     ui.el('documentsRows').querySelector('a.badge').getAttribute('href'),
     '/control.html?id=c1&framework=A',
   );
+  // A new document is filed in the folder the tree has open.
+  ui.click('[data-folder-key="f1"]');
+  await settle(() => ui.el('documentsRows').textContent.includes('No documents are filed here.'));
   await ui.add('document', 'documentFormCard');
   assert.equal(ui.el('docWritePane').hidden, false);
+  assert.equal(ui.el('docFolder').value, 'f1');
 
   ui.el('docTitle').value = 'Access policy';
   ui.el('docTags').value = 'Access';
@@ -249,12 +248,6 @@ test('a written document is saved with its tags, a new folder and its links', as
   assert.deepEqual(chips(ui), ['Access', 'Security']);
   assert.equal(ui.el('docTagChoices').textContent.trim(), '');
 
-  ui.el('docNewFolder').value = 'Policies';
-  ui.el('docNewFolder').dispatchEvent(new ui.window.KeyboardEvent('keydown', { key: 'Enter' }));
-  await ui.statusIs('Folder created and selected.');
-  assert.equal(ui.el('docFolder').value, 'f1');
-  assert.equal(ui.el('docNewFolder').value, '');
-
   ui.el('docContent').value = '<p>Who may access what</p>';
   ui.select('docControls', 'c1');
   ui.select('docClauses', 'k1');
@@ -262,11 +255,6 @@ test('a written document is saved with its tags, a new folder and its links', as
   await ui.statusIs('Document created');
 
   assert.deepEqual(ui.writes(), [
-    {
-      method: 'POST',
-      url: '/api/v1/isms/document-folders',
-      body: { name: 'Policies', parent_id: null },
-    },
     {
       method: 'POST',
       url: '/api/v1/isms/documents?framework=A',

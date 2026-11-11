@@ -80,6 +80,12 @@
                   <label class="form-label" for="pestleRationale">Rationale for relevance</label>
                   <textarea id="pestleRationale" class="form-control" rows="4" maxlength="20000" placeholder="Explain why this item is relevant, or why it is not applicable."></textarea>
                 </div>
+                <div class="col-12">
+                  <div class="form-label" id="pestleAffectedLabel">Who and what it affects</div>
+                  <div class="form-text mt-0 mb-2">The people, vendors / 3rd parties (customers, suppliers or a regulator, say) and assets this factor affects.</div>
+                  <div id="pestleAffectedPicker" role="group" aria-labelledby="pestleAffectedLabel" hidden></div>
+                  <div id="pestleAffected" class="d-flex flex-wrap gap-1"><span class="small-muted">-</span></div>
+                </div>
                 <div class="col-12 d-flex flex-wrap gap-2 align-items-center justify-content-between">
                   <button id="deletePestleItem" class="btn btn-outline-danger" type="button" style="display:none;">Delete item</button>
                   <div class="ms-auto d-flex gap-2">

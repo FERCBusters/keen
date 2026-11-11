@@ -4,15 +4,14 @@ Saving a record's framework links in the application keeps one diary entry per
 record, and the entry's mappings count the linked controls towards control
 coverage. The seed writes links directly, so this step records each entry as
 the application does: for documents, SWOT items, objectives, assets,
-organisation chart nodes, meeting minutes, effectiveness measures, risks and
-interested parties alike.
+organisation chart nodes, meeting minutes, effectiveness measures and risks
+alike.
 """
 
 from datetime import timedelta
 
 from app.db.models import (
     Event,
-    InterestedParty,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsMeeting,
@@ -36,7 +35,6 @@ RECORDS = {
     "meeting": IsmsMeeting,
     "effectiveness_measure": IsmsEffectivenessMeasure,
     "risk": Risk,
-    "interested_party": InterestedParty,
 }
 
 

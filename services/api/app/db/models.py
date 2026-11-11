@@ -1206,11 +1206,11 @@ class Risk(Base):
     control_links = relationship(
         "RiskControlLink", back_populates="risk", cascade="all, delete-orphan"
     )
-    party_links = relationship(
-        "RiskInterestedParty",
+    affected_links = relationship(
+        "AffectedLink",
         back_populates="risk",
         cascade="all, delete-orphan",
-        order_by="RiskInterestedParty.created_at",
+        order_by="AffectedLink.created_at, AffectedLink.id",
     )
 
     __table_args__ = (
@@ -1257,27 +1257,27 @@ class RiskRegisterSettings(Base):
     high_max: Mapped[int] = mapped_column(Integer, nullable=False, default=16)
 
 
-class RiskInterestedParty(Base):
-    """Who a risk affects: an interested party, a person or a vendor.
+class AffectedLink(Base):
+    """Who or what a risk or a PESTLE(E) factor affects.
 
-    Exactly one of the three references is set; the row disappears with the
-    risk or with the party it names.
+    A link has exactly one owner (a risk or a PESTLE(E) item) and exactly one
+    target (a person, a vendor or an asset); it disappears with either.
     """
 
-    __tablename__ = "risk_interested_parties"
+    __tablename__ = "affected_links"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    risk_id: Mapped[uuid.UUID] = mapped_column(
+    risk_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("risks.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    interested_party_id: Mapped[uuid.UUID | None] = mapped_column(
+    pestle_item_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("interested_parties.id", ondelete="CASCADE"),
+        ForeignKey("pestle_items.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
@@ -1293,21 +1293,33 @@ class RiskInterestedParty(Base):
         nullable=True,
         index=True,
     )
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("risk_assets.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False
     )
 
-    risk = relationship("Risk", back_populates="party_links")
-    interested_party = relationship("InterestedParty")
+    risk = relationship("Risk", back_populates="affected_links")
+    pestle_item = relationship("PestleItem", back_populates="affected_links")
     person = relationship("IsmsPerson")
     vendor = relationship("IsmsVendor")
+    asset = relationship("RiskAsset")
 
     __table_args__ = (
         CheckConstraint(
-            "(CASE WHEN interested_party_id IS NULL THEN 0 ELSE 1 END)"
-            " + (CASE WHEN person_id IS NULL THEN 0 ELSE 1 END)"
-            " + (CASE WHEN vendor_id IS NULL THEN 0 ELSE 1 END) = 1",
-            name="ck_risk_interested_parties_one_party",
+            "(CASE WHEN risk_id IS NULL THEN 0 ELSE 1 END)"
+            " + (CASE WHEN pestle_item_id IS NULL THEN 0 ELSE 1 END) = 1",
+            name="ck_affected_links_one_owner",
+        ),
+        CheckConstraint(
+            "(CASE WHEN person_id IS NULL THEN 0 ELSE 1 END)"
+            " + (CASE WHEN vendor_id IS NULL THEN 0 ELSE 1 END)"
+            " + (CASE WHEN asset_id IS NULL THEN 0 ELSE 1 END) = 1",
+            name="ck_affected_links_one_target",
         ),
     )
 
@@ -1424,6 +1436,12 @@ class PestleItem(Base):
         back_populates="pestle_item",
         cascade="all, delete-orphan",
     )
+    affected_links = relationship(
+        "AffectedLink",
+        back_populates="pestle_item",
+        cascade="all, delete-orphan",
+        order_by="AffectedLink.created_at, AffectedLink.id",
+    )
 
 
 class PestleBusinessProcess(Base):
@@ -1515,177 +1533,6 @@ class PestleClauseRelevance(Base):
     pestle_item = relationship("PestleItem", back_populates="clause_links")
     clause = relationship("FrameworkClause")
     relevance = relationship("PestleRelevanceLevel")
-
-
-# -----------------------------------------------------------------------------
-# Interested parties risk/context assessment
-# -----------------------------------------------------------------------------
-
-
-class InterestedPartyName(Base):
-    __tablename__ = "interested_party_names"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(
-        String(256), unique=True, nullable=False, index=True
-    )
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    created_by = relationship("User", foreign_keys=[created_by_user_id])
-    parties = relationship("InterestedParty", back_populates="name")
-
-
-class InterestedPartyNature(Base):
-    __tablename__ = "interested_party_natures"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(
-        String(256), unique=True, nullable=False, index=True
-    )
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    created_by = relationship("User", foreign_keys=[created_by_user_id])
-    parties = relationship("InterestedParty", back_populates="nature")
-
-
-class InterestedParty(Base):
-    """A party with a stake in the organisation, such as customers or a
-    regulator. The record is organisation-wide; only its control links belong
-    to a framework."""
-
-    __tablename__ = "interested_parties"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("interested_party_names.id"),
-        nullable=False,
-        index=True,
-    )
-    nature_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("interested_party_natures.id"),
-        nullable=False,
-        index=True,
-    )
-    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    name = relationship("InterestedPartyName", back_populates="parties")
-    nature = relationship("InterestedPartyNature", back_populates="parties")
-    created_by = relationship("User", foreign_keys=[created_by_user_id])
-    control_links = relationship(
-        "InterestedPartyControlLink",
-        back_populates="interested_party",
-        cascade="all, delete-orphan",
-    )
-    communications = relationship(
-        "InterestedPartyCommunication",
-        back_populates="interested_party",
-        cascade="all, delete-orphan",
-        order_by="InterestedPartyCommunication.created_at, InterestedPartyCommunication.id",
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "name_id", "nature_id", name="uq_interested_parties_name_nature"
-        ),
-    )
-
-
-class InterestedPartyControlLink(Base):
-    __tablename__ = "interested_party_control_links"
-
-    interested_party_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("interested_parties.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    framework_slug: Mapped[str] = mapped_column(
-        String(64), primary_key=True, nullable=False, index=True
-    )
-    control_item_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("control_items.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
-
-    interested_party = relationship("InterestedParty", back_populates="control_links")
-    control = relationship("ControlItem")
-
-
-class InterestedPartyCommunication(Base):
-    __tablename__ = "interested_party_communications"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    interested_party_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("interested_parties.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    event: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    when: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    with_whom: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    methods: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    interested_party = relationship("InterestedParty", back_populates="communications")
-
-    __table_args__ = (
-        CheckConstraint(
-            "event in ('Business as Usual','Incident','Alert','Notifiable Event')",
-            name="ck_interested_party_communications_event",
-        ),
-        CheckConstraint(
-            "\"when\" in ('As Required','Upon Identification','Routine','Within 24 hours','Within 48 hours','Within 72 hours','Within a week','Within a month')",
-            name="ck_interested_party_communications_when",
-        ),
-        CheckConstraint(
-            "with_whom in ('Individual member','Individual staff member','Senior Supplier Point of Contact','Supplier Point of Contact','NCSC','ICO','Sender')",
-            name="ck_interested_party_communications_with_whom",
-        ),
-    )
 
 
 # -----------------------------------------------------------------------------

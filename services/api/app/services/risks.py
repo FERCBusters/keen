@@ -16,25 +16,26 @@ from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     ControlItem,
-    InterestedParty,
-    InterestedPartyName,
-    InterestedPartyNature,
     IsmsLicense,
     IsmsOrgNode,
     IsmsOrgNodeUser,
-    IsmsPerson,
-    IsmsVendor,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
-    RiskInterestedParty,
     RiskLibraryEntry,
     User,
 )
 from app.security.permissions import has_any_permission, has_permission
 from app.security.roles import is_active_user
+from app.services.affected import (
+    MAX_AFFECTED,
+    AffectedRef,
+    affected_list,
+    affected_loads,
+)
+from app.services.affected_links import replace_affected_links
 from app.services.context import ChangeContext
 from app.services.control_refs import (
     CLAUSE_ROW_TYPE,
@@ -48,7 +49,6 @@ from app.services.entity_changelog import (
 )
 from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
-from app.services.interested_parties import _lookup_by_id_or_name
 from app.services.isms.link_diary import (
     remove_entity_link_diary,
     sync_entity_link_diary,
@@ -125,17 +125,6 @@ class RiskMitigatorAnalysePayload(BaseModel):
     limit: int | None = Field(default=10, ge=1, le=25)
 
 
-class RiskPartyRef(BaseModel):
-    """One party a risk affects: an existing record, or a new interested party."""
-
-    interested_party_id: uuid.UUID | None = None
-    person_id: uuid.UUID | None = None
-    vendor_id: uuid.UUID | None = None
-    # A new interested party, created (or reused) by name and nature.
-    name: str | None = Field(default=None, max_length=256)
-    nature: str | None = Field(default=None, max_length=256)
-
-
 class RiskUpsertPayload(BaseModel):
     asset_id: uuid.UUID | None = None
     asset_name: str | None = Field(default=None, max_length=256)
@@ -145,7 +134,7 @@ class RiskUpsertPayload(BaseModel):
     subcategory_name: str | None = Field(default=None, max_length=128)
     title: str | None = Field(default=None, max_length=256)
     risk_types: list[str] | None = None
-    interested_parties: list[RiskPartyRef] | None = Field(default=None, max_length=100)
+    affected: list[AffectedRef] | None = Field(default=None, max_length=MAX_AFFECTED)
     treatment_strategy: str | None = Field(default=None, max_length=32)
     treatment_status: str | None = Field(default=None, max_length=32)
     treatment_plan: str | None = Field(default=None, max_length=20000)
@@ -608,163 +597,14 @@ def risk_display(risk: Risk) -> str:
     return asset_name or threat[:120] or "Risk"
 
 
-def _party_link_out(link: RiskInterestedParty) -> dict[str, Any] | None:
-    """Describe one affected party; None once the party record is gone."""
-
-    if link.interested_party_id:
-        party = link.interested_party
-        if party is None:
-            return None
-        return {
-            "kind": "interested_party",
-            "id": str(link.interested_party_id),
-            "label": party.name.name if party.name else "Interested party",
-            "detail": party.nature.name if party.nature else "",
-            "href": f"/interested_party.html?id={link.interested_party_id}",
-        }
-    if link.person_id:
-        person = link.person
-        if person is None:
-            return None
-        return {
-            "kind": "person",
-            "id": str(link.person_id),
-            "label": person.name,
-            "detail": person.position or "",
-            "href": "/isms.html?tab=people",
-        }
-    vendor = link.vendor
-    if vendor is None:
-        return None
-    return {
-        "kind": "vendor",
-        "id": str(link.vendor_id),
-        "label": vendor.name,
-        "detail": vendor.website or "",
-        "href": "/isms.html?tab=vendors",
-    }
-
-
-def _risk_parties_out(risk: Risk) -> list[dict[str, Any]]:
-    out = []
-    for link in list(risk.party_links or []):
-        item = _party_link_out(link)
-        if item is not None:
-            out.append(item)
-    return out
-
-
-def _replace_party_links(
-    db: Session,
-    risk: Risk,
-    refs: list[RiskPartyRef],
-    *,
-    framework: str,
-    user: User | None,
+def _replace_affected(
+    db: Session, risk: Risk, refs: list[AffectedRef], *, user: User
 ) -> None:
-    """Replace who the risk affects; a new interested party is created inline.
+    """Replace the people, vendors and assets the risk affects."""
 
-    Each reference names exactly one existing interested party, person or
-    vendor, or a new interested party by name and nature, which is reused when
-    one with that name and nature already exists in the framework.
-    """
-
-    links: list[RiskInterestedParty] = []
-    seen: set[tuple[str, uuid.UUID]] = set()
-
-    def add(kind: str, row_id: uuid.UUID) -> None:
-        if (kind, row_id) in seen:
-            return
-        seen.add((kind, row_id))
-        links.append(
-            RiskInterestedParty(
-                risk_id=risk.id, created_at=_utcnow(), **{f"{kind}_id": row_id}
-            )
-        )
-
-    for ref in refs:
-        chosen = [
-            value
-            for value in (ref.interested_party_id, ref.person_id, ref.vendor_id)
-            if value
-        ]
-        named = bool((ref.name or "").strip())
-        if len(chosen) + int(named) != 1:
-            raise DomainError(
-                400,
-                "Each affected party names one interested party, person or vendor,"
-                " or a new interested party by name and nature",
-            )
-        if ref.interested_party_id:
-            if not db.get(InterestedParty, ref.interested_party_id):
-                raise DomainError(400, "Unknown interested party")
-            add("interested_party", ref.interested_party_id)
-        elif ref.person_id:
-            if not db.get(IsmsPerson, ref.person_id):
-                raise DomainError(400, "Unknown person")
-            add("person", ref.person_id)
-        elif ref.vendor_id:
-            if not db.get(IsmsVendor, ref.vendor_id):
-                raise DomainError(400, "Unknown vendor")
-            add("vendor", ref.vendor_id)
-        else:
-            if not (ref.nature or "").strip():
-                raise DomainError(400, "A new interested party needs a nature")
-            name = _lookup_by_id_or_name(
-                db,
-                InterestedPartyName,
-                name=ref.name,
-                user=user,
-                label="name",
-            )
-            nature = _lookup_by_id_or_name(
-                db,
-                InterestedPartyNature,
-                name=ref.nature,
-                user=user,
-                label="nature",
-            )
-            party = (
-                db.query(InterestedParty)
-                .filter(
-                    InterestedParty.name_id == name.id,
-                    InterestedParty.nature_id == nature.id,
-                )
-                .one_or_none()
-            )
-            if party is None:
-                now = _utcnow()
-                party = InterestedParty(
-                    name_id=name.id,
-                    nature_id=nature.id,
-                    note="",
-                    created_by_user_id=getattr(user, "id", None),
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(party)
-                db.flush()
-                record_entity_changelog(
-                    db,
-                    entity_type="interested_party",
-                    entity_id=party.id,
-                    action="created",
-                    before=None,
-                    after={
-                        "id": str(party.id),
-                        "name": name.name,
-                        "nature": nature.name,
-                        "display": f"{name.name} ({nature.name})",
-                    },
-                    user=user,
-                    request_method="POST",
-                    request_path="/v1/risks",
-                )
-            add("interested_party", party.id)
-
-    for link in list(risk.party_links):
-        db.delete(link)
-    risk.party_links = links
+    risk.affected_links = replace_affected_links(
+        db, list(risk.affected_links), refs, owner={"risk_id": risk.id}, user=user
+    )
     db.flush()
 
 
@@ -808,7 +648,7 @@ def _risk_out(
         "display": risk_display(risk),
         "method": "cia" if risk.risk_types else "general",
         "risk_types": list(risk.risk_types or []),
-        "interested_parties": _risk_parties_out(risk),
+        "affected": affected_list(list(risk.affected_links)),
         "risk_owner": risk_owner_out(risk),
         "threat_summary": risk.threat_summary or "",
         "treatment_strategy": risk.treatment_strategy or "",
@@ -1324,69 +1164,6 @@ def list_risk_owner_users(*, user, db: Session):
     }
 
 
-def list_risk_party_options(*, framework: str, q: str = "", user, db: Session):
-    """Who a risk can affect, for the risk wizard: the organisation's interested
-    parties, people from the ISMS directory and vendors, by name only."""
-
-    fw = framework_parameter(framework)
-    needle = clean_text(q, max_len=256, required=False, label="q").lower()
-
-    def matches(*values: str | None) -> bool:
-        return not needle or any(needle in (v or "").lower() for v in values)
-
-    parties = (
-        db.query(InterestedParty)
-        .join(InterestedPartyName, InterestedPartyName.id == InterestedParty.name_id)
-        .order_by(func.lower(InterestedPartyName.name))
-        .limit(500)
-        .all()
-    )
-    people = db.query(IsmsPerson).order_by(func.lower(IsmsPerson.name)).limit(500).all()
-    vendors = (
-        db.query(IsmsVendor).order_by(func.lower(IsmsVendor.name)).limit(500).all()
-    )
-    natures = (
-        db.query(InterestedPartyNature)
-        .order_by(func.lower(InterestedPartyNature.name))
-        .limit(200)
-        .all()
-    )
-    return {
-        "framework": fw,
-        "interested_parties": [
-            {
-                "id": str(p.id),
-                "kind": "interested_party",
-                "label": p.name.name if p.name else "",
-                "detail": p.nature.name if p.nature else "",
-            }
-            for p in parties
-            if matches(p.name.name if p.name else "", p.nature.name if p.nature else "")
-        ],
-        "people": [
-            {
-                "id": str(person.id),
-                "kind": "person",
-                "label": person.name,
-                "detail": person.position or "",
-            }
-            for person in people
-            if matches(person.name, person.position)
-        ],
-        "vendors": [
-            {
-                "id": str(vendor.id),
-                "kind": "vendor",
-                "label": vendor.name,
-                "detail": "",
-            }
-            for vendor in vendors
-            if matches(vendor.name)
-        ],
-        "natures": [nature.name for nature in natures],
-    }
-
-
 def list_my_owned_risks(
     *,
     framework: str = settings.default_framework_slug,
@@ -1510,7 +1287,8 @@ def list_risks(
 
     total = int(qry.count() or 0)
     rows = (
-        qry.order_by(
+        qry.options(affected_loads(Risk.affected_links))
+        .order_by(
             Risk.risk_score.desc(),
             RiskAsset.name.asc(),
             Risk.threat_summary.asc(),
@@ -1679,10 +1457,8 @@ def insert_risk(
     db.add(risk)
     db.flush()
     fw = framework_parameter(payload.framework)
-    if payload.interested_parties is not None:
-        _replace_party_links(
-            db, risk, payload.interested_parties, framework=fw, user=user
-        )
+    if payload.affected is not None:
+        _replace_affected(db, risk, payload.affected, user=user)
     if payload.controls is not None:
         controls = (
             payload.controls + template_refs
@@ -1748,10 +1524,8 @@ def update_risk(*, risk_id: str, payload: RiskUpsertPayload, user, db: Session):
     fw = framework_parameter(payload.framework)
     before_risk = risk_changelog_state(db, risk.id, framework=fw)
     _apply_payload(db, risk, payload, is_create=False)
-    if payload.interested_parties is not None:
-        _replace_party_links(
-            db, risk, payload.interested_parties, framework=fw, user=user
-        )
+    if payload.affected is not None:
+        _replace_affected(db, risk, payload.affected, user=user)
     if payload.controls is not None:
         _replace_control_links(
             db, risk, framework=fw, control_values=payload.controls, user=user

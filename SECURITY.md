@@ -124,7 +124,7 @@ A control's requirement standing counts its linked policies and its measures' la
 
 ### Diary link entries
 
-Saving an ISMS record, a risk or an interested party with framework links records an automatic diary entry containing the record type, its linked control and clause references and a record-UUID link, within the authority of the already authorised save. A Risk Ledger import records the same entry for each risk it links to a control, as a Keen record outside the importing connection's scope, so the entry carries no connection identity. Entries about risks are visible to users who can read or manage risks, entries about interested parties to users who can read or manage interested parties or risks, and entries about other ISMS records to users with ISMS read access; administrators keep diary editing rights, and the entries never enter evidence retention purges.
+Saving an ISMS record or a risk with framework links records an automatic diary entry containing the record type, its linked control and clause references and a record-UUID link, within the authority of the already authorised save. A Risk Ledger import records the same entry for each risk it links to a control, as a Keen record outside the importing connection's scope, so the entry carries no connection identity. Entries about risks are visible to users who can read or manage risks, and entries about other ISMS records to users with ISMS read access; administrators keep diary editing rights, and the entries never enter evidence retention purges.
 
 Statistics (event totals, controls with evidence, and per-control evidence counts and latest-evidence dates) can count entries a reader cannot open, so any `events.read` user can infer that a record was linked to a control, and roughly when. Event and evidence lists, exports, facets, source counters, graphs and volume charts include only entries the reader can open, and the same rules govern each entry's artifacts and questions. Event lists and facets, source lists, graphs and a control's evidence summary are cached per account for the aggregate cache lifetime, 60 seconds by default, so a permission change reaches them within that time.
 
@@ -139,6 +139,12 @@ An upgrade adds Keen's built-in mapping rules for its own cloud, workstation and
 ### Risks and organisation roles
 
 Membership of an organisation role that owns risks grants read access to those risks, so changing that role's members or deleting it requires `risk.manage`. Choosing a role as a risk's owner, or as a quiz's audience, gives the role's current members that access, whoever set its membership; review a role's members when choosing it.
+
+### Who a risk or factor affects
+
+A risk or a PESTLE(E) factor names the people, vendors / 3rd parties and assets it affects through links it owns; deleting the risk, the factor or the named record deletes the link. Naming a record the risk or factor does not already name requires ISMS read access and that record's feature, and adding a person or vendor by name from the picker requires ISMS manage access, as adding it in its own register does. Links a risk or factor already holds stay for anyone who may edit it, so an editor without ISMS read access can change other fields without losing them. The picker's list of people, vendors and assets requires ISMS read access.
+
+Everyone who can read a risk or factor sees the names of the records it names, with a short description (a person's position, a vendor's description or website, an asset's category), including readers without ISMS read access; naming a record is a deliberate disclosure to the readers of the risk or factor. Opening the record itself keeps its own authority.
 
 ### Stories
 

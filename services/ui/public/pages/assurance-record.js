@@ -259,7 +259,7 @@ export async function assuranceRecord(kind) {
         title: `Delete ${kind}`,
         message: person
           ? 'Delete this person and their assurance records? Linked workstation agents will be unassigned.'
-          : 'Delete this vendor? Its assets remain in the asset register.',
+          : 'Delete this vendor / 3rd party? Its assets remain in the asset register.',
         confirmLabel: 'Delete',
         danger: true,
       }))

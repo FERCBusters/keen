@@ -21,7 +21,6 @@ from app.db.models import (
     Event,
     Framework,
     FrameworkClause,
-    InterestedParty,
     IsmsObjective,
     Mapping,
     Risk,
@@ -107,16 +106,6 @@ def _objective(catalogue, controls, status=200):
     )
 
 
-def _party(catalogue, controls, status=200):
-    body = {
-        "framework": "A",
-        "name": "Customers",
-        "nature": "Data subjects",
-        "controls": controls,
-    }
-    return catalogue.call("POST", "/v1/interested-parties", body, status=status)
-
-
 def _audit(catalogue, controls, status=200):
     body = {"title": "Access review", "framework_slug": "A", "controls": controls}
     return catalogue.call("POST", "/v1/audits", body, status=status)
@@ -161,20 +150,10 @@ def test_risks_link_the_control_that_shares_a_reference_with_a_clause(catalogue)
     assert [c["id"] for c in replaced["controls"]] == [control]
 
 
-def test_isms_records_and_parties_link_the_control_by_reference(catalogue):
+def test_isms_records_link_the_control_by_reference(catalogue):
     control = catalogue.ids["control"]
     objective = _objective(catalogue, ["5.1"])
     assert [c["id"] for c in objective["controls"]] == [control]
-    # These registers match references without regard to case.
-    party = _party(catalogue, ["5.1"])
-    assert [c["id"] for c in party["controls"]] == [control]
-    relinked = catalogue.call(
-        "PATCH",
-        f"/v1/interested-parties/{party['id']}/controls",
-        {"controls": ["5.1"]},
-        framework="A",
-    )
-    assert [c["id"] for c in relinked["controls"]] == [control]
 
 
 def test_audit_scope_and_findings_use_the_control_by_reference(catalogue):
@@ -229,7 +208,6 @@ def test_event_filters_by_control_reference_skip_the_clause_row(catalogue):
     [
         (_risk, "Unknown control for A: 4.1"),
         (_objective, "Unknown control: 4.1"),
-        (_party, "Unknown control: 4.1"),
     ],
 )
 def test_a_reference_that_only_a_clause_carries_is_an_unknown_control(
@@ -257,7 +235,6 @@ def test_audits_and_clause_links_refuse_a_clause_only_reference(catalogue):
     [
         (_risk, Risk),
         (_objective, IsmsObjective),
-        (_party, InterestedParty),
         (_audit, Audit),
     ],
 )
@@ -308,8 +285,8 @@ def test_case_insensitive_registers_prefer_the_exact_reference(catalogue):
     db.add_all([upper, lower, mixed, other])
     db.commit()
 
-    party = _party(catalogue, ["x.1", "X.1"])
-    assert sorted(c["id"] for c in party["controls"]) == sorted(
+    both = _objective(catalogue, ["x.1", "X.1"])
+    assert sorted(c["id"] for c in both["controls"]) == sorted(
         [str(upper.id), str(lower.id)]
     )
     objective = _objective(catalogue, ["x.1"])

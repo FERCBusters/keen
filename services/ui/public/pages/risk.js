@@ -19,13 +19,13 @@ import {
 import {
   methodBadgeHtml,
   methodOf,
-  partyBadgesHtml,
   treatmentLabel,
   treatmentStatusLabel,
   riskDisplayTitle,
   riskWizardHref,
   scoreClass,
 } from '/pages/risk-common.js';
+import { affectedBadgesHtml } from '/pages/affected-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -235,7 +235,7 @@ function renderRisk(risk) {
     residualScore.innerHTML = `${scoreBadge(risk?.residual_risk_score, detail)} <span class="small-muted ms-1">${esc(detail)}</span>`;
   }
   if (riskParties)
-    riskParties.innerHTML = partyBadgesHtml(risk?.interested_parties, risk?.framework || framework);
+    riskParties.innerHTML = affectedBadgesHtml(risk?.affected, risk?.framework || framework);
   if (riskTreatment) {
     const due = risk?.treatment_due_at
       ? ` · due ${esc(isoDateToDisplay(risk.treatment_due_at))}`
@@ -265,7 +265,7 @@ deleteRisk?.addEventListener('click', async () => {
   if (
     !(await confirmAction({
       title: 'Delete risk',
-      message: `Delete “${riskDisplayTitle(risk)}”? Its links to controls, interested parties and posture checks are removed with it.`,
+      message: `Delete “${riskDisplayTitle(risk)}”? Its links to controls and posture checks, and to the people, vendors / 3rd parties and assets it affects, are removed with it.`,
       confirmLabel: 'Delete',
       danger: true,
     }))

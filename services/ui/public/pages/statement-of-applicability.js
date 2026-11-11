@@ -17,6 +17,7 @@ import {
 } from '/app.js';
 import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 import { scoreBadge } from '/pages/risk-common.js';
+import { affectedBadgesHtml } from '/pages/affected-common.js';
 
 await initNavbar();
 enableTableSorting();
@@ -30,12 +31,10 @@ const clausesHead = document.getElementById('clausesHead');
 const clausesRows = document.getElementById('clausesRows');
 const risksRows = document.getElementById('risksRows');
 const pestleRows = document.getElementById('pestleRows');
-const interestedPartiesRows = document.getElementById('interestedPartiesRows');
 const controlsFilter = document.getElementById('controlsFilter');
 const clausesFilter = document.getElementById('clausesFilter');
 const risksFilter = document.getElementById('risksFilter');
 const pestleFilter = document.getElementById('pestleFilter');
-const interestedPartiesFilter = document.getElementById('interestedPartiesFilter');
 const ismsObjectivesRows = document.getElementById('ismsObjectivesRows');
 const ismsDocumentsRows = document.getElementById('ismsDocumentsRows');
 const ismsEffectivenessRows = document.getElementById('ismsEffectivenessRows');
@@ -51,7 +50,6 @@ let soa = {
   risks: [],
   pestle_items: [],
   business_processes: [],
-  interested_parties: [],
   isms_objectives: [],
   isms_documents: [],
   isms_effectiveness_measures: [],
@@ -117,14 +115,6 @@ function pestleLink(item) {
     item.framework || framework,
   );
   return `<a href="${esc(href)}">${esc(shorten(item.item || 'PESTLE(E) item', 90))}</a>`;
-}
-
-function interestedPartyLink(item) {
-  const href = withFramework(
-    `/interested_party.html?id=${encodeURIComponent(item.id)}`,
-    item.framework || framework,
-  );
-  return `<a href="${esc(href)}">${esc(item.name?.name || 'Interested party')}</a>`;
 }
 
 function personBadges(items) {
@@ -302,7 +292,7 @@ function renderPestle() {
 
   if (!soa.can_view_pestle) {
     pestleRows.innerHTML =
-      '<tr><td colspan="7" class="p-4 small-muted">You do not have permission to view PESTLE(E) items.</td></tr>';
+      '<tr><td colspan="8" class="p-4 small-muted">You do not have permission to view PESTLE(E) items.</td></tr>';
     return;
   }
 
@@ -314,7 +304,8 @@ function renderPestle() {
     const clauses = (item.clauses || [])
       .map((x) => `${x.clause?.ref || ''} ${x.clause?.title || ''} ${x.relevance?.label || ''}`)
       .join(' ');
-    return `${item.type || ''} ${item.lens || ''} ${item.item || ''} ${item.rationale || ''} ${item.overall_relevance?.label || ''} ${processes} ${clauses}`
+    const affected = item.affected.map((x) => x.label).join(' ');
+    return `${item.type || ''} ${item.lens || ''} ${item.item || ''} ${item.rationale || ''} ${item.overall_relevance?.label || ''} ${affected} ${processes} ${clauses}`
       .toLowerCase()
       .includes(q);
   });
@@ -345,6 +336,7 @@ function renderPestle() {
       <td class="wrap fw-semibold">${pestleLink(item)}</td>
       <td>${relevanceBadge(item.overall_relevance)}</td>
       <td class="wrap small-muted">${esc(shorten(item.rationale || '', 220) || '-')}</td>
+      <td>${affectedBadgesHtml(item.affected, framework)}</td>
       <td>${processes}</td>
       <td>${clauses}</td>
     </tr>`;
@@ -353,65 +345,7 @@ function renderPestle() {
 
   if (!rows.length) {
     pestleRows.innerHTML =
-      '<tr><td colspan="7" class="p-4 small-muted">No PESTLE(E) items match.</td></tr>';
-  }
-}
-
-function renderInterestedParties() {
-  const items = Array.isArray(soa.interested_parties) ? soa.interested_parties : [];
-  const q = filterText(interestedPartiesFilter);
-
-  if (!soa.can_view_interested_parties) {
-    interestedPartiesRows.innerHTML =
-      '<tr><td colspan="6" class="p-4 small-muted">You do not have permission to view interested parties.</td></tr>';
-    return;
-  }
-
-  const rows = items.filter((item) => {
-    if (!q) return true;
-    const controls = (item.controls || []).map((c) => `${c.ref} ${c.title || ''}`).join(' ');
-    const comms = (item.communications || [])
-      .map((c) => `${c.event} ${c.when} ${c.with_whom} ${c.methods.join(' ')}`)
-      .join(' ');
-    return `${item.name?.name || ''} ${item.nature?.name || ''} ${item.note} ${controls} ${comms}`
-      .toLowerCase()
-      .includes(q);
-  });
-
-  interestedPartiesRows.innerHTML = rows
-    .map((item) => {
-      const controls =
-        (item.controls || [])
-          .map(
-            (c) =>
-              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}&tab=governance`, c.framework || framework))}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
-          )
-          .join('') || '<span class="small-muted">-</span>';
-      const comms =
-        (item.communications || [])
-          .map((c) => `${esc(c.event)} · ${esc(c.when)} · ${esc(c.with_whom)}`)
-          .join('<br>') || '<span class="small-muted">-</span>';
-      const methods =
-        Array.from(new Set((item.communications || []).flatMap((c) => c.methods)))
-          .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
-          .join('') || '<span class="small-muted">-</span>';
-      const note = item.note.trim()
-        ? esc(shorten(item.note, 180))
-        : '<span class="small-muted">-</span>';
-      return `<tr>
-      <td class="fw-semibold">${interestedPartyLink(item)}</td>
-      <td>${esc(item.nature?.name || '-')}</td>
-      <td class="wrap small-muted">${note}</td>
-      <td>${controls}</td>
-      <td class="small">${comms}</td>
-      <td>${methods}</td>
-    </tr>`;
-    })
-    .join('');
-
-  if (!rows.length) {
-    interestedPartiesRows.innerHTML =
-      '<tr><td colspan="6" class="p-4 small-muted">No interested parties match.</td></tr>';
+      '<tr><td colspan="8" class="p-4 small-muted">No PESTLE(E) items match.</td></tr>';
   }
 }
 
@@ -538,14 +472,13 @@ function renderAll() {
   const counts = soa.counts || {};
   if (meta) {
     const businessProcessCount = counts.isms_business_processes ?? counts.business_processes ?? 0;
-    meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} CIA risks · ${counts.pestle || 0} PESTLE(E) items · ${businessProcessCount || 0} business processes · ${counts.interested_parties || 0} interested parties · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets`;
+    meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} CIA risks · ${counts.pestle || 0} PESTLE(E) items · ${businessProcessCount || 0} business processes · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets`;
   }
   renderSwot();
   renderControls();
   renderClauses();
   renderRisks();
   renderPestle();
-  renderInterestedParties();
   renderIsmsObjectives();
   renderIsmsDocuments();
   renderIsmsEffectiveness();
@@ -567,10 +500,7 @@ async function load() {
       '<tr><td colspan="9" class="p-4 small-muted">Failed to load risks.</td></tr>';
     if (pestleRows)
       pestleRows.innerHTML =
-        '<tr><td colspan="7" class="p-4 small-muted">Failed to load PESTLE(E) items.</td></tr>';
-    if (interestedPartiesRows)
-      interestedPartiesRows.innerHTML =
-        '<tr><td colspan="6" class="p-4 small-muted">Failed to load interested parties.</td></tr>';
+        '<tr><td colspan="8" class="p-4 small-muted">Failed to load PESTLE(E) items.</td></tr>';
     if (ismsObjectivesRows)
       ismsObjectivesRows.innerHTML =
         '<tr><td colspan="7" class="p-4 small-muted">Failed to load ISMS objectives.</td></tr>';
@@ -593,7 +523,6 @@ controlsFilter?.addEventListener('input', renderControls);
 clausesFilter?.addEventListener('input', renderClauses);
 risksFilter?.addEventListener('input', renderRisks);
 pestleFilter?.addEventListener('input', renderPestle);
-interestedPartiesFilter?.addEventListener('input', renderInterestedParties);
 ismsObjectivesFilter?.addEventListener('input', renderIsmsObjectives);
 ismsDocumentsFilter?.addEventListener('input', renderIsmsDocuments);
 ismsEffectivenessFilter?.addEventListener('input', renderIsmsEffectiveness);
@@ -603,7 +532,6 @@ function activateInitialTab() {
   if (!tab) return;
   const mapped = lookupTab(
     {
-      interestedparties: 'soaInterestedPartiesTab',
       isms: 'soaIsmsObjectivesTab',
       ismsobjectives: 'soaIsmsObjectivesTab',
       ismsdocuments: 'soaIsmsDocumentsTab',

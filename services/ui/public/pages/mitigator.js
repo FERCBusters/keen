@@ -20,10 +20,10 @@ import {
   riskHref,
   controlHref,
   pestleHref,
-  interestedPartyHref,
   riskWizardHref,
   storeWizardDraft,
 } from '/pages/risk-common.js';
+import { AFFECTED_KINDS, affectedChoices } from '/pages/affected-common.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -190,7 +190,6 @@ function existingSection(data) {
   const existing = data.existing_matches;
   const risks = existing.cia_risks || [];
   const pestle = existing.pestle_items || [];
-  const parties = existing.interested_parties || [];
   const riskCards = risks
     .map(
       (r) => `<div class="mitigator-suggestion-card d-flex flex-wrap justify-content-between gap-2">
@@ -224,17 +223,14 @@ function existingSection(data) {
     </div>`,
     )
     .join('');
-  const partyHtml = parties.length
-    ? `<div class="small mt-2">Interested parties already recorded that match: ${parties.map((p) => `<a href="${esc(interestedPartyHref(p.id, framework))}">${esc(p.label)}</a>`).join(', ')}.</div>`
-    : '';
   const any = risks.length || pestle.length;
   return sectionHtml(
     1,
     any ? 'Is it already covered?' : 'Nothing like this exists yet',
     any
       ? 'These existing risks and factors use similar words. If one of them is the same thing, open it and update it instead of creating a duplicate.'
-      : 'No existing risk, PESTLE(E) factor or interested party matched your description, so a new one is likely needed.',
-    `${riskCards}${pestleCards}${partyHtml}` || '',
+      : 'No existing risk or PESTLE(E) factor matched your description, so a new one is likely needed.',
+    `${riskCards}${pestleCards}` || '',
     { tone: any ? 'border-warning-subtle' : '' },
   );
 }
@@ -267,7 +263,7 @@ function templateSection(data) {
 
 function newRiskSection(data) {
   const controls = data.control_suggestions || data.suggestions;
-  const parties = data?.interested_party_suggestions || [];
+  const affected = data.affected_suggestions;
   const draftPestle = data?.draft_pestle_item;
   const controlRows = controls
     .map((item, idx) => {
@@ -286,12 +282,12 @@ function newRiskSection(data) {
     </div>`;
     })
     .join('');
-  const partyRows = parties
+  const affectedRows = affected
     .map(
       (item, idx) => `<div class="form-check">
-      <input class="form-check-input mitigator-interested-select" type="checkbox" value="${esc(String(idx))}" id="mitigatorParty${idx}" ${item.duplicate_exact ? 'disabled' : 'checked'}>
-      <label class="form-check-label" for="mitigatorParty${idx}"><span class="fw-semibold">${esc(item.name)}</span> - ${esc(item.nature)}${item.duplicate_exact ? ' <span class="small-muted">(already recorded)</span>' : ''}</label>
-      <div class="small-muted">${esc(item.reason)}</div>
+      <input class="form-check-input mitigator-affected-select" type="checkbox" value="${esc(String(idx))}" id="mitigatorAffected${idx}" checked>
+      <label class="form-check-label" for="mitigatorAffected${idx}"><span class="fw-semibold">${esc(item.label)}</span> <span class="badge text-bg-light border">${esc(AFFECTED_KINDS[item.kind].label)}</span> ${confidenceBadge(item.confidence)}</label>
+      <div class="small-muted">${esc(item.reasons.join(' '))}</div>
     </div>`,
     )
     .join('');
@@ -303,7 +299,7 @@ function newRiskSection(data) {
         <button class="btn btn-primary" type="button" id="mitigatorToWizard"><i class="bi bi-magic me-1" aria-hidden="true"></i>Create a new risk in the wizard</button>
         ${draftPestle && canManagePestle ? `<button class="btn btn-outline-primary" type="button" id="mitigatorToPestleWizard"><i class="bi bi-globe2 me-1" aria-hidden="true"></i>Record it as a PESTLE(E) factor instead</button>` : ''}
       </div>
-      <div class="small-muted mt-2">The wizard opens with your description, the asset, the CIA types, the ticked controls and parties filled in. Nothing is saved until you reach the last step.</div>`
+      <div class="small-muted mt-2">The wizard opens with your description, the asset, the CIA types, and the ticked controls, people, vendors and assets filled in. Nothing is saved until you reach the last step.</div>`
     : '<div class="small-muted mt-3">You need risk.manage permission to create risks.</div>';
   const body = `
     <div class="mb-3">
@@ -311,7 +307,7 @@ function newRiskSection(data) {
       <div class="small-muted mb-2">Each of these is a framework control that would reduce the risk. Untick any that do not apply; you can change them again in the wizard.</div>
       ${controlRows ? `<div class="vstack gap-2">${controlRows}</div>` : '<div class="alert alert-warning mb-0">No controls matched strongly enough. Add more detail or select more impact prompts, or choose controls in the wizard.</div>'}
     </div>
-    ${partyRows ? `<div class="mb-2"><div class="fw-semibold">People and parties who might be affected</div><div class="small-muted mb-2">Ticked parties are added to the new risk as interested parties.</div>${partyRows}</div>` : ''}
+    ${affectedRows ? `<div class="mb-2"><div class="fw-semibold">Who and what it might affect</div><div class="small-muted mb-2">People, vendors / 3rd parties and assets already in Keen that your description points to. Ticked ones are named on the new risk or factor.</div>${affectedRows}</div>` : ''}
     ${pestleHits ? `<div class="small mt-2">This also reads like a PESTLE(E) influence: ${pestleHits}</div>` : ''}
     ${actions}`;
   return sectionHtml(
@@ -346,13 +342,13 @@ function selectedControls() {
     .filter(Boolean);
 }
 
-function selectedPartyDrafts() {
-  const suggestions = analysis?.interested_party_suggestions || [];
-  return [...document.querySelectorAll('.mitigator-interested-select')]
-    .filter((cb) => cb.checked && !cb.disabled)
-    .map((cb) => suggestions[Number(cb.value)])
-    .filter(Boolean)
-    .map((s) => ({ name: s.name, nature: s.nature }));
+function selectedAffected() {
+  const suggestions = analysis.affected_suggestions;
+  return affectedChoices(
+    [...document.querySelectorAll('.mitigator-affected-select')]
+      .filter((cb) => cb.checked)
+      .map((cb) => suggestions[Number(cb.value)]),
+  );
 }
 
 function draftForWizard({ templateId = '' } = {}) {
@@ -371,7 +367,7 @@ function draftForWizard({ templateId = '' } = {}) {
     risk_types: types,
     note: draft.note || '',
     controls,
-    interested_parties: selectedPartyDrafts(),
+    affected: selectedAffected(),
     mitigator_context: { ...(draft.mitigator_context || {}), selected_control_ids: controls },
     template_id: templateId,
   };
@@ -432,6 +428,7 @@ suggestionsEl.addEventListener('click', (ev) => {
         threat_summary: draft.item,
         pestle_type: draft.type,
         lens: draft.lens,
+        affected: selectedAffected(),
       },
       { method: 'pestle' },
     );

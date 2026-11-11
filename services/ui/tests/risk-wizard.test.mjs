@@ -1,6 +1,6 @@
-// The risk wizard: one guided path through method, subject, parties,
-// description, rating, controls and review, creating the asset and parties it
-// needs along the way; editing an existing risk; the PESTLE(E) path; and the
+// The risk wizard: one guided path through method, subject, who it affects,
+// description, rating, controls and review, creating the asset, people and
+// vendors it needs along the way; editing an existing risk; the PESTLE(E) path; and the
 // hand-off from the Mitigator.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -58,14 +58,12 @@ const library = [
     suggested_assessment: {},
   },
 ];
-const parties = {
-  framework: 'A',
-  interested_parties: [
-    { kind: 'interested_party', id: 'ip1', label: 'Customers', detail: 'Customer' },
-  ],
+// The people, vendors and assets /api/v1/affected/options lists.
+const affectedOptions = {
   people: [{ kind: 'person', id: 'p1', label: 'Dana <b>Lee</b>', detail: 'DPO' }],
   vendors: [{ kind: 'vendor', id: 'v1', label: 'CloudCo', detail: 'Hosting' }],
-  natures: ['Customer', 'Regulator'],
+  assets: [{ kind: 'asset', id: 'a1', label: 'Payroll DB', detail: 'Information › Databases' }],
+  can_add: { person: true, vendor: true },
 };
 const pestleMeta = {
   types: ['Political', 'Legal'],
@@ -85,7 +83,15 @@ const existingRisk = {
   threat_summary: 'Ransomware encrypts the payroll database',
   note: 'Seen at a peer organisation',
   risk_types: ['Availability'],
-  interested_parties: [{ kind: 'person', id: 'p1', label: 'Dana <b>Lee</b>', detail: 'DPO' }],
+  affected: [
+    {
+      kind: 'person',
+      id: 'p1',
+      label: 'Dana <b>Lee</b>',
+      detail: 'DPO',
+      href: '/person.html?id=p1',
+    },
+  ],
   register_likelihood: 3,
   register_impact: 4,
   register_residual_likelihood: 2,
@@ -122,7 +128,10 @@ async function wizard(t, options = {}) {
       if (p === '/api/v1/risks/users') return users;
       if (p === '/api/v1/controls') return { items: controls };
       if (p === '/api/v1/risks/library') return { items: library };
-      if (p === '/api/v1/risks/parties') return parties;
+      if (p === '/api/v1/affected/options') {
+        if (options.affectedFail) throw new Error('Registers offline');
+        return structuredClone(options.affectedOptions ?? affectedOptions);
+      }
       if (p === '/api/v1/risks/register/heatmap') {
         if (options.registerFail) throw new Error('offline');
         return {
@@ -179,12 +188,16 @@ const check = (ui, selector, checked = true) => {
   box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
 };
 const tick = () => new Promise((r) => setTimeout(r, 5));
+// The affected picker waits for typing to pause before it searches.
+const pause = () => new Promise((r) => setTimeout(r, 140));
+const chosenAffected = (ui) =>
+  [...ui.el('affectedChosen').querySelectorAll('.badge')].map((b) => b.textContent);
 const reviewText = (ui) =>
   [...ui.el('reviewSummary').querySelectorAll('dt, dd > span')]
     .map((e) => e.textContent.replace(/\s+/g, ' ').trim())
     .join(' ');
 
-test('the wizard walks a simple risk from method to saved, adding the asset and a party it needs', async (t) => {
+test('the wizard walks a simple risk from method to saved, adding the asset and a vendor it needs', async (t) => {
   const { ui, state } = await wizard(t);
   assert.equal(visibleStep(ui), 'method');
   assert.deepEqual(
@@ -228,23 +241,20 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
 
   assert.equal(visibleStep(ui), 'parties');
   assert.equal(ui.el('skipStep').hidden, false);
-  assert.equal(ui.el('partyList').querySelector('b'), null);
-  assert.equal(ui.el('partyList').querySelectorAll('[data-party]').length, 3);
-  check(ui, '[data-party="vendor:v1"]');
-  assert.match(ui.el('selectedParties').textContent, /CloudCo/);
-  input(ui, 'partySearch', 'Fair Work Ombudsman');
-  await tick();
-  assert.equal(ui.el('partyList').querySelectorAll('[data-party]').length, 0);
-  assert.equal(ui.el('newPartyPanel').hidden, false);
-  ui.el('addNewParty').click();
-  assert.match(ui.el('status').textContent, /Say what their relationship to you is/);
-  ui.el('newPartyNature').value = 'Regulator';
-  ui.el('addNewParty').click();
-  assert.match(ui.el('selectedParties').textContent, /Fair Work Ombudsman \(Regulator\) new/);
+  assert.equal(ui.el('affectedList').querySelector('b'), null);
+  assert.equal(ui.el('affectedList').querySelectorAll('[data-affected]').length, 3);
+  check(ui, '[data-affected="vendor:v1"]');
+  assert.deepEqual(chosenAffected(ui), ['CloudCo']);
+  input(ui, 'affectedSearch', 'Fair Work Ombudsman');
+  await pause();
+  assert.equal(ui.el('affectedList').querySelectorAll('[data-affected]').length, 0);
+  assert.equal(ui.el('affectedAddPanel').hidden, false);
+  ui.el('affectedAddPanel').querySelector('[data-add-affected="new_vendor"]').click();
+  assert.deepEqual(chosenAffected(ui), ['CloudCo', 'Fair Work Ombudsmannew vendor / 3rd party']);
   // Removing a chip and re-ticking keeps the list consistent.
-  ui.el('selectedParties').querySelector('[data-remove-party="vendor:v1"]').click();
-  assert.doesNotMatch(ui.el('selectedParties').textContent, /CloudCo/);
-  check(ui, '[data-party="person:p1"]');
+  ui.el('affectedChosen').querySelector('[data-remove-affected="vendor:v1"]').click();
+  assert.deepEqual(chosenAffected(ui), ['Fair Work Ombudsmannew vendor / 3rd party']);
+  check(ui, '[data-affected="person:p1"]');
   next(ui);
 
   assert.equal(visibleStep(ui), 'describe');
@@ -294,7 +304,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   const review = reviewText(ui);
   assert.match(review, /Kind of risk Simple risk/);
   assert.match(review, /Asset HR portal new Information › Web apps/);
-  assert.match(review, /Affected parties Fair Work Ombudsman new, Dana <b>Lee<\/b>/);
+  assert.match(review, /Affects Fair Work Ombudsman new, Dana <b>Lee<\/b>/);
   assert.match(review, /Today 20 \(Critical\), after controls 6 \(Moderate\)/);
   assert.match(review, /Owner dana/);
   assert.match(review, /Treatment Mitigate \(In progress, due 2027-01-31\)/);
@@ -330,10 +340,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
       treatment_plan: 'Turn on MFA',
       treatment_due_at: '2027-01-31',
       controls: ['c1'],
-      interested_parties: [
-        { name: 'Fair Work Ombudsman', nature: 'Regulator' },
-        { person_id: 'p1' },
-      ],
+      affected: [{ new_vendor: 'Fair Work Ombudsman' }, { person_id: 'p1' }],
       asset_name: 'HR portal',
       category_id: 'cat1',
       subcategory_name: 'Web apps',
@@ -345,7 +352,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   assert.equal(ui.el('doneTitle').textContent, 'Risk recorded');
   assert.match(
     ui.el('doneDetail').textContent,
-    /Keen also added the asset “HR portal” and 1 new interested party for you/,
+    /Keen also added the asset “HR portal” and 1 new vendor \/ 3rd party for you/,
   );
   assert.equal(
     ui.el('doneActions').querySelector('a').getAttribute('href'),
@@ -397,7 +404,7 @@ test('a CIA risk needs at least one property, and a template fills the blanks', 
   assert.equal(body.asset_id, 'a1');
   assert.equal(body.library_template_id, 'tpl1');
   assert.deepEqual(body.controls, []);
-  assert.deepEqual(body.interested_parties, []);
+  assert.deepEqual(body.affected, []);
   await settle(() => visibleStep(ui) === 'done');
   assert.equal(ui.el('doneDetail').textContent, 'Everything is in the register.');
 });
@@ -407,7 +414,7 @@ test('a template can be deselected, and changing method clears a template of the
   // A PESTLE(E) template switches the wizard to the PESTLE(E) method.
   assert.equal(ui.document.querySelector('input[name="riskMethod"]:checked').value, 'pestle');
   assert.match(ui.el('templateList').textContent, /Privacy law change/);
-  assert.equal(ui.el('stepHint').textContent, 'Step 1 of 5');
+  assert.equal(ui.el('stepHint').textContent, 'Step 1 of 6');
   const radio = ui.document.querySelector('input[name="riskMethod"][value="general"]');
   radio.checked = true;
   radio.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
@@ -441,6 +448,13 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
   check(ui, '[data-new-process="Onboarding"]', false);
   assert.doesNotMatch(ui.el('processList').textContent, /Onboarding/);
   next(ui);
+  // A factor names who and what it affects too, a new person among them.
+  assert.equal(visibleStep(ui), 'parties');
+  check(ui, '[data-affected="asset:a1"]');
+  input(ui, 'affectedSearch', 'Payroll officer');
+  await pause();
+  ui.el('affectedAddPanel').querySelector('[data-add-affected="new_person"]').click();
+  next(ui);
   assert.equal(visibleStep(ui), 'describe');
   assert.equal(ui.el('riskTitle').closest('.col-12').hidden, true);
   next(ui);
@@ -469,6 +483,7 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
   assert.equal(visibleStep(ui), 'review');
   const review = reviewText(ui);
   assert.match(review, /Business processes Payroll run, Recruitment \(new\)/);
+  assert.match(review, /Affects Payroll DB, Payroll officer new/);
   assert.match(review, /Type and lens Legal · Internal/);
   assert.match(review, /Overall relevance 3 Low/);
   assert.match(review, /Relevant clauses 6\.1\.2/);
@@ -486,6 +501,7 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
         item: 'Privacy law tightens retention',
         overall_relevance_code: 'low',
         rationale: 'Draft bill published\n\nWatch the consultation',
+        affected: [{ asset_id: 'a1' }, { new_person: 'Payroll officer' }],
       },
     },
   ]);
@@ -505,7 +521,10 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
     },
   ]);
   assert.equal(ui.el('doneTitle').textContent, 'PESTLE(E) factor recorded');
-  assert.match(ui.el('doneDetail').textContent, /the business process “Recruitment”/);
+  assert.equal(
+    ui.el('doneDetail').textContent,
+    'Keen also added the business process “Recruitment” and 1 new person for you.',
+  );
   assert.equal(
     ui.el('doneActions').querySelector('a').getAttribute('href'),
     '/pestle_item.html?id=pi-new&tab=details&framework=A',
@@ -532,7 +551,7 @@ test('editing an existing risk starts at the subject with everything filled in a
   ui.el('selectedAssetSummary').querySelector('#clearAsset').click();
   ui.el('assetList').querySelector('[data-asset="a1"]').click();
   next(ui);
-  assert.equal(ui.document.querySelector('[data-party="person:p1"]').checked, true);
+  assert.equal(ui.document.querySelector('[data-affected="person:p1"]').checked, true);
   next(ui);
   assert.equal(ui.el('riskTitle').value, 'Payroll held to ransom');
   assert.equal(ui.document.querySelector('[data-cia="Availability"]').checked, true);
@@ -555,7 +574,7 @@ test('editing an existing risk starts at the subject with everything filled in a
   assert.equal(body.asset_id, 'a1');
   assert.equal(body.title, 'Payroll held to ransom');
   assert.deepEqual(body.risk_types, ['Availability']);
-  assert.deepEqual(body.interested_parties, [{ person_id: 'p1' }]);
+  assert.deepEqual(body.affected, [{ person_id: 'p1' }]);
   assert.equal(body.risk_owner_role_id, 'role1');
   assert.equal(body.risk_owner_user_id, null);
   assert.deepEqual(body.controls, ['c2']);
@@ -577,9 +596,10 @@ test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested control
       threat_summary: 'Attackers phish payroll staff for credentials',
       asset_name: 'Payroll DB',
       controls: ['c1', 'unknown'],
-      interested_parties: [
+      affected: [
         { kind: 'vendor', id: 'v1', label: 'CloudCo', detail: 'Hosting' },
-        { name: 'Payroll team', nature: 'Internal' },
+        // A record the draft names that the registers no longer hold is kept.
+        { kind: 'asset', id: 'a9', label: 'Old CRM', detail: '' },
       ],
       mitigator_context: { query: 'phishing payroll' },
     }),
@@ -595,7 +615,7 @@ test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested control
   next(ui);
   assert.match(ui.el('selectedAssetSummary').textContent, /Using existing asset Payroll DB/);
   next(ui);
-  assert.match(ui.el('selectedParties').textContent, /CloudCo.*Payroll team \(Internal\) new/s);
+  assert.deepEqual(chosenAffected(ui), ['CloudCo', 'Old CRM']);
   next(ui);
   assert.equal(ui.el('riskTitle').value, 'Phishing of payroll staff');
   assert.equal(ui.document.querySelector('[data-cia="Confidentiality"]').checked, true);
@@ -611,10 +631,7 @@ test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested control
   assert.deepEqual(body.controls, ['c1']);
   assert.deepEqual(body.risk_types, ['Confidentiality']);
   assert.deepEqual(body.mitigator_context, { query: 'phishing payroll' });
-  assert.deepEqual(body.interested_parties, [
-    { vendor_id: 'v1' },
-    { name: 'Payroll team', nature: 'Internal' },
-  ]);
+  assert.deepEqual(body.affected, [{ vendor_id: 'v1' }, { asset_id: 'a9' }]);
 });
 
 test('a draft naming an unknown asset proposes it as new, with the category it suggested', async (t) => {
@@ -734,6 +751,8 @@ test('a PESTLE(E) clause can be unticked, and a clause list that cannot load is 
   const { ui } = await wizard(t, { query: '&method=pestle' });
   next(ui);
   ui.el('skipStep').click();
+  ui.el('skipStep').click();
+  assert.equal(visibleStep(ui), 'describe');
   ui.el('riskDescription').value = 'Privacy law tightens retention';
   const legal = ui.document.querySelector('input[name="pestleType"][value="Legal"]');
   legal.checked = true;
@@ -750,6 +769,7 @@ test('a PESTLE(E) clause can be unticked, and a clause list that cannot load is 
 
   const offline = await wizard(t, { query: '&method=pestle', clausesFail: true });
   next(offline.ui);
+  offline.ui.el('skipStep').click();
   offline.ui.el('skipStep').click();
   offline.ui.el('riskDescription').value = 'Privacy law tightens retention';
   const type = offline.ui.document.querySelector('input[name="pestleType"][value="Legal"]');

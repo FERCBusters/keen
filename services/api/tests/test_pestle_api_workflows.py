@@ -629,3 +629,120 @@ def test_pestle_access_and_text_helpers_guard_their_bounds(pestle, monkeypatch):
         framework_parameter("  ")
     with pytest.raises(DomainError, match="Invalid framework"):
         framework_parameter("bad slug")
+
+
+# --- Who and what a factor affects ------------------------------------------------
+
+
+def test_a_factor_names_who_and_what_it_affects(pestle):
+    from app.db.models import (
+        IsmsPerson,
+        IsmsVendor,
+        RiskAsset,
+        RiskAssetSubcategory,
+        RiskCategory,
+    )
+
+    db = pestle.db
+    category = RiskCategory(name="Data")
+    vendor = IsmsVendor(name="Privacy Commissioner", description="Regulator")
+    person = IsmsPerson(name="Dana", position="DPO")
+    db.add_all([category, vendor, person])
+    db.flush()
+    subcategory = RiskAssetSubcategory(category_id=category.id, name="Databases")
+    db.add(subcategory)
+    db.flush()
+    asset = RiskAsset(
+        name="Customer database", category_id=category.id, subcategory_id=subcategory.id
+    )
+    db.add(asset)
+    db.commit()
+
+    def as_user(*codes):
+        client = pestle.keen.client(pestle.keen.user(*codes))
+        return lambda *a, **k: _send(client, *a, **k)
+
+    # Whoever manages the ISMS registers names records and adds new ones.
+    risk_manager = as_user("risk.manage")
+    created = risk_manager(
+        "POST",
+        "/v1/pestle/items",
+        {
+            "framework": "A",
+            "type": "Legal",
+            "lens": "External",
+            "item": "Breach notification within thirty days",
+            "affected": [
+                {"vendor_id": str(vendor.id)},
+                {"asset_id": str(asset.id)},
+                {"new_vendor": "Customers"},
+            ],
+        },
+    )
+    assert [(a["kind"], a["label"]) for a in created["affected"]] == [
+        ("vendor", "Privacy Commissioner"),
+        ("asset", "Customer database"),
+        ("vendor", "Customers"),
+    ]
+    path = f"/v1/pestle/items/{created['id']}"
+    # PESTLE(E) readers see who a factor affects, in the list and on the item.
+    listed = pestle.read("GET", "/v1/pestle/items", framework="A")
+    assert [a["label"] for a in listed["items"][0]["affected"]] == [
+        "Privacy Commissioner",
+        "Customer database",
+        "Customers",
+    ]
+    assert len(pestle.read("GET", path)["affected"]) == 3
+    history = pestle.read("GET", f"{path}/changelog")
+    change = next(c for c in history["items"][0]["changes"] if c["field"] == "affected")
+    assert change["after"] == [
+        "Privacy Commissioner (vendor / 3rd party)",
+        "Customer database (asset)",
+        "Customers (vendor / 3rd party)",
+    ]
+
+    # Without ISMS read access a PESTLE(E) manager keeps or removes the
+    # records a factor names, but names no others.
+    kept = pestle.manage(
+        "PATCH",
+        path,
+        {
+            "framework": "A",
+            "type": "Legal",
+            "lens": "External",
+            "item": "Breach notification within thirty days",
+            "affected": [{"vendor_id": str(vendor.id)}],
+        },
+    )
+    assert [a["label"] for a in kept["affected"]] == ["Privacy Commissioner"]
+    body = {
+        "framework": "A",
+        "type": "Legal",
+        "lens": "External",
+        "item": "Breach notification within thirty days",
+    }
+    refused = pestle.manage(
+        "PATCH",
+        path,
+        {**body, "affected": [{"person_id": str(person.id)}]},
+        status=403,
+    )
+    assert refused["detail"] == (
+        "Naming who is affected needs read access to People, Vendors and Assets"
+    )
+    # ISMS readers name existing records, but only managers add new ones.
+    reader = as_user("pestle.manage", "isms.read")
+    named = reader("PATCH", path, {**body, "affected": [{"person_id": str(person.id)}]})
+    assert [a["label"] for a in named["affected"]] == ["Dana"]
+    refused = reader(
+        "PATCH", path, {**body, "affected": [{"new_person": "Sam"}]}, status=403
+    )
+    assert refused["detail"] == (
+        "Adding a person needs permission to manage the ISMS registers"
+    )
+    assert db.query(IsmsPerson).count() == 1
+    # Deleting the factor removes its links.
+    risk_manager("DELETE", path)
+    from app.db.models import AffectedLink
+
+    assert db.query(AffectedLink).count() == 0

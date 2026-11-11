@@ -1,6 +1,6 @@
 // The risk wizard on the paths its main workflow tests leave out: templates
 // without CIA properties or an example asset, an asset chosen and then renamed,
-// empty registers of processes, parties, users and controls, a Mitigator draft
+// empty registers of processes, people, vendors, users and controls, a Mitigator draft
 // for a PESTLE(E) factor, editing an unrated, unowned or no-longer-owned risk,
 // clause searches, the controls feature switched off, and clicks that land
 // beside the controls they are meant for.
@@ -41,15 +41,13 @@ const generalTemplate = {
   treatment_guidance: '',
   suggested_assessment: {},
 };
-// Vendors carry no detail in the party options the API serves.
-const parties = {
-  framework: 'A',
-  interested_parties: [
-    { id: 'ip1', kind: 'interested_party', label: 'Customers', detail: 'Customer' },
-  ],
-  people: [],
-  vendors: [{ id: 'v1', kind: 'vendor', label: 'CloudCo', detail: '' }],
-  natures: ['Customer', 'Regulator'],
+// A vendor without a description or website, and a person without a position,
+// as /api/v1/affected/options lists them.
+const affectedOptions = {
+  people: [{ kind: 'person', id: 'p1', label: 'Sam', detail: null }],
+  vendors: [{ kind: 'vendor', id: 'v1', label: 'CloudCo', detail: '' }],
+  assets: [],
+  can_add: { person: true, vendor: true },
 };
 const pestleMeta = {
   types: ['Political', 'Legal'],
@@ -73,7 +71,7 @@ function existing(overrides = {}) {
     threat_summary: 'A laptop is stolen',
     note: '',
     risk_types: [],
-    interested_parties: [],
+    affected: [],
     risk_owner: { id: null, type: 'user', name: null, username: null },
     register_likelihood: null,
     register_impact: null,
@@ -124,7 +122,10 @@ async function wizard(t, options = {}) {
         );
       if (p === '/api/v1/controls') return { items: options.controls ?? controls };
       if (p === '/api/v1/risks/library') return { items: options.library ?? [generalTemplate] };
-      if (p === '/api/v1/risks/parties') return options.parties ?? parties;
+      if (p === '/api/v1/affected/options') {
+        if (options.affectedFail) throw new Error('Forbidden');
+        return structuredClone(options.affected ?? affectedOptions);
+      }
       if (p === '/api/v1/risks/register/heatmap')
         return {
           thresholds: { low_max: 4, moderate_max: 9, high_max: 16 },
@@ -275,48 +276,57 @@ test('a PESTLE(E) factor without recorded business processes explains how to add
   );
 });
 
-// --- Parties --------------------------------------------------------------------------------------
+// --- Who it affects --------------------------------------------------------------------------------
 
-test('a vendor without detail is listed and chosen by name alone, and clicks on its chip keep it', async (t) => {
+const pause = () => new Promise((r) => setTimeout(r, 140));
+
+test('a vendor or person without detail is listed and chosen by name alone, and clicks on its chip keep it', async (t) => {
   const { ui } = await wizard(t);
   next(ui);
   ui.el('assetList').querySelector('[data-asset="a1"]').click();
   next(ui);
-  const row = ui.el('partyList').querySelector('[data-party="vendor:v1"]').closest('label');
-  assert.equal(row.querySelector('.flex-grow-1').textContent, 'CloudCo');
-  assert.equal(
+  const label = (key) =>
     ui
-      .el('partyList')
-      .querySelector('[data-party="interested_party:ip1"]')
+      .el('affectedList')
+      .querySelector(`[data-affected="${key}"]`)
       .closest('label')
-      .querySelector('.flex-grow-1').textContent,
-    'Customers - Customer',
-  );
-  check(ui, '[data-party="vendor:v1"]');
-  const chip = ui.el('selectedParties').querySelector('.badge');
+      .querySelector('.flex-grow-1').textContent;
+  assert.equal(label('vendor:v1'), 'CloudCo');
+  assert.equal(label('person:p1'), 'Sam');
+  check(ui, '[data-affected="vendor:v1"]');
+  const chip = ui.el('affectedChosen').querySelector('.badge');
   assert.equal(chip.textContent, 'CloudCo');
   chip.click();
-  assert.equal(ui.el('selectedParties').querySelector('.badge').textContent, 'CloudCo');
+  assert.equal(ui.el('affectedChosen').querySelector('.badge').textContent, 'CloudCo');
 });
 
-test('with no parties recorded the list says so, and two new parties are counted when saved', async (t) => {
-  const none = { framework: 'A', interested_parties: [], people: [], vendors: [], natures: [] };
-  const { ui, state } = await wizard(t, { parties: none });
+test('with nobody recorded the list says so, and two records added by name are counted when saved', async (t) => {
+  const none = { people: [], vendors: [], assets: [], can_add: { person: true, vendor: true } };
+  const { ui, state } = await wizard(t, { affected: none });
   next(ui);
   ui.el('assetList').querySelector('[data-asset="a1"]').click();
   next(ui);
   assert.equal(
-    ui.el('partyList').textContent,
-    'No interested parties, people or vendors recorded yet. Type a name to add one.',
+    ui.el('affectedList').textContent,
+    'No people, vendors / 3rd parties or assets recorded yet.',
   );
-  for (const [name, nature] of [
-    ['Fair Work Ombudsman', 'Regulator'],
-    ['Payroll team', 'Internal'],
+  for (const [name, kind] of [
+    ['Fair Work Ombudsman', 'new_vendor'],
+    ['Insurer', 'new_vendor'],
+    ['Payroll officer', 'new_person'],
+    ['Payroll clerk', 'new_person'],
   ]) {
-    input(ui, 'partySearch', name);
-    ui.el('newPartyNature').value = nature;
-    ui.el('addNewParty').click();
+    input(ui, 'affectedSearch', name);
+    await pause();
+    // A click beside the buttons adds nobody.
+    ui.el('affectedAddPanel').click();
+    ui.el('affectedAddPanel').querySelector(`[data-add-affected="${kind}"]`).click();
   }
+  // A name already added is not offered again.
+  input(ui, 'affectedSearch', 'insurer');
+  await pause();
+  assert.equal(ui.el('affectedAddPanel').hidden, true);
+  assert.equal(ui.el('affectedList').textContent, 'Nobody and nothing by that name yet.');
   next(ui);
   ui.el('riskTitle').value = 'Payslips changed';
   next(ui);
@@ -324,36 +334,53 @@ test('with no parties recorded the list says so, and two new parties are counted
   ui.el('skipStep').click();
   next(ui);
   await settle(() => visibleStep(ui) === 'done');
-  assert.equal(state.posted[0].body.interested_parties.length, 2);
+  assert.deepEqual(state.posted[0].body.affected, [
+    { new_vendor: 'Fair Work Ombudsman' },
+    { new_vendor: 'Insurer' },
+    { new_person: 'Payroll officer' },
+    { new_person: 'Payroll clerk' },
+  ]);
   assert.equal(
     ui.el('doneDetail').textContent,
-    'Keen also added 2 new interested parties for you.',
+    'Keen also added 2 new people and 2 new vendors / 3rd parties for you.',
   );
 });
 
-test('Add does nothing when the name was cleared before the party list caught up', async (t) => {
-  // The design system's debounce: the list redraws a moment after typing stops.
-  const debounce = (fn, wait) => {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), wait);
-    };
-  };
-  const { ui } = await wizard(t, { vendor: { debounce } });
+test('an account that may not add people or vendors is offered only what is recorded', async (t) => {
+  const readOnly = { ...affectedOptions, can_add: { person: false, vendor: false } };
+  const { ui } = await wizard(t, { affected: readOnly });
   next(ui);
   ui.el('assetList').querySelector('[data-asset="a1"]').click();
   next(ui);
-  input(ui, 'partySearch', 'Acme');
-  await settle(() => ui.el('newPartyPanel').hidden === false);
-  ui.el('newPartyNature').value = 'Customer';
-  input(ui, 'partySearch', '');
-  ui.el('addNewParty').click();
-  assert.equal(ui.el('selectedParties').textContent, 'Nobody selected yet.');
-  assert.equal(ui.el('status').textContent, '');
-  assert.equal(ui.el('newPartyNature').value, 'Customer');
-  // The redraw then catches up and hides the offer.
-  await settle(() => ui.el('newPartyPanel').hidden);
+  assert.equal(
+    ui.el('affectedSearch').placeholder,
+    'Search people, vendors / 3rd parties and assets',
+  );
+  input(ui, 'affectedSearch', 'Acme');
+  await pause();
+  assert.equal(ui.el('affectedAddPanel').hidden, true);
+});
+
+test('without access to the registers the step is left out and an edit keeps the records a risk names', async (t) => {
+  const { ui, state } = await wizard(t, {
+    query: '&id=r1',
+    affectedFail: true,
+    risk: existing({
+      affected: [
+        { kind: 'vendor', id: 'v1', label: 'CloudCo', detail: '', href: '/vendor.html?id=v1' },
+      ],
+    }),
+  });
+  assert.deepEqual(
+    [...ui.el('wizardSteps').querySelectorAll('[data-goto-step]')].map((b) => b.dataset.gotoStep),
+    ['subject', 'describe', 'rate', 'controls', 'review'],
+  );
+  for (let i = 0; i < 4; i += 1) next(ui);
+  assert.equal(visibleStep(ui), 'review');
+  assert.equal(reviewValue(ui, 'Affects'), undefined);
+  next(ui);
+  await settle(() => state.patched.length === 1);
+  assert.equal('affected' in state.patched[0].body, false);
 });
 
 // --- Drafts --------------------------------------------------------------------------------------
@@ -366,10 +393,15 @@ test('a PESTLE(E) draft from the Mitigator preselects its type and lens', async 
       threat_summary: 'Phishing regulation tightens',
       pestle_type: 'Legal',
       lens: 'Internal',
+      affected: [{ kind: 'vendor', id: 'v1', label: 'CloudCo', detail: '' }],
     },
   });
   next(ui);
   ui.el('skipStep').click();
+  // The records the Mitigator ticked are chosen for the factor.
+  assert.equal(visibleStep(ui), 'parties');
+  assert.equal(ui.el('affectedList').querySelector('[data-affected="vendor:v1"]').checked, true);
+  next(ui);
   assert.equal(visibleStep(ui), 'describe');
   assert.equal(ui.el('riskDescription').value, 'Phishing regulation tightens');
   const legal = ui.document.querySelector('input[name="pestleType"][value="Legal"]');
@@ -392,7 +424,7 @@ test('the note in a Mitigator draft is carried into the description step', async
       risk_types: [],
       note: 'From the Mitigator',
       controls: [],
-      interested_parties: [],
+      affected: [],
     },
   });
   next(ui);
@@ -491,6 +523,7 @@ async function pestleToClauses(t, options = {}) {
   next(ui);
   check(ui, '[data-process="bp1"]');
   next(ui);
+  next(ui);
   ui.el('riskDescription').value = 'Privacy law tightens retention';
   check(ui, 'input[name="pestleType"][value="Legal"]');
   return { ui, state };
@@ -565,7 +598,7 @@ test('two controls suggested by the Mitigator are counted in the plural', async 
       risk_types: [],
       note: '',
       controls: ['c1', 'c2'],
-      interested_parties: [],
+      affected: [],
     },
   });
   next(ui);
@@ -626,13 +659,13 @@ test('without the controls feature no controls are fetched, and an edited riskâ€
 
 // --- Review ---------------------------------------------------------------------------------------
 
-test('parties and controls skipped after ticking are shown unticked when the review sends you back', async (t) => {
+test('records and controls skipped after ticking are shown unticked when the review sends you back', async (t) => {
   const { ui } = await wizard(t);
   next(ui);
   ui.el('assetList').querySelector('[data-asset="a1"]').click();
   next(ui);
-  check(ui, '[data-party="vendor:v1"]');
-  // Skip drops the ticked party.
+  check(ui, '[data-affected="vendor:v1"]');
+  // Skip drops the ticked record.
   ui.el('skipStep').click();
   ui.el('riskTitle').value = 'Laptop theft';
   next(ui);
@@ -640,7 +673,7 @@ test('parties and controls skipped after ticking are shown unticked when the rev
   check(ui, '[data-control="c1"]');
   ui.el('skipStep').click();
   assert.equal(visibleStep(ui), 'review');
-  assert.equal(reviewValue(ui, 'Affected parties'), 'None');
+  assert.equal(reviewValue(ui, 'Affects'), 'None');
   assert.equal(reviewValue(ui, 'Controls'), 'None yet');
   const change = (step) =>
     ui.el('reviewSummary').querySelector(`[data-goto-step="${step}"]`).click();
@@ -652,6 +685,6 @@ test('parties and controls skipped after ticking are shown unticked when the rev
   next(ui);
   change('parties');
   assert.equal(visibleStep(ui), 'parties');
-  assert.equal(ui.el('partyList').querySelector('[data-party="vendor:v1"]').checked, false);
-  assert.equal(ui.el('selectedParties').textContent, 'Nobody selected yet.');
+  assert.equal(ui.el('affectedList').querySelector('[data-affected="vendor:v1"]').checked, false);
+  assert.equal(ui.el('affectedChosen').textContent, 'Nobody and nothing selected yet.');
 });

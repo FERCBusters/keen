@@ -360,15 +360,6 @@ def _authenticate(request: Request) -> JSONResponse | None:
                     return JSONResponse(
                         {"detail": "risk.manage permission required"}, status_code=403
                     )
-            elif path.startswith("/v1/interested-parties"):
-                if not (
-                    has_permission(db, user, "interested_parties.manage")
-                    or has_permission(db, user, "risk.manage")
-                ):
-                    return JSONResponse(
-                        {"detail": "interested_parties.manage permission required"},
-                        status_code=403,
-                    )
             elif path.startswith("/v1/quizzes"):
                 if not has_permission(db, user, "quiz.manage"):
                     return JSONResponse(

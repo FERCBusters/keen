@@ -58,11 +58,6 @@ from app.db.models import (  # noqa: E402
     ControlItem,
     Event,
     FrameworkClause,
-    InterestedParty,
-    InterestedPartyCommunication,
-    InterestedPartyControlLink,
-    InterestedPartyName,
-    InterestedPartyNature,
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
     IsmsBusinessProcess,
@@ -100,8 +95,6 @@ def linked_record(model: type, filters: dict[str, Any]) -> tuple[str, Any] | Non
         return filters["entity_type"], filters["entity_id"]
     if model is RiskControlLink:
         return "risk", filters["risk_id"]
-    if model is InterestedPartyControlLink:
-        return "interested_party", filters["interested_party_id"]
     return None
 
 
@@ -316,22 +309,6 @@ class DemoSeeder:
                 {
                     "risk_id": risk.id,
                     "framework_slug": framework,
-                    "control_item_id": control.id,
-                },
-            )
-
-    def link_interested_party_controls(
-        self, party: InterestedParty, refs: Iterable[str]
-    ) -> None:
-        for ref in refs:
-            control = self._control(ref)
-            if not control:
-                continue
-            self.ensure_link(
-                InterestedPartyControlLink,
-                {
-                    "interested_party_id": party.id,
-                    "framework_slug": self.framework,
                     "control_item_id": control.id,
                 },
             )
@@ -639,107 +616,6 @@ class DemoSeeder:
                 {"created_by_user_id": self.user.id},
             )
         return pestle_processes
-
-    def seed_interested_parties(self) -> None:
-        specs = [
-            {
-                "name": "Customers",
-                "nature": "Expect secure and available service",
-                "note": "Customers require reliable service delivery, clear security obligations, and timely incident communication.",
-                "controls": ["A.5.1", "A.5.24", "A.5.26", "A.8.15"],
-                "communications": [
-                    ("Business as Usual", "Routine", "Individual member", ["Email"]),
-                    (
-                        "Incident",
-                        "Within 24 hours",
-                        "Individual member",
-                        ["Email", "Telephone"],
-                    ),
-                ],
-            },
-            {
-                "name": "Staff",
-                "nature": "Need clear policies and secure tooling",
-                "note": "Staff need current policies, training, and access to approved systems.",
-                "controls": ["A.5.4", "A.6.3", "A.6.5", "A.8.2"],
-                "communications": [
-                    (
-                        "Business as Usual",
-                        "Routine",
-                        "Individual staff member",
-                        ["Email", "Chat"],
-                    ),
-                    (
-                        "Alert",
-                        "Upon Identification",
-                        "Individual staff member",
-                        ["Chat"],
-                    ),
-                ],
-            },
-            {
-                "name": "Regulators",
-                "nature": "Expect notification and evidence records",
-                "note": "Regulators may require notification records, investigation evidence, and management review outcomes.",
-                "controls": ["A.5.31", "A.5.34", "A.5.36", "A.8.15"],
-                "communications": [
-                    (
-                        "Notifiable Event",
-                        "Within 72 hours",
-                        "ICO",
-                        ["ICO Portal", "Email"],
-                    ),
-                ],
-            },
-            {
-                "name": "Managed hosting provider",
-                "nature": "Supplier assurance and technical support",
-                "note": "Hosting suppliers support operational resilience and require assurance review.",
-                "controls": ["A.5.19", "A.5.20", "A.5.21", "A.5.23"],
-                "communications": [
-                    (
-                        "Incident",
-                        "As Required",
-                        "Supplier Point of Contact",
-                        ["Email", "Telephone"],
-                    ),
-                    (
-                        "Business as Usual",
-                        "Routine",
-                        "Senior Supplier Point of Contact",
-                        ["Email"],
-                    ),
-                ],
-            },
-        ]
-        for spec in specs:
-            name = self.upsert(
-                InterestedPartyName,
-                {"name": self.label(spec["name"])},
-                {"created_by_user_id": self.user.id},
-            )
-            nature = self.upsert(
-                InterestedPartyNature,
-                {"name": spec["nature"]},
-                {"created_by_user_id": self.user.id},
-            )
-            party = self.upsert(
-                InterestedParty,
-                {"name_id": name.id, "nature_id": nature.id},
-                {"note": spec["note"], "created_by_user_id": self.user.id},
-            )
-            self.link_interested_party_controls(party, spec["controls"])
-            for event, when, with_whom, methods in spec["communications"]:
-                self.ensure_link(
-                    InterestedPartyCommunication,
-                    {
-                        "interested_party_id": party.id,
-                        "event": event,
-                        "when": when,
-                        "with_whom": with_whom,
-                    },
-                    {"methods": methods},
-                )
 
     def seed_access_matrix(
         self,
@@ -1646,7 +1522,7 @@ class DemoSeeder:
             },
             {
                 "key": "supplier_audit",
-                "title": "Supplier and Interested Parties Assurance Audit",
+                "title": "Supplier and Third-Party Assurance Audit",
                 "status": "open",
                 "audit_type": "external",
                 "start_offset": 15,
@@ -1655,7 +1531,7 @@ class DemoSeeder:
                 "clauses": ["4.2", "6.1", "8.1", "9.1"],
                 "documents": ["supplier_standard", "incident_process"],
                 "diary": ["supplier_assurance"],
-                "summary": "Open sample audit for supplier governance, hosting assurance, and interested-party communication expectations.",
+                "summary": "Open sample audit for supplier governance, hosting assurance, and third-party communication expectations.",
             },
             {
                 "key": "incident_audit",
@@ -2012,7 +1888,6 @@ class DemoSeeder:
         licenses = self.seed_licenses()
         assets = self.seed_assets(licenses, org_nodes)
         processes = self.seed_business_processes()
-        self.seed_interested_parties()
         risks = seed_risks(self, assets, org_nodes)
         seed_pestle(self, processes)
         self.seed_access_matrix(assets, org_nodes)

@@ -1,9 +1,9 @@
 """Authorisation matrix through the real deployment, using synthetic accounts.
 
 Each row names the roles that must be allowed; every other role must be denied.
-The permission model follows SECURITY.md: risk.read implies PESTLE, interested
-party and ISMS read access, risk.manage implies their management, and
-audits.manage implies events.read and isms.read.
+The permission model follows SECURITY.md: risk.read implies PESTLE(E) and ISMS
+read access, risk.manage implies their management, and audits.manage implies
+events.read and isms.read.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ EVENTS = {"events_reader", "questioner", "audit_manager"}
 RISK = {"risk_reader", "risk_manager"}
 ISMS = {"isms_reader", "isms_manager", "audit_manager"} | RISK
 PESTLE = {"pestle_reader"} | RISK
-PARTIES = {"parties_reader"} | RISK
 AUDITS = {"audit_reader", "audit_manager"}
 
 READS = [
@@ -35,8 +34,7 @@ READS = [
     ("/api/v1/risks/users", {"risk_manager"}),
     ("/api/v1/pestle/items", PESTLE),
     ("/api/v1/pestle/items/{pestle}", PESTLE),
-    ("/api/v1/interested-parties", PARTIES),
-    ("/api/v1/interested-parties/{party}", PARTIES),
+    ("/api/v1/affected/options", ISMS),
     ("/api/v1/isms/objectives", ISMS),
     ("/api/v1/isms/objectives/{objective}", ISMS),
     ("/api/v1/isms/documents/{document}", ISMS),
@@ -102,13 +100,6 @@ WRITES = [
         "PATCH",
         "/api/v1/pestle/items/{pestle}",
         {"item": "e2e-changed"},
-        {"risk_manager"},
-    ),
-    (
-        "party",
-        "PATCH",
-        "/api/v1/interested-parties/{party}",
-        {"note": "e2e-changed"},
         {"risk_manager"},
     ),
     (

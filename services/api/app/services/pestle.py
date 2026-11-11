@@ -25,6 +25,13 @@ from app.db.models import (
     User,
 )
 from app.security.permissions import has_any_permission
+from app.services.affected import (
+    MAX_AFFECTED,
+    AffectedRef,
+    affected_list,
+    affected_loads,
+)
+from app.services.affected_links import replace_affected_links
 from app.services.control_refs import clause_summary, control_summary
 from app.services.entity_changelog import (
     list_entity_changelogs,
@@ -82,6 +89,8 @@ class PestleItemPayload(BaseModel):
     overall_relevance_id: uuid.UUID | None = None
     overall_relevance_code: str | None = Field(default="na", max_length=32)
     rationale: str | None = Field(default="", max_length=20000)
+    # The people, vendors and assets the factor affects; omit to keep them.
+    affected: list[AffectedRef] | None = Field(default=None, max_length=MAX_AFFECTED)
 
 
 class BusinessProcessPayload(BaseModel):
@@ -101,6 +110,21 @@ class BusinessProcessLinksPayload(BaseModel):
 
 class ClauseLinksPayload(BaseModel):
     items: list[RelevanceLinkPayload] = Field(default_factory=list)
+
+
+def _replace_affected(
+    db: Session, item: PestleItem, refs: list[AffectedRef], *, user: User
+) -> None:
+    """Replace the people, vendors and assets the factor affects."""
+
+    item.affected_links = replace_affected_links(
+        db,
+        list(item.affected_links),
+        refs,
+        owner={"pestle_item_id": item.id},
+        user=user,
+    )
+    db.flush()
 
 
 def can_read_pestle(db: Session, user: User | None) -> bool:
@@ -276,6 +300,7 @@ def _item_out(
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "business_process_count": len(business_links),
         "clause_count": len(clause_links),
+        "affected": affected_list(list(row.affected_links)),
     }
     if include_links:
         out["business_processes"] = [
@@ -440,7 +465,8 @@ def list_pestle_items(
 
     total = int(qry.count() or 0)
     rows = (
-        qry.order_by(
+        qry.options(affected_loads(PestleItem.affected_links))
+        .order_by(
             PestleItem.type.asc(), PestleItem.lens.asc(), PestleItem.updated_at.desc()
         )
         .offset(offset)
@@ -472,6 +498,8 @@ def create_pestle_item(*, payload: PestleItemPayload, user, db: Session):
     _apply_item_payload(db, row, payload, is_create=True)
     db.add(row)
     db.flush()
+    if payload.affected is not None:
+        _replace_affected(db, row, payload.affected, user=user)
     record_entity_changelog(
         db,
         entity_type="pestle_item",
@@ -497,6 +525,8 @@ def update_pestle_item(*, item_id: str, payload: PestleItemPayload, user, db: Se
     row = _item_or_404(db, item_id)
     before = pestle_item_changelog_state(db, row.id)
     _apply_item_payload(db, row, payload, is_create=False)
+    if payload.affected is not None:
+        _replace_affected(db, row, payload.affected, user=user)
     db.add(row)
     db.flush()
     record_entity_changelog(

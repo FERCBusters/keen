@@ -122,7 +122,6 @@ test('risk and ISMS pages are grouped into menus that keep the framework', async
     ['Risks dashboard', '/risks.html?framework=A'],
     ['Add a risk', '/risk-wizard.html?framework=A'],
     ['PESTLE(E) method', '/risks.html?tab=pestle&framework=A'],
-    ['Interested parties', '/interested_parties.html?framework=A'],
     ['Keen Mitigator', '/mitigator.html?framework=A'],
   ]);
   assert.deepEqual(ui.menu('ismsDropdown'), [
@@ -134,7 +133,7 @@ test('risk and ISMS pages are grouped into menus that keep the framework', async
     ['Policies & processes', '/isms.html?tab=documents&framework=A'],
     ['Organisation chart', '/isms.html?tab=org&framework=A'],
     ['Asset matrix', '/isms.html?tab=assets&framework=A'],
-    ['People & vendors', '/assurance.html?framework=A'],
+    ['People & vendors / 3rd parties', '/assurance.html?framework=A'],
     ['Access control matrix', '/isms.html?tab=access&framework=A'],
     ['Minutes of meetings', '/isms.html?tab=meetings&framework=A'],
     ['Statement of Applicability', '/statement-of-applicability.html?framework=A'],

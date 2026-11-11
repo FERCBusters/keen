@@ -16,9 +16,8 @@ from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.db.models import (
     ControlItem,
-    InterestedParty,
-    InterestedPartyName,
-    InterestedPartyNature,
+    IsmsPerson,
+    IsmsVendor,
     PestleBusinessProcess,
     PestleBusinessProcessRelevance,
     PestleClauseRelevance,
@@ -30,6 +29,8 @@ from app.db.models import (
     RiskLibraryEntry,
 )
 from app.security.regex import scan_pattern
+from app.services import features
+from app.services.affected import KIND_FEATURES, record_out
 from app.services.control_refs import clause_summary, control_summary
 from app.services.mitigator_catalogue import catalogue_tokens, rank_library
 
@@ -703,146 +704,101 @@ def _search_existing_risks(
     return matches[:limit]
 
 
-def _detect_interested_parties(
-    *, text_blob: str, rules: dict[str, Any]
+# How many people, vendors and assets the Mitigator reads to match them.
+_AFFECTED_SCAN_LIMIT = 2000
+
+
+def _suggest_affected(
+    db: Session, *, text_blob: str, rules: dict[str, Any], limit: int = 8
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    suggestions: list[dict[str, Any]] = []
+    """Existing people, vendors and assets the issue appears to affect.
+
+    A record whose name appears in the issue is a strong match. A group the
+    issue mentions (``affected`` in the rules, such as suppliers or regulators)
+    suggests the records of its kinds whose name or description holds one of
+    the group's record words. Nothing is created.
+    """
+
+    text_norm = _norm_text(text_blob)
+    state = features.state(db)
+    groups: list[tuple[dict[str, Any], list[str]]] = []
     signals: list[dict[str, Any]] = []
     terms: list[str] = []
-    for key, cfg in (rules.get("interested_parties") or {}).items():
-        name = str(cfg.get("name") or key).strip()
-        matched = [t for t in cfg.get("terms") or [] if _contains_term(text_blob, t)]
-        if not matched:
+    for key, cfg in (rules.get("affected") or {}).items():
+        hits = [
+            t
+            for t in cfg.get("terms") or []
+            if _contains_norm(text_norm, _norm_text(t))
+        ]
+        if not hits:
             continue
         terms.extend(cfg.get("terms") or [])
-        nature = str(cfg.get("nature") or "Impacted by scenario").strip()
-        suggestion = {
-            "key": key,
-            "name": name,
-            "nature": nature,
-            "note": cfg.get("note")
-            or "Suggested by Keen Mitigator from issue keywords.",
-            "matched_terms": _unique_strs(matched)[:12],
-            "reason": cfg.get("reason")
-            or f"The issue mentions terms that affect {name}.",
-            "communication": cfg.get("communication") or None,
-        }
-        suggestions.append(suggestion)
+        label = str(cfg.get("label") or key.replace("_", " ").title())
+        reason = cfg.get("reason") or f"The issue mentions {label.lower()}."
+        groups.append(({**cfg, "label": label, "reason": reason}, hits))
         signals.append(
             {
-                "kind": "interested_party",
-                "label": name,
-                "matched_terms": suggestion["matched_terms"],
-                "reason": suggestion["reason"],
+                "kind": "affected",
+                "label": label,
+                "matched_terms": _unique_strs(hits)[:12],
+                "reason": reason,
             }
         )
-    suggestions.sort(key=lambda row: str(row.get("name") or ""))
-    return suggestions, signals, terms
 
+    candidates: list[tuple[IsmsPerson | IsmsVendor | RiskAsset, str]] = []
+    if state.enabled(KIND_FEATURES["person"]):
+        candidates += [
+            (person, f"{person.name} {person.position}")
+            for person in db.query(IsmsPerson).limit(_AFFECTED_SCAN_LIMIT)
+        ]
+    if state.enabled(KIND_FEATURES["vendor"]):
+        candidates += [
+            (vendor, f"{vendor.name} {vendor.description}")
+            for vendor in db.query(IsmsVendor).limit(_AFFECTED_SCAN_LIMIT)
+        ]
+    if state.enabled(KIND_FEATURES["asset"]):
+        candidates += [
+            (asset, asset.name)
+            for asset in db.query(RiskAsset)
+            .options(joinedload(RiskAsset.category), joinedload(RiskAsset.subcategory))
+            .limit(_AFFECTED_SCAN_LIMIT)
+        ]
 
-def _party_out(
-    row: InterestedParty, score: float = 0, matched_terms: list[str] | None = None
-) -> dict[str, Any]:
-    return {
-        "id": str(row.id),
-        "name": getattr(row.name, "name", "") or "",
-        "nature": getattr(row.nature, "name", "") or "",
-        "label": f"{getattr(row.name, 'name', '') or ''} - {getattr(row.nature, 'name', '') or ''}",
-        "note": row.note or "",
-        "score": round(score, 2) if score else 0,
-        "confidence": _confidence(score, strong=24, medium=12) if score else "existing",
-        "matched_terms": _unique_strs(matched_terms or [])[:12],
-    }
-
-
-def _search_interested_parties(
-    db: Session,
-    *,
-    framework: str,
-    terms: list[str],
-    suggested_parties: list[dict[str, Any]],
-    selected_control_ids: list[str],
-    issue: str,
-    limit: int = 8,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    rows = (
-        db.query(InterestedParty)
-        .join(InterestedPartyName, InterestedPartyName.id == InterestedParty.name_id)
-        .join(
-            InterestedPartyNature, InterestedPartyNature.id == InterestedParty.nature_id
-        )
-        .options(joinedload(InterestedParty.name), joinedload(InterestedParty.nature))
-        .all()
-    )
-    existing_matches: list[dict[str, Any]] = []
-    exact_existing_keys: set[str] = set()
-    for row in rows:
-        doc = " ".join(
-            str(p or "")
-            for p in [
-                getattr(row.name, "name", ""),
-                getattr(row.nature, "name", ""),
-                row.note,
-            ]
-        )
-        score, matched_terms = _term_score(
-            doc,
-            terms,
-            title=f"{getattr(row.name, 'name', '')} {getattr(row.nature, 'name', '')}",
-        )
-        for suggestion in suggested_parties:
-            if _norm_text(getattr(row.name, "name", "")) == _norm_text(
-                suggestion.get("name")
+    suggestions: list[dict[str, Any]] = []
+    for row, doc in candidates:
+        out = record_out(row)
+        score = 0.0
+        matched: list[str] = []
+        reasons: list[str] = []
+        name = _norm_text(row.name)
+        if len(name) >= 3 and _contains_norm(text_norm, name):
+            score += 24.0
+            matched.append(row.name)
+            reasons.append(f"The issue names {row.name}.")
+        doc_norm = _norm_text(doc)
+        for cfg, hits in groups:
+            if out["kind"] not in (cfg.get("kinds") or []):
+                continue
+            if any(
+                _contains_norm(doc_norm, _norm_text(word))
+                for word in cfg.get("record_words") or []
             ):
-                score += 8.0
-                matched_terms.extend(suggestion.get("matched_terms") or [])
-                if _norm_text(getattr(row.nature, "name", "")) == _norm_text(
-                    suggestion.get("nature")
-                ):
-                    score += 12.0
-                    exact_existing_keys.add(
-                        _norm_text(
-                            f"{suggestion.get('name')}|{suggestion.get('nature')}"
-                        )
-                    )
-        if score < 8:
+                score += 12.0
+                matched.extend(hits)
+                reasons.append(cfg["reason"])
+        if not score:
             continue
-        existing_matches.append(
-            _party_out(row, score=score, matched_terms=matched_terms)
-        )
-    existing_matches.sort(
-        key=lambda x: (-float(x.get("score") or 0), str(x.get("label") or ""))
-    )
-
-    create_suggestions: list[dict[str, Any]] = []
-    for idx, suggestion in enumerate(suggested_parties):
-        key = _norm_text(f"{suggestion.get('name')}|{suggestion.get('nature')}")
-        communication = suggestion.get("communication") or None
-        communications = [communication] if isinstance(communication, dict) else []
-        draft = {
-            "framework": framework,
-            "name": suggestion.get("name"),
-            "nature": suggestion.get("nature"),
-            "note": "\n".join(
-                [
-                    "Created from Keen Mitigator questionnaire.",
-                    str(suggestion.get("note") or "").strip(),
-                    str(issue or "").strip(),
-                ]
-            ).strip(),
-            "controls": selected_control_ids,
-            "communications": communications,
-        }
-        create_suggestions.append(
+        suggestions.append(
             {
-                **suggestion,
-                "id": f"draft-{idx}",
-                "duplicate_exact": key in exact_existing_keys,
-                "draft": draft,
+                **out,
+                "score": score,
+                "confidence": _confidence(score, strong=24, medium=12),
+                "matched_terms": _unique_strs(matched)[:12],
+                "reasons": _unique_strs(reasons),
             }
         )
-
-    return existing_matches[:limit], create_suggestions
+    suggestions.sort(key=lambda x: (-x["score"], x["label"].lower(), x["id"]))
+    return suggestions[:limit], signals, terms
 
 
 def analyse_risk_mitigation(
@@ -960,16 +916,15 @@ def analyse_risk_mitigation(
         rules=rules,
         pestle_hits=pestle_hits,
     )
-    party_detections, party_signals, party_terms = _detect_interested_parties(
-        text_blob=text_blob,
-        rules=rules,
+    affected_suggestions, affected_signals, affected_terms = _suggest_affected(
+        db, text_blob=text_blob, rules=rules
     )
     signals.extend(pestle_signals)
     signals.extend(business_process_signals)
-    signals.extend(party_signals)
+    signals.extend(affected_signals)
     terms_for_matching.extend(pestle_terms)
     terms_for_matching.extend(bp_terms)
-    terms_for_matching.extend(party_terms)
+    terms_for_matching.extend(affected_terms)
 
     # Let the user's own words influence matches as well, without letting very short
     # or generic tokens dominate the curated controls vocabulary.
@@ -1147,10 +1102,10 @@ def analyse_risk_mitigation(
             "Detected PESTLE(E) types: "
             + ", ".join(hit.get("type") or "" for hit in pestle_hits[:4])
         )
-    if party_detections:
+    if affected_suggestions:
         note_lines.append(
-            "Detected interested parties: "
-            + ", ".join(p.get("name") or "" for p in party_detections[:6])
+            "Possibly affected: "
+            + ", ".join(item["label"] for item in affected_suggestions[:6])
         )
     if active_flags:
         note_lines.append("Selected impacts: " + ", ".join(sorted(active_flags)))
@@ -1165,17 +1120,6 @@ def analyse_risk_mitigation(
         terms=terms_for_matching,
         pestle_hits=pestle_hits,
         limit=8,
-    )
-    existing_interested_parties, interested_party_suggestions = (
-        _search_interested_parties(
-            db,
-            framework=framework,
-            terms=terms_for_matching,
-            suggested_parties=party_detections,
-            selected_control_ids=selected_control_ids,
-            issue=threat_summary,
-            limit=8,
-        )
     )
     draft_pestle_item = _draft_pestle_item(
         framework=framework,
@@ -1210,13 +1154,14 @@ def analyse_risk_mitigation(
             for s in suggestions
         ],
         "pestle_hits": pestle_hits,
-        "interested_party_suggestions": [
+        "affected_suggestions": [
             {
-                "name": x.get("name"),
-                "nature": x.get("nature"),
-                "matched_terms": x.get("matched_terms") or [],
+                "kind": x["kind"],
+                "id": x["id"],
+                "label": x["label"],
+                "matched_terms": x["matched_terms"],
             }
-            for x in interested_party_suggestions
+            for x in affected_suggestions
         ],
     }
 
@@ -1252,11 +1197,10 @@ def analyse_risk_mitigation(
         "pestle_hits": pestle_hits,
         "business_process_suggestions": business_processes,
         "pestle_suggestions": existing_pestle_items,
-        "interested_party_suggestions": interested_party_suggestions,
+        "affected_suggestions": affected_suggestions,
         "existing_matches": {
             "cia_risks": existing_risks,
             "pestle_items": existing_pestle_items,
-            "interested_parties": existing_interested_parties,
         },
         "draft_risk": draft_risk,
         "draft_pestle_item": draft_pestle_item,

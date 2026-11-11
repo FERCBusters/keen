@@ -258,7 +258,7 @@ _RISK_FIELDS = (
     "subcategory",
     "risk_types",
     "risk_owner",
-    "interested_parties",
+    "affected",
     "threat_summary",
     "treatment_strategy",
     "treatment_status",
@@ -411,25 +411,6 @@ async def list_assets(
     return await _shape(listing, answer)
 
 
-async def list_interested_parties(
-    q: Query = "",
-    framework: Framework = None,
-    limit: Limit200 = 50,
-    offset: Offset = 0,
-) -> dict:
-    """List interested parties, the nature of their interest, communications
-    with them and linked controls."""
-    _needs("interested_parties.read")
-    answer = await _get(
-        "/v1/interested-parties",
-        q=q or None,
-        framework=await _framework(framework),
-        limit=limit,
-        offset=offset,
-    )
-    return await _shape(listing, answer)
-
-
 async def list_pestle_items(
     q: Query = "",
     framework: Framework = None,
@@ -494,7 +475,6 @@ TOOLS = (
     list_documents,
     get_document,
     list_assets,
-    list_interested_parties,
     list_pestle_items,
     search_evidence,
 )
@@ -510,7 +490,7 @@ def tailor_isms_document(document_title: str) -> str:
         "2. Find the controls the document addresses, and call get_control "
         "for each to see the policies, objectives, risks and evidence behind it.\n"
         "3. Use list_risks, list_swot, list_objectives, list_assets and "
-        "list_interested_parties for the context the document describes.\n"
+        "list_pestle_items for the context the document describes.\n"
         "4. Replace template placeholders with what the records show. Where Keen "
         "holds nothing for a statement, mark it [TO CONFIRM] instead of "
         "inventing it, and cite the Keen record (id or control ref) behind "

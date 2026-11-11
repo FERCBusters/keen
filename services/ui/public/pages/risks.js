@@ -36,7 +36,6 @@ import {
   methodOf,
   methodBadgeHtml,
   riskTypeBadgesHtml,
-  partyBadgesHtml,
   scoreBadge,
   severityBadge,
   treatmentLabel,
@@ -47,6 +46,7 @@ import {
   pestleHref,
   riskWizardHref,
 } from '/pages/risk-common.js';
+import { affectedBadgesHtml } from '/pages/affected-common.js';
 import {
   initRiskVisualisations,
   loadRiskVisualisations,
@@ -213,7 +213,7 @@ function renderRows(items) {
       <td>${riskCellHtml(r)}</td>
       <td>${esc(r.asset)}<div class="small-muted">${esc([r.category?.name, r.subcategory?.name].filter(Boolean).join(' › '))}</div></td>
       <td>${methodBadgeHtml(methodOf(r))}${r.risk_types.length ? `<div class="mt-1">${riskTypeBadgesHtml(r.risk_types)}</div>` : ''}</td>
-      <td>${partyBadgesHtml(r.interested_parties, framework)}</td>
+      <td>${affectedBadgesHtml(r.affected, framework)}</td>
       <td>${userPillHtml(r.risk_owner)}</td>
       <td class="text-end" data-sort="${esc(r.risk_score)}">${ratingBadge(r, 'inherent')}</td>
       <td class="text-end" data-sort="${esc(Number(r.residual_risk_score || 0))}">${ratingBadge(r, 'residual')}</td>
@@ -424,7 +424,7 @@ function pestleRelevanceBadge(level) {
 
 async function loadPestle() {
   if (!canViewPestle || !featureEnabled(me, 'pestle')) return;
-  showTableLoading($('pestleRows'), 7, 'Loading PESTLE(E) factors');
+  showTableLoading($('pestleRows'), 8, 'Loading PESTLE(E) factors');
   try {
     if (!pestleMeta) {
       pestleMeta = await apiGet('/api/v1/pestle/meta');
@@ -451,19 +451,20 @@ async function loadPestle() {
         <td>${esc(item.lens)}</td>
         <td><a class="fw-semibold" href="${esc(pestleHref(item.id, framework))}">${esc(item.item)}</a>${item.rationale ? `<div class="small-muted text-truncate" style="max-width:420px;">${esc(item.rationale)}</div>` : ''}</td>
         <td>${pestleRelevanceBadge(item.overall_relevance)}</td>
+        <td>${affectedBadgesHtml(item.affected, framework)}</td>
         <td>${esc(String(item.business_process_count))}</td>
         <td>${esc(String(item.clause_count))}</td>
         <td class="no-print"><a class="btn btn-sm btn-outline-secondary" href="${esc(pestleHref(item.id, framework))}">Open</a></td>
       </tr>`,
           )
           .join('')
-      : '<tr><td colspan="7" class="p-4 text-center small-muted">No PESTLE(E) factors yet. Use “Add a PESTLE(E) factor” to record one.</td></tr>';
+      : '<tr><td colspan="8" class="p-4 text-center small-muted">No PESTLE(E) factors yet. Use “Add a PESTLE(E) factor” to record one.</td></tr>';
     $('pestleMeta').textContent =
       `${pestleItems.length} factor${pestleItems.length === 1 ? '' : 's'} for ${data.framework}. Open a factor to score its relevance to business processes and clauses.`;
     loaded.pestle = true;
   } catch (e) {
     $('pestleRows').innerHTML =
-      '<tr><td colspan="7" class="p-4 text-center text-danger">Failed to load PESTLE(E) factors.</td></tr>';
+      '<tr><td colspan="8" class="p-4 text-center text-danger">Failed to load PESTLE(E) factors.</td></tr>';
     notify(`Failed to load PESTLE(E) factors: ${errorText(e)}`);
   }
 }

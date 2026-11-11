@@ -104,10 +104,6 @@ def require_sample_source_access(
         from app.services.pestle import can_read_pestle
 
         allowed = can_read_pestle(db, user)
-    elif entity_type == "interested_party":
-        from app.services.interested_parties import can_read_interested_parties
-
-        allowed = can_read_interested_parties(db, user)
     elif entity_type == "story":
         from app.services.stories import can_read_stories
 

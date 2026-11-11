@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.api.routing import Router
 
 from .admin import router as admin_router
+from .affected import router as affected_router
 from .agents import router as agents_router
 from .artifacts import router as artifacts_router
 from .assurance import router as assurance_router
@@ -20,7 +21,6 @@ from .graph import router as graph_router
 from .home import router as home_router
 from .inbox import router as inbox_router
 from .integrations import router as integrations_router
-from .interested_parties import router as interested_parties_router
 from .isms import router as isms_router
 from .managed_configurations import router as managed_configurations_router
 from .mcp import router as mcp_router
@@ -67,8 +67,8 @@ OPENAPI_TAGS = [
         "description": "PESTLE(E) impact items, business processes and relevance mappings.",
     },
     {
-        "name": "Interested parties",
-        "description": "Interested party names, nature of interest, linked controls and communications.",
+        "name": "Affected records",
+        "description": "People, vendors and assets a risk or PESTLE(E) factor can name as affected.",
     },
     {
         "name": "Artifacts",
@@ -88,7 +88,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Statement of Applicability",
-        "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E), interested parties and ISMS.",
+        "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E) and ISMS.",
     },
     {
         "name": "Quizzes",
@@ -129,7 +129,7 @@ router.include_router(managed_configurations_router, tags=["Admin"])
 router.include_router(events_router, tags=["Events"])
 router.include_router(questions_router, tags=["Questions"])
 router.include_router(pestle_router, tags=["PESTLE(E)"])
-router.include_router(interested_parties_router, tags=["Interested parties"])
+router.include_router(affected_router, tags=["Affected records"])
 router.include_router(isms_router, tags=["ISMS"])
 router.include_router(assurance_router, tags=["Assurance"])
 router.include_router(bookstack_sections_router, tags=["ISMS"])

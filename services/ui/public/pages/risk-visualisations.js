@@ -148,7 +148,7 @@ function renderRiskControlsGraph() {
     return;
   }
   el.innerHTML = '';
-  el.classList.add('interested-party-bipartite-viz');
+  el.classList.add('bipartite-viz');
   const riskMap = new Map(risks.map((node) => [node.id, node]));
   const controlMap = new Map(controlNodes.map((node) => [node.id, node]));
   const compact = el.clientWidth && el.clientWidth < 720;
@@ -229,7 +229,7 @@ function renderRiskControlsGraph() {
     const maxPrimary = isRisk ? (compact ? 28 : 44) : compact ? 28 : 36;
     const maxSecondary = isRisk ? (compact ? 26 : 42) : compact ? 28 : 48;
     selection
-      .attr('class', 'interested-party-bipartite-node')
+      .attr('class', 'bipartite-node')
       .attr('transform', (node) => `translate(${x},${yScale(node.id)})`);
     selection
       .append('circle')
@@ -269,7 +269,7 @@ function renderRiskControlsHeatmap() {
   const linkMap = new Map(links.map((link) => [`${link.source}::${link.target}`, link]));
   const maxScore = Math.max(1, ...links.map((link) => riskVizScoreValue(link, scoreMode)));
   const scoreLabel = riskVizScoreLabel(scoreMode);
-  el.classList.add('interested-party-control-matrix');
+  el.classList.add('record-control-matrix');
   el.innerHTML = `
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3 no-print">
       <div class="small-muted">${esc(risks.length)} risk(s), ${esc(controlNodes.length)} control(s), ${esc(links.length)} mapping(s). Darker cells have higher ${esc(scoreLabel)}.</div>
@@ -313,8 +313,8 @@ function renderRiskControlsHeatmap() {
       return;
     }
     host.innerHTML = `
-      <div class="interested-party-control-matrix-wrap risk-control-heatmap-wrap">
-        <table class="table table-sm table-bordered align-middle mb-0 interested-party-control-matrix-table risk-control-heatmap-table">
+      <div class="record-control-matrix-wrap risk-control-heatmap-wrap">
+        <table class="table table-sm table-bordered align-middle mb-0 record-control-matrix-table risk-control-heatmap-table">
           <thead>
             <tr>
               <th class="matrix-sticky-col matrix-corner">Risk scenario</th>
@@ -330,7 +330,7 @@ function renderRiskControlsHeatmap() {
                 );
                 const subtitle = riskVizSecondaryLabel(risk);
                 return `<tr>
-                <th class="matrix-sticky-col matrix-party-label">
+                <th class="matrix-sticky-col matrix-row-label">
                   <a class="fw-semibold" href="${esc(riskHref(risk.risk_id))}">${esc(truncateRiskVizText(riskVizPrimaryLabel(risk), 92))}</a>
                   <div class="small-muted">${esc(subtitle)}${linkedCount ? ` · ${linkedCount} shown control(s)` : ''}</div>
                   <div class="small-muted">Risk score: ${esc(String(risk.risk_score))} · Residual: ${esc(String(risk.residual_risk_score))}</div>

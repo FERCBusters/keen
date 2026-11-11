@@ -24,6 +24,7 @@ from app.db.models import (
     RiskControlLink,
     User,
 )
+from app.services.affected import affected_labels
 from app.services.control_refs import control_summary
 
 _CHANGE_FIELD_LABELS = {
@@ -67,7 +68,7 @@ _CHANGE_FIELD_LABELS = {
     "resource_user_ids": "Resource users",
     "source": "Source",
     "source_type": "Source type",
-    "interested_parties": "Affected parties",
+    "affected": "Affected",
     "treatment_strategy": "Treatment decision",
     "treatment_status": "Treatment status",
     "treatment_plan": "Treatment plan",
@@ -152,7 +153,6 @@ _ENTITY_LABELS = {
     "risk": "CIA triad risk",
     "pestle_item": "PESTLE(E) item",
     "pestle_business_process": "PESTLE(E) business process",
-    "interested_party": "Interested party",
     "story": "Story",
     "quiz": "Quiz",
 }
@@ -504,19 +504,6 @@ def risk_changelog_state(
     asset_name = asset.name if asset else None
     threat = (risk.threat_summary or "").strip()
     title = (risk.title or "").strip()
-    parties = []
-    for link in list(risk.party_links or []):
-        if link.interested_party_id and link.interested_party:
-            party = link.interested_party
-            parties.append(
-                f"{party.name.name if party.name else 'Interested party'}"
-                f" ({party.nature.name if party.nature else 'party'})"
-            )
-        elif link.person_id and link.person:
-            parties.append(f"{link.person.name} (person)")
-        else:
-            # A link names exactly one party, and the party's removal removes it.
-            parties.append(f"{link.vendor.name} (vendor)")
     return {
         "id": str(risk.id),
         "framework": framework,
@@ -527,7 +514,7 @@ def risk_changelog_state(
         "category": category.name if category else None,
         "subcategory": subcategory.name if subcategory else None,
         "risk_types": list(risk.risk_types or []),
-        "interested_parties": parties,
+        "affected": affected_labels(list(risk.affected_links)),
         "treatment_strategy": risk.treatment_strategy or "",
         "treatment_status": risk.treatment_status or "open",
         "treatment_plan": risk.treatment_plan or "",
@@ -627,6 +614,7 @@ def pestle_item_changelog_state(
         "rationale": item.rationale,
         "business_processes": _pestle_business_process_links(db, item.id),
         "clauses": _pestle_clause_links(db, item.id),
+        "affected": affected_labels(list(item.affected_links)),
         "created_at": item.created_at.isoformat() if item.created_at else None,
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
     }

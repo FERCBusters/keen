@@ -226,7 +226,6 @@ def test_sampling_cannot_grant_itself_bookstack_snapshot_read(
     [
         "risk",
         "pestle_item",
-        "interested_party",
         "isms_objective",
         "isms_document",
         "isms_org_node",
@@ -255,7 +254,9 @@ def test_sampling_other_sources_requires_their_read_permission(
         assert db.query(AuditEvidence).count() == 0
 
 
-@pytest.mark.parametrize("entity_type", ["document", "Isms_Document", "isms-document"])
+@pytest.mark.parametrize(
+    "entity_type", ["document", "Isms_Document", "isms-document", "interested_party"]
+)
 def test_sampling_accepts_only_the_stored_entity_names(sampling_client, entity_type):
     client, factory, ids = sampling_client
     grant(factory, ids.user, "isms.read")
@@ -466,7 +467,7 @@ def test_audit_managers_sample_the_events_and_isms_records_they_read(
     section = {"entity_type": "bookstack_section", "entity_id": str(ids.section)}
     assert client.post(url, json=section).status_code == 200
     # Records outside events and the ISMS still need their own read access.
-    for entity_type in ("risk", "pestle_item", "interested_party", "story"):
+    for entity_type in ("risk", "pestle_item", "story"):
         refused = client.post(
             url, json={"entity_type": entity_type, "entity_id": str(uuid.uuid4())}
         )

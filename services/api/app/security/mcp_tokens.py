@@ -64,10 +64,6 @@ SCOPES: dict[str, tuple[str, frozenset[str]]] = {
         "PESTLE(E) items",
         frozenset({"pestle.read", "pestle.manage"}),
     ),
-    "interested_parties.read": (
-        "Interested parties",
-        frozenset({"interested_parties.read", "interested_parties.manage"}),
-    ),
     "events.read": (
         "Evidence events and the coverage counts built from them",
         frozenset({"events.read"}),
@@ -91,7 +87,6 @@ INNER_ROUTES = (
     "/v1/isms/documents",
     "/v1/isms/documents/{document_id:uuid}",
     "/v1/isms/assets",
-    "/v1/interested-parties",
     "/v1/pestle/items",
     "/v1/events",
 )

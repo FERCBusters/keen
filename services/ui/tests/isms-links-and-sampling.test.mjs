@@ -525,9 +525,9 @@ test('an empty organisation chart says so, and filtering keeps the empty row vis
   assert.equal(emptyRow.closest('tr').style.display, '');
 });
 
-// --- Documents: folders, media and refused folder creation ---------------------------
+// --- Documents: folder choices and media ---------------------------------------------
 
-test('folder choices show their path, and a cycle of parents ends', async (t) => {
+test('folder choices show their path in order, and a cycle of parents ends', async (t) => {
   const ui = await isms(t, {
     query: '&tab=documents',
     summary: (r) => ({ ...r, ...registerRows() }),
@@ -550,11 +550,17 @@ test('folder choices show their path, and a cycle of parents ends', async (t) =>
       'Governance',
       'Governance / Policies',
       'Governance / Policies / <b>Standards</b>',
-      'Loop B / Loop A',
       'Loop A / Loop B',
+      'Loop B / Loop A',
     ],
   );
   assert.equal(ui.el('docFolder').querySelector('b'), null);
+  // The tree holds the folders reachable from the top level, names as text.
+  assert.deepEqual(
+    [...ui.el('docFolderPanel').querySelectorAll('[data-folder-name]')].map((n) => n.textContent),
+    ['All documents', 'Unfiled', 'Governance', 'Policies', '<b>Standards</b>'],
+  );
+  assert.equal(ui.el('docFolderPanel').querySelector('b'), null);
 });
 
 test('editing a document in a folder added elsewhere fetches the folders again', async (t) => {
@@ -595,6 +601,8 @@ test('editing a document in a folder added elsewhere fetches the folders again',
   const before = folderRequests;
   archived = true;
   assert.equal(ui.el('docFolder').options.length, 1);
+  // A folder the tree does not know yet shows no path under the title.
+  assert.equal(ui.el('documentsRows').querySelector('.bi-folder2'), null);
 
   ui.document.querySelector('[data-isms-edit="document"][data-isms-id="d1"]').click();
 
@@ -645,28 +653,6 @@ test('a folder list that cannot be refreshed while editing is reported as a warn
   assert.equal(ui.el('status').dataset.alert, 'warning');
   assert.equal(ui.el('docFolder').value, '');
   assert.equal(ui.el('docTitle').value, 'Security policy');
-});
-
-test('a refused folder is reported and the typed name is kept', async (t) => {
-  const ui = await isms(t, {
-    query: '&tab=documents',
-    summary: (r) => ({ ...r, ...registerRows() }),
-    post: (u) => {
-      if (u.pathname === '/api/v1/isms/document-folders') throw new Error('Folder name taken');
-      return { ok: true };
-    },
-  });
-  await settle(() => ui.el('documentsRows').textContent.includes('Security policy'));
-  ui.document.querySelector('[data-isms-add="document"]').click();
-  await settle(() => ui.el('documentFormCard').style.display === '');
-  ui.el('docNewFolder').value = 'Policies';
-
-  ui.el('docAddFolder').click();
-
-  await settle(() => ui.el('status').textContent === 'Folder name taken');
-  assert.equal(ui.el('status').dataset.alert, 'danger');
-  assert.equal(ui.el('docNewFolder').value, 'Policies');
-  assert.equal(ui.el('docFolder').options.length, 1);
 });
 
 // --- Refused actions are reported in place -------------------------------------------

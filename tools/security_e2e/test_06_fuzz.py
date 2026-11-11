@@ -132,7 +132,6 @@ def test_create_payload_type_confusion(admin, needs_writes, cleanup, run_id):
             "item": run_id,
         },
         "/api/v1/isms/objectives": {"requirement": run_id, "goal": run_id},
-        "/api/v1/interested-parties": {"name": run_id, "nature": run_id},
         "/api/v1/audits": {"title": run_id},
     }
     findings = []

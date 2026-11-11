@@ -68,7 +68,6 @@ test('a Risks link outside a list item turns its container into the risk menu', 
       ['Risks dashboard', '/risks.html?framework=A'],
       ['Add a risk', '/risk-wizard.html?framework=A'],
       ['PESTLE(E) method', '/risks.html?tab=pestle&framework=A'],
-      ['Interested parties', '/interested_parties.html?framework=A'],
       ['Keen Mitigator', '/mitigator.html?framework=A'],
     ],
   );

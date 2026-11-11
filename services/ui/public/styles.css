@@ -640,23 +640,23 @@ a.schedule-calendar-event {
   min-height: 520px;
 }
 
-.interested-party-bipartite-viz {
+.bipartite-viz {
   position: relative;
   min-width: 0;
   overflow: hidden;
 }
 
-.interested-party-bipartite-viz svg {
+.bipartite-viz svg {
   display: block;
   max-width: 100%;
   cursor: grab;
 }
 
-.interested-party-bipartite-viz svg:active {
+.bipartite-viz svg:active {
   cursor: grabbing;
 }
 
-.interested-party-bipartite-node text {
+.bipartite-node text {
   paint-order: stroke;
   stroke: var(--bs-body-bg);
   stroke-width: 3px;
@@ -700,12 +700,12 @@ a.schedule-calendar-event {
   font-size: 0.78rem;
 }
 
-/* Interested Parties control matrix */
-.interested-party-control-matrix {
+/* Records × controls matrix */
+.record-control-matrix {
   min-width: 0;
 }
 
-.interested-party-control-matrix-wrap {
+.record-control-matrix-wrap {
   max-height: 72vh;
   overflow: auto;
   border: 1px solid var(--bs-border-color);
@@ -713,25 +713,25 @@ a.schedule-calendar-event {
   background: var(--bs-body-bg);
 }
 
-.interested-party-control-matrix-table {
+.record-control-matrix-table {
   min-width: max-content;
   border-collapse: separate;
   border-spacing: 0;
 }
 
-.interested-party-control-matrix-table th,
-.interested-party-control-matrix-table td {
+.record-control-matrix-table th,
+.record-control-matrix-table td {
   border-color: var(--bs-border-color);
 }
 
-.interested-party-control-matrix-table thead th {
+.record-control-matrix-table thead th {
   position: sticky;
   top: 0;
   z-index: 3;
   background: var(--bs-tertiary-bg);
 }
 
-.interested-party-control-matrix-table .matrix-sticky-col {
+.record-control-matrix-table .matrix-sticky-col {
   position: sticky;
   left: 0;
   z-index: 2;
@@ -740,12 +740,12 @@ a.schedule-calendar-event {
   background: var(--bs-body-bg);
 }
 
-.interested-party-control-matrix-table thead .matrix-sticky-col {
+.record-control-matrix-table thead .matrix-sticky-col {
   z-index: 4;
   background: var(--bs-tertiary-bg);
 }
 
-.interested-party-control-matrix-table .matrix-control-header {
+.record-control-matrix-table .matrix-control-header {
   width: 2.75rem;
   min-width: 2.75rem;
   max-width: 2.75rem;
@@ -755,7 +755,7 @@ a.schedule-calendar-event {
   text-align: center;
 }
 
-.interested-party-control-matrix-table .matrix-control-link {
+.record-control-matrix-table .matrix-control-link {
   display: inline-block;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
@@ -766,20 +766,20 @@ a.schedule-calendar-event {
   text-decoration: none;
 }
 
-.interested-party-control-matrix-table .matrix-control-link:hover {
+.record-control-matrix-table .matrix-control-link:hover {
   text-decoration: underline;
 }
 
-.interested-party-control-matrix-table .matrix-party-label {
+.record-control-matrix-table .matrix-row-label {
   white-space: normal;
 }
 
-.interested-party-control-matrix-table .matrix-party-note {
+.record-control-matrix-table .matrix-row-note {
   margin-top: 0.2rem;
   font-size: 0.72rem;
 }
 
-.interested-party-control-matrix-table .matrix-cell {
+.record-control-matrix-table .matrix-cell {
   width: 2.75rem;
   min-width: 2.75rem;
   height: 2.35rem;
@@ -788,17 +788,17 @@ a.schedule-calendar-event {
   vertical-align: middle;
 }
 
-.interested-party-control-matrix-table .matrix-cell-empty {
+.record-control-matrix-table .matrix-cell-empty {
   background: var(--bs-body-bg);
 }
 
-.interested-party-control-matrix-table .matrix-cell-linked {
+.record-control-matrix-table .matrix-cell-linked {
   background: var(--bs-primary-bg-subtle);
   color: var(--bs-primary-text-emphasis);
   font-weight: 700;
 }
 
-.interested-party-control-matrix-table .matrix-cell-linked a {
+.record-control-matrix-table .matrix-cell-linked a {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -808,7 +808,7 @@ a.schedule-calendar-event {
   text-decoration: none;
 }
 
-.interested-party-control-matrix-table tbody tr:hover .matrix-cell-empty {
+.record-control-matrix-table tbody tr:hover .matrix-cell-empty {
   background: var(--bs-tertiary-bg);
 }
 
@@ -2524,4 +2524,74 @@ dialog.keen-confirm [data-message] {
 /* A link to Suggested rules scrolls it into view below the fixed navigation bar. */
 #ec-suggestions {
   scroll-margin-top: calc(var(--ui-nav-height, 3.5rem) + 0.5rem);
+}
+
+/* Document folder tree beside Policies & processes (pages/document-folders.js). */
+@media (min-width: 1200px) {
+  /* Beside the table the tree stays in view while the documents scroll. */
+  .keen-folder-panel {
+    position: sticky;
+    top: calc(var(--ui-nav-height, var(--keen-nav-height, 0px)) + 0.75rem);
+  }
+}
+.keen-folder-tree,
+.keen-folder-group {
+  margin: 0;
+  padding: 0;
+}
+.keen-folder-group {
+  margin-inline-start: 0.85rem;
+  padding-inline-start: 0.35rem;
+  border-inline-start: 1px dashed rgba(var(--keen-accent-rgb), 0.35);
+}
+.keen-folder-tree [role='treeitem'] {
+  outline: none;
+}
+.keen-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.keen-folder-row:hover {
+  background: var(--bs-tertiary-bg);
+}
+.keen-folder-tree [role='treeitem'][aria-selected='true'] > .keen-folder-row {
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-weight: 600;
+}
+.keen-folder-tree [role='treeitem']:focus-visible > .keen-folder-row {
+  box-shadow: 0 0 0 0.2rem rgba(var(--keen-accent-rgb), 0.35);
+}
+.keen-folder-row[draggable='true'] {
+  cursor: grab;
+}
+.keen-folder-row.keen-folder-drop {
+  border-color: var(--keen-accent);
+  background: rgba(var(--keen-accent-rgb), 0.12);
+}
+.keen-folder-toggle {
+  display: inline-flex;
+  justify-content: center;
+  flex: 0 0 1rem;
+  color: var(--bs-secondary-color);
+}
+.keen-folder-icon {
+  color: var(--keen-accent);
+}
+.keen-folder-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.keen-folder-input {
+  padding-block: 0.1rem;
+}
+tr[data-doc-drag] {
+  cursor: grab;
 }

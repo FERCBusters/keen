@@ -35,7 +35,6 @@ NOISE = frozenset(
         "justification_options",
         "can_view_risks",
         "can_view_pestle",
-        "can_view_interested_parties",
         "can_view_isms",
         "can_view_swot",
     }

@@ -84,20 +84,11 @@
           </div>
         </section>
 
-        <!-- Step 3: parties -->
+        <!-- Step 3: who and what is affected -->
         <section class="risk-wizard-step" data-step="parties" hidden>
-          <h2 class="h5">Who is affected?</h2>
-          <p class="small-muted">Optional. Tick the people, suppliers or interested parties the risk affects, such as customers, regulators, staff or a vendor. If someone is missing, add them here and Keen records them as an interested party.</p>
-          <input id="partySearch" class="form-control mb-2" type="search" placeholder="Search interested parties, people and vendors, or type a new name" aria-label="Search affected parties" autocomplete="off">
-          <div id="partyList" class="list-group mb-3"></div>
-          <div id="newPartyPanel" class="border rounded-3 p-3" hidden>
-            <div class="fw-semibold mb-2">Add “<span id="newPartyName"></span>” as a new interested party</div>
-            <label class="form-label" for="newPartyNature">What is their relationship to you?</label>
-            <input id="newPartyNature" class="form-control" list="partyNatureOptions" maxlength="256" placeholder="e.g. Customer, Regulator, Supplier, Staff" autocomplete="off">
-            <datalist id="partyNatureOptions"></datalist>
-            <button class="btn btn-outline-primary mt-2" id="addNewParty" type="button"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add this party</button>
-          </div>
-          <div id="selectedParties" class="d-flex flex-wrap gap-1 mt-3"></div>
+          <h2 class="h5">Who and what does it affect?</h2>
+          <p class="small-muted">Optional. Tick the people, vendors / 3rd parties (customers, suppliers or a regulator, say) and other assets it affects. Someone missing can be added by name, and their details completed later in People &amp; vendors / 3rd parties.</p>
+          <div id="affectedPicker"></div>
         </section>
 
         <!-- Step 4: describe -->

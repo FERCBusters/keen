@@ -76,17 +76,7 @@ const controlRelatedTab = document.getElementById('controlRelatedTab');
 const controlGovernanceTab = document.getElementById('controlGovernanceTab');
 const controlIsmsView = document.getElementById('controlIsmsView');
 const controlChangelogEl = document.getElementById('controlChangelog');
-const interestedPartiesCard = document.getElementById('interestedPartiesCard');
-const interestedPartiesView = document.getElementById('interestedPartiesView');
-const interestedPartiesCount = document.getElementById('interestedPartiesCount');
 const canViewRisks = !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
-const canViewInterestedParties = !!(
-  me?.is_admin ||
-  me?.can_view_interested_parties ||
-  me?.can_manage_interested_parties ||
-  me?.can_view_risks ||
-  me?.can_manage_risks
-);
 const canViewIsms = !!(
   me?.is_admin ||
   me?.can_view_isms ||
@@ -254,7 +244,6 @@ let clauseCatalog = { items: [], tree: [] };
 let clauseApplicabilityEditMode = false;
 // Declared before the tabs are wired: a deep-linked tab loads as the page starts.
 let risksLoaded = false;
-let interestedPartiesLoaded = false;
 let ismsLoaded = false;
 
 let state = {
@@ -356,7 +345,6 @@ function activateControlTab(name) {
 
 function wireControlTabs() {
   if (!canViewRisks) risksCard?.classList.add('d-none');
-  if (!canViewInterestedParties) interestedPartiesCard?.classList.add('d-none');
   controlRequirementsTab?.addEventListener('shown.bs.tab', () => {
     setControlTabQuery('requirements');
     loadRequirements();
@@ -371,12 +359,7 @@ function wireControlTabs() {
   });
   controlGovernanceTab?.addEventListener('shown.bs.tab', async () => {
     setControlTabQuery('governance');
-    await Promise.all([
-      loadLinkedRisks(),
-      loadLinkedInterestedParties(),
-      loadControlIsms(),
-      loadControlChangelog(),
-    ]);
+    await Promise.all([loadLinkedRisks(), loadControlIsms(), loadControlChangelog()]);
   });
   activeTab = activateControlTab(qs('tab', 'requirements'));
 }
@@ -578,64 +561,6 @@ async function loadLinkedRisks({ force = false } = {}) {
     risksCard.style.display = 'none';
   }
 }
-async function loadLinkedInterestedParties({ force = false } = {}) {
-  if (!featureEnabled(me, 'interested_parties')) return;
-  if (!id) return;
-  if (!canViewInterestedParties) {
-    interestedPartiesCard.style.display = 'none';
-    return;
-  }
-  if (interestedPartiesLoaded && !force) return;
-  interestedPartiesCard.style.display = '';
-  interestedPartiesView.innerHTML = '<span class="small-muted">Loading interested parties</span>';
-  try {
-    const data = await apiGet(
-      `/api/v1/controls/${encodeURIComponent(id)}/interested-parties?framework=${encodeURIComponent(ctrl?.framework || framework)}`,
-    );
-    const items = data.items;
-    interestedPartiesLoaded = true;
-    if (interestedPartiesCount) interestedPartiesCount.textContent = String(items.length);
-    if (!items.length) {
-      interestedPartiesView.innerHTML =
-        '<span class="small-muted">No interested parties mapped to this control for this framework.</span>';
-      return;
-    }
-    interestedPartiesView.innerHTML = `
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead><tr><th>Name</th><th>Nature of interest</th><th>Note</th><th>Communications</th><th>Methods</th></tr></thead>
-          <tbody>
-            ${items
-              .map((it) => {
-                const href = withFramework(
-                  `/interested_party.html?id=${encodeURIComponent(it.id)}`,
-                  ctrl?.framework || framework,
-                );
-                const comms =
-                  it.communications
-                    .map((c) => `${esc(c.event)} / ${esc(c.with_whom)}`)
-                    .join('<br>') || '<span class="small-muted">-</span>';
-                const methods =
-                  Array.from(new Set(it.communications.flatMap((c) => c.methods)))
-                    .map((m) => `<span class="badge badge-soft me-1 mb-1">${esc(m)}</span>`)
-                    .join('') || '<span class="small-muted">-</span>';
-                const note = it.note.trim()
-                  ? esc(shorten(it.note, 140))
-                  : '<span class="small-muted">-</span>';
-                return `<tr><td><a class="fw-semibold" href="${esc(href)}">${esc(it.name.name)}</a></td><td>${esc(it.nature.name)}</td><td class="small text-wrap" style="min-width:220px;">${note}</td><td class="small">${comms}</td><td>${methods}</td></tr>`;
-              })
-              .join('')}
-          </tbody>
-        </table>
-      </div>`;
-  } catch (e) {
-    interestedPartiesLoaded = false;
-    if (interestedPartiesCount) interestedPartiesCount.textContent = '0';
-    interestedPartiesView.innerHTML =
-      '<span class="text-danger">Failed to load interested parties for this control.</span>';
-  }
-}
-
 function flattenClauseTree(nodes, depth = 0, out = []) {
   for (const n of nodes) {
     out.push({ ...n, depth });
@@ -791,8 +716,6 @@ async function reloadControlOnly() {
   renderLinkedClauses();
   risksLoaded = false;
   await loadLinkedRisks({ force: true });
-  interestedPartiesLoaded = false;
-  await loadLinkedInterestedParties({ force: true });
   renderAdminClauses();
 }
 
@@ -968,7 +891,6 @@ async function load() {
     await Promise.all([
       opening,
       loadLinkedRisks(),
-      loadLinkedInterestedParties({ force: true }),
       tab === 'related' ? loadRelatedControls() : null,
       tab === 'governance'
         ? Promise.all([loadControlChangelog(), loadControlIsms({ force: true })])

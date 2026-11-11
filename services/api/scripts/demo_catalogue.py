@@ -196,16 +196,70 @@ VENDORS = (
 )
 
 
+# Third parties other than suppliers, with what they are to the organisation.
+THIRD_PARTIES = {
+    "Customers": "Customers of the customer portal. Fictional, for demonstration only.",
+    "Data protection regulator": (
+        "Regulator told of notifiable personal data breaches. Fictional, for"
+        " demonstration only."
+    ),
+}
+PEOPLE = (
+    ("Alex Example", "Assurance lead"),
+    ("Sam Example", "Platform engineer"),
+    ("Riley Example", "Service owner"),
+    ("Jordan Example", "Support analyst"),
+    ("Casey Example", "Privacy lead"),
+    ("Morgan Example", "Contractor"),
+)
+
+
 def ensure_vendor(seeder, name):
     return seeder.upsert(
         IsmsVendor,
         {"name": seeder.label(name)},
         dict(
-            description="Fictional supplier for demonstration only.",
+            description=THIRD_PARTIES.get(
+                name, "Fictional supplier for demonstration only."
+            ),
             website="https://example.invalid",
             contact="support@example.invalid",
         ),
     )
+
+
+def seed_people(seeder):
+    """The fictional people, by name, with their assurance records."""
+    people = {}
+    for name, role in PEOPLE:
+        person = seeder.upsert(
+            IsmsPerson,
+            {"name": seeder.label(name)},
+            dict(
+                email=name.split()[0].lower() + "@example.invalid",
+                position=role,
+                notes="Fictional demonstration person. Not a login account.",
+            ),
+        )
+        for category, title in [
+            ("Training", "Security awareness"),
+            ("Policy acknowledgement", "Acceptable use acknowledgement"),
+        ]:
+            seeder.upsert(
+                IsmsPersonAssurance,
+                {"person_id": person.id, "name": title},
+                dict(
+                    category=category,
+                    status="pending" if name.startswith("Morgan") else "met",
+                    source_system="demo",
+                    notes="Synthetic assurance record.",
+                    completed_at=None
+                    if name.startswith("Morgan")
+                    else seeder.seed_date - timedelta(days=14),
+                ),
+            )
+        people[name] = person
+    return people
 
 
 def select_frameworks(seeder, frameworks, default=None):
@@ -272,41 +326,8 @@ def seed_catalogue(seeder, frameworks):
     folder = seeder.upsert(
         IsmsDocumentFolder, {"name": seeder.label("Sample policies"), "parent_id": None}
     )
-    for name, role in [
-        ("Alex Example", "Assurance lead"),
-        ("Sam Example", "Platform engineer"),
-        ("Riley Example", "Service owner"),
-        ("Jordan Example", "Support analyst"),
-        ("Casey Example", "Privacy lead"),
-        ("Morgan Example", "Contractor"),
-    ]:
-        person = seeder.upsert(
-            IsmsPerson,
-            {"name": seeder.label(name)},
-            dict(
-                email=name.split()[0].lower() + "@example.invalid",
-                position=role,
-                notes="Fictional demonstration person. Not a login account.",
-            ),
-        )
-        for category, title in [
-            ("Training", "Security awareness"),
-            ("Policy acknowledgement", "Acceptable use acknowledgement"),
-        ]:
-            seeder.upsert(
-                IsmsPersonAssurance,
-                {"person_id": person.id, "name": title},
-                dict(
-                    category=category,
-                    status="pending" if name.startswith("Morgan") else "met",
-                    source_system="demo",
-                    notes="Synthetic assurance record.",
-                    completed_at=None
-                    if name.startswith("Morgan")
-                    else seeder.seed_date - timedelta(days=14),
-                ),
-            )
-    for name in VENDORS:
+    seed_people(seeder)
+    for name in (*VENDORS, *THIRD_PARTIES):
         ensure_vendor(seeder, name)
     # The ISMS programme asset carries the example control gaps when the full
     # dataset exists; the order keeps repeated runs on the same asset.

@@ -171,7 +171,7 @@ const topics = {
   context: [
     'Organisational context',
     'using-isms.html#context',
-    'PESTLE(E) items and interested parties record the external and internal factors your management system responds to.',
+    'PESTLE(E) items record the external and internal factors your management system responds to, and the people, vendors / 3rd parties and assets each affects.',
     'Link each item to the controls or clauses it influences. The guide explains how context feeds objectives and risk assessment.',
   ],
   objectives: [
@@ -183,13 +183,13 @@ const topics = {
   documents: [
     'Policies, processes and documents',
     'using-documents.html',
-    'Write a policy in Keen, upload a document, or link one maintained elsewhere. Every version is kept and can be linked to controls.',
-    'Pick the workflow that matches where the document lives. The guide covers approvals, versions and framework links.',
+    'Write a policy in Keen, upload a document, or link one maintained elsewhere, and file it in the folder tree. Each saved revision of text written in Keen is kept, and every document can be linked to controls.',
+    'Pick the workflow that matches where the document lives. The guide covers folders, revisions, comments and framework links.',
   ],
   peopleAssets: [
     'People, suppliers and assets',
     'using-people-assets.html',
-    'The organisation chart, People directory, vendors, asset matrix and access matrix describe who and what your controls protect.',
+    'The organisation chart, People directory, vendors / 3rd parties, asset matrix and access matrix describe who and what your controls protect.',
     'Keep owners current; assets, risks and access records reference them. The guide explains each matrix.',
   ],
   quizzes: [
@@ -298,8 +298,6 @@ const pages = {
   'risk-wizard': 'risks',
   pestle: 'context',
   mitigator: 'mitigator',
-  'interested-party': 'context',
-  'interested-parties': 'context',
   account: 'account',
   notifications: 'notifications',
   isms: 'isms',
@@ -342,7 +340,6 @@ const tabs = {
   controlPestleTab: 'context',
   clausePestleTab: 'context',
   soaPestleTab: 'context',
-  soaInterestedPartiesTab: 'context',
   soaSwotTab: 'swot',
   soaIsmsObjectivesTab: 'objectives',
   soaIsmsDocumentsTab: 'documents',

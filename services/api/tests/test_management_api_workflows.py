@@ -4,7 +4,7 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from app.api.routes import audits, interested_parties, isms, pestle, questions, risks
+from app.api.routes import audits, isms, pestle, questions, risks
 from app.core.config import settings
 from app.db.models import ControlItem, Framework, FrameworkClause, User
 from app.db.session import get_db
@@ -37,7 +37,7 @@ def api(contract_db, monkeypatch, tmp_path):
     db.commit()
     identity = {"user": admin}
     app = FastAPI()
-    for module in [isms, risks, pestle, interested_parties, audits, questions]:
+    for module in [isms, risks, pestle, audits, questions]:
         app.include_router(module.router, prefix="/api")
 
     @app.middleware("http")
@@ -99,12 +99,6 @@ ENTITIES = [
         "Agent coverage",
     ),
     (
-        "interested-parties",
-        {"framework": "A", "name": "Customers", "nature": "External"},
-        "note",
-        "Reviewed",
-    ),
-    (
         "pestle/items",
         {
             "framework": "A",
@@ -141,8 +135,6 @@ def test_create_update_list_delete(api, path, payload, field, value):
 
 # The permission each entity needs to read, change and delete its records.
 PERMISSIONS = {
-    "interested-parties": ("interested_parties.read",)
-    + ("interested_parties.manage",) * 2,
     "pestle/items": ("pestle.read", "pestle.manage", "pestle.manage"),
     "audits": ("audits.read", "audits.manage", "audits.admin"),
     "risks": ("risk.read", "risk.manage", "risk.manage"),
@@ -180,7 +172,6 @@ def test_access_is_denied_without_permission(api, path, payload, field, value):
         ("isms/documents", "isms.read"),
         ("risks", "risk.read"),
         ("pestle/items", "pestle.read"),
-        ("interested-parties", "interested_parties.read"),
         ("audits", "audits.read"),
     ],
 )
@@ -284,77 +275,6 @@ def test_document_revision_scope_and_optimistic_lock(api):
         "<p>Version one</p>"
     )
     assert request(api, "GET", path)["content_html"] == "<p>Version two</p>"
-
-
-def test_interested_party_communications_controls_and_changelog(api):
-    body = {
-        "framework": "A",
-        "name": "Customers",
-        "nature": "External",
-        "controls": ["1"],
-        "communications": [
-            {
-                "event": "Incident",
-                "when": "Within 24 hours",
-                "with_whom": "Individual member",
-                "methods": ["Email"],
-            }
-        ],
-    }
-    party = request(api, "POST", "interested-parties", body)
-    path = "interested-parties/" + party["id"]
-    assert len(party["controls"]) == 1
-    assert party["communications"][0]["methods"] == ["Email"]
-    assert request(api, "POST", "interested-parties", body, status=400) == {
-        "detail": "Interested party with this name and nature already exists"
-    }
-    assert request(
-        api, "DELETE", "interested-parties/names/" + party["name"]["id"], status=400
-    ) == {"detail": "Name is used by an interested party"}
-    assert request(
-        api, "DELETE", "interested-parties/natures/" + party["nature"]["id"], status=400
-    ) == {"detail": "Nature is used by an interested party"}
-    # The party is one organisation-wide record; each framework keeps its own
-    # control links, so a control from B cannot be linked under A.
-    viewed_in_b = request(api, "PATCH", path, {"framework": "B"})
-    assert (viewed_in_b["framework"], viewed_in_b["controls"]) == ("B", [])
-    assert len(request(api, "GET", path)["controls"]) == 1
-    assert request(
-        api,
-        "PATCH",
-        path + "/controls",
-        {"controls": [str(api.controls[1].id)]},
-        status=400,
-    ) == {"detail": f"Unknown control: {api.controls[1].id}"}
-    linked_in_b = request(
-        api,
-        "PATCH",
-        path + "/controls",
-        {"controls": [str(api.controls[1].id)]},
-        framework="B",
-    )
-    assert [c["framework"] for c in linked_in_b["controls"]] == ["B"]
-    assert len(request(api, "GET", path + "/controls")["controls"]) == 1
-    assert len(request(api, "GET", path + "/controls", framework="B")["controls"]) == 1
-    request(api, "PATCH", path + "/communications", {"items": []})
-    assert request(api, "GET", path + "/communications")["items"] == []
-    request(api, "PATCH", path + "/controls", {"controls": []})
-    assert request(api, "GET", path + "/controls")["controls"] == []
-    assert len(request(api, "GET", path + "/changelog")["items"]) == 4
-
-
-@pytest.mark.parametrize("lookup", ["names", "natures"])
-def test_party_lookup_normalization_duplicate_and_deletion(api, lookup):
-    path = "interested-parties/" + lookup
-    row = request(api, "POST", path, {"name": "  Supplier  "})
-    assert row["name"] == "Supplier"
-    assert request(api, "POST", path, {"name": "supplier"})["id"] == row["id"]
-    other = request(api, "POST", path, {"name": "Other"})
-    assert request(
-        api, "PATCH", path + "/" + other["id"], {"name": "SUPPLIER"}, status=400
-    ) == {"detail": f"{lookup[:-1].capitalize()} already exists"}
-    assert request(api, "GET", path, q="supp")["items"][0]["id"] == row["id"]
-    request(api, "DELETE", path + "/" + row["id"])
 
 
 def test_risk_scores_controls_owner_and_change_history(api):
@@ -609,11 +529,6 @@ def test_scheduled_audit_template_roundtrip(api, recurrence):
         ("isms/meetings", "Meeting id must be a UUID", "Meeting not found"),
         ("risks", "risk_id must be a UUID", "Risk not found"),
         ("pestle/items", "pestle item id must be a UUID", "PESTLE(E) item not found"),
-        (
-            "interested-parties",
-            "interested_party_id must be a UUID",
-            "Interested party not found",
-        ),
         ("audits", "audit_id must be a UUID", "Audit not found"),
     ],
 )

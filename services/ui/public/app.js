@@ -103,7 +103,6 @@ function _patchRiskNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html'))}">Risks dashboard</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risk-wizard.html'))}">Add a risk</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/risks.html?tab=pestle'))}">PESTLE(E) method</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/interested_parties.html'))}">Interested parties</a></li>
       <li><a class="dropdown-item d-inline-flex align-items-center gap-2" href="${esc(_withCurrentFramework('/mitigator.html'))}"><img src="/keen-mitigator-64.png" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a></li>
     </ul>`;
   navRoot.dataset.pestleRiskDropdownPatched = '1';
@@ -147,7 +146,7 @@ function _patchIsmsNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; processes</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=org'))}">Organisation chart</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=assets'))}">Asset matrix</a></li>
-      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/assurance.html'))}">People &amp; vendors</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/assurance.html'))}">People &amp; vendors / 3rd parties</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=access'))}">Access control matrix</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=meetings'))}">Minutes of meetings</a></li>
       <li><hr class="dropdown-divider"></li>

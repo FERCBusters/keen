@@ -20,14 +20,13 @@ const analysis = {
   signals: [],
   suggestions: [],
   library_suggestions: [],
-  interested_party_suggestions: [],
+  affected_suggestions: [],
   existing_matches: {
     cia_risks: [
       match({ id: 'r1', asset_name: 'Payroll DB', threat_summary: 'Staff logins are phished' }),
       match({ id: 'r2', asset_name: 'Laptops', threat_summary: '' }),
     ],
     pestle_items: [],
-    interested_parties: [],
   },
   draft_risk: { threat_summary: 'Payroll staff are phished', risk_types: [] },
 };
@@ -93,8 +92,8 @@ async function wizard(t, storage) {
       if (p === '/api/v1/risks/users') return { items: [], roles: [] };
       if (p === '/api/v1/controls') return { items: [] };
       if (p === '/api/v1/risks/library') return { items: [] };
-      if (p === '/api/v1/risks/parties')
-        return { framework: 'A', interested_parties: [], people: [], vendors: [], natures: [] };
+      if (p === '/api/v1/affected/options')
+        return { people: [], vendors: [], assets: [], can_add: { person: true, vendor: true } };
       if (p === '/api/v1/risks/register/heatmap')
         return { thresholds: { low_max: 4, moderate_max: 9, high_max: 16 } };
       if (p === '/api/v1/pestle/meta')
@@ -142,7 +141,14 @@ test('a stored draft missing fields fills only what it holds', async (t) => {
   const data = {
     'keen.riskWizardDraft': JSON.stringify({
       asset_name: 'Badge readers',
-      interested_parties: [{ name: 'Regulator' }, { kind: 'person', id: 'p9' }],
+      // A record named without its detail, one without its name, one without an
+      // id, and one of no known kind.
+      affected: [
+        { kind: 'vendor', id: 'v9', label: 'Regulator' },
+        { kind: 'asset', id: 'a7' },
+        { kind: 'person', label: 'Nobody' },
+        { kind: 'group', id: 'g1', label: 'Staff' },
+      ],
     }),
   };
   const ui = await wizard(t, {
@@ -171,6 +177,12 @@ test('a stored draft missing fields fills only what it holds', async (t) => {
   type('newAssetSubcategory', 'Access control');
   next();
   assert.equal(step(), 'parties');
-  assert.match(ui.el('selectedParties').textContent, /Regulator/);
-  assert.doesNotMatch(ui.el('selectedParties').textContent, /undefined/);
+  assert.deepEqual(
+    [...ui.el('affectedChosen').querySelectorAll('.badge')].map((b) => b.textContent),
+    ['Regulator', ''],
+  );
+  assert.equal(
+    ui.el('affectedList').querySelector('[data-affected="vendor:v9"]').closest('label').textContent,
+    'RegulatorVendor / 3rd party',
+  );
 });

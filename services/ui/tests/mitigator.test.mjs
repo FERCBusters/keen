@@ -40,9 +40,27 @@ const analysis = {
     },
   ],
   pestle_hits: [{ type: 'Legal' }],
-  interested_party_suggestions: [
-    { name: 'Payroll team', nature: 'Internal', reason: 'Named in the description' },
-    { name: 'Customers', nature: 'Customer', reason: 'Already recorded', duplicate_exact: true },
+  affected_suggestions: [
+    {
+      kind: 'person',
+      id: 'pe1',
+      label: 'Payroll <b>lead</b>',
+      detail: 'HR',
+      kind_label: 'Person',
+      href: '/person.html?id=pe1',
+      confidence: 'strong',
+      reasons: ['Named in the description.'],
+    },
+    {
+      kind: 'vendor',
+      id: 'v1',
+      label: 'Acme Payroll',
+      detail: null,
+      kind_label: 'Vendor / 3rd party',
+      href: '/vendor.html?id=v1',
+      confidence: 'medium',
+      reasons: ['The issue mentions suppliers.', 'Its description says payroll.'],
+    },
   ],
   existing_matches: {
     cia_risks: [
@@ -67,7 +85,6 @@ const analysis = {
         clauses: [{ clause: { ref: '6.1.2' } }],
       },
     ],
-    interested_parties: [{ id: 'ip1', label: 'Customers' }],
   },
   draft_risk: {
     asset_name: 'Payroll DB',
@@ -204,7 +221,6 @@ test('an analysis is laid out as existing matches, templates, then a new risk wi
   assert.ok(
     sections[0].querySelector('a[href="/pestle_item.html?id=pi1&tab=details&framework=A"]'),
   );
-  assert.ok(sections[0].querySelector('a[href="/interested_party.html?id=ip1&framework=A"]'));
   assert.ok(sections[0].classList.contains('border-warning-subtle'));
   // 2. Templates are offered with their example rating and the reason they matched.
   assert.equal(sections[1].querySelector('i'), null);
@@ -229,15 +245,23 @@ test('an analysis is laid out as existing matches, templates, then a new risk wi
   assert.match(sections[2].textContent, /Out of scope - review applicability/);
   assert.equal(sections[2].querySelector('b'), null);
   assert.match(sections[2].textContent, /Matches "<b>phishing<\/b>"/);
-  const parties = sections[2].querySelectorAll('.mitigator-interested-select');
+  // People, vendors and assets already in Keen are offered ticked, names as text.
+  const affected = sections[2].querySelectorAll('.mitigator-affected-select');
   assert.deepEqual(
-    [...parties].map((b) => [b.checked, b.disabled]),
+    [...affected].map((b) => [b.value, b.checked]),
     [
-      [true, false],
-      [false, true],
+      ['0', true],
+      ['1', true],
     ],
   );
-  assert.match(sections[2].textContent, /Customers - Customer \(already recorded\)/);
+  assert.match(
+    sections[2].textContent,
+    /Payroll <b>lead<\/b>\s*Person\s*Strong match\s*Named in the description\./,
+  );
+  assert.match(
+    sections[2].textContent,
+    /Acme Payroll\s*Vendor \/ 3rd party\s*Medium match\s*The issue mentions suppliers\. Its description says payroll\./,
+  );
   assert.match(sections[2].textContent, /This also reads like a PESTLE\(E\) influence: Legal/);
   assert.ok(ui.el('mitigatorToWizard'));
   assert.ok(ui.el('mitigatorToPestleWizard'));
@@ -251,11 +275,12 @@ test('an analysis is laid out as existing matches, templates, then a new risk wi
   assert.equal(ui.el('mitigatorImpactSensitive').checked, false);
 });
 
-test('the wizard receives the ticked controls and parties as a draft', async (t) => {
+test('the wizard receives the ticked controls and affected records as a draft', async (t) => {
   const { ui, state, storage, location } = await mitigator(t);
   await analyse(ui, state);
   const backup = ui.document.querySelector('.mitigator-suggestion-select[value="c2"]');
   backup.checked = false;
+  ui.document.querySelector('.mitigator-affected-select[value="1"]').checked = false;
   ui.el('mitigatorToWizard').click();
   assert.equal(location.href, '/risk-wizard.html?framework=A');
   const draft = JSON.parse(storage.getItem('keen.riskWizardDraft'));
@@ -269,7 +294,7 @@ test('the wizard receives the ticked controls and parties as a draft', async (t)
     risk_types: ['Confidentiality'],
     note: 'From the Mitigator',
     controls: ['c1'],
-    interested_parties: [{ name: 'Payroll team', nature: 'Internal' }],
+    affected: [{ kind: 'person', id: 'pe1', label: 'Payroll <b>lead</b>', detail: 'HR' }],
     mitigator_context: { query_terms: ['phishing'], selected_control_ids: ['c1'] },
     template_id: '',
   });
@@ -283,11 +308,16 @@ test('a template or a PESTLE(E) factor can be chosen instead', async (t) => {
   assert.equal(JSON.parse(storage.getItem('keen.riskWizardDraft')).template_id, 'tpl1');
   ui.el('mitigatorToPestleWizard').click();
   assert.equal(location.href, '/risk-wizard.html?method=pestle&framework=A');
+  // A factor names the same ticked records; a vendor without detail has none.
   assert.deepEqual(JSON.parse(storage.getItem('keen.riskWizardDraft')), {
     method: 'pestle',
     threat_summary: 'Phishing regulation',
     pestle_type: 'Legal',
     lens: 'External',
+    affected: [
+      { kind: 'person', id: 'pe1', label: 'Payroll <b>lead</b>', detail: 'HR' },
+      { kind: 'vendor', id: 'v1', label: 'Acme Payroll', detail: '' },
+    ],
   });
 });
 
@@ -298,6 +328,7 @@ test('an empty analysis says nothing matched and falls back to the description',
       signals: [],
       suggestions: [],
       library_suggestions: [],
+      affected_suggestions: [],
       existing_matches: {},
       draft_risk: {},
     },
@@ -319,6 +350,8 @@ test('an empty analysis says nothing matched and falls back to the description',
   assert.equal(draft.method, 'general');
   assert.equal(draft.threat_summary, 'Something vague');
   assert.deepEqual(draft.controls, []);
+  assert.deepEqual(draft.affected, []);
+  assert.doesNotMatch(sections[2].textContent, /Who and what it might affect/);
 });
 
 test('failures and permissions are explained', async (t) => {
@@ -379,11 +412,10 @@ function sparseAnalysis(overrides = {}) {
       },
     ],
     pestle_hits: [],
-    interested_party_suggestions: [],
+    affected_suggestions: [],
     existing_matches: {
       cia_risks: [],
       pestle_items: [],
-      interested_parties: [],
       ...overrides.existing,
     },
     draft_risk: {

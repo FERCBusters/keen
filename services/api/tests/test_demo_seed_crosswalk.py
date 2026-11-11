@@ -411,7 +411,7 @@ def test_annex_references_never_resolve_to_their_clause_twins(seeded):
 
 
 def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
-    from app.db.models import Risk, RiskControlLink, RiskInterestedParty
+    from app.db.models import AffectedLink, Risk, RiskControlLink
     from app.services.risks import (
         TREATMENT_STATUSES,
         TREATMENT_STRATEGIES,
@@ -457,9 +457,13 @@ def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
     assert {f for (f,) in db.query(RiskControlLink.framework_slug).distinct()} == set(
         SHOWCASE
     )
-    affected = db.query(RiskInterestedParty).all()
-    assert any(p.interested_party_id for p in affected)
-    assert any(p.vendor_id for p in affected)
+    # Risks and PESTLE(E) factors name the people, third parties and assets
+    # they affect.
+    affected = db.query(AffectedLink).all()
+    assert any(link.risk_id and link.person_id for link in affected)
+    assert any(link.risk_id and link.vendor_id for link in affected)
+    assert any(link.pestle_item_id and link.vendor_id for link in affected)
+    assert any(link.pestle_item_id and link.asset_id for link in affected)
 
 
 def test_pestle_analysis_covers_every_factor_in_both_lenses(seeded):
@@ -556,7 +560,6 @@ def test_documents_link_controls_and_record_their_automatic_diary_entries(seeded
 def test_every_linked_record_counts_towards_control_coverage(seeded):
     """Measures, SWOT items, risks and the rest count, as saving them does."""
     from app.db.models import (
-        InterestedPartyControlLink,
         IsmsEntityClauseLink,
         IsmsEntityControlLink,
         RiskControlLink,
@@ -575,16 +578,10 @@ def test_every_linked_record_counts_towards_control_coverage(seeded):
         IsmsEntityClauseLink.entity_type, IsmsEntityClauseLink.entity_id
     ):
         linked[record_type, record_id] |= set()
-    for model, record_type, column in (
-        (RiskControlLink, "risk", RiskControlLink.risk_id),
-        (
-            InterestedPartyControlLink,
-            "interested_party",
-            InterestedPartyControlLink.interested_party_id,
-        ),
+    for record_id, control_id in db.query(
+        RiskControlLink.risk_id, RiskControlLink.control_item_id
     ):
-        for record_id, control_id in db.query(column, model.control_item_id):
-            linked[record_type, record_id].add(control_id)
+        linked["risk", record_id].add(control_id)
     counted = Counter()
     for (record_type, record_id), controls in linked.items():
         if record_type == "access_control_matrix":
@@ -604,7 +601,6 @@ def test_every_linked_record_counts_towards_control_coverage(seeded):
     assert set(counted) == {
         "document",
         "effectiveness_measure",
-        "interested_party",
         "meeting",
         "objective",
         "risk",
@@ -880,7 +876,6 @@ def test_teardown_removes_the_seeded_dataset(artifact_storage):
         assert {entry.external_id.split(":")[1] for entry in entries} == {
             "document",
             "effectiveness_measure",
-            "interested_party",
             "meeting",
             "objective",
             "risk",

@@ -87,17 +87,12 @@
   },
   "services/ui/public/pages/control.js": {
     "no-unsanitized/property": {
-      "count": 9
+      "count": 8
     }
   },
   "services/ui/public/pages/controls.js": {
     "no-unsanitized/property": {
       "count": 1
-    }
-  },
-  "services/ui/public/pages/documents.js": {
-    "no-unsanitized/property": {
-      "count": 7
     }
   },
   "services/ui/public/pages/event-filter-conditions.js": {
@@ -150,16 +145,6 @@
       "count": 5
     }
   },
-  "services/ui/public/pages/interested_parties.js": {
-    "no-unsanitized/property": {
-      "count": 3
-    }
-  },
-  "services/ui/public/pages/interested_party.js": {
-    "no-unsanitized/property": {
-      "count": 4
-    }
-  },
   "services/ui/public/pages/isms-access.js": {
     "no-unsanitized/property": {
       "count": 2
@@ -200,7 +185,7 @@
       "count": 1
     },
     "no-unsanitized/property": {
-      "count": 41
+      "count": 40
     }
   },
   "services/ui/public/pages/mitigator.js": {
@@ -275,7 +260,7 @@
   },
   "services/ui/public/pages/risk-wizard.js": {
     "no-unsanitized/property": {
-      "count": 23
+      "count": 20
     }
   },
   "services/ui/public/pages/risk.js": {
@@ -313,7 +298,7 @@
   },
   "services/ui/public/pages/statement-of-applicability.js": {
     "no-unsanitized/property": {
-      "count": 15
+      "count": 14
     }
   },
   "services/ui/public/pages/stories.js": {

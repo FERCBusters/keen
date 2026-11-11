@@ -639,87 +639,43 @@ pestle_business_processes:
     pestle_types: [Technological, Legal, Ethical]
     terms: [architecture, requirements, design, assurance, compatibility, interoperability, data transfer, privacy by design, technical evolution]
 
-interested_parties:
-  organisation_members:
-    name: Organisation Members
-    nature: Impacted by scenario
-    reason: The issue mentions users or members, which maps to Organisation Members.
-    terms: [user, users, member, members, organisation member, data subject, individual, individuals, citizen, citizens]
-    note: Users/members appear to be directly affected by the scenario.
-    communication:
-      event: Alert
-      when: As Required
-      with_whom: Individual member
-      methods: [Email, As Appropriate]
-  organisation_personnel:
-    name: Organisation Personnel
-    nature: Impacted by scenario
-    reason: The issue mentions personnel, staff, employees or workforce impacts, which maps to Organisation Personnel.
-    terms: [personnel, staff, employee, employees, worker, workers, workforce, internal user, operator, operators, team, teams]
-    note: Personnel appear to be directly affected by the scenario.
-    communication:
-      event: Alert
-      when: As Required
-      with_whom: Individual staff member
-      methods: [Email, Google Chat]
+# Who an issue affects. Keen Mitigator suggests existing People, Vendors / 3rd
+# parties and Assets and never creates them. A record whose name appears in the
+# issue is a strong match. When the issue mentions a group below (any of its
+# terms), the records of the group's kinds whose name or description holds one
+# of its record words are suggested too. A group with no kinds is reported as a
+# signal only, so the person names who is affected.
+affected:
+  customers:
+    label: Customers and members
+    reason: The issue mentions customers, members or the people your service holds data about.
+    terms: [customer, customers, subscriber, subscribers, client, clients, tenant, tenants, paying user, paying users, member, members, data subject, data subjects, user, users, citizen, citizens]
+    kinds: [vendor]
+    record_words: [customer, customers, client, clients, subscriber, subscribers, member, members, tenant, tenants]
+  staff:
+    label: Staff and contractors
+    reason: The issue mentions staff, contractors or the workforce; name the people it affects.
+    terms: [personnel, staff, employee, employees, worker, workers, workforce, internal user, operator, operators, contractor, contractors, team, teams]
+    kinds: []
   suppliers:
-    name: Suppliers
-    nature: Impacted by scenario
-    reason: The issue mentions suppliers, vendors or third parties.
-    terms: [supplier, suppliers, vendor, vendors, third party, third-party, contractor, outsource, outsourced, processor, cloud provider, aws, azure, saas]
-    note: Supplier or third-party involvement was detected.
-    communication:
-      event: Alert
-      when: As Required
-      with_whom: Supplier Point of Contact
-      methods: [Email, As Appropriate]
-  legal_regulatory_bodies:
-    name: Legal/regulatory bodies
-    nature: Notification or compliance interest
-    reason: The issue may require legal or regulatory awareness.
-    terms: [legal, regulator, regulatory, compliance, ico, gdpr, dpa 2018, data protection, breach notification, fines, audit, statutory]
-    note: Legal/regulatory interest was detected.
-    communication:
-      event: Notifiable Event
-      when: As Required
-      with_whom: ICO
-      methods: [ICO Portal, Email]
-  independent_alerting_entities:
-    name: Independent alerting entities
-    nature: Alerting or public-interest source
-    reason: The issue mentions independent alerting sources such as researchers, media or whistleblowers.
-    terms: [security researcher, researchers, media, journalist, journalists, whistleblower, whistle blowers, independent alert, public disclosure, campaigners, lobbyists]
-    note: An independent alerting or public-interest entity may be involved.
-    communication:
-      event: Alert
-      when: Upon Identification
-      with_whom: Sender
-      methods: [Email, As Appropriate]
-  ncsc:
-    name: NCSC
-    nature: Threat intelligence or cyber guidance interest
-    reason: The issue mentions NCSC, threat intelligence or nationally relevant cyber security concerns.
-    terms: [ncsc, threat intelligence, cyber threat, cyber attack, cni, state actor, state actors, ransomware, national cyber security centre]
-    note: NCSC/threat-intelligence relevance was detected.
-    communication:
-      event: Alert
-      when: Upon Identification
-      with_whom: NCSC
-      methods: [Email, As Appropriate]
-  subscribers:
-    name: Subscribers
-    nature: Impacted by scenario
-    reason: The issue mentions customers or subscribers, which maps to Subscribers.
-    terms: [customer, customers, subscriber, subscribers, client, clients, tenant, tenants, paying user, paying users]
-    note: Customer/subscriber impact was detected.
-    communication:
-      event: Alert
-      when: As Required
-      with_whom: Individual member
-      methods: [Email, As Appropriate]
+    label: Suppliers and service providers
+    reason: The issue mentions suppliers, vendors or other third parties.
+    terms: [supplier, suppliers, vendor, vendors, third party, third-party, outsource, outsourced, processor, sub-processor, cloud provider, hosting provider, aws, azure, google cloud, saas]
+    kinds: [vendor]
+    record_words: [supplier, vendor, provider, hosting, cloud, saas, service, services, processor, platform, software]
+  regulators:
+    label: Regulators and authorities
+    reason: The issue may need a regulator or authority told, or concerns their requirements.
+    terms: [regulator, regulators, regulatory, compliance, ico, oaic, gdpr, privacy act, dpa 2018, data protection, breach notification, notifiable data breach, notifiable, fines, statutory, legal]
+    kinds: [vendor]
+    record_words: [regulator, regulatory, commissioner, authority, ombudsman, ico, oaic, government, agency, certification body, auditor]
+  alerting:
+    label: Researchers, media and cyber security agencies
+    reason: The issue mentions researchers, the media or national cyber security agencies.
+    terms: [security researcher, researchers, media, journalist, journalists, whistleblower, whistleblowers, public disclosure, ncsc, acsc, cisa, cert, threat intelligence, national cyber security centre]
+    kinds: [vendor]
+    record_words: [researcher, media, press, ncsc, acsc, cisa, cert, csirt, cyber security centre, signals directorate]
 
-# Scenario-language bridges for the live KEEN-AF risk library. Matching still
-# requires words from the issue; structured defaults cannot trigger a template.
 catalogue_synonyms:
   - [supplier, vendor, third party, outsourced, outsourcing]
   - [backup, back up, restore, recovery]

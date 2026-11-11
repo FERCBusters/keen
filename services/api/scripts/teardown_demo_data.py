@@ -39,6 +39,7 @@ for candidate in (API_ROOT, Path.cwd()):
 
 from app.core.config import settings  # noqa: E402
 from app.db.models import (  # noqa: E402
+    AffectedLink,
     Artifact,
     Audit,
     AuditAttendee,
@@ -53,11 +54,6 @@ from app.db.models import (  # noqa: E402
     Event,
     EventIncident,
     EventQuestionThread,
-    InterestedParty,
-    InterestedPartyCommunication,
-    InterestedPartyControlLink,
-    InterestedPartyName,
-    InterestedPartyNature,
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
     IsmsBusinessProcess,
@@ -89,7 +85,6 @@ from app.db.models import (  # noqa: E402
     RiskAssetSubcategory,
     RiskCategory,
     RiskControlLink,
-    RiskInterestedParty,
     Story,
     StoryComment,
     StoryItem,
@@ -122,7 +117,6 @@ ISMS_LINKED_RECORDS = {
 LINK_ENTRY_RECORDS = {
     **ISMS_LINKED_RECORDS,
     "risk": "risks",
-    "interested_party": "parties",
 }
 
 
@@ -197,11 +191,8 @@ class DemoTeardown:
         self.delete_event_dependents(found["events"])
         self.delete_isms_dependents(found)
         self.delete_ids(RiskControlLink, RiskControlLink.risk_id, found["risks"])
-        self.delete_ids(
-            RiskInterestedParty, RiskInterestedParty.risk_id, found["risks"]
-        )
+        self.delete_ids(AffectedLink, AffectedLink.risk_id, found["risks"])
         self.delete_pestle_dependents(found)
-        self.delete_interested_party_dependents(found["parties"])
         self.delete_parents(found)
 
     def find(self) -> dict[str, list[Any]]:
@@ -224,9 +215,6 @@ class DemoTeardown:
                 PestleBusinessProcess, PestleBusinessProcess.name
             ),
             "pestle_items": self.labelled_ids(PestleItem, PestleItem.item),
-            "party_names": self.labelled_ids(
-                InterestedPartyName, InterestedPartyName.name
-            ),
             "categories": self.labelled_ids(RiskCategory, RiskCategory.name),
             "people": self.labelled_ids(IsmsPerson, IsmsPerson.name),
             "vendors": self.labelled_ids(IsmsVendor, IsmsVendor.name),
@@ -253,15 +241,6 @@ class DemoTeardown:
                     ),
                 )
             )
-        )
-        found["parties"] = (
-            self.ids(
-                db.query(InterestedParty.id).filter(
-                    InterestedParty.name_id.in_(found["party_names"])
-                )
-            )
-            if found["party_names"]
-            else []
         )
         found["subcategories"] = self.ids(
             db.query(RiskAssetSubcategory.id).filter(
@@ -400,7 +379,6 @@ class DemoTeardown:
             ("isms_swot", found["swot"]),
             ("risk", found["risks"]),
             ("pestle_item", found["pestle_items"]),
-            ("interested_party", found["parties"]),
             ("story", found["stories"]),
         ]
         for entity_type, ids in entity_targets:
@@ -476,6 +454,9 @@ class DemoTeardown:
 
     def delete_pestle_dependents(self, found: dict[str, list[Any]]) -> None:
         self.delete_ids(
+            AffectedLink, AffectedLink.pestle_item_id, found["pestle_items"]
+        )
+        self.delete_ids(
             PestleClauseRelevance,
             PestleClauseRelevance.pestle_item_id,
             found["pestle_items"],
@@ -491,15 +472,11 @@ class DemoTeardown:
             found["pestle_processes"],
         )
 
-    def delete_interested_party_dependents(self, party_ids: list[Any]) -> None:
-        for model in (
-            InterestedPartyControlLink,
-            InterestedPartyCommunication,
-            RiskInterestedParty,
-        ):
-            self.delete_ids(model, model.interested_party_id, party_ids)
-
     def delete_parents(self, found: dict[str, list[Any]]) -> None:
+        # Links naming seeded people, vendors and assets go with them.
+        self.delete_ids(AffectedLink, AffectedLink.person_id, found["people"])
+        self.delete_ids(AffectedLink, AffectedLink.vendor_id, found["vendors"])
+        self.delete_ids(AffectedLink, AffectedLink.asset_id, found["assets"])
         self.delete_ids(Audit, Audit.id, found["audits"])
         self.delete_ids(Event, Event.id, found["events"])
         self.delete_ids(IsmsMeeting, IsmsMeeting.id, found["meetings"])
@@ -525,11 +502,6 @@ class DemoTeardown:
         self.delete_ids(
             PestleBusinessProcess, PestleBusinessProcess.id, found["pestle_processes"]
         )
-        self.delete_ids(InterestedParty, InterestedParty.id, found["parties"])
-        self.delete_ids(
-            InterestedPartyName, InterestedPartyName.id, found["party_names"]
-        )
-        self._delete_seeded_interested_party_natures_if_orphaned()
         self.delete_ids(
             IsmsBusinessProcess, IsmsBusinessProcess.id, found["isms_processes"]
         )
@@ -545,29 +517,6 @@ class DemoTeardown:
                 )
         self.delete_ids(IsmsVendor, IsmsVendor.id, found["vendors"])
         self.delete_ids(IsmsOrgNode, IsmsOrgNode.id, found["org_nodes"])
-
-    def _delete_seeded_interested_party_natures_if_orphaned(self) -> None:
-        seeded_names = [
-            "Expect secure and available service",
-            "Need clear policies and secure tooling",
-            "Expect notification and evidence records",
-            "Supplier assurance and technical support",
-        ]
-        candidates = (
-            self.db.query(InterestedPartyNature)
-            .filter(InterestedPartyNature.name.in_(seeded_names))
-            .all()
-        )
-        for nature in candidates:
-            still_used = (
-                self.db.query(InterestedParty.id)
-                .filter(InterestedParty.nature_id == nature.id)
-                .first()
-            )
-            if not still_used:
-                self.db.delete(nature)
-                self.stats[InterestedPartyNature.__tablename__] += 1
-        self.db.flush()
 
     def print_summary(self) -> None:
         print("\nDeletion summary:")

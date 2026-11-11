@@ -7,7 +7,6 @@ const soa = () => ({
   framework: 'A',
   can_view_risks: true,
   can_view_pestle: true,
-  can_view_interested_parties: true,
   can_view_isms: true,
   can_view_swot: true,
   counts: {
@@ -16,7 +15,6 @@ const soa = () => ({
     risks: 2,
     pestle: 1,
     business_processes: 3,
-    interested_parties: 1,
     isms_objectives: 1,
     isms_documents: 3,
     isms_effectiveness_measures: 2,
@@ -77,24 +75,26 @@ const soa = () => ({
         { clause: { id: 'k1', ref: '4.1', title: 'Context' }, relevance: { label: 'High' } },
         {},
       ],
-    },
-    { id: 'p2', type: '', item: '', overall_relevance: { code: 'medium', label: 'Medium' } },
-    { id: 'p3', item: 'Low item', overall_relevance: { code: 'low', label: 'Low' } },
-    { id: 'p4', item: 'Unrated' },
-  ],
-  interested_parties: [
-    {
-      id: 'ip1',
-      name: { name: 'Regulator' },
-      nature: { name: 'Statutory' },
-      note: 'Notify quickly',
-      controls: [{ id: 'c1', ref: 'A.5.1', title: 'Policies' }],
-      communications: [
-        { event: 'Breach', when: '72h', with_whom: 'Commissioner', methods: ['Email', 'Portal'] },
-        { event: 'Audit', when: 'Annually', with_whom: 'Board', methods: ['Email'] },
+      affected: [
+        {
+          kind: 'vendor',
+          id: 'v1',
+          label: HOSTILE + 'Commissioner',
+          detail: 'Regulator',
+          href: '/vendor.html?id=v1',
+        },
+        { kind: 'asset', id: 'a1', label: 'CRM', detail: 'Data › Databases', href: '' },
       ],
     },
-    { id: 'ip2', name: null, nature: null, note: ' ' },
+    {
+      id: 'p2',
+      type: '',
+      item: '',
+      overall_relevance: { code: 'medium', label: 'Medium' },
+      affected: [],
+    },
+    { id: 'p3', item: 'Low item', overall_relevance: { code: 'low', label: 'Low' }, affected: [] },
+    { id: 'p4', item: 'Unrated', affected: [] },
   ],
   isms_objectives: [
     {
@@ -206,7 +206,7 @@ test('the summary and control/clause matrices show applicability with safe links
   const ui = await soaPage(t);
   assert.equal(
     ui.el('soaMeta').textContent,
-    'A · 2 controls · 2 clauses · 2 CIA risks · 1 PESTLE(E) items · 3 business processes · 1 interested parties · 1 ISMS objectives · 3 ISMS documents · 2 effectiveness measures · 1 assets',
+    'A · 2 controls · 2 clauses · 2 CIA risks · 1 PESTLE(E) items · 3 business processes · 1 ISMS objectives · 3 ISMS documents · 2 effectiveness measures · 1 assets',
   );
   assert.equal(ui.document.querySelector('main img'), null);
   assert.equal(ui.window.pwned, undefined);
@@ -253,7 +253,7 @@ test('the summary and control/clause matrices show applicability with safe links
   assert.equal(ui.el('clausesRows').querySelector('td').getAttribute('colspan'), '5');
 });
 
-test('risks, PESTLE(E) and Interested Parties render scores, relevance and filters', async (t) => {
+test('risks and PESTLE(E) items render scores, relevance, who they affect and filters', async (t) => {
   const ui = await soaPage(t);
   const [r1, r2] = ui.el('risksRows').querySelectorAll('tr');
   assert.equal(r1.querySelector('a').textContent, 'Payroll DB - Ransomware');
@@ -290,7 +290,17 @@ test('risks, PESTLE(E) and Interested Parties render scores, relevance and filte
     ['badge text-bg-danger', 'badge text-bg-warning', 'badge badge-soft', 'badge text-bg-light'],
   );
   assert.equal(pestle[1].querySelector('a').textContent, 'PESTLE(E) item');
-  const processes = pestle[0].querySelectorAll('td')[5].querySelectorAll('.badge');
+  // Who a factor affects links to each record, names as text.
+  const affected = pestle[0].querySelectorAll('td')[5];
+  assert.deepEqual(
+    [...affected.querySelectorAll('.badge')].map((b) => [b.textContent, b.getAttribute('href')]),
+    [
+      ['Vendor / 3rd party: ' + HOSTILE + 'Commissioner', '/vendor.html?id=v1&framework=A'],
+      ['Asset: CRM', null],
+    ],
+  );
+  assert.equal(pestle[1].querySelectorAll('td')[5].textContent, '-');
+  const processes = pestle[0].querySelectorAll('td')[6].querySelectorAll('.badge');
   assert.deepEqual(
     [...processes].map((b) => [b.textContent, b.getAttribute('title')]),
     [
@@ -298,41 +308,18 @@ test('risks, PESTLE(E) and Interested Parties render scores, relevance and filte
       ['Business process', '-'],
     ],
   );
-  const clauseBadges = pestle[0].querySelectorAll('td')[6].querySelectorAll('a');
+  const clauseBadges = pestle[0].querySelectorAll('td')[7].querySelectorAll('a');
   assert.equal(clauseBadges[0].getAttribute('href'), '/clause.html?id=k1&tab=pestle&framework=A');
   assert.equal(clauseBadges[0].getAttribute('title'), 'Context · High');
   assert.equal(clauseBadges[1].textContent, 'Clause');
   filter(ui, 'pestleFilter', 'payroll');
   assert.equal(rowTexts(ui, 'pestleRows').length, 1);
+  filter(ui, 'pestleFilter', 'commissioner');
+  assert.equal(rowTexts(ui, 'pestleRows').length, 1);
   filter(ui, 'pestleFilter', '4.1');
   assert.equal(rowTexts(ui, 'pestleRows').length, 1);
   filter(ui, 'pestleFilter', 'zzz');
   assert.match(ui.el('pestleRows').textContent, /No PESTLE\(E\) items match/);
-
-  const [ip1, ip2] = ui.el('interestedPartiesRows').querySelectorAll('tr');
-  assert.equal(
-    ip1.querySelector('a').getAttribute('href'),
-    '/interested_party.html?id=ip1&framework=A',
-  );
-  assert.equal(
-    ip1.querySelectorAll('td')[3].querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=governance&framework=A',
-  );
-  assert.match(
-    ip1.querySelectorAll('td')[4].textContent,
-    /Breach · 72h · CommissionerAudit · Annually · Board/,
-  );
-  // Methods are de-duplicated across communications.
-  assert.deepEqual(
-    [...ip1.querySelectorAll('td')[5].querySelectorAll('.badge')].map((b) => b.textContent),
-    ['Email', 'Portal'],
-  );
-  assert.equal(ip2.querySelector('a').textContent, 'Interested party');
-  assert.equal(rowTexts(ui, 'interestedPartiesRows')[1], 'Interested party - - - - -');
-  filter(ui, 'interestedPartiesFilter', 'portal');
-  assert.equal(rowTexts(ui, 'interestedPartiesRows').length, 1);
-  filter(ui, 'interestedPartiesFilter', 'zzz');
-  assert.match(ui.el('interestedPartiesRows').textContent, /No interested parties match/);
 });
 
 test('ISMS objectives, documents, measures, organisation and assets are listed', async (t) => {
@@ -418,7 +405,6 @@ test('sections the user cannot view explain the restriction', async (t) => {
     ...soa(),
     can_view_risks: false,
     can_view_pestle: false,
-    can_view_interested_parties: false,
     can_view_isms: false,
     counts: undefined,
   };
@@ -426,10 +412,6 @@ test('sections the user cannot view explain the restriction', async (t) => {
   assert.match(ui.el('soaMeta').textContent, /^A · 0 controls/);
   assert.match(ui.el('risksRows').textContent, /do not have permission to view risks/);
   assert.match(ui.el('pestleRows').textContent, /do not have permission to view PESTLE\(E\) items/);
-  assert.match(
-    ui.el('interestedPartiesRows').textContent,
-    /do not have permission to view interested parties/,
-  );
   assert.match(
     ui.el('ismsObjectivesRows').textContent,
     /do not have permission to view ISMS objectives/,
@@ -467,7 +449,6 @@ test('a load failure is reported in every section', async (t) => {
     ['clausesRows', 'Failed to load clauses.'],
     ['risksRows', 'Failed to load risks.'],
     ['pestleRows', 'Failed to load PESTLE(E) items.'],
-    ['interestedPartiesRows', 'Failed to load interested parties.'],
     ['ismsObjectivesRows', 'Failed to load ISMS objectives.'],
     ['ismsDocumentsRows', 'Failed to load ISMS documents.'],
     ['ismsEffectivenessRows', 'Failed to load effectiveness measures.'],
@@ -485,7 +466,6 @@ function fakeTabs() {
 test('the tab query parameter opens the matching tab and tab changes are recorded', async (t) => {
   for (const [tab, id] of [
     ['risks', 'soaRisksTab'],
-    ['interestedparties', 'soaInterestedPartiesTab'],
     ['isms', 'soaIsmsObjectivesTab'],
     ['ISMSDocuments', 'soaIsmsDocumentsTab'],
     ['effectiveness', 'soaIsmsEffectivenessTab'],
@@ -518,7 +498,6 @@ const sparse = () => ({
   framework: 'A',
   can_view_risks: true,
   can_view_pestle: true,
-  can_view_interested_parties: true,
   can_view_isms: true,
   can_view_swot: true,
   counts: {},
@@ -539,16 +518,6 @@ const sparse = () => ({
     },
   ],
   pestle_items: [],
-  interested_parties: [
-    {
-      id: 'ip3',
-      name: { name: 'Staff' },
-      nature: { name: 'Internal' },
-      note: '',
-      controls: [{ id: 'c9', ref: 'A.9', title: null }],
-      communications: [],
-    },
-  ],
   isms_objectives: [
     {
       id: 'o1',
@@ -599,7 +568,6 @@ test('untitled controls and unnamed records show no placeholder text and match n
   for (const [id, rows, empty] of [
     ['controlsFilter', 'controlsRows', 'No controls match.'],
     ['risksFilter', 'risksRows', 'No risks match.'],
-    ['interestedPartiesFilter', 'interestedPartiesRows', 'No interested parties match.'],
   ]) {
     filter(ui, id, 'a.9');
     assert.notEqual(ui.el(rows).textContent.trim(), empty, id);

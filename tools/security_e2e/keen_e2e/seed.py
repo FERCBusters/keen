@@ -20,7 +20,7 @@ def _id(response):
     for key in ("id", "risk_id", "audit_id", "item_id"):
         if isinstance(body, dict) and body.get(key):
             return str(body[key])
-    for key in ("risk", "audit", "item", "party", "objective", "document", "meeting"):
+    for key in ("risk", "audit", "item", "objective", "document", "meeting"):
         nested = body.get(key) if isinstance(body, dict) else None
         if isinstance(nested, dict) and nested.get("id"):
             return str(nested["id"])
@@ -49,6 +49,14 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
         "/api/v1/isms/org-nodes",
         "/isms.html?tab=org",
     )
+    # A third party the risk and PESTLE(E) factor name as affected.
+    create(
+        "vendor",
+        "/api/v1/isms/vendors",
+        {"name": short, "description": text},
+        "/api/v1/isms/vendors",
+        "/vendor.html?id={id}",
+    )
     create(
         "risk",
         "/api/v1/risks",
@@ -62,6 +70,7 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
             "note": text,
             "treatment_plan": text,
             "risk_owner_role_id": seed.ids["org_role"],
+            "affected": [{"vendor_id": seed.ids["vendor"]}],
         },
         "/api/v1/risks",
         "/risk.html?id={id}",
@@ -77,19 +86,17 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
     create(
         "pestle",
         "/api/v1/pestle/items",
-        {"type": "Political", "lens": "Internal", "item": text, "rationale": text},
+        {
+            "type": "Political",
+            "lens": "Internal",
+            "item": text,
+            "rationale": text,
+            "affected": [{"vendor_id": seed.ids["vendor"]}],
+        },
         "/api/v1/pestle/items",
         "/pestle_item.html?id={id}",
     )
     seed.pages.append(("pestle_list", "/pestle.html"))
-    create(
-        "party",
-        "/api/v1/interested-parties",
-        {"name": short, "nature": short, "note": text[:3900]},
-        "/api/v1/interested-parties",
-        "/interested_party.html?id={id}",
-    )
-    seed.pages.append(("parties", "/interested_parties.html"))
     create(
         "objective",
         "/api/v1/isms/objectives",
@@ -121,7 +128,14 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
         "/api/v1/isms/meetings",
         "/isms-meeting.html?id={id}",
     )
-    seed.pages += [("isms", "/isms.html"), ("documents", "/documents.html")]
+    create(
+        "folder",
+        "/api/v1/isms/document-folders",
+        {"name": short},
+        "/api/v1/isms/document-folders",
+        "/isms.html?tab=documents",
+    )
+    seed.pages.append(("isms", "/isms.html"))
     create(
         "story",
         "/api/v1/stories",

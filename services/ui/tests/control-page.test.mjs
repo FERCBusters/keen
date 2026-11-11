@@ -139,25 +139,6 @@ async function controlPage(t, options = {}) {
           ],
         };
       }
-      if (p === '/api/v1/controls/c1/interested-parties') {
-        if (fail.parties) throw new Error('IP offline');
-        if (empty.parties) return { items: [] };
-        if (options.parties) return { items: options.parties };
-        return {
-          items: [
-            {
-              id: 'ip1',
-              name: { name: 'Regulator <script>' },
-              nature: { name: 'Legal' },
-              note: 'Annual returns',
-              communications: [
-                { event: 'Breach', with_whom: 'DPO', methods: ['Email', 'Phone'] },
-                { event: 'Audit', with_whom: 'CFO', methods: ['Email'] },
-              ],
-            },
-          ],
-        };
-      }
       if (p === '/api/v1/controls/c1/isms') {
         if (fail.isms) throw new Error('ISMS offline');
         // Policies and measures appear under Requirements, not the ISMS tab.
@@ -404,12 +385,6 @@ test('control page renders details, linked records and evidence with untrusted t
     /risk\.html\?id=r1&framework=A/,
   );
 
-  // Interested parties de-duplicate communication methods.
-  assert.equal(ui.el('interestedPartiesCount').textContent, '1');
-  assert.match(ui.el('interestedPartiesView').textContent, /Regulator <script>/);
-  assert.match(ui.el('interestedPartiesView').innerHTML, /Breach \/ DPO<br>Audit \/ CFO/);
-  assert.equal(ui.el('interestedPartiesView').querySelectorAll('.badge').length, 2);
-
   // Evidence rows and source facets.
   assert.equal(ui.el('rows').querySelector('img'), null);
   assert.match(ui.el('rows').textContent, /pushed/);
@@ -465,11 +440,9 @@ test('the Keen Assurance Framework attribution is shown for its controls', async
 test('readers without risk or ISMS permission do not request restricted links', async (t) => {
   const { ui } = await controlPage(t, { me: { can_view_controls: true } });
   assert.ok(ui.el('risksCard').classList.contains('d-none'));
-  assert.ok(ui.el('interestedPartiesCard').classList.contains('d-none'));
   assert.ok(ui.el('controlGovernancePane').contains(ui.el('risksCard')));
   assert.equal(ui.el('risksCard').style.display, 'none');
-  assert.equal(ui.el('interestedPartiesCard').style.display, 'none');
-  assert.ok(!ui.calls.some((c) => /\/(risks|interested-parties)\?/.test(c.url)));
+  assert.ok(!ui.calls.some((c) => /\/risks\?/.test(c.url)));
   assert.equal(ui.el('editClauseApplicability').style.display, 'none');
   assert.equal(ui.el('controlJustificationCard').style.display, 'none');
   await openRelated(ui);
@@ -556,7 +529,6 @@ test('the tab bar shows four top-level tabs and the governance pane holds the re
     'clausesCard',
     'adminClausesCard',
     'risksCard',
-    'interestedPartiesCard',
     'controlChangelog',
   ]) {
     assert.ok(ui.el('controlGovernancePane').contains(ui.el(id)), id);
@@ -594,7 +566,6 @@ test('evidence appears while slower sections are still loading', async (t) => {
         await risksPending;
         return { items: [] };
       }
-      if (p === '/api/v1/controls/c1/interested-parties') return { items: [] };
       if (p === '/api/v1/events/facets') return { sources: [{ source: 'github', count: 1 }] };
       if (p === '/api/v1/events')
         return {
@@ -790,13 +761,6 @@ test('control load failures and evidence failures are reported', async (t) => {
   const events = await controlPage(t, { fail: { events: true } });
   await settle(() => /Failed to load evidence/.test(events.ui.el('status').textContent));
   assert.match(events.ui.el('rows').textContent, /Failed to load evidence/);
-
-  const parties = await controlPage(t, { fail: { parties: true } });
-  assert.match(
-    parties.ui.el('interestedPartiesView').textContent,
-    /Failed to load interested parties/,
-  );
-  assert.equal(parties.ui.el('interestedPartiesCount').textContent, '0');
 });
 
 test('a control page without an id explains the missing parameter', async (t) => {
@@ -811,7 +775,7 @@ test('a control page without an id explains the missing parameter', async (t) =>
 test('a control with nothing linked says so in every tab', async (t) => {
   const { ui } = await controlPage(t, {
     control: baseControl({ clauses: [] }),
-    empty: { risks: true, parties: true, events: true, clauseTree: true },
+    empty: { risks: true, events: true, clauseTree: true },
     fail: { facets: true },
   });
   assert.equal(ui.el('clausesView').textContent, 'No clauses linked to this control.');
@@ -819,10 +783,6 @@ test('a control with nothing linked says so in every tab', async (t) => {
   assert.equal(ui.el('rows').textContent, 'No evidence matches your filters.');
   await settle(() => /No risks mapped/.test(ui.el('risksView').textContent));
   assert.equal(ui.el('risksCount').textContent, '0');
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() =>
-    /No interested parties mapped/.test(ui.el('interestedPartiesView').textContent),
-  );
   // Without the facets the source filter keeps whatever it had.
   assert.equal(ui.el('status').dataset.alert, undefined);
   ui.el('editClauseApplicability').click();
@@ -1431,27 +1391,24 @@ test('a control page without an id opens Governance without requests', async (t)
     },
     before,
   );
-  assert.equal(ui.el('interestedPartiesView').textContent.includes('Failed'), false);
   assert.equal(ui.el('status').textContent, 'Missing control id.');
 });
 
-test('switched-off risks, interested parties and ISMS leave Governance without those requests', async (t) => {
+test('switched-off risks and ISMS leave Governance without those requests', async (t) => {
   const { ui } = await controlPage(t, {
     me: {
       is_admin: true,
-      features: { enabled: { risk_cia: false, interested_parties: false, isms: false } },
+      features: { enabled: { risk_cia: false, isms: false } },
     },
   });
   ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => /Justification changed/.test(ui.el('controlChangelog').textContent));
   assert.equal(
-    ui.calls.some((c) => /\/controls\/c1\/(risks|interested-parties|isms)\?/.test(c.url)),
+    ui.calls.some((c) => /\/controls\/c1\/(risks|isms)\?/.test(c.url)),
     false,
   );
   // Their panels keep the page's own placeholders.
   assert.equal(ui.el('risksCard').style.display, 'none');
-  assert.equal(ui.el('interestedPartiesCard').style.display, 'none');
-  assert.equal(ui.el('interestedPartiesView').textContent, 'No interested parties linked.');
   assert.equal(ui.el('controlIsmsView').textContent, 'Loading ISMS references');
 });
 
@@ -1479,26 +1436,6 @@ test('ISMS records without names are listed by their kind', async (t) => {
       ['Assets', 'Asset'],
       ['Meetings', 'Meeting'],
     ],
-  );
-});
-
-test('an interested party without communications or a note shows dashes', async (t) => {
-  const { ui } = await controlPage(t, {
-    parties: [
-      {
-        id: 'ip2',
-        name: { name: 'Auditor' },
-        nature: { name: 'External' },
-        note: '   ',
-        communications: [],
-      },
-    ],
-  });
-  await settle(() => ui.el('interestedPartiesView').querySelector('tbody tr'));
-  const cells = [...ui.el('interestedPartiesView').querySelector('tbody tr').cells];
-  assert.deepEqual(
-    cells.map((c) => c.textContent.trim()),
-    ['Auditor', 'External', '-', '-', '-'],
   );
 });
 
@@ -1580,7 +1517,6 @@ test('related controls stay browsable by framework slug when the catalogue canno
         if (path === '/api/v1/frameworks') throw new Error('Catalogue offline');
         if (path === '/api/v1/controls/c1') return baseControl();
         if (path === '/api/v1/controls/c1/risks') return { items: [] };
-        if (path === '/api/v1/controls/c1/interested-parties') return { items: [] };
         if (path === '/api/v1/controls/c1/cross-framework')
           return {
             items: [

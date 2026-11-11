@@ -109,11 +109,20 @@ def docs(keen):  # noqa: F811 - fixture imported above
 # --- Folders ------------------------------------------------------------------
 
 
+def _folder(row, name, parent_id, document_count=0):
+    return {
+        "id": row["id"],
+        "name": name,
+        "parent_id": parent_id,
+        "document_count": document_count,
+    }
+
+
 def test_folders_form_a_named_tree_that_refuses_cycles(docs):
     policies = docs.folder("  Policies  ")
     hr = docs.folder("HR", policies["id"])
-    assert policies == {"id": policies["id"], "name": "Policies", "parent_id": None}
-    assert hr == {"id": hr["id"], "name": "HR", "parent_id": policies["id"]}
+    assert policies == _folder(policies, "Policies", None)
+    assert hr == _folder(hr, "HR", policies["id"])
     tree = docs.call(docs.reader, "GET", FOLDERS)
     assert tree == [hr, policies]
 
@@ -148,17 +157,59 @@ def test_folders_form_a_named_tree_that_refuses_cycles(docs):
         f"{FOLDERS}/{hr['id']}",
         json={"name": " People ", "parent_id": None},
     )
-    assert moved == {"id": hr["id"], "name": "People", "parent_id": None}
-    docs.call(
+    assert moved == _folder(hr, "People", None)
+    docs.create(folder_id=policies["id"])
+    docs.create(folder_id=policies["id"], title="Backup standard")
+    moved = docs.call(
         docs.manager,
         "PATCH",
         f"{FOLDERS}/{policies['id']}",
         json={"name": "Policies", "parent_id": hr["id"]},
     )
+    assert moved == _folder(policies, "Policies", hr["id"], 2)
+    # Each folder counts the documents filed directly in it.
     assert docs.call(docs.reader, "GET", FOLDERS) == [
-        {"id": hr["id"], "name": "People", "parent_id": None},
-        {"id": policies["id"], "name": "Policies", "parent_id": hr["id"]},
+        _folder(hr, "People", None),
+        _folder(policies, "Policies", hr["id"], 2),
     ]
+
+
+def test_folders_beside_each_other_have_different_names(docs):
+    policies = docs.folder("Policies")
+    hr = docs.folder("HR", policies["id"])
+    records = docs.folder("Records")
+    # Names compare without regard to case or surrounding space, at the top
+    # level and inside a folder.
+    for name, parent in (("policies", None), (" hr ", policies["id"])):
+        refused = docs.call(
+            docs.manager,
+            "POST",
+            FOLDERS,
+            409,
+            json={"name": name, "parent_id": parent},
+        )
+        assert refused["detail"] == "A folder with that name is already here"
+    for name, parent in (("POLICIES", None), ("HR", policies["id"])):
+        refused = docs.call(
+            docs.manager,
+            "PATCH",
+            f"{FOLDERS}/{records['id']}",
+            409,
+            json={"name": name, "parent_id": parent},
+        )
+        assert refused["detail"] == "A folder with that name is already here"
+    # The same name is fine elsewhere, and a folder keeps its own name.
+    assert docs.folder("HR")["name"] == "HR"
+    kept = docs.call(
+        docs.manager,
+        "PATCH",
+        f"{FOLDERS}/{hr['id']}",
+        json={"name": "hr", "parent_id": policies["id"]},
+    )
+    assert kept["name"] == "hr"
+    # A name is one line.
+    folded = docs.folder("Board\n  papers", policies["id"])
+    assert folded["name"] == "Board papers"
 
 
 def test_a_folder_is_deleted_only_once_it_is_empty(docs):

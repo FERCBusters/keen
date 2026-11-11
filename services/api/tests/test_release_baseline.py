@@ -146,6 +146,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0047_affected_links",
         "0046_asset_owner_only",
         "0045_mcp_oauth",
         "0044_posture_risk_treatment",
@@ -1114,6 +1115,344 @@ def test_audit_trail_permission_is_removed_and_its_holders_refresh():
             assert description(conn, "audits.admin") == (
                 "Edit and delete any audit or scheduled audit template."
             )
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_interested_parties_are_removed_and_affected_links_added():
+    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires PostgreSQL integration database")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "affected_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def tables(conn):
+        return set(
+            conn.scalars(
+                text(
+                    "SELECT table_name FROM information_schema.tables"
+                    " WHERE table_schema = :schema"
+                ),
+                {"schema": schema},
+            )
+        )
+
+    def run(conn, sql, **params):
+        return conn.execute(text(sql), params)
+
+    def party_schema(conn):
+        """The register's columns, constraints and indexes, without the schema name."""
+        named = {"schema": schema, "tables": sorted(party_tables)}
+        columns = run(
+            conn,
+            "SELECT table_name, column_name, data_type, character_maximum_length,"
+            " is_nullable, column_default FROM information_schema.columns"
+            " WHERE table_schema = :schema AND table_name = ANY(:tables)",
+            **named,
+        ).all()
+        constraints = run(
+            conn,
+            "SELECT c.conrelid::regclass::text, c.conname,"
+            " pg_get_constraintdef(c.oid) FROM pg_constraint c"
+            " JOIN pg_namespace n ON n.oid = c.connamespace"
+            " WHERE n.nspname = :schema"
+            " AND c.conrelid::regclass::text = ANY(:tables)",
+            **named,
+        ).all()
+        indexes = run(
+            conn,
+            "SELECT tablename, indexname, replace(indexdef, :prefix, '')"
+            " FROM pg_indexes WHERE schemaname = :schema AND tablename = ANY(:tables)",
+            prefix=schema + ".",
+            **named,
+        ).all()
+        return set(columns), set(constraints), set(indexes)
+
+    party_tables = {
+        "risk_interested_parties",
+        "interested_party_communications",
+        "interested_party_control_links",
+        "interested_parties",
+        "interested_party_names",
+        "interested_party_natures",
+    }
+    ids = {
+        key: uuid.uuid4()
+        for key in (
+            "holder",
+            "member",
+            "bystander",
+            "group",
+            "read",
+            "manage",
+            "other",
+            "name",
+            "nature",
+            "party",
+            "category",
+            "subcategory",
+            "asset",
+            "risk",
+            "audit",
+            "client",
+            "grant",
+        )
+    }
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0046_asset_owner_only")
+            assert party_tables <= tables(conn)
+            before = party_schema(conn)
+            assert all(before)
+            for key, code in (
+                ("read", "interested_parties.read"),
+                ("manage", "interested_parties.manage"),
+                ("other", "risk.read"),
+            ):
+                run(
+                    conn,
+                    "INSERT INTO permissions (id, code, created_at)"
+                    " VALUES (:id, :code, now())",
+                    id=ids[key],
+                    code=code,
+                )
+            for name, landing in (
+                ("holder", "/interested_parties.html?framework=x"),
+                ("member", "/interested_party.html"),
+                ("bystander", "/risks.html"),
+            ):
+                run(
+                    conn,
+                    "INSERT INTO users (id, username, password_hash, created_at,"
+                    " updated_at, pref_auto_apply_filters, pref_source_colors,"
+                    " pref_landing_page, pref_date_format, authz_version)"
+                    " VALUES (:id, :name, 'unused', now(), now(), false, '{}',"
+                    " :landing, 'dmy', 3)",
+                    id=ids[name],
+                    name=name,
+                    landing=landing,
+                )
+            run(
+                conn,
+                "INSERT INTO user_permissions (user_id, permission_id)"
+                " VALUES (:u, :p), (:b, :o)",
+                u=ids["holder"],
+                p=ids["read"],
+                b=ids["bystander"],
+                o=ids["other"],
+            )
+            run(
+                conn,
+                "INSERT INTO groups (id, name, created_at) VALUES (:id, 'parties', now())",
+                id=ids["group"],
+            )
+            run(
+                conn,
+                "INSERT INTO group_permissions (group_id, permission_id)"
+                " VALUES (:g, :p)",
+                g=ids["group"],
+                p=ids["manage"],
+            )
+            run(
+                conn,
+                "INSERT INTO user_groups (user_id, group_id) VALUES (:u, :g)",
+                u=ids["member"],
+                g=ids["group"],
+            )
+            run(
+                conn,
+                "INSERT INTO interested_party_names (id, name) VALUES (:id, 'Customers')",
+                id=ids["name"],
+            )
+            run(
+                conn,
+                "INSERT INTO interested_party_natures (id, name)"
+                " VALUES (:id, 'External')",
+                id=ids["nature"],
+            )
+            run(
+                conn,
+                "INSERT INTO interested_parties (id, name_id, nature_id, note,"
+                " created_at, updated_at) VALUES (:id, :n, :t, '', now(), now())",
+                id=ids["party"],
+                n=ids["name"],
+                t=ids["nature"],
+            )
+            run(
+                conn,
+                "INSERT INTO risk_categories (id, name) VALUES (:id, 'IT')",
+                id=ids["category"],
+            )
+            run(
+                conn,
+                "INSERT INTO risk_asset_subcategories (id, category_id, name)"
+                " VALUES (:id, :c, 'Servers')",
+                id=ids["subcategory"],
+                c=ids["category"],
+            )
+            run(
+                conn,
+                "INSERT INTO risk_assets (id, name, category_id, subcategory_id)"
+                " VALUES (:id, 'Platform', :c, :s)",
+                id=ids["asset"],
+                c=ids["category"],
+                s=ids["subcategory"],
+            )
+            run(
+                conn,
+                "INSERT INTO risks (id, asset_id) VALUES (:id, :a)",
+                id=ids["risk"],
+                a=ids["asset"],
+            )
+            run(
+                conn,
+                "INSERT INTO risk_interested_parties (id, risk_id, interested_party_id,"
+                " created_at) VALUES (:id, :r, :p, now())",
+                id=uuid.uuid4(),
+                r=ids["risk"],
+                p=ids["party"],
+            )
+            run(
+                conn,
+                "INSERT INTO audits (id, title, framework_slug, created_at,"
+                " updated_at, schedule_date_rule) VALUES"
+                " (:id, 'Audit', 'iso_27001_2022', now(), now(), 'exact')",
+                id=ids["audit"],
+            )
+            for entity_type, entity_id in (
+                ("interested_party", ids["party"]),
+                ("risk", ids["risk"]),
+            ):
+                run(
+                    conn,
+                    "INSERT INTO audit_evidence (id, audit_id, added_at,"
+                    " entity_type, entity_id) VALUES (:id, :a, now(), :t, :e)",
+                    id=uuid.uuid4(),
+                    a=ids["audit"],
+                    t=entity_type,
+                    e=entity_id,
+                )
+                run(
+                    conn,
+                    "INSERT INTO entity_changelogs (id, entity_type, entity_id,"
+                    " action, summary, changes, changed_at) VALUES"
+                    " (:id, :t, :e, 'created', 'Created', '[]', now())",
+                    id=uuid.uuid4(),
+                    t=entity_type,
+                    e=entity_id,
+                )
+            run(
+                conn,
+                "INSERT INTO managed_configurations (name, document, version,"
+                " updated_at) VALUES ('features', CAST(:doc AS jsonb), 4, now())",
+                doc=json.dumps({"interested_parties": False, "pestle": False}),
+            )
+            run(
+                conn,
+                "INSERT INTO mcp_clients (id, client_id, client_name, info, created_at)"
+                " VALUES (:id, 'kmc_x', 'Client', '{}', now())",
+                id=ids["client"],
+            )
+            run(
+                conn,
+                "INSERT INTO mcp_grants (id, user_id, client_pk, scopes,"
+                " session_version, mfa_version, created_at, expires_at) VALUES"
+                " (:id, :u, :c, CAST(:scopes AS jsonb), 1, 1, now(), now())",
+                id=ids["grant"],
+                u=ids["holder"],
+                c=ids["client"],
+                scopes=json.dumps(["risk.read", "interested_parties.read"]),
+            )
+            run(
+                conn,
+                "INSERT INTO mcp_tokens (id, token_hash, grant_id, kind, scopes,"
+                " created_at, expires_at) VALUES (:id, 'hash', :g, 'access',"
+                " CAST(:scopes AS jsonb), now(), now())",
+                id=uuid.uuid4(),
+                g=ids["grant"],
+                scopes=json.dumps(["interested_parties.read"]),
+            )
+            conn.commit()
+
+            command.upgrade(config, "0047_affected_links")
+            assert not party_tables & tables(conn)
+            assert "affected_links" in tables(conn)
+            codes = set(run(conn, "SELECT code FROM permissions").scalars())
+            assert "risk.read" in codes
+            assert not {c for c in codes if c.startswith("interested_parties.")}
+            # Holders, directly or through a group, refresh their snapshots.
+            assert dict(
+                run(conn, "SELECT username, authz_version FROM users").all()
+            ) == {"holder": 4, "member": 4, "bystander": 3}
+            assert dict(
+                run(conn, "SELECT username, pref_landing_page FROM users").all()
+            ) == {"holder": "/", "member": "/", "bystander": "/risks.html"}
+            assert run(conn, "SELECT count(*) FROM group_permissions").scalar() == 0
+            assert run(conn, "SELECT count(*) FROM user_permissions").scalar() == 1
+            assert run(
+                conn, "SELECT document FROM managed_configurations"
+            ).scalar() == {"pestle": False}
+            assert run(conn, "SELECT scopes FROM mcp_grants").scalar() == ["risk.read"]
+            assert run(conn, "SELECT scopes FROM mcp_tokens").scalar() == []
+            for table in ("audit_evidence", "entity_changelogs"):
+                assert run(
+                    conn, f"SELECT entity_type FROM {table}"
+                ).scalars().all() == ["risk"]
+
+            # A link names one owner and one target, and goes with either.
+            def link(**columns):
+                names = ", ".join(columns)
+                values = ", ".join(f":{name}" for name in columns)
+                run(
+                    conn,
+                    f"INSERT INTO affected_links (id, created_at, {names})"
+                    f" VALUES (:id, now(), {values})",
+                    id=uuid.uuid4(),
+                    **columns,
+                )
+
+            link(risk_id=ids["risk"], asset_id=ids["asset"])
+            conn.commit()
+            for columns, constraint in (
+                ({"asset_id": ids["asset"]}, "ck_affected_links_one_owner"),
+                ({"risk_id": ids["risk"]}, "ck_affected_links_one_target"),
+            ):
+                with pytest.raises(Exception, match=constraint):
+                    link(**columns)
+                conn.rollback()
+            run(conn, "DELETE FROM risks")
+            assert run(conn, "SELECT count(*) FROM affected_links").scalar() == 0
+            conn.commit()
+
+            # A downgrade brings back the register's schema and permissions,
+            # empty and held by nobody, and the upgrade runs again from there.
+            command.downgrade(config, "0046_asset_owner_only")
+            assert "affected_links" not in tables(conn)
+            assert party_schema(conn) == before
+            assert run(conn, "SELECT count(*) FROM interested_parties").scalar() == 0
+            assert set(
+                run(
+                    conn,
+                    "SELECT code FROM permissions WHERE code LIKE 'interested_parties.%'",
+                ).scalars()
+            ) == {"interested_parties.read", "interested_parties.manage"}
+            assert run(conn, "SELECT count(*) FROM group_permissions").scalar() == 0
+            assert run(conn, "SELECT count(*) FROM user_permissions").scalar() == 1
+            command.upgrade(config, "0047_affected_links")
+            assert not party_tables & tables(conn)
+            assert "affected_links" in tables(conn)
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

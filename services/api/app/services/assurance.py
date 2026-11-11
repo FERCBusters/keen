@@ -24,7 +24,7 @@ from app.services.isms.organisation import require_quiz_authority_for_audience_r
 from app.services.people import ensure_person_for_user as ensure_person_for_user
 from app.services.people import person_for_user as person_for_user
 from app.services.people import require_link_authority
-from app.services.text import clean_email
+from app.services.text import clean_email, clean_text
 
 
 class PersonInput(BaseModel):
@@ -245,16 +245,60 @@ def list_vendors(*, user, db: Session):
     return {"items": [_vendor_out(row) for row in rows]}
 
 
+def vendor_by_name(db: Session, name: str) -> IsmsVendor | None:
+    """The vendor with this name, compared without regard to case."""
+    return (
+        db.query(IsmsVendor)
+        .filter(func.lower(IsmsVendor.name) == name.strip().lower())
+        .first()
+    )
+
+
+def person_by_name(db: Session, name: str) -> IsmsPerson | None:
+    """The earliest person with this name, compared without regard to case."""
+    return (
+        db.query(IsmsPerson)
+        .filter(func.lower(IsmsPerson.name) == name.strip().lower())
+        .order_by(IsmsPerson.created_at, IsmsPerson.id)
+        .first()
+    )
+
+
+def vendor_named(db: Session, name: str) -> IsmsVendor:
+    """The vendor with this name, added with the name alone when there is none.
+
+    The caller commits; a vendor's other details are completed on its page.
+    """
+    name = clean_text(name, max_len=256, required=True, label="Vendor name")
+    row = vendor_by_name(db, name)
+    if row is None:
+        row = IsmsVendor(name=name)
+        db.add(row)
+        db.flush()
+    return row
+
+
+def person_named(db: Session, name: str) -> IsmsPerson:
+    """The person with this name, added with the name alone when there is none.
+
+    A person added here has no Keen account and no role, so they carry no
+    authority. The caller commits.
+    """
+    name = clean_text(name, max_len=256, required=True, label="Person name")
+    row = person_by_name(db, name)
+    if row is None:
+        row = IsmsPerson(name=name)
+        db.add(row)
+        db.flush()
+    return row
+
+
 def _save_vendor(db: Session, row: IsmsVendor, payload: VendorInput):
     name = payload.name.strip()
     if not name:
         raise DomainError(400, "Name is required")
-    other = (
-        db.query(IsmsVendor)
-        .filter(func.lower(IsmsVendor.name) == name.lower(), IsmsVendor.id != row.id)
-        .first()
-    )
-    if other:
+    other = vendor_by_name(db, name)
+    if other and other.id != row.id:
         raise DomainError(409, "Vendor already exists")
     website = payload.website.strip()
     if website and urlparse(website).scheme not in {"https", "http"}:

@@ -1,6 +1,6 @@
-"""Automatic diary entries for ISMS, risk and interested-party framework links.
+"""Automatic diary entries for ISMS and risk framework links.
 
-Saving an ISMS record, a risk or an interested party with framework links
+Saving an ISMS record or a risk with framework links
 maintains one diary event per record. The entry lists the linked control and
 clause references and links to the record by UUID. Its automatic mappings
 follow the live link state, so control evidence counts include each
@@ -27,7 +27,6 @@ from app.db.models import (
     EventIncident,
     EventQuestionThread,
     FrameworkClause,
-    InterestedPartyControlLink,
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
     Mapping,
@@ -66,7 +65,6 @@ _LABELS = {
     "meeting": "Meeting",
     "effectiveness_measure": "Effectiveness measure",
     "risk": "Risk",
-    "interested_party": "Interested party",
 }
 # Record pages take only the record UUID. Organisation chart nodes have no
 # page of their own, so their entries open the organisation chart.
@@ -78,21 +76,12 @@ _RECORD_PAGES = {
     "meeting": "/isms-meeting.html?id={id}",
     "effectiveness_measure": "/isms-effectiveness-measure.html?id={id}",
     "risk": "/risk.html?id={id}",
-    "interested_party": "/interested_party.html?id={id}",
 }
-# Risks and interested parties keep their control links in tables of their own.
+# Risks keep their control links in a table of their own.
 _DIRECT_LINKS: dict[
-    str,
-    tuple[
-        type[RiskControlLink | InterestedPartyControlLink],
-        InstrumentedAttribute[uuid.UUID],
-    ],
+    str, tuple[type[RiskControlLink], InstrumentedAttribute[uuid.UUID]]
 ] = {
     "risk": (RiskControlLink, RiskControlLink.risk_id),
-    "interested_party": (
-        InterestedPartyControlLink,
-        InterestedPartyControlLink.interested_party_id,
-    ),
 }
 _SECTION_PAGES = {"org_node": "/isms.html?tab=org"}
 

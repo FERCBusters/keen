@@ -23,10 +23,6 @@ from app.db.models import (
     Event,
     Framework,
     FrameworkClause,
-    InterestedParty,
-    InterestedPartyControlLink,
-    InterestedPartyName,
-    InterestedPartyNature,
     IsmsAccessControlMatrixEntry,
     IsmsApplicationConfigurationEntry,
     IsmsBusinessProcess,
@@ -573,6 +569,7 @@ def test_reverse_lookups_follow_the_sampled_records_feature(audits):
         "effectiveness",
         "metric",
         "interested-party",
+        "interested_party",
         "Risk",
     ],
 )
@@ -634,18 +631,13 @@ def test_sampled_records_are_described_with_their_controls(audits):
         item=HOSTILE,
         overall_relevance_id=high.id,
     )
-    name, nature = (
-        InterestedPartyName(name="Customers"),
-        InterestedPartyNature(name="Data subjects"),
-    )
-    db.add_all([pestle, name, nature])
+    db.add(pestle)
     db.flush()
     db.add(
         PestleClauseRelevance(
             pestle_item_id=pestle.id, clause_id=audits.leaf.id, relevance_id=high.id
         )
     )
-    party = InterestedParty(name_id=name.id, nature_id=nature.id, note="Retail")
     swot = IsmsSwot(title="Strong team", kind="strength", description="Experienced")
     objective = IsmsObjective(
         requirement="Protect data", goal="No breaches", metric="Incidents"
@@ -656,13 +648,8 @@ def test_sampled_records_are_described_with_their_controls(audits):
         framework_slug=fw, summary="Coverage", description="Count"
     )
     meeting = IsmsMeeting(title="Management review", date=date(2026, 2, 1))
-    db.add_all([party, swot, objective, node, process, measure, meeting])
+    db.add_all([swot, objective, node, process, measure, meeting])
     db.flush()
-    db.add(
-        InterestedPartyControlLink(
-            interested_party_id=party.id, framework_slug=fw, control_item_id=control.id
-        )
-    )
     metric = IsmsEffectivenessMetricEntry(
         measure_id=measure.id,
         metric_value=96.5,
@@ -705,7 +692,6 @@ def test_sampled_records_are_described_with_their_controls(audits):
     samples = {
         "risk": risk,
         "pestle_item": pestle,
-        "interested_party": party,
         "isms_swot": swot,
         "isms_objective": objective,
         "isms_document": audits.document,
@@ -754,11 +740,6 @@ def test_sampled_records_are_described_with_their_controls(audits):
 
     expectations = {
         "pestle_item": (f"PESTLE(E): {HOSTILE}", "Legal · External", ["A.5.1"]),
-        "interested_party": (
-            "Interested party: Customers - Data subjects",
-            "Retail",
-            ["A.5.1"],
-        ),
         "isms_swot": ("SWOT strength: Strong team", "Experienced", ["A.5.1"]),
         "isms_objective": ("ISMS objective: No breaches", "Incidents", ["A.5.1"]),
         "isms_document": ("ISMS document: Security policy", "policy", ["A.5.1"]),

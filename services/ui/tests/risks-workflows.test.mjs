@@ -1,5 +1,5 @@
 // The Risks dashboard through the real page module: every risk with its kind,
-// parties and treatment; the register, heatmap and thresholds; CIA and
+// who it affects and treatment; the register, heatmap and thresholds; CIA and
 // PESTLE(E) tabs; the reusable library; risk/control visualisations; controls
 // without risks; and the permission boundaries.
 import test from 'node:test';
@@ -30,14 +30,14 @@ const riskRows = [
     threat_summary: 'Ransomware encrypts the payroll database',
     method: 'cia',
     risk_types: ['Availability'],
-    interested_parties: [
-      { kind: 'person', id: 'p1', label: 'Dana', detail: 'DPO', href: '/isms.html?tab=people' },
+    affected: [
+      { kind: 'person', id: 'p1', label: 'Dana', detail: 'DPO', href: '/person.html?id=p1' },
       {
-        kind: 'interested_party',
-        id: 'ip1',
-        label: '<b>Staff</b>',
-        detail: 'Internal',
-        href: '/interested_party.html?id=ip1',
+        kind: 'vendor',
+        id: 'v1',
+        label: '<b>Customers</b>',
+        detail: 'Paying subscribers',
+        href: '/vendor.html?id=v1',
       },
     ],
     risk_owner: { username: 'dana' },
@@ -58,7 +58,7 @@ const riskRows = [
     threat_summary: '',
     method: 'general',
     risk_types: [],
-    interested_parties: [],
+    affected: [],
     risk_score: 16,
     residual_risk_score: 0,
     treatment_strategy: '',
@@ -170,6 +170,7 @@ const pestleItems = [
     overall_relevance: { code: 'high', label: '1 High' },
     business_process_count: 2,
     clause_count: 1,
+    affected: [],
   },
 ];
 
@@ -268,12 +269,12 @@ const cell = (ui, l, i) =>
 
 // --- All risks ------------------------------------------------------------------------------------
 
-test('the dashboard lists every risk with its kind, parties, treatment and safe text', async (t) => {
+test('the dashboard lists every risk with its kind, who it affects, treatment and safe text', async (t) => {
   const { ui, state } = await dashboard(t);
   assert.deepEqual(state.riskQueries, [{ framework: 'A' }]);
   const rows = ui.el('rows').querySelectorAll('tr');
   assert.equal(rows.length, 2);
-  // Highest score first; names and party labels are text, never markup.
+  // Highest score first; names and affected records are text, never markup.
   assert.match(rows[0].textContent, /Laptop/);
   assert.equal(ui.el('rows').querySelector('img'), null);
   assert.equal(ui.el('rows').querySelector('b'), null);
@@ -282,15 +283,13 @@ test('the dashboard lists every risk with its kind, parties, treatment and safe 
   assert.match(rows[1].querySelectorAll('td')[2].textContent, /CIA/);
   assert.match(rows[1].querySelectorAll('td')[2].textContent, /Availability/);
   assert.match(rows[0].querySelectorAll('td')[2].textContent, /Risk/);
-  const parties = rows[1].querySelectorAll('td')[3];
-  assert.match(parties.textContent, /Dana/);
-  assert.match(parties.textContent, /<b>Staff<\/b>/);
+  const affected = rows[1].querySelectorAll('td')[3];
+  assert.match(affected.textContent, /Dana/);
   assert.equal(
-    parties
-      .querySelector('a[href="/interested_party.html?id=ip1&framework=A"]')
-      ?.textContent.trim(),
-    '<b>Staff</b>',
+    affected.querySelector('a[href="/vendor.html?id=v1&framework=A"]')?.textContent.trim(),
+    'Vendor / 3rd party: <b>Customers</b>',
   );
+  assert.equal(rows[0].querySelectorAll('td')[3].textContent.trim(), '-');
   assert.match(
     rows[1].querySelectorAll('td')[7].textContent,
     /Mitigate.*In progress.*due 2026-12-01/s,
@@ -574,11 +573,25 @@ test('the CIA tab asks for CIA risks only and filters by type', async (t) => {
 });
 
 test('the PESTLE(E) tab lists factors with safe text and links to the wizard and workspace', async (t) => {
-  const { ui, state } = await dashboard(t, { query: '&tab=pestle' });
+  const asset = {
+    kind: 'asset',
+    id: 'a1',
+    label: 'CRM',
+    detail: 'Data',
+    href: '/isms-asset.html?id=a1',
+  };
+  const { ui, state } = await dashboard(t, {
+    query: '&tab=pestle',
+    pestleItems: [{ ...pestleItems[0], affected: [asset] }],
+  });
   await settle(() => ui.el('pestleRows').querySelectorAll('tr').length === 1);
   const row = ui.el('pestleRows').querySelector('tr');
   assert.equal(row.querySelector('b'), null);
-  assert.match(row.textContent, /Legal.*External.*<b>GDPR<\/b> fines rise.*1 High.*2.*1/s);
+  assert.match(row.textContent, /Legal.*External.*<b>GDPR<\/b> fines rise.*1 High.*CRM.*2.*1/s);
+  assert.equal(
+    row.querySelector('a.badge').getAttribute('href'),
+    '/isms-asset.html?id=a1&framework=A',
+  );
   assert.equal(
     row.querySelector('a').getAttribute('href'),
     '/pestle_item.html?id=pi1&tab=details&framework=A',
@@ -687,10 +700,10 @@ test('risk visualisations draw the risk/control graph and a filterable heatmap',
   assert.match(ui.window.location.search, /tab=visualisations/);
   const svg = ui.el('riskControlsGraph').querySelector('svg');
   // Unlinked risks are omitted; risks with more links come first.
-  assert.equal(svg.querySelectorAll('.interested-party-bipartite-node').length, 4);
+  assert.equal(svg.querySelectorAll('.bipartite-node').length, 4);
   assert.match(svg.textContent, /2 risk\(s\), 2 control\(s\), 3 mapping\(s\)/);
   assert.ok(
-    [...svg.querySelectorAll('.interested-party-bipartite-node > title')].some((x) =>
+    [...svg.querySelectorAll('.bipartite-node > title')].some((x) =>
       x.textContent.includes('complete sentences into risk titles'),
     ),
   );
@@ -763,7 +776,7 @@ test('risk graph labels mark every truncation with an ellipsis', async (t) => {
   };
   const { ui } = await dashboard(t, { query: '&tab=visualisations', graph: small });
   await settle(() => ui.el('riskControlsGraph').querySelector('svg'));
-  const node = ui.el('riskControlsGraph').querySelector('.interested-party-bipartite-node');
+  const node = ui.el('riskControlsGraph').querySelector('.bipartite-node');
   const lines = [...node.querySelector('text').querySelectorAll('tspan')].map((x) => x.textContent);
   assert.equal(lines.length, 3);
   assert.ok(lines.at(-1).endsWith('…'), lines.at(-1));
@@ -796,7 +809,7 @@ test('CIA, PESTLE(E), library and category load failures are reported on their t
   await settle(() =>
     /Failed to load PESTLE\(E\) factors\./.test(pestle.ui.el('pestleRows').textContent),
   );
-  assert.equal(pestle.ui.el('pestleRows').querySelector('td').getAttribute('colspan'), '7');
+  assert.equal(pestle.ui.el('pestleRows').querySelector('td').getAttribute('colspan'), '8');
   assert.equal(
     pestle.ui.el('status').textContent,
     'Failed to load PESTLE(E) factors: Factors offline',

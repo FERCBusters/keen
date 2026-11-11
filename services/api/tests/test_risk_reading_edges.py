@@ -1,4 +1,4 @@
-"""Risk ownership, Mitigator subcategories and affected parties at their edges.
+"""Risk ownership, Mitigator subcategories and affected records at their edges.
 
 Only an active account owns a risk, directly or through its role; the
 Mitigator accepts a subcategory without its category and scopes it only when
@@ -10,12 +10,10 @@ import uuid
 
 import pytest
 from app.db.models import (
-    InterestedParty,
-    InterestedPartyName,
-    InterestedPartyNature,
     IsmsPerson,
     IsmsVendor,
     Risk,
+    RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
 )
@@ -78,37 +76,40 @@ def test_the_mitigator_scopes_a_subcategory_only_to_a_named_category(reg):
         assert refused["detail"] == "Unknown asset subcategory"
 
 
-def test_a_risk_read_while_its_parties_are_removed_lists_those_that_remain(reg):
+def test_a_risk_read_while_its_affected_records_are_removed_lists_those_that_remain(
+    reg,
+):
     db = reg.db
     if db.get_bind().dialect.name != "postgresql":
         pytest.skip("The removals are run on the PostgreSQL connection")
-    nature = InterestedPartyNature(name="External")
-    customers, regulator = (
-        InterestedPartyName(name="Customers"),
-        InterestedPartyName(name="Regulator"),
-    )
-    db.add_all([nature, customers, regulator])
-    db.flush()
-    gone_party = InterestedParty(name_id=customers.id, nature_id=nature.id)
-    kept_party = InterestedParty(name_id=regulator.id, nature_id=nature.id)
     person = IsmsPerson(name="Dana", position="DPO")
-    vendor = IsmsVendor(name="Cloud host", website="https://cloud.example")
-    db.add_all([gone_party, kept_party, person, vendor])
+    gone_vendor = IsmsVendor(name="Cloud host", website="https://cloud.example")
+    kept_vendor = IsmsVendor(name="Privacy Commissioner")
+    category = RiskCategory(name="Hardware")
+    db.add_all([person, gone_vendor, kept_vendor, category])
+    db.flush()
+    subcategory = RiskAssetSubcategory(category_id=category.id, name="Laptops")
+    db.add(subcategory)
+    db.flush()
+    laptop = RiskAsset(
+        name="Laptop", category_id=category.id, subcategory_id=subcategory.id
+    )
+    db.add(laptop)
     db.commit()
     created = _create(
         reg,
-        interested_parties=[
-            {"interested_party_id": str(gone_party.id)},
-            {"interested_party_id": str(kept_party.id)},
+        affected=[
             {"person_id": str(person.id)},
-            {"vendor_id": str(vendor.id)},
+            {"vendor_id": str(gone_vendor.id)},
+            {"asset_id": str(laptop.id)},
+            {"vendor_id": str(kept_vendor.id)},
         ],
     )
-    assert len(created["interested_parties"]) == 4
+    assert len(created["affected"]) == 4
     pending = {
-        "interested_parties": str(gone_party.id),
         "isms_people": str(person.id),
-        "isms_vendors": str(vendor.id),
+        "isms_vendors": str(gone_vendor.id),
+        "risk_assets": str(laptop.id),
     }
 
     def removed_meanwhile(conn, cursor, statement, parameters, context, many):
@@ -130,6 +131,6 @@ def test_a_risk_read_while_its_parties_are_removed_lists_those_that_remain(reg):
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", removed_meanwhile)
     assert pending == {}
-    assert [(p["kind"], p["id"]) for p in shown["interested_parties"]] == [
-        ("interested_party", str(kept_party.id))
+    assert [(a["kind"], a["id"]) for a in shown["affected"]] == [
+        ("vendor", str(kept_vendor.id))
     ]

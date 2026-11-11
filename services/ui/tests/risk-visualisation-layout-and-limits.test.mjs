@@ -175,13 +175,10 @@ function layoutGraph() {
 
 const nodeLines = (ui, i) =>
   [
-    ...ui
-      .el('riskControlsGraph')
-      .querySelectorAll('.interested-party-bipartite-node')
-      [i].querySelectorAll('text'),
+    ...ui.el('riskControlsGraph').querySelectorAll('.bipartite-node')[i].querySelectorAll('text'),
   ].map((text) => [...text.querySelectorAll('tspan')].map((s) => s.textContent));
 const nodeX = (ui) =>
-  [...ui.el('riskControlsGraph').querySelectorAll('.interested-party-bipartite-node')].map(
+  [...ui.el('riskControlsGraph').querySelectorAll('.bipartite-node')].map(
     (g) => g.getAttribute('transform').match(/translate\(([^,]+),/)[1],
   );
 const sceneTransform = (ui) =>

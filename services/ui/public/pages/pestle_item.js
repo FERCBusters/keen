@@ -1,5 +1,12 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
+  affectedBadges,
+  affectedChoices,
+  affectedPayload,
+  loadAffectedOptions,
+  mountAffectedPicker,
+} from '/pages/affected-common.js';
+import {
   errorText,
   initNavbar,
   apiGet,
@@ -61,6 +68,8 @@ const deletePestleItem = document.getElementById('deletePestleItem');
 const samplePestleAudit = document.getElementById('samplePestleAudit');
 const relatedControlsCount = document.getElementById('relatedControlsCount');
 const relatedControls = document.getElementById('relatedControls');
+const pestleAffected = document.getElementById('pestleAffected');
+const pestleAffectedPicker = document.getElementById('pestleAffectedPicker');
 
 const businessProcessRelevanceList = document.getElementById('businessProcessRelevanceList');
 const clauseRelevanceList = document.getElementById('clauseRelevanceList');
@@ -81,6 +90,9 @@ const pestleQuestions = mountQuestionThreads({
 
 let meta = { types: [], lenses: [], relevance_levels: [] };
 let currentItem = null;
+// Managers who may read the People, Vendors and asset registers pick who and
+// what the item affects; everyone else sees the records it names.
+let affectedPicker = null;
 let processRelevanceRows = [];
 let clauseRelevanceRows = [];
 
@@ -195,7 +207,21 @@ function formPayload() {
     item: itemText,
     overall_relevance_code: pestleOverallRelevance.value,
     rationale: pestleRationale.value,
+    ...(affectedPicker ? { affected: affectedPayload(affectedPicker.value()) } : {}),
   };
+}
+
+async function mountAffected() {
+  if (!canManagePestle) return;
+  const options = await loadAffectedOptions().catch(() => null);
+  if (!options) return;
+  affectedPicker = mountAffectedPicker(pestleAffectedPicker, {
+    prefix: 'pestleAffected',
+    options,
+    chosen: affectedChoices(currentItem?.affected),
+  });
+  pestleAffectedPicker.hidden = false;
+  pestleAffected.hidden = true;
 }
 
 function renderRelatedControls(item) {
@@ -235,6 +261,8 @@ function renderItem(item = null) {
   if (pestleOverallRelevance) pestleOverallRelevance.value = item?.overall_relevance?.code || 'na';
   if (pestleItemText) pestleItemText.value = item?.item || '';
   if (pestleRationale) pestleRationale.value = item?.rationale || '';
+  pestleAffected.replaceChildren(...affectedBadges(item?.affected, framework));
+  affectedPicker?.set(affectedChoices(item?.affected));
 
   const isExisting = !!item?.id;
   const title = isExisting ? shorten(item.item, 90) : 'New PESTLE(E) item';
@@ -513,6 +541,7 @@ try {
     toast(status, 'You do not have permission to view PESTLE(E) assessments.', 'danger');
   } else {
     await loadItem();
+    await mountAffected();
     if (itemId && requestedTab === 'relevance') await loadItemRelations(itemId);
     if (itemId && requestedTab === 'questions') await pestleQuestions.refresh();
     if (itemId && requestedTab === 'changelog') await loadPestleChangelog();

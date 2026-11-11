@@ -32,7 +32,7 @@ def _scope(raw: bytes):
     [
         # The reported link: a quiz round id that climbs to another route.
         b"/v1/me/quizzes/rounds/..%2F..%2F..%2Fadmin%2Fusers%2FU1%2Fpassword/attempt",
-        b"/v1/interested-parties/..%2Fadmin%2Fgroups%2Fg1",
+        b"/v1/pestle/items/..%2Fadmin%2Fgroups%2Fg1",
         b"/v1/sources/%2e%2e%2Fme",
         b"/v1/sources/x%2Fy/insights",
         b"/v1/sources/x%5Cy/insights",

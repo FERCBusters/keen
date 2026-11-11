@@ -404,7 +404,7 @@ test('visualisations draw the lens/type heatmap, relevance circles and clause ne
   assert.equal(ui.window.pwned, undefined);
   const svg = network.querySelector('svg');
   assert.match(svg.textContent, /2 clauses, 2 PESTLE\(E\) items, 3 relevance mappings/);
-  const nodes = [...svg.querySelectorAll('.interested-party-bipartite-node')];
+  const nodes = [...svg.querySelectorAll('.bipartite-node')];
   assert.equal(nodes.length, 4);
   // Clauses sort numerically; items with more mappings come first.
   assert.match(nodes[0].querySelector('text').textContent, /^4\.1 \(2\)/);
@@ -562,7 +562,7 @@ test('visualisation labels follow a dark hex page background and equal relevance
     '4.10 × Second\nRelevance: Medium',
     '4.2 × Mystery\nRelevance: N/A',
   ]);
-  const nodes = [...svg.querySelectorAll('.interested-party-bipartite-node')];
+  const nodes = [...svg.querySelectorAll('.bipartite-node')];
   assert.match(nodes[0].querySelector('text').textContent, /^4\.2 \(2\)/);
   assert.equal(nodes[0].style.cursor, 'pointer');
 });

@@ -16,7 +16,7 @@ OWNERS = {
     "risks": "risk_cia",
     "risk_register": "risk_register",
     "pestle": "pestle",
-    "interested_parties": "interested_parties",
+    "affected": "risks",
     "bookstack_sections": "documents",
     "soa": "soa",
     "stories": "stories",

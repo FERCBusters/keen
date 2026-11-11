@@ -104,7 +104,6 @@ def resolver(admin, seed):
     known = {
         "/v1/risks": ids["risk"],
         "/v1/pestle/items": ids["pestle"],
-        "/v1/interested-parties": ids["party"],
         "/v1/isms/objectives": ids["objective"],
         "/v1/isms/documents": ids["document"],
         "/v1/isms/meetings": ids["meeting"],

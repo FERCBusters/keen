@@ -30,6 +30,7 @@ import {
   curvedLink,
   splitLabel,
 } from '/pages/bipartite-graph.js';
+import { affectedBadgesHtml } from '/pages/affected-common.js';
 
 const me = await initNavbar();
 initCollapsibleFilterSections();
@@ -200,12 +201,12 @@ function badgeForRelevance(rel) {
 function renderItems() {
   if (!canViewPestle) {
     pestleRows.innerHTML =
-      '<tr><td colspan="8" class="p-4 small-muted">You do not have permission to view PESTLE(E) assessments.</td></tr>';
+      '<tr><td colspan="9" class="p-4 small-muted">You do not have permission to view PESTLE(E) assessments.</td></tr>';
     return;
   }
   if (!items.length) {
     pestleRows.innerHTML =
-      '<tr><td colspan="8" class="p-4 text-center small-muted">No PESTLE(E) items match.</td></tr>';
+      '<tr><td colspan="9" class="p-4 text-center small-muted">No PESTLE(E) items match.</td></tr>';
     return;
   }
   pestleRows.innerHTML = items
@@ -217,6 +218,7 @@ function renderItems() {
       <td><a class="fw-semibold" href="${esc(href)}">${esc(shorten(it.item, 160))}</a></td>
       <td>${badgeForRelevance(it.overall_relevance)}</td>
       <td class="wrap small-muted">${esc(shorten(it.rationale || '', 220) || '-')}</td>
+      <td>${affectedBadgesHtml(it.affected, framework)}</td>
       <td><span class="badge text-bg-light">${esc(String(it.business_process_count || 0))} process${Number(it.business_process_count || 0) === 1 ? '' : 'es'}</span></td>
       <td><span class="badge text-bg-light">${esc(String(it.clause_count || 0))} clause${Number(it.clause_count || 0) === 1 ? '' : 's'}</span></td>
       <td class="no-print"><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-outline-primary" href="${esc(href)}">${canManagePestle ? 'Edit' : 'View'}</a>${canSampleAudits ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-pestle="${esc(it.id)}"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>` : ''}</div></td>
@@ -585,7 +587,7 @@ function drawClauseNetwork(data) {
     );
 
   el.innerHTML = '';
-  el.classList.add('interested-party-bipartite-viz');
+  el.classList.add('bipartite-viz');
 
   const clauseMap = new Map();
   const itemMap = new Map();
@@ -708,7 +710,7 @@ function drawClauseNetwork(data) {
     const maxPrimaryChars = isClause ? (compact ? 26 : 38) : compact ? 28 : 44;
     const maxSecondaryChars = isClause ? (compact ? 28 : 42) : compact ? 26 : 38;
     selection
-      .attr('class', 'interested-party-bipartite-node')
+      .attr('class', 'bipartite-node')
       .attr('transform', (node) => `translate(${x},${yScale(node.id)})`);
     selection
       .append('circle')
@@ -759,7 +761,7 @@ async function loadMeta() {
 
 async function loadItems() {
   if (!canViewPestle) return;
-  showTableLoading(pestleRows, 8, 'Loading PESTLE(E) items');
+  showTableLoading(pestleRows, 9, 'Loading PESTLE(E) items');
   const u = new URL('/api/v1/pestle/items', location.origin);
   if (framework) u.searchParams.set('framework', framework);
   if (pestleQ?.value) u.searchParams.set('q', pestleQ.value.trim());

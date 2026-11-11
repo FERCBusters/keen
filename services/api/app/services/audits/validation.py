@@ -17,7 +17,6 @@ from app.services.text import clean_text
 AUDIT_SAMPLE_ENTITY_LABELS = {
     "risk": "CIA Triad risk",
     "pestle_item": "PESTLE(E) item",
-    "interested_party": "Interested party",
     "isms_swot": "SWOT item",
     "isms_objective": "ISMS objective",
     "isms_document": "ISMS document",

@@ -1,8 +1,15 @@
 // The risk wizard: one guided path that creates a risk and whatever it needs
-// along the way (an asset, interested parties, a business process), or edits
+// along the way (an asset, a person or vendor it affects, a business process), or edits
 // an existing register risk. It asks for the method first and shows only the
 // fields that method needs.
 import { featureEnabled } from '/pages/feature-availability.js';
+import {
+  AFFECTED_KINDS,
+  affectedChoices,
+  affectedPayload,
+  loadAffectedOptions,
+  mountAffectedPicker,
+} from '/pages/affected-common.js';
 import {
   errorText,
   initNavbar,
@@ -58,7 +65,9 @@ const state = {
   newAsset: null, // {name, category, subcategory} for one to create
   processes: [], // [{id, name}] existing business processes
   newProcesses: [], // [name]
-  parties: [], // [{kind, id, label, detail}] existing, or {kind:'new', label, detail}
+  // [{kind, id, label, detail}] people, vendors and assets, or
+  // {kind: 'new_person' | 'new_vendor', label} to add by name
+  parties: [],
   title: '',
   description: '',
   note: '',
@@ -84,7 +93,9 @@ let users = [];
 let roles = [];
 let allControls = [];
 let library = [];
-let partyOptions = { interested_parties: [], people: [], vendors: [], natures: [] };
+// The people, vendors and assets the account may name; null without access.
+let affectedOptions = null;
+let affectedPicker = null;
 let pestleMeta = { types: [], lenses: [], relevance_levels: [] };
 let businessProcesses = [];
 let clauses = [];
@@ -112,8 +123,8 @@ function isPestle() {
 
 // Steps that do not apply to the chosen method are skipped in both directions.
 function stepApplies(step) {
-  if (state.method === 'pestle') return !['parties', 'controls'].includes(step);
-  return true;
+  if (step === 'parties') return affectedOptions !== null;
+  return state.method !== 'pestle' || step !== 'controls';
 }
 
 function visibleSteps() {
@@ -175,7 +186,7 @@ function stepHintFor(step) {
         ? 'Processes are optional for a PESTLE(E) factor.'
         : 'Pick or add one asset.';
     case 'parties':
-      return 'You can skip this and add parties later.';
+      return 'You can skip this and name them later.';
     case 'describe':
       return 'A short name and a few sentences are enough.';
     case 'rate':
@@ -187,6 +198,19 @@ function stepHintFor(step) {
     default:
       return '';
   }
+}
+
+// Draws a step's choices from the state before it is shown, however the
+// wizard arrives at it: Next, Skip or a step's Change link.
+function prepareStep(step) {
+  if (step === 'subject') {
+    renderAssets();
+    renderProcesses();
+  }
+  if (step === 'parties') renderParties();
+  if (step === 'describe') renderDescribe();
+  if (step === 'rate') renderRatings();
+  if (step === 'controls') renderControls();
 }
 
 function goTo(step) {
@@ -398,50 +422,32 @@ function renderProcesses() {
     '<div class="list-group-item small-muted">No business processes yet. Type a name to add one.</div>';
 }
 
-// --- Step 3: parties ------------------------------------------------------------------------
-
-function partyKey(p) {
-  return `${p.kind}:${p.id || p.label}`;
-}
-
-function allPartyOptions() {
-  return [...partyOptions.interested_parties, ...partyOptions.people, ...partyOptions.vendors];
-}
+// --- Step 3: who and what is affected ------------------------------------------------------
 
 function renderParties() {
-  const query = String($('partySearch').value || '').trim();
-  const q = query.toLowerCase();
-  const chosen = new Set(state.parties.map(partyKey));
-  const kindLabel = { interested_party: 'Interested party', person: 'Person', vendor: 'Vendor' };
-  const rows = allPartyOptions()
-    .filter((p) => !q || `${p.label} ${p.detail}`.toLowerCase().includes(q))
-    .slice(0, 60)
-    .map(
-      (p) => `<label class="list-group-item d-flex gap-2 align-items-center">
-      <input class="form-check-input mt-0" type="checkbox" data-party="${esc(partyKey(p))}" ${chosen.has(partyKey(p)) ? 'checked' : ''}>
-      <span class="flex-grow-1"><span class="fw-semibold">${esc(p.label)}</span>${p.detail ? ` <span class="small-muted">- ${esc(p.detail)}</span>` : ''}</span>
-      <span class="badge text-bg-light border">${esc(kindLabel[p.kind])}</span>
-    </label>`,
-    );
-  $('partyList').innerHTML =
-    rows.join('') ||
-    `<div class="list-group-item small-muted">${query ? 'Nobody by that name yet.' : 'No interested parties, people or vendors recorded yet. Type a name to add one.'}</div>`;
-  const exact = allPartyOptions().some((p) => p.label.toLowerCase() === q);
-  const alreadyNew = state.parties.some((p) => p.kind === 'new' && p.label.toLowerCase() === q);
-  $('newPartyPanel').hidden = !query || exact || alreadyNew;
-  $('newPartyName').textContent = query;
-  renderSelectedParties();
+  affectedPicker.set(state.parties);
 }
 
-function renderSelectedParties() {
-  $('selectedParties').innerHTML = state.parties.length
+function affectedSummary() {
+  return state.parties.length
     ? state.parties
-        .map(
-          (p) =>
-            `<span class="badge badge-soft d-inline-flex align-items-center gap-1">${esc(p.label)}${p.detail ? ` <span class="small-muted">(${esc(p.detail)})</span>` : ''}${p.kind === 'new' ? ' <span class="small">new</span>' : ''}<button class="btn btn-sm btn-link p-0 ms-1" type="button" data-remove-party="${esc(partyKey(p))}" aria-label="Remove ${esc(p.label)}"><i class="bi bi-x" aria-hidden="true"></i></button></span>`,
+        .map((choice) =>
+          AFFECTED_KINDS[choice.kind]
+            ? esc(choice.label)
+            : `${esc(choice.label)} <span class="badge text-bg-light border">new</span>`,
         )
-        .join('')
-    : '<span class="small-muted">Nobody selected yet.</span>';
+        .join(', ')
+    : '<span class="small-muted">None</span>';
+}
+
+// "1 new person", "2 new vendors / 3rd parties": what saving adds by name.
+function addedByName() {
+  const people = state.parties.filter((choice) => choice.kind === 'new_person').length;
+  const vendors = state.parties.filter((choice) => choice.kind === 'new_vendor').length;
+  return [
+    people && `${people} new ${people === 1 ? 'person' : 'people'}`,
+    vendors && `${vendors} new ${vendors === 1 ? 'vendor / 3rd party' : 'vendors / 3rd parties'}`,
+  ].filter(Boolean);
 }
 
 // --- Step 4: describe -----------------------------------------------------------------------
@@ -627,6 +633,7 @@ function renderReview() {
         'subject',
       ),
     );
+    if (affectedOptions) rows.push(reviewRow('Affects', affectedSummary(), 'parties'));
     rows.push(reviewRow('Factor', esc(state.description), 'describe'));
     rows.push(reviewRow('Type and lens', esc(`${state.pestleType} · ${state.lens}`), 'describe'));
     const level = pestleMeta.relevance_levels.find((l) => l.code === state.relevance);
@@ -652,20 +659,7 @@ function renderReview() {
         'subject',
       ),
     );
-    rows.push(
-      reviewRow(
-        'Affected parties',
-        state.parties.length
-          ? state.parties
-              .map(
-                (p) =>
-                  `${esc(p.label)}${p.kind === 'new' ? ' <span class="badge text-bg-light border">new</span>' : ''}`,
-              )
-              .join(', ')
-          : '<span class="small-muted">None</span>',
-        'parties',
-      ),
-    );
+    if (affectedOptions) rows.push(reviewRow('Affects', affectedSummary(), 'parties'));
     rows.push(reviewRow('Name', esc(state.title), 'describe'));
     rows.push(reviewRow('What could happen', esc(state.description || '-'), 'describe'));
     if (state.method === 'cia')
@@ -778,10 +772,9 @@ function riskPayload() {
     treatment_plan: state.treatment.plan,
     treatment_due_at: state.treatment.due || null,
     controls: [...state.controls],
-    interested_parties: state.parties.map((p) =>
-      p.kind === 'new' ? { name: p.label, nature: p.detail } : { [`${p.kind}_id`]: p.id },
-    ),
   };
+  // Without access to the registers, the links a risk holds stay as they are.
+  if (affectedOptions) payload.affected = affectedPayload(state.parties);
   if (state.asset) payload.asset_id = state.asset.id;
   else if (state.newAsset) {
     payload.asset_name = state.newAsset.name;
@@ -811,9 +804,7 @@ async function saveRisk() {
     : await apiPost('/api/v1/risks', payload);
   const created = [];
   if (!editingId && state.newAsset) created.push(`the asset “${state.newAsset.name}”`);
-  const newParties = state.parties.filter((p) => p.kind === 'new').length;
-  if (newParties)
-    created.push(`${newParties} new interested part${newParties === 1 ? 'y' : 'ies'}`);
+  if (affectedOptions) created.push(...addedByName());
   return { saved, created };
 }
 
@@ -825,14 +816,19 @@ async function savePestle() {
     processIds.push(process.id);
     created.push(`the business process “${name}”`);
   }
-  const item = await apiPost('/api/v1/pestle/items', {
+  const body = {
     framework,
     type: state.pestleType,
     lens: state.lens,
     item: state.description,
     overall_relevance_code: state.relevance,
     rationale: [state.rationale, state.note].filter(Boolean).join('\n\n'),
-  });
+  };
+  if (affectedOptions) {
+    body.affected = affectedPayload(state.parties);
+    created.push(...addedByName());
+  }
+  const item = await apiPost('/api/v1/pestle/items', body);
   const code = state.relevance && state.relevance !== 'na' ? state.relevance : 'high';
   if (processIds.length)
     await apiPatch(`/api/v1/pestle/items/${encodeURIComponent(item.id)}/business-processes`, {
@@ -892,7 +888,7 @@ async function loadOptions() {
     userData,
     controlData,
     libraryData,
-    partyData,
+    affectedData,
     catalog,
     registerData,
   ] = await Promise.all([
@@ -903,7 +899,8 @@ async function loadOptions() {
       ? apiGet(`/api/v1/controls?framework=${encodeURIComponent(framework)}&limit=5000`)
       : { items: [] },
     apiGet('/api/v1/risks/library'),
-    apiGet(`/api/v1/risks/parties?framework=${encodeURIComponent(framework)}`),
+    // Without read access to People, Vendors and Assets the step is left out.
+    loadAffectedOptions().catch(() => null),
     getFrameworkCatalog().catch(() => ({ items: [] })),
     // The heatmap carries the severity thresholds the rating step bands with.
     apiGet('/api/v1/risks/register/heatmap').catch(() => null),
@@ -914,12 +911,17 @@ async function loadOptions() {
   roles = userData.roles;
   allControls = controlData.items;
   library = libraryData.items;
-  partyOptions = { ...partyOptions, ...partyData };
+  affectedOptions = affectedData;
   keenAfEnabled = catalog.items.some((item) => item.slug === 'KEEN-AF:1.0');
   if (registerData?.thresholds) thresholds = registerData.thresholds;
-  $('partyNatureOptions').innerHTML = partyOptions.natures
-    .map((n) => `<option value="${esc(n)}"></option>`)
-    .join('');
+  if (affectedOptions)
+    affectedPicker = mountAffectedPicker($('affectedPicker'), {
+      prefix: 'affected',
+      options: affectedOptions,
+      onChange: (chosen) => {
+        state.parties = chosen;
+      },
+    });
   if (canManagePestle && featureEnabled(me, 'pestle')) {
     const [meta, processes, clauseData] = await Promise.all([
       apiGet('/api/v1/pestle/meta').catch(() => pestleMeta),
@@ -943,12 +945,7 @@ async function loadExisting() {
   state.existing = risk;
   state.method = risk.risk_types.length ? 'cia' : 'general';
   state.asset = { id: risk.asset_id, name: risk.asset };
-  state.parties = risk.interested_parties.map((p) => ({
-    kind: p.kind,
-    id: p.id,
-    label: p.label,
-    detail: p.detail,
-  }));
+  state.parties = affectedChoices(risk.affected);
   state.title = risk.title;
   state.description = risk.threat_summary;
   state.note = risk.note;
@@ -1001,21 +998,7 @@ function applyDraft(draft) {
     state.suggestedControlIds = draft.controls.filter((id) => known.has(id));
     for (const id of state.suggestedControlIds) state.controls.add(id);
   }
-  for (const party of draft.interested_parties || []) {
-    if (party?.id && party?.kind)
-      state.parties.push({
-        kind: party.kind,
-        id: party.id,
-        label: party.label,
-        detail: party.detail,
-      });
-    else if (party?.name)
-      state.parties.push({
-        kind: 'new',
-        label: String(party.name),
-        detail: String(party.nature ?? ''),
-      });
-  }
+  state.parties.push(...affectedChoices(draft.affected));
   if (draft.mitigator_context && typeof draft.mitigator_context === 'object')
     state.mitigatorContext = draft.mitigator_context;
   if (draft.pestle_type) state.pestleType = String(draft.pestle_type);
@@ -1042,14 +1025,7 @@ form.addEventListener('submit', async (ev) => {
   }
   stepIndex = Math.min(stepIndex + 1, visibleSteps().length - 1);
   const next = currentStep();
-  if (next === 'subject') {
-    renderAssets();
-    renderProcesses();
-  }
-  if (next === 'parties') renderParties();
-  if (next === 'describe') renderDescribe();
-  if (next === 'rate') renderRatings();
-  if (next === 'controls') renderControls();
+  prepareStep(next);
   showStep(next);
 });
 
@@ -1060,11 +1036,14 @@ $('backStep').addEventListener('click', () => {
 
 $('skipStep').addEventListener('click', () => {
   const step = currentStep();
-  if (step === 'parties') state.parties = [];
+  if (step === 'parties') {
+    state.parties = [];
+    renderParties();
+  }
   if (step === 'controls') state.controls = new Set();
   stepIndex = Math.min(stepIndex + 1, visibleSteps().length - 1);
   const next = currentStep();
-  if (next === 'describe') renderDescribe();
+  prepareStep(next);
   showStep(next);
 });
 
@@ -1074,13 +1053,7 @@ document.addEventListener('click', (ev) => {
     const step = goto.dataset.gotoStep;
     const current = currentStep();
     if (current === 'describe' || current === 'rate') collectStep(current);
-    if (step === 'subject') {
-      renderAssets();
-      renderProcesses();
-    }
-    if (step === 'parties') renderParties();
-    if (step === 'describe') renderDescribe();
-    if (step === 'controls') renderControls();
+    prepareStep(step);
     goTo(step);
   }
 });
@@ -1144,41 +1117,6 @@ $('processList').addEventListener('change', (ev) => {
     state.newProcesses = state.newProcesses.filter((n) => n !== added.dataset.newProcess);
     renderProcesses();
   }
-});
-
-$('partySearch').addEventListener('input', debounce(renderParties, 120));
-$('partyList').addEventListener('change', (ev) => {
-  const box = ev.target;
-  const option = allPartyOptions().find((p) => partyKey(p) === box.dataset.party);
-  state.parties = state.parties.filter((p) => partyKey(p) !== box.dataset.party);
-  if (box.checked)
-    state.parties.push({
-      kind: option.kind,
-      id: option.id,
-      label: option.label,
-      detail: option.detail,
-    });
-  renderSelectedParties();
-});
-$('addNewParty').addEventListener('click', () => {
-  const name = $('partySearch').value.trim();
-  const nature = $('newPartyNature').value.trim();
-  if (!name) return;
-  if (!nature) {
-    notify('Say what their relationship to you is, for example Customer or Regulator.', 'warning');
-    $('newPartyNature').focus();
-    return;
-  }
-  state.parties.push({ kind: 'new', label: name, detail: nature });
-  $('partySearch').value = '';
-  $('newPartyNature').value = '';
-  renderParties();
-});
-$('selectedParties').addEventListener('click', (ev) => {
-  const remove = ev.target.closest('[data-remove-party]');
-  if (!remove) return;
-  state.parties = state.parties.filter((p) => partyKey(p) !== remove.dataset.removeParty);
-  renderParties();
 });
 
 $('pestleTypeChoices').addEventListener('change', (ev) => {

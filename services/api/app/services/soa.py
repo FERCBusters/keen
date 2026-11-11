@@ -14,11 +14,6 @@ from app.db.models import (
     ControlClauseLink,
     ControlItem,
     FrameworkClause,
-    InterestedParty,
-    InterestedPartyCommunication,
-    InterestedPartyControlLink,
-    InterestedPartyName,
-    InterestedPartyNature,
     IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
@@ -36,10 +31,10 @@ from app.db.models import (
     RiskCategory,
     RiskControlLink,
 )
+from app.services.affected import affected_list
 from app.services.clauses import clause_with_evidence
 from app.services.control_refs import control_summary
 from app.services.features import state
-from app.services.interested_parties import can_read_interested_parties
 from app.services.isms.access import can_read_isms
 from app.services.isms.serializers import (
     _asset_out,
@@ -120,58 +115,7 @@ def _pestle_summary(item: PestleItem) -> dict[str, Any]:
             }
             for link in clause_links
         ],
-    }
-
-
-def _interested_party_controls(
-    db: Session, party_id, framework: str
-) -> list[dict[str, Any]]:
-    rows = (
-        db.query(ControlItem)
-        .join(
-            InterestedPartyControlLink,
-            InterestedPartyControlLink.control_item_id == ControlItem.id,
-        )
-        .filter(
-            InterestedPartyControlLink.interested_party_id == party_id,
-            InterestedPartyControlLink.framework_slug == framework,
-            ControlItem.framework_slug == framework,
-        )
-        .all()
-    )
-    rows.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
-    return [control_summary(c) for c in rows]
-
-
-def _communication_summary(row: InterestedPartyCommunication) -> dict[str, Any]:
-    return {
-        "id": str(row.id),
-        "event": row.event,
-        "when": row.when,
-        "with_whom": row.with_whom,
-        "methods": list(row.methods or []),
-    }
-
-
-def _interested_party_summary(
-    db: Session, row: InterestedParty, framework: str
-) -> dict[str, Any]:
-    return {
-        "id": str(row.id),
-        "framework": framework,
-        "name": {
-            "id": str(row.name.id) if row.name else None,
-            "name": row.name.name if row.name else None,
-        },
-        "nature": {
-            "id": str(row.nature.id) if row.nature else None,
-            "name": row.nature.name if row.nature else None,
-        },
-        "note": row.note or "",
-        "controls": _interested_party_controls(db, row.id, framework),
-        "communications": [
-            _communication_summary(comm) for comm in list(row.communications or [])
-        ],
+        "affected": affected_list(list(item.affected_links)),
     }
 
 
@@ -248,7 +192,6 @@ def statement_of_applicability(
 
     can_view_risks = can_read_risks(db, user)
     can_view_pestle = can_read_pestle(db, user)
-    can_view_interested_parties = can_read_interested_parties(db, user)
     can_view_isms = can_read_isms(db, user)
     risk_rows: list[dict[str, Any]] = []
     if can_view_risks:
@@ -291,24 +234,6 @@ def statement_of_applicability(
         )
         business_process_rows = [
             _business_process_summary(row) for row in business_processes
-        ]
-
-    interested_party_rows: list[dict[str, Any]] = []
-    if can_view_interested_parties:
-        interested_parties = (
-            db.query(InterestedParty)
-            .join(
-                InterestedPartyName, InterestedPartyName.id == InterestedParty.name_id
-            )
-            .join(
-                InterestedPartyNature,
-                InterestedPartyNature.id == InterestedParty.nature_id,
-            )
-            .order_by(InterestedPartyNature.name.asc(), InterestedPartyName.name.asc())
-            .all()
-        )
-        interested_party_rows = [
-            _interested_party_summary(db, row, fw) for row in interested_parties
         ]
 
     can_view_swot = can_view_isms and state(db).enabled("swot")
@@ -402,7 +327,6 @@ def statement_of_applicability(
         "justification_options": list(CONTROL_JUSTIFICATIONS),
         "can_view_risks": can_view_risks,
         "can_view_pestle": can_view_pestle,
-        "can_view_interested_parties": can_view_interested_parties,
         "can_view_isms": can_view_isms,
         "can_view_swot": can_view_swot,
         "swot_items": swot_rows,
@@ -413,10 +337,6 @@ def statement_of_applicability(
             "risks": len(risk_rows),
             "pestle": len(pestle_rows),
             "business_processes": len(business_process_rows),
-            "interested_parties": len(interested_party_rows),
-            "interested_party_communications": sum(
-                len(row.get("communications") or []) for row in interested_party_rows
-            ),
             "isms_objectives": len(isms_objectives),
             "isms_documents": len(isms_documents),
             "isms_org_nodes": len(isms_org_nodes),
@@ -430,7 +350,6 @@ def statement_of_applicability(
         "risks": risk_rows,
         "pestle_items": pestle_rows,
         "business_processes": business_process_rows,
-        "interested_parties": interested_party_rows,
         "isms_objectives": isms_objectives,
         "isms_documents": isms_documents,
         "isms_org_nodes": isms_org_nodes,

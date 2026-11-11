@@ -210,6 +210,9 @@ Rounded soft-blocks on Bootstrap 5 primitives. All shared component styling is o
 ### Navigation
 Fixed-top accent navbar (`.navbar-keen`): white text, 10px-radius hover/active pills at 0.16/0.18 white alpha, brand icon (28px, white rounded 9px background), framework selector, search box, notification bell; three density states (compact, tight, overflow) progressively compress type down to 0.74rem before ellipsising the brand. In-page secondary nav uses the admin tab rail (18px glass back, 14px items, 0.16 alpha active accent wash with accent-700 text) or the lightweight pill tabs (999px, accent-100 active). Anchor-underline links come in subtle ink (`.link-subtle`, 0.75 alpha ink, underlines on hover).
 
+### Folder tree
+The folder panel beside Policies & processes (`.keen-folder-tree`, Keen-scoped in `styles.css` until a second tree earns it a place in mosp-design-system) is an ARIA tree inside a card: 8px-radius rows with the accent folder icon, a light count badge and a chevron toggle; child folders hang off a dashed 0.35 alpha accent guide. The selected row takes the `--bs-primary-bg-subtle` wash at weight 600, keyboard focus the accent focus ring, and a drop target a solid accent border over a 0.12 accent wash. Names are edited in place in a small input; the panel stays in view beside the table from the xl breakpoint.
+
 ### Tables
 The primary data surface. Sticky 700-weight headers pinned below the navbar with an accent-tinted inset rule and body-bg backing; `border-collapse: separate`; `.table-responsive` un-clip-scrolls on desktop so stickiness follows the page, switching back to horizontal scroll and static headers below 992px. Sortable headers earn ↑/↓ glyph pseudo-elements. Row loading uses a veiled `rgba(248,250,252,0.65)` strip.
 

@@ -35,6 +35,8 @@ async function detail(
       }
       if (u.pathname.endsWith('/changelog'))
         return { items: [{ summary: 'Changed ' + hostile, changes: [] }] };
+      // A document page also lists its revisions and comments.
+      if (u.pathname.endsWith('/revisions') || u.pathname.endsWith('/comments')) return [];
       if (swot && u.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
       if (sources && u.pathname === '/api/v1/sources')
         return { items: [{ source: 'jira', label: 'Jira' }] };

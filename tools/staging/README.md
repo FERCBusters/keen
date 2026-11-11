@@ -20,7 +20,7 @@ The golden state is the demonstration ISMS dataset from
 `services/api/scripts/seed_demo_data.py`, across all frameworks (ISO 27001,
 SOC 2, PCI DSS, the Keen Assurance Framework and Cyber Essentials, with ISO
 27001 as the organisation default): organisation roles, assets, risks, PESTLE
-items, interested parties, documents, meetings, objectives, audits,
+items, people and third parties, documents, meetings, objectives, audits,
 effectiveness measures, stories and evidence events, including the automatic
 diary entries for document control links. Real data matters to the suite: list
 pages, search, charts and aggregates take code paths that an empty installation

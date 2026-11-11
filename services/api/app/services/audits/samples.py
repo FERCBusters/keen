@@ -10,8 +10,6 @@ from app.db.models import (
     BookStackSectionEvidence,
     ControlClauseLink,
     ControlItem,
-    InterestedParty,
-    InterestedPartyControlLink,
     IsmsAccessControlMatrixEntry,
     IsmsApplicationConfigurationEntry,
     IsmsDocument,
@@ -73,8 +71,6 @@ def entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
         return f"/risk.html?id={eid}{fwq}"
     if entity_type == "pestle_item":
         return f"/pestle_item.html?id={eid}{fwq}"
-    if entity_type == "interested_party":
-        return f"/interested_party.html?id={eid}{fwq}"
     if entity_type == "isms_swot":
         return f"/swot.html?id={eid}{fwq}"
     if entity_type == "story":
@@ -151,26 +147,6 @@ def pestle_sample_controls(
     return [control_out(c) for c in rows]
 
 
-def interested_party_sample_controls(
-    db: Session, party_id: uuid.UUID, framework: str
-) -> list[dict[str, Any]]:
-    rows = (
-        db.query(ControlItem)
-        .join(
-            InterestedPartyControlLink,
-            InterestedPartyControlLink.control_item_id == ControlItem.id,
-        )
-        .filter(
-            InterestedPartyControlLink.interested_party_id == party_id,
-            InterestedPartyControlLink.framework_slug == framework,
-            ControlItem.framework_slug == framework,
-        )
-        .order_by(ControlItem.ref.asc())
-        .all()
-    )
-    return [control_out(c) for c in rows]
-
-
 def isms_sample_controls(
     db: Session, entity_type: str, entity_id: uuid.UUID, framework: str
 ) -> list[dict[str, Any]]:
@@ -237,17 +213,6 @@ def audit_sample_entity_reference(
             title = f"PESTLE(E): {short_text(row.item, 180) or row.type}"
             subtitle = f"{row.type} · {row.lens}".strip(" ·")
             controls = pestle_sample_controls(db, row.id, framework)
-    elif entity_type == "interested_party":
-        row = db.get(InterestedParty, entity_id)
-        if row:
-            name = getattr(getattr(row, "name", None), "name", "") or "Interested party"
-            nature = (
-                getattr(getattr(row, "nature", None), "name", "")
-                or "Nature of interest"
-            )
-            title = f"Interested party: {name} - {nature}"
-            subtitle = short_text(row.note, 220)
-            controls = interested_party_sample_controls(db, row.id, framework)
     elif entity_type == "isms_swot":
         row = db.get(IsmsSwot, entity_id)
         if row:

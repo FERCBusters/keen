@@ -246,7 +246,7 @@ test('equally relevant mappings sort by clause then item, and equally mapped ite
       '4.3 Scope × Mike\nRelevance: 3 Low',
     ],
   );
-  const nodes = [...svg.querySelectorAll('.interested-party-bipartite-node')];
+  const nodes = [...svg.querySelectorAll('.bipartite-node')];
   assert.deepEqual(
     nodes.slice(3).map((n) => n.querySelector('tspan').textContent),
     ['Alpha (1)', 'Kilo (1)', 'Mike (1)', 'Zeta (1)'],
@@ -276,7 +276,7 @@ test('a narrow graph uses the compact layout and wraps labels to its shorter lin
     svg.querySelector('.pestle-clause-bipartite-scene').getAttribute('transform'),
     'translate(10,167.81456953642385) scale(0.5298013245033113)',
   );
-  const [clause, item] = svg.querySelectorAll('.interested-party-bipartite-node');
+  const [clause, item] = svg.querySelectorAll('.bipartite-node');
   assert.deepEqual(nodeLines(clause), [
     ['Annex A clause five point', 'one policies for…'],
     ['Information security…'],

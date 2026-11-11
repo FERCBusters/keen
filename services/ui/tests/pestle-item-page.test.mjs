@@ -28,8 +28,40 @@ function item(overrides = {}) {
       { id: 'c1', ref: 'A1', title: '<i>Privacy</i>', in_scope: true },
       { id: 'c2', ref: 'A2', title: 'Retention', in_scope: false },
     ],
+    affected: [
+      {
+        kind: 'vendor',
+        id: 'v1',
+        label: '<b>Regulator</b>',
+        detail: 'Data protection authority',
+        kind_label: 'Vendor / 3rd party',
+        href: '/vendor.html?id=v1',
+      },
+    ],
     ...overrides,
   };
+}
+
+// The people, vendors and assets a manager may name, as the API lists them.
+const affectedOptions = {
+  people: [{ kind: 'person', id: 'pe1', label: 'Dana', detail: 'DPO' }],
+  vendors: [
+    { kind: 'vendor', id: 'v1', label: '<b>Regulator</b>', detail: 'Data protection authority' },
+  ],
+  assets: [{ kind: 'asset', id: 'a1', label: 'CRM', detail: 'Data › Databases' }],
+  can_add: { person: true, vendor: true },
+};
+// What the API returns for the records a save names: each picked record, and
+// a person or vendor added by name as a new record.
+function servedAffected(refs) {
+  const known = [...affectedOptions.people, ...affectedOptions.vendors, ...affectedOptions.assets];
+  return refs.map((ref) => {
+    if (ref.new_person)
+      return { kind: 'person', id: 'pe-new', label: ref.new_person, detail: null };
+    if (ref.new_vendor) return { kind: 'vendor', id: 'v-new', label: ref.new_vendor, detail: null };
+    const id = ref.person_id || ref.vendor_id || ref.asset_id;
+    return known.find((option) => option.id === id);
+  });
 }
 
 async function pestleItem(t, options = {}) {
@@ -70,6 +102,10 @@ async function pestleItem(t, options = {}) {
         return meta;
       }
       if (p === '/api/v1/pestle/items/p1') return structuredClone(state.item);
+      if (p === '/api/v1/affected/options') {
+        if (fail.affected) throw new Error('Registers offline');
+        return structuredClone(options.affectedOptions || affectedOptions);
+      }
       if (p === '/api/v1/pestle/items/p1/business-processes')
         return {
           items: [
@@ -110,6 +146,7 @@ async function pestleItem(t, options = {}) {
         state.item = {
           ...state.item,
           ...b,
+          affected: b.affected ? servedAffected(b.affected) : state.item.affected,
           overall_relevance: { code: level.code, label: level.label },
         };
         return structuredClone(state.item);
@@ -120,7 +157,13 @@ async function pestleItem(t, options = {}) {
       state.posted.push({ path: u.pathname, body: plain(b) });
       if (options.postFail) throw new Error('Rejected');
       if (u.pathname === '/api/v1/pestle/items') {
-        state.item = { ...item(), ...b, id: 'p1', related_controls: [] };
+        state.item = {
+          ...item(),
+          ...b,
+          id: 'p1',
+          related_controls: [],
+          affected: servedAffected(b.affected || []),
+        };
         return structuredClone(state.item);
       }
       return { ok: true };
@@ -162,6 +205,58 @@ test('PESTLE item details render safely with relevance badge and related control
   assert.match(ui.el('pestleVisualisations').getAttribute('href'), /tab=visualisations/);
   assert.equal(ui.el('deletePestleItem').style.display, '');
   assert.equal(ui.el('samplePestleAudit').style.display, '');
+});
+
+test('managers name who and what an item affects, adding a vendor by name', async (t) => {
+  const { ui, state } = await pestleItem(t);
+  assert.equal(ui.el('pestleAffectedPicker').hidden, false);
+  assert.equal(ui.el('pestleAffected').hidden, true);
+  const chosen = () =>
+    [...ui.el('pestleAffectedChosen').querySelectorAll('.badge')].map((b) => b.textContent);
+  assert.deepEqual(chosen(), ['<b>Regulator</b>']);
+  assert.equal(ui.el('pestleAffectedChosen').querySelector('b'), null);
+
+  const box = ui.el('pestleAffectedList').querySelector('[data-affected="person:pe1"]');
+  box.checked = true;
+  box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  ui.el('pestleAffectedSearch').value = 'Insurer';
+  ui.el('pestleAffectedSearch').dispatchEvent(new ui.window.Event('input'));
+  await settle(() => !ui.el('pestleAffectedAddPanel').hidden);
+  ui.el('pestleAffectedAddPanel').querySelector('[data-add-affected="new_vendor"]').click();
+  ui.el('pestleAffectedChosen').querySelector('[data-remove-affected="vendor:v1"]').click();
+  assert.deepEqual(chosen(), ['Dana', 'Insurernew vendor / 3rd party']);
+
+  ui.el('pestleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => ui.el('status').textContent === 'PESTLE(E) item saved');
+  assert.deepEqual(state.patched[0].body.affected, [
+    { person_id: 'pe1' },
+    { new_vendor: 'Insurer' },
+  ]);
+  // The saved records replace the choices, the new vendor among them.
+  assert.deepEqual(chosen(), ['Dana', 'Insurer']);
+});
+
+test('readers see who an item affects as links, and the registers are not asked', async (t) => {
+  const { ui } = await pestleItem(t, { me: { can_view_pestle: true } });
+  assert.equal(ui.el('pestleAffectedPicker').hidden, true);
+  const link = ui.el('pestleAffected').querySelector('a.badge');
+  assert.equal(link.getAttribute('href'), '/vendor.html?id=v1&framework=A');
+  assert.equal(link.textContent, 'Vendor / 3rd party: <b>Regulator</b>');
+  assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/affected/options')));
+});
+
+test('an editor who cannot list the registers keeps the records an item names', async (t) => {
+  const { ui, state } = await pestleItem(t, { fail: { affected: true } });
+  assert.equal(ui.el('pestleAffectedPicker').hidden, true);
+  assert.equal(ui.el('pestleAffected').hidden, false);
+  ui.el('pestleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+  await settle(() => ui.el('status').textContent === 'PESTLE(E) item saved');
+  // Without the picker the save leaves the named records as they are.
+  assert.equal('affected' in state.patched[0].body, false);
+  assert.equal(
+    ui.el('pestleAffected').querySelector('a.badge').textContent.includes('Regulator'),
+    true,
+  );
 });
 
 test('read-only PESTLE viewers see disabled fields and no mutation controls', async (t) => {
@@ -250,6 +345,7 @@ test('new PESTLE items require text and are created before relevance can be edit
       item: 'Election',
       overall_relevance_code: 'medium',
       rationale: 'Policy change',
+      affected: [],
     },
   });
   assert.match(ui.window.location.search, /id=p1/);

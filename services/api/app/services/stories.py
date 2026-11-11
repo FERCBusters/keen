@@ -89,7 +89,7 @@ KIND_LABELS = {
     "objective": "Objective",
     "swot": "SWOT item",
     "person": "Person",
-    "vendor": "Vendor",
+    "vendor": "Vendor / 3rd party",
     "effectiveness_measure": "Effectiveness measure",
     "meeting": "Meeting minutes",
     "note": "Note",

@@ -34,6 +34,7 @@ import { featureEnabled, sectionFeatures } from '/pages/feature-availability.js'
 import { renderBoard, renderTimeline, normalise, statuses, label } from '/pages/planning-views.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
+import { ALL, UNFILED, mountDocumentFolders } from '/pages/document-folders.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -41,6 +42,7 @@ const canManage = !!(me?.is_admin || me?.can_manage_isms || me?.can_manage_risks
 const canSampleAudits = canSampleIntoAudit(me, 'isms');
 enableTableSorting();
 const status = document.getElementById('status');
+const $ = (id) => document.getElementById(id);
 const metaEl = document.getElementById('ismsMeta');
 
 let meta = {
@@ -67,7 +69,6 @@ let data = {
   meetings: [],
 };
 let meetingPeople = [];
-let documentFolders = [];
 let documentTags = [];
 let documentTagFilter = '';
 const documentTagColors = ['primary', 'success', 'warning', 'info', 'danger', 'secondary'];
@@ -115,28 +116,78 @@ function showDocumentMedium() {
   }))
     $(id).hidden = key !== medium;
 }
+// The folder tree beside the documents table; choosing a folder shows the
+// documents filed in it.
+const documentFolderPanel = mountDocumentFolders({
+  panel: $('docFolderPanel'),
+  canManage,
+  status,
+  framework,
+  onSelect: () => renderDocuments(),
+  onChange: async () => {
+    fillDocumentFolderSelect();
+    invalidateIsmsCache();
+    await ensureSection('documents', { force: true });
+  },
+});
+// Managers drag document rows onto a folder to file them.
+if (canManage) {
+  documentFolderPanel.attachDocumentRows($('documentsRows'));
+  $('docFolderHint').textContent =
+    'Choose a folder to see what is filed in it. Drag documents and folders onto a folder to move them.';
+}
+
+// The real folder the tree has open, or '' for none.
+function openDocumentFolder() {
+  const view = documentFolderPanel.selected();
+  return view === ALL || view === UNFILED ? '' : view;
+}
+
+function fillDocumentFolderSelect() {
+  const select = $('docFolder');
+  const chosen = select.value;
+  const options = documentFolderPanel
+    .folders()
+    .map((folder) => [documentFolderPanel.pathOf(folder.id).join(' / '), folder.id])
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([path, id]) => new Option(path, id));
+  select.replaceChildren(new Option('Unfiled', ''), ...options);
+  select.value = chosen;
+}
+
 async function loadDocumentFolders() {
-  documentFolders = await apiGet('/api/v1/isms/document-folders');
-  const selected = $('docFolder').value;
-  const names = new Map(documentFolders.map((folder) => [folder.id, folder]));
-  function label(folder) {
-    const path = [folder.name];
-    let parent = folder.parent_id;
-    const seen = new Set([folder.id]);
-    while (names.has(parent) && !seen.has(parent)) {
-      seen.add(parent);
-      const next = names.get(parent);
-      path.unshift(next.name);
-      parent = next.parent_id;
+  await documentFolderPanel.load();
+  fillDocumentFolderSelect();
+}
+
+// "All documents › Policies › HR", with each folder a button that opens it.
+function renderDocumentFolderPath() {
+  const view = documentFolderPanel.selected();
+  const crumb = (text, target, current) => {
+    const li = document.createElement('li');
+    li.className = `breadcrumb-item${current ? ' active' : ''}`;
+    if (current) {
+      li.setAttribute('aria-current', 'location');
+      li.textContent = text;
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-link btn-sm p-0 align-baseline';
+      button.textContent = text;
+      button.addEventListener('click', () => documentFolderPanel.select(target));
+      li.append(button);
     }
-    return path.join(' / ');
-  }
-  $('docFolder').innerHTML =
-    '<option value="">Unfiled</option>' +
-    documentFolders
-      .map((folder) => `<option value="${esc(folder.id)}">${esc(label(folder))}</option>`)
-      .join('');
-  $('docFolder').value = selected;
+    return li;
+  };
+  const list = document.createElement('ol');
+  list.className = 'breadcrumb small mb-0';
+  list.append(crumb('All documents', ALL, view === ALL));
+  if (view === UNFILED) list.append(crumb('Unfiled', UNFILED, true));
+  const folders = documentFolderPanel.trail(view);
+  folders.forEach((folder, at) =>
+    list.append(crumb(folder.name, folder.id, at === folders.length - 1)),
+  );
+  $('docFolderPath').replaceChildren(list);
 }
 
 async function loadMeetingPeople() {
@@ -243,7 +294,6 @@ const sectionAliases = {
   soa: 'soa',
 };
 
-const $ = (id) => document.getElementById(id);
 const rows = {
   objectives: $('objectivesRows'),
   documents: $('documentsRows'),
@@ -555,6 +605,8 @@ function showNewIsmsForm(kind) {
   hideAllIsmsForms(kind);
   resetForm(kind);
   setFormMode(kind, null);
+  // A new document is filed in the folder the tree has open.
+  if (kind === 'document') $('docFolder').value = openDocumentFolder();
   setFormCardVisible(kind, true);
   const form = $(formIds[kind]);
   form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -677,8 +729,12 @@ function actionsHtml(kind, id, extraClass = '') {
   const sample = canSampleAudits
     ? `<button class="btn btn-outline-success" type="button" data-audit-sample-entity="${esc(kind)}" data-isms-id="${esc(id)}" title="Sample into audit"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>`
     : '';
+  const move =
+    canManage && kind === 'document'
+      ? `<button class="btn btn-outline-secondary" type="button" data-doc-move="${esc(id)}" title="Move to a folder"><i class="bi bi-folder-symlink" aria-hidden="true"></i><span class="visually-hidden">Move to a folder</span></button>`
+      : '';
   const editDelete = canManage
-    ? `<button class="btn btn-outline-primary" type="button" data-isms-edit="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit</span></button><button class="btn btn-outline-danger" type="button" data-isms-delete="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button>`
+    ? `${move}<button class="btn btn-outline-primary" type="button" data-isms-edit="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit</span></button><button class="btn btn-outline-danger" type="button" data-isms-delete="${esc(kind)}" data-isms-id="${esc(id)}"><i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Delete</span></button>`
     : '';
   if (!sample && !editDelete) return `<td class="${esc(cls)}"></td>`;
   return `<td class="${esc(cls)}"><div class="btn-group btn-group-sm" role="group">${sample}${editDelete}</div></td>`;
@@ -1070,7 +1126,7 @@ function renderOverview() {
               ${button({ label: 'Risks', href: '/risks.html', x: 506, y: 100, w: 138, h: 34 })}
               ${button({ label: 'PESTLE(E)', href: '/pestle.html', x: 656, y: 100, w: 96, h: 34 })}
               ${button({ label: 'Org chart', href: '/isms.html?tab=org', x: 384, y: 146, w: 110, h: 34 })}
-              ${button({ label: 'Interested parties', href: '/interested_parties.html', x: 506, y: 146, w: 138, h: 34 })}
+              ${button({ label: 'People & vendors / 3rd parties', href: '/assurance.html', x: 506, y: 146, w: 138, h: 34, lines: ['People & vendors', '/ 3rd parties'] })}
               ${button({ label: 'Asset matrix', href: '/isms.html?tab=assets', x: 656, y: 146, w: 96, h: 34 })}
               ${button({ label: 'Policies & processes', href: '/isms.html?tab=documents', x: 384, y: 196, w: 174, h: 34 })}
               ${button({ label: 'Access control matrix', href: '/isms.html?tab=access', x: 570, y: 196, w: 182, h: 34, lines: ['Access control', 'matrix'] })}
@@ -1190,8 +1246,21 @@ function renderObjectives() {
   applyIsmsTableFilter($('objectivesTableFilter'));
 }
 
+// Where a document is filed, under its title when every document is listed.
+// A folder the tree does not know yet, such as one added in another session,
+// shows nothing until the folders reload.
+function documentFolderLine(doc, view) {
+  const path = view === ALL && doc.folder_id ? documentFolderPanel.pathOf(doc.folder_id) : [];
+  return path.length
+    ? `<div class="small-muted fw-normal"><i class="bi bi-folder2 me-1" aria-hidden="true"></i>${esc(path.join(' › '))}</div>`
+    : '';
+}
+
 function renderDocuments() {
-  const items = data.documents;
+  documentFolderPanel.setDocuments(data.documents);
+  renderDocumentFolderPath();
+  const view = documentFolderPanel.selected();
+  const items = data.documents.filter((doc) => view === ALL || (doc.folder_id || UNFILED) === view);
   setCount('documentsCount', items.length);
   const tags = [...new Set(items.flatMap((item) => item.tags))].sort();
   $('docTagCloud').innerHTML = tags.length
@@ -1201,12 +1270,15 @@ function renderDocuments() {
     items
       .filter((item) => !documentTagFilter || item.tags.includes(documentTagFilter))
       .map(
-        (d) => `<tr data-isms-row="document">
-    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title)}</a><div class="small">${d.tags.map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${docLink(d)}</td>
+        (
+          d,
+        ) => `<tr data-isms-row="document"${canManage ? ` draggable="true" data-doc-drag="${esc(d.id)}"` : ''}>
+    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title)}</a>${documentFolderLine(d, view)}<div class="small">${d.tags.map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${docLink(d)}</td>
     <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${controlBadges(d.controls, framework, { tab: '' })}</td><td>${clauseBadges(d.clauses, framework)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
   </tr>`,
       )
-      .join('') || emptyRow(8, 'No ISMS documents yet.');
+      .join('') ||
+    emptyRow(8, view === ALL ? 'No ISMS documents yet.' : 'No documents are filed here.');
 }
 
 function renderOrg() {
@@ -2209,28 +2281,6 @@ onIsmsSubmit('documentForm', async (ev) => {
     file ? 'Document saved and file uploaded' : editingId ? 'Document updated' : 'Document created',
   );
 });
-$('docAddFolder')?.addEventListener('click', async () => {
-  const name = $('docNewFolder').value.trim();
-  if (!name) return;
-  try {
-    const folder = await apiPost('/api/v1/isms/document-folders', {
-      name,
-      parent_id: $('docFolder').value || null,
-    });
-    await loadDocumentFolders();
-    $('docFolder').value = folder.id;
-    $('docNewFolder').value = '';
-    toast(status, 'Folder created and selected.', 'success');
-  } catch (err) {
-    toast(status, errorText(err), 'danger');
-  }
-});
-$('docNewFolder')?.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    $('docAddFolder').click();
-  }
-});
 $('docTags').addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ',') {
     event.preventDefault();
@@ -2422,7 +2472,12 @@ document.addEventListener('click', async (ev) => {
   const licenseDeleteBtn = ev.target.closest?.('[data-license-delete]');
   const removeMeetingLinkBtn = ev.target.closest?.('[data-remove-meeting-link]');
   const effectivenessRecordBtn = ev.target.closest?.('[data-effectiveness-record]');
+  const moveDocumentBtn = ev.target.closest?.('[data-doc-move]');
   try {
+    if (moveDocumentBtn) {
+      await documentFolderPanel.moveDocument(moveDocumentBtn.dataset.docMove);
+      return;
+    }
     if (addBtn) {
       const kind = addBtn.getAttribute('data-isms-add');
       await ensureSection(sectionForKind(kind));

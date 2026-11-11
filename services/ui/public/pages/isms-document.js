@@ -3,6 +3,7 @@ import {
   safeExternalHref,
   initNavbar,
   apiGet,
+  apiPost,
   esc,
   fmtTs,
   getCurrentFramework,
@@ -13,6 +14,7 @@ import {
   openAuditSampleModal,
   loadEntityChangelog,
   renderRichTextContent,
+  userDisplayName,
 } from '/app.js';
 
 import {
@@ -98,6 +100,101 @@ async function loadChangelog() {
   );
 }
 
+function documentApi(path) {
+  return `/api/v1/isms/documents/${encodeURIComponent(documentId)}/${path}`;
+}
+
+function element(tag, className, text = '') {
+  const el = document.createElement(tag);
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+// Saved versions of the text written in Keen, newest first.
+async function loadRevisions() {
+  const revisions = await apiGet(documentApi('revisions'));
+  const list = $('revisionList');
+  if (!revisions.length) {
+    list.textContent = 'No text written in Keen has been saved yet.';
+    return;
+  }
+  list.className = 'd-flex flex-wrap gap-2';
+  list.replaceChildren(
+    ...revisions.map((revision) => {
+      const button = element(
+        'button',
+        'btn btn-outline-secondary btn-sm',
+        `Version ${revision.version} · ${fmtTs(revision.created_at)}`,
+      );
+      button.type = 'button';
+      button.dataset.revision = String(revision.version);
+      button.setAttribute('aria-pressed', 'false');
+      return button;
+    }),
+  );
+}
+
+async function showRevision(button) {
+  const revision = await apiGet(
+    documentApi(`revisions/${encodeURIComponent(button.dataset.revision)}`),
+  );
+  for (const other of $('revisionList').querySelectorAll('[data-revision]'))
+    other.setAttribute('aria-pressed', String(other === button));
+  const heading = element('div', 'fw-semibold', `Version ${revision.version}`);
+  const checksum = element('div', 'small-muted text-break', 'SHA-256 ');
+  checksum.append(element('code', '', revision.sha256));
+  const content = element('div', 'mt-2');
+  content.innerHTML = renderRichTextContent(revision.content_html);
+  const preview = element('div', 'alert alert-secondary mb-0');
+  preview.append(heading, checksum, content);
+  $('revisionPreview').replaceChildren(preview);
+}
+
+async function loadComments() {
+  const comments = await apiGet(documentApi('comments'));
+  const list = $('commentList');
+  if (!comments.length) {
+    list.className = 'small-muted';
+    list.textContent = 'No comments yet.';
+    return;
+  }
+  list.className = '';
+  list.replaceChildren(
+    ...comments.map((comment) => {
+      const row = element('div', 'border-bottom py-2');
+      row.append(
+        element('strong', '', userDisplayName(comment.author, 'Former user')),
+        ' ',
+        element('small', 'small-muted', fmtTs(comment.created_at)),
+        element('div', 'whitespace-pre-wrap', comment.body),
+      );
+      return row;
+    }),
+  );
+}
+
+// Revisions and comments each report their own failure, so one that cannot
+// load leaves the other readable.
+async function loadHistory() {
+  const results = await Promise.allSettled([loadRevisions(), loadComments()]);
+  const [revisions, comments] = results;
+  if (revisions.status === 'rejected') {
+    $('revisionList').textContent = 'Revisions could not be loaded.';
+    toast(status, `Could not load revisions: ${errorText(revisions.reason)}`, 'warning');
+  }
+  if (comments.status === 'rejected') {
+    $('commentList').textContent = 'Comments could not be loaded.';
+    toast(status, `Could not load comments: ${errorText(comments.reason)}`, 'warning');
+  }
+}
+
+const TABS = {
+  revisions: $('documentRevisionsTab'),
+  comments: $('documentCommentsTab'),
+  changelog: $('documentChangelogTab'),
+};
+
 async function load() {
   if (!documentId) {
     toast(status, 'Missing document id.', 'danger');
@@ -108,8 +205,8 @@ async function load() {
       `/api/v1/isms/documents/${encodeURIComponent(documentId)}?framework=${encodeURIComponent(framework)}`,
     );
     renderDocument(row);
-    await loadChangelog();
-    activateTabFromHashOrQuery(params, { changelog: $('documentChangelogTab') });
+    await Promise.all([loadChangelog(), loadHistory()]);
+    activateTabFromHashOrQuery(params, TABS);
   } catch (e) {
     toast(status, `Failed to load document: ${errorText(e)}`, 'danger');
   }
@@ -127,9 +224,31 @@ $('sampleDocumentAudit')?.addEventListener('click', () => {
   });
 });
 
-window.addEventListener('hashchange', () =>
-  activateTabFromHashOrQuery(params, { changelog: $('documentChangelogTab') }),
-);
+$('revisionList').addEventListener('click', async (ev) => {
+  const button = ev.target.closest('[data-revision]');
+  if (!button) return;
+  try {
+    await showRevision(button);
+  } catch (err) {
+    toast(status, `Could not open the revision: ${errorText(err)}`, 'danger');
+  }
+});
+
+// Managers discuss a document in its comments; readers see them.
+$('commentForm').hidden = !canManageIsms;
+$('commentForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  try {
+    await apiPost(documentApi('comments'), { body: $('commentBody').value });
+    $('commentBody').value = '';
+    await loadComments();
+    toast(status, 'Comment added.', 'success');
+  } catch (err) {
+    toast(status, `Could not add the comment: ${errorText(err)}`, 'danger');
+  }
+});
+
+window.addEventListener('hashchange', () => activateTabFromHashOrQuery(params, TABS));
 load();
 
 import { mountSwotRelated } from '/pages/swot-related.js';

@@ -85,7 +85,6 @@ def test_a_scope_never_admits_what_the_accounts_offered_it_cannot_read():
         "isms.read": policy.ISMS_READ,
         "risk.read": policy.RISK_READ,
         "pestle.read": policy.PESTLE_READ,
-        "interested_parties.read": policy.PARTIES_READ,
         "events.read": policy.EVENTS_READ,
     }.items():
         domain = {

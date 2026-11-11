@@ -202,8 +202,6 @@ def _validate_landing_page(raw: str | None, *, is_admin: bool) -> str:
         "/risks.html",
         "/pestle.html",
         "/pestle_item.html",
-        "/interested_parties.html",
-        "/interested_party.html",
         "/statement-of-applicability.html",
         "/isms.html",
     }
@@ -278,7 +276,6 @@ def _capabilities(db: Session, user: User, *, is_admin: bool) -> dict[str, bool]
     manage_risks = allowed("risk.manage")
     view_risks = manage_risks or allowed("risk.read")
     manage_pestle = manage_risks or allowed("pestle.manage")
-    manage_parties = manage_risks or allowed("interested_parties.manage")
     manage_isms = manage_risks or allowed("isms.manage")
     admin_stories = allowed("stories.admin")
     manage_stories = admin_stories or allowed("stories.manage")
@@ -294,10 +291,6 @@ def _capabilities(db: Session, user: User, *, is_admin: bool) -> dict[str, bool]
         "can_manage_risks": manage_risks,
         "can_view_pestle": manage_pestle or view_risks or allowed("pestle.read"),
         "can_manage_pestle": manage_pestle,
-        "can_view_interested_parties": manage_parties
-        or view_risks
-        or allowed("interested_parties.read"),
-        "can_manage_interested_parties": manage_parties,
         "can_view_isms": manage_isms or view_risks or allowed("isms.read"),
         "can_manage_isms": manage_isms,
         "can_view_events": allowed("events.read"),
@@ -320,10 +313,6 @@ _FEATURE_CAPABILITIES = {
     "audits": ("can_view_audits", "can_manage_audits", "can_admin_audits"),
     "risks": ("can_view_risks", "can_manage_risks"),
     "pestle": ("can_view_pestle", "can_manage_pestle"),
-    "interested_parties": (
-        "can_view_interested_parties",
-        "can_manage_interested_parties",
-    ),
     "isms": ("can_view_isms", "can_manage_isms"),
     "evidence": ("can_view_events",),
     "stories": ("can_view_stories", "can_manage_stories", "can_admin_stories"),

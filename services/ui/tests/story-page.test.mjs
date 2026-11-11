@@ -800,7 +800,7 @@ test('flow chart titles open records in a new tab and authors add any kind of re
       ['objective', 'Objective', 'objectives'],
       ['swot', 'SWOT item', 'swot'],
       ['person', 'Person', 'people'],
-      ['vendor', 'Vendor', 'vendors'],
+      ['vendor', 'Vendor / 3rd party', 'vendors'],
       ['effectiveness_measure', 'Effectiveness measure', 'effectiveness'],
       ['meeting', 'Meeting minutes', 'meetings'],
       ['note', 'Note', ''],

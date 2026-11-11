@@ -2,7 +2,7 @@
 // wizard, the risk detail page and the Mitigator. Other pages that list risks
 // use its score bands. Each page passes its own framework so links keep the
 // selected framework.
-import { esc, localPath, withFramework } from '/app.js';
+import { esc, withFramework } from '/app.js';
 
 export const RISK_TYPES = ['Confidentiality', 'Integrity', 'Availability'];
 export const PESTLE_TYPES = [
@@ -94,23 +94,6 @@ export function riskTypeBadgesHtml(types) {
   return types.map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`).join('');
 }
 
-export function partyBadgesHtml(parties, framework) {
-  const items = Array.isArray(parties) ? parties : [];
-  if (!items.length) return '<span class="small-muted">-</span>';
-  return items
-    .map((p) => {
-      const icon =
-        p.kind === 'person' ? 'bi-person' : p.kind === 'vendor' ? 'bi-building' : 'bi-people';
-      const label = `<i class="bi ${icon} me-1" aria-hidden="true"></i>${esc(p.label)}`;
-      const title = p.detail ? ` title="${esc(p.detail)}"` : '';
-      const href = localPath(p.href) && localPath(withFramework(p.href, framework));
-      return href
-        ? `<a class="badge badge-soft text-decoration-none me-1" href="${esc(href)}"${title}>${label}</a>`
-        : `<span class="badge badge-soft me-1"${title}>${label}</span>`;
-    })
-    .join('');
-}
-
 export function scoreClass(score) {
   const n = Number(score || 0);
   if (n < 5) return 'text-bg-success';
@@ -180,10 +163,6 @@ export function pestleHref(id, framework, tab = 'details') {
     `/pestle_item.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(tab)}`,
     framework,
   );
-}
-
-export function interestedPartyHref(id, framework) {
-  return withFramework(`/interested_party.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 export function riskDashboardHref(framework, tab = '') {

@@ -408,15 +408,6 @@ test('deleting the document being edited closes its form before the register rel
   assert.equal(ui.el('documentFormCard').style.display, 'none');
 });
 
-test('a folder needs a name before it is created', async (t) => {
-  const ui = await register(t, { tab: 'documents' });
-  await ui.add('document', 'documentFormCard');
-  ui.el('docNewFolder').value = '  ';
-  ui.el('docAddFolder').click();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.deepEqual(ui.writes(), []);
-});
-
 test('an access row whose service was deleted opens with no service chosen', async (t) => {
   const db = asset('a1', 'Prod DB');
   const ui = await register(t, {

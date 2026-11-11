@@ -38,6 +38,14 @@ const item = {
   business_processes: [],
   clauses: [],
   related_controls: [],
+  affected: [],
+};
+// What /api/v1/affected/options sends when nothing is recorded yet.
+const affectedOptions = {
+  people: [],
+  vendors: [],
+  assets: [],
+  can_add: { person: true, vendor: true },
 };
 
 async function pestleItem(t, { query = '&id=p1', confirm = true, vendor = {} } = {}) {
@@ -49,6 +57,7 @@ async function pestleItem(t, { query = '&id=p1', confirm = true, vendor = {} } =
     get: async (u) => {
       if (u.pathname === '/api/v1/pestle/meta') return structuredClone(meta);
       if (u.pathname === '/api/v1/pestle/items/p1') return structuredClone(item);
+      if (u.pathname === '/api/v1/affected/options') return structuredClone(affectedOptions);
       throw new Error('Unexpected GET ' + u);
     },
     patch: async (u) => {

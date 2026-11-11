@@ -39,6 +39,7 @@ async function detail(t, name, { path, row, me = { is_admin: true }, risks, quer
     get: async (u) => {
       if (u.pathname === path) return structuredClone(row);
       if (u.pathname.endsWith('/changelog')) return { items: [] };
+      if (u.pathname.endsWith('/revisions') || u.pathname.endsWith('/comments')) return [];
       if (u.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
       if (u.pathname === '/api/v1/sources') return { items: [] };
       if (risks && u.pathname === '/api/v1/risks') return risks(u);

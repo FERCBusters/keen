@@ -12,9 +12,9 @@ from app.core.config import settings
 from app.db.models import (
     ControlItem,
     FrameworkClause,
-    InterestedParty,
-    InterestedPartyName,
-    InterestedPartyNature,
+    IsmsPerson,
+    IsmsVendor,
+    ManagedConfiguration,
     PestleBusinessProcess,
     PestleBusinessProcessRelevance,
     PestleClauseRelevance,
@@ -91,15 +91,17 @@ RULES = {
         },
         "software development": {"terms": ["code"]},
     },
-    "interested_parties": {
+    "affected": {
         "regulators": {
-            "name": "Regulators",
-            "nature": "Enforcement",
+            "label": "Regulators",
             "terms": ["regulator"],
-            "note": "Regulators may act.",
-            "communication": {"event": "Breach", "when": "Within 72 hours"},
+            "kinds": ["vendor"],
+            "record_words": ["commissioner"],
+            "reason": "A regulator may act.",
         },
-        "staff": {"name": "Staff", "terms": ["employee"]},
+        # A group with no kinds is a signal only, with a label and reason made
+        # from its key.
+        "staff_members": {"terms": ["employee"]},
     },
 }
 
@@ -390,7 +392,7 @@ def test_controls_without_any_matching_terms_are_not_suggested(
     assert result["risk_types"] == ["Confidentiality"]
     assert result["draft_pestle_item"] is None
     assert result["pestle_hits"] == []
-    assert result["interested_party_suggestions"] == []
+    assert result["affected_suggestions"] == []
 
 
 def test_long_issues_are_bounded_in_the_draft(contract_db, monkeypatch):
@@ -528,15 +530,16 @@ def _registers(db):
             ),
         ]
     )
-    regulators = InterestedPartyName(name="Regulators")
-    enforcement = InterestedPartyNature(name="Enforcement")
-    investors = InterestedPartyName(name="Investors")
-    db.add_all([regulators, enforcement, investors])
-    db.flush()
-    party = InterestedParty(
-        name_id=regulators.id, nature_id=enforcement.id, note="National regulator"
+    commissioner = IsmsVendor(
+        name="Information Commissioner", description="National regulator"
     )
-    db.add_all([party, InterestedParty(name_id=investors.id, nature_id=enforcement.id)])
+    db.add_all(
+        [
+            commissioner,
+            IsmsVendor(name="Investors", description="Shareholders"),
+            IsmsPerson(name="Dana Lee", position="Privacy lead"),
+        ]
+    )
     category = RiskCategory(name="Data")
     db.add(category)
     db.flush()
@@ -568,7 +571,14 @@ def _registers(db):
         )
     )
     db.flush()
-    return dict(board=board, fines=fines, exact=exact, party=party, related=related)
+    return dict(
+        board=board,
+        fines=fines,
+        exact=exact,
+        commissioner=commissioner,
+        asset=asset,
+        related=related,
+    )
 
 
 def test_related_registers_are_matched_and_drafts_avoid_duplicates(
@@ -627,20 +637,39 @@ def test_related_registers_are_matched_and_drafts_avoid_duplicates(
     assert "Possible existing related items:" in draft["rationale"]
     assert draft["business_processes"] == result["business_process_suggestions"]
 
-    party_suggestion = result["interested_party_suggestions"]
-    assert len(party_suggestion) == 1
-    regulators = party_suggestion[0]
-    assert (regulators["name"], regulators["nature"]) == ("Regulators", "Enforcement")
-    assert regulators["duplicate_exact"] is True
-    assert regulators["reason"] == "The issue mentions terms that affect Regulators."
-    assert regulators["draft"]["communications"] == [
-        {"event": "Breach", "when": "Within 72 hours"}
+    # The asset is named in the issue; the regulator group finds the vendor
+    # whose description names a commissioner. Nothing new is proposed.
+    affected = result["affected_suggestions"]
+    assert [(a["kind"], a["id"]) for a in affected] == [
+        ("asset", str(rows["asset"].id)),
+        ("vendor", str(rows["commissioner"].id)),
     ]
-    assert regulators["draft"]["controls"] == result["draft_risk"]["controls"]
-    existing_parties = result["existing_matches"]["interested_parties"]
-    assert [p["id"] for p in existing_parties] == [str(rows["party"].id)]
-    assert existing_parties[0]["label"] == "Regulators - Enforcement"
-    assert existing_parties[0]["confidence"] == "strong"
+    database, commissioner = affected
+    assert database["confidence"] == "strong"
+    assert database["reasons"] == ["The issue names Customer database."]
+    assert database["href"] == f"/isms-asset.html?id={rows['asset'].id}"
+    assert commissioner["confidence"] == "medium"
+    assert commissioner["matched_terms"] == ["regulator"]
+    assert commissioner["reasons"] == ["A regulator may act."]
+    assert commissioner["kind_label"] == "Vendor / 3rd party"
+    assert _signals(result, "affected") == [
+        {
+            "kind": "affected",
+            "label": "Regulators",
+            "matched_terms": ["regulator"],
+            "reason": "A regulator may act.",
+        }
+    ]
+    assert result["draft_risk"]["mitigator_context"]["affected_suggestions"] == [
+        {
+            "kind": item["kind"],
+            "id": item["id"],
+            "label": item["label"],
+            "matched_terms": item["matched_terms"],
+        }
+        for item in affected
+    ]
+    assert set(result["existing_matches"]) == {"cia_risks", "pestle_items"}
 
     cia = result["existing_matches"]["cia_risks"]
     assert [risk["id"] for risk in cia] == [str(rows["related"].id)]
@@ -649,14 +678,15 @@ def test_related_registers_are_matched_and_drafts_avoid_duplicates(
 
     note = result["draft_risk"]["note"]
     assert "Detected PESTLE(E) types: Legal" in note
-    assert "Detected interested parties: Regulators" in note
+    assert "Possibly affected: Customer database, Information Commissioner" in note
 
 
 def test_related_registers_are_read_with_a_bounded_number_of_statements(
     contract_db, monkeypatch
 ):
     """Register rows and their links load eagerly: the statement count stays flat
-    as the registers grow, instead of one round trip per risk, item or party."""
+    as the registers grow, instead of one round trip per risk or item. People,
+    vendors and assets take one statement each."""
     rows = _registers(contract_db)
     for index in range(40):
         risk = Risk(
@@ -691,7 +721,7 @@ def test_related_registers_are_read_with_a_bounded_number_of_statements(
     finally:
         sqlalchemy.event.remove(engine, "before_cursor_execute", record)
     assert result["existing_matches"]["cia_risks"]
-    assert len(statements) <= 16, len(statements)
+    assert len(statements) <= 19, len(statements)
 
 
 def test_pestle_hits_default_to_board_strategy_without_process_rules(
@@ -717,13 +747,54 @@ def test_pestle_hits_default_to_board_strategy_without_process_rules(
 
 def test_existing_pestle_items_alone_shape_the_draft(contract_db, monkeypatch):
     _registers(contract_db)
-    rules = {"pestle_types": {}, "interested_parties": {}}
+    rules = {"pestle_types": {}, "affected": {}}
     result = _analyse(contract_db, monkeypatch, rules=rules, issue="Regulator")
     assert result["pestle_hits"] == []
     draft = result["draft_pestle_item"]
     first = result["pestle_suggestions"][0]
     assert (draft["type"], draft["lens"]) == (first["type"], first["lens"])
     assert "Detected PESTLE(E) signals" not in draft["rationale"]
+
+
+def test_affected_records_follow_names_groups_and_features(contract_db, monkeypatch):
+    db = contract_db
+    db.add_all(
+        [
+            IsmsPerson(name="Dana Lee", position="Commissioner liaison"),
+            # Names shorter than three characters never match on their own.
+            IsmsVendor(name="AB", description=""),
+            IsmsVendor(name="Northwind Hosting", description=""),
+        ]
+    )
+    db.flush()
+    issue = "An employee told the regulator that Dana Lee shared AB data with Northwind Hosting."
+    result = _analyse(db, monkeypatch, issue=issue)
+    # The person matches by name only: the regulator group covers vendors.
+    assert [
+        (a["kind"], a["label"], a["score"]) for a in result["affected_suggestions"]
+    ] == [
+        ("person", "Dana Lee", 24.0),
+        ("vendor", "Northwind Hosting", 24.0),
+    ]
+    assert _signals(result, "affected")[1] == {
+        "kind": "affected",
+        "label": "Staff Members",
+        "matched_terms": ["employee"],
+        "reason": "The issue mentions staff members.",
+    }
+
+    # Records whose feature is off are not read.
+    db.add(
+        ManagedConfiguration(
+            name="features",
+            version=1,
+            document={"people": False, "vendors": False, "assets": False},
+        )
+    )
+    db.flush()
+    db.info.pop("keen_features", None)
+    result = _analyse(db, monkeypatch, issue=issue)
+    assert result["affected_suggestions"] == []
 
 
 def test_short_issue_titles_use_the_first_sentence():
