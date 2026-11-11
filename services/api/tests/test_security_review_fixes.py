@@ -24,21 +24,14 @@ from app.security import oidc
 from app.security.client_ip import request_ip
 from app.services.errors import DomainError
 from fastapi import HTTPException
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 from starlette.responses import Response
 
-from tests.db_helpers import create_sqlite_schema
-
 
 @pytest.fixture
-def db():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    create_sqlite_schema(engine)
+def db(postgres_engine):
+    engine = postgres_engine
     with Session(engine) as session:
         yield session
     engine.dispose()
@@ -626,7 +619,7 @@ def test_removing_an_unknown_address_sends_no_notification(db, user, mail, monke
     assert db.query(UserSsoEmail).count() == 0
 
 
-def test_migration_upgrade_and_downgrade():
+def test_migration_upgrade_and_downgrade(empty_schema_engine):
     import importlib.util
     from pathlib import Path
 
@@ -634,7 +627,7 @@ def test_migration_upgrade_and_downgrade():
     from alembic.operations import Operations
     from sqlalchemy import inspect, text
 
-    engine = create_engine("sqlite://")
+    engine = empty_schema_engine
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE users (id UUID PRIMARY KEY)"))
         path = (

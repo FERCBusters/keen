@@ -22,8 +22,6 @@ from app.db.models import (
 )
 from app.services import features
 from app.services.errors import DomainError
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
 # Imported fixtures: the assembled application, a populated ISMS and a
 # catalogue with linked policies and measures.
@@ -251,20 +249,12 @@ def test_control_requirements_count_only_policies_while_measures_are_off(lab):  
 # --- SWOT structure lock ----------------------------------------------------------
 
 
-def test_the_swot_structure_lock_is_taken_on_postgresql_only(contract_db):
+def test_a_swot_structure_edit_takes_the_structure_lock(contract_db):
     from app.services.isms.swot import _lock
 
-    engine = create_engine("sqlite://")
-    try:
-        with Session(engine) as lite:
-            _, statements = statements_of(lite, lambda: _lock(lite))
-        assert statements == []
-    finally:
-        engine.dispose()
-    if contract_db.get_bind().dialect.name == "postgresql":
-        _, statements = statements_of(contract_db, lambda: _lock(contract_db))
-        assert statements == [
-            "SAVEPOINT sa_savepoint_1",
-            "SELECT pg_advisory_xact_lock_shared(%(key)s)",
-            "SELECT pg_advisory_xact_lock(724103610)",
-        ]
+    _, statements = statements_of(contract_db, lambda: _lock(contract_db))
+    assert statements == [
+        "SAVEPOINT sa_savepoint_1",
+        "SELECT pg_advisory_xact_lock_shared(%(key)s)",
+        "SELECT pg_advisory_xact_lock(724103610)",
+    ]

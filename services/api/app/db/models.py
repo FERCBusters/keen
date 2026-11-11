@@ -3098,7 +3098,6 @@ class AgentKey(Base):
             "agent_id",
             unique=True,
             postgresql_where=sql_text("state = 'active'"),
-            sqlite_where=sql_text("state = 'active'"),
         ),
     )
 
@@ -3204,7 +3203,6 @@ class AgentServerKey(Base):
             "purpose",
             unique=True,
             postgresql_where=sql_text("state = 'active'"),
-            sqlite_where=sql_text("state = 'active'"),
         ),
     )
 

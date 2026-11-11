@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import statistics
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -80,12 +80,6 @@ def _percentile(values: list[float], share: float) -> float:
     return ordered[index]
 
 
-def _day(value) -> str:
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()[:10]
-    return str(value)[:10]
-
-
 def clean_days(days) -> int:
     """The window length a request asks for, checked against the allowed range."""
     try:
@@ -150,7 +144,7 @@ def _compute(src, framework, window_days, db, user, clock) -> dict:
         .group_by(func.date(Event.timestamp))
         .all()
     )
-    counts_by_day = {_day(day): int(n) for day, n in daily_rows}
+    counts_by_day = {day.isoformat()[:10]: int(n) for day, n in daily_rows}
     total_in_window = sum(counts_by_day.values())
 
     sample = (

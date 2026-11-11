@@ -1,48 +1,14 @@
 """Test-only database setup; production metadata is never modified."""
 
-from sqlalchemy import BigInteger, DefaultClause, MetaData, create_engine, event, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.ext.compiler import compiles
+import os
+
+import pytest
+from sqlalchemy import create_engine, event
 
 
-@compiles(JSONB, "sqlite")
-def sqlite_jsonb(_type, _compiler, **_kw):
-    return "JSON"
-
-
-@compiles(UUID, "sqlite")
-def sqlite_uuid(_type, _compiler, **_kw):
-    # SQLite gives a column named UUID numeric affinity, which can turn valid
-    # hex identifiers into lossy floating-point values. Match Uuid emulation.
-    return "CHAR(32)"
-
-
-@compiles(BigInteger, "sqlite")
-def sqlite_bigint(_type, _compiler, **_kw):
-    # SQLite integers are already 64-bit; only an INTEGER PRIMARY KEY receives
-    # automatic row IDs, which PostgreSQL bigserial keys rely on.
-    return "INTEGER"
-
-
-def create_sqlite_schema(engine):
-    from app.db.session import Base
-
-    # Lightweight adapter tests use SQLite. Retention SQL, triggers and MFA
-    # migrations are tested separately on PostgreSQL, not emulated here.
-    metadata = MetaData()
-    for table in Base.metadata.sorted_tables:
-        table.to_metadata(metadata)
-    for table in metadata.tables.values():
-        for column in table.columns:
-            default = column.server_default
-            if default is not None and str(default.arg) == "now() AT TIME ZONE 'UTC'":
-                column.server_default = DefaultClause(text("CURRENT_TIMESTAMP"))
-    metadata.create_all(engine)
-
-
-def schema_engine(url, schema):
+def schema_engine(url, schema, **options):
     """Explicitly select the private schema on every connection, and verify it."""
-    engine = create_engine(url)
+    engine = create_engine(url, **options)
 
     @event.listens_for(engine, "connect")
     def select_schema(connection, _record):
@@ -58,3 +24,15 @@ def schema_engine(url, schema):
         connection.commit()
 
     return engine
+
+
+def required_database_url(variable):
+    """The disposable PostgreSQL database a suite runs on."""
+    url = os.environ.get(variable)
+    if not url:
+        pytest.fail(
+            f"Set {variable} to a disposable PostgreSQL database; tests.sh "
+            "sets it from KEEN_TEST_DATABASE_URL. See TESTING.md.",
+            pytrace=False,
+        )
+    return url

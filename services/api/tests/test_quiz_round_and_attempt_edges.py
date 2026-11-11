@@ -60,8 +60,6 @@ def test_a_handed_in_attempt_follows_its_person_to_their_new_account(world):  # 
 
 
 def test_a_start_that_fails_for_another_reason_saves_no_attempt(world):  # noqa: F811
-    if not world.keen.postgres:
-        pytest.skip("SQLite does not enforce the foreign key this start breaks")
     ada = world.students[0]
     quiz = world.ready(people=[ada], questions=CHOICES)
     round_ = world.open_round(quiz)

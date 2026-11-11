@@ -141,8 +141,6 @@ SECRET = Fernet.generate_key().decode()
 @pytest.fixture
 def committed(contract_postgres_engine, monkeypatch):
     """Sessions that commit for real, so another transaction sees their work."""
-    if contract_postgres_engine is None:
-        pytest.skip("Requires PostgreSQL for concurrent transactions")
     monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", SECRET)
     monkeypatch.setattr(settings, "demo_mode", False)
     monkeypatch.setattr(agent_enrollment, "get_valkey", lambda: None)

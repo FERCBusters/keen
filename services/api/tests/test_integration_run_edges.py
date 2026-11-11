@@ -1,7 +1,7 @@
 """Custom API integrations: page requests without a size parameter, failed
 previews, runs removed while their claim fails, and handing runs to the worker.
 
-The upstream API is a fetch function, the database is the SQLite integration
+The upstream API is a fetch function, the database is the integration
 database behind runtime.SessionLocal, and the broker is replaced where a run
 is queued.
 """
@@ -19,7 +19,7 @@ from app.worker.celery_app import celery_app
 from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
 
-# Imported fixture: a SQLite integration database behind runtime.SessionLocal.
+# Imported fixture: an integration database behind runtime.SessionLocal.
 from tests.test_integration_builder import (
     database,  # noqa: F401
     record,

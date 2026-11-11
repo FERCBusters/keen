@@ -8,6 +8,8 @@ import httpx
 import pytest
 from app.ingest import taiga as tg
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge")
+
 ENTRY = {
     "id": 55,
     "created": "2026-10-09T12:00:00+00:00",

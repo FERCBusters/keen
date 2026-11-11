@@ -22,7 +22,7 @@ from app.security import rate_limit
 from sqlalchemy import event as sql_event
 from sqlalchemy.exc import OperationalError
 
-# Imported fixtures: the agent router on SQLite, and its keen-agent harness.
+# Imported fixtures: the agent router on its database, and its keen-agent harness.
 from tests.test_keen_agent import record
 from tests.test_keen_agent import setup as setup  # noqa: F401
 from tests.test_ueu_evidence import enrolled

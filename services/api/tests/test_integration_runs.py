@@ -25,7 +25,7 @@ from app.integrations.errors import IntegrationError
 from app.integrations.schema import Definition
 from cryptography.fernet import InvalidToken
 
-# Imported fixture: a SQLite integration database behind runtime.SessionLocal.
+# Imported fixture: an integration database behind runtime.SessionLocal.
 from tests.test_integration_builder import database  # noqa: F401
 
 

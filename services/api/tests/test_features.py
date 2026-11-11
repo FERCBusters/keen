@@ -157,7 +157,7 @@ def test_revision_cache_invalidates_between_sessions(contract_db):
             assert not features.state(other).enabled("questions")
         locks = [sql for sql in statements if "pg_advisory_xact_lock_shared" in sql]
         queries = [sql for sql in statements if sql not in locks]
-        assert len(locks) == (1 if engine.dialect.name == "postgresql" else 0)
+        assert len(locks) == 1
         assert len(queries) == 1
         assert "managed_configurations.version" in queries[0]
         assert "managed_configurations.document" not in queries[0]
@@ -263,8 +263,6 @@ def test_invalid_settings_do_not_write(keen):
 
 
 def test_concurrent_initial_saves_have_one_winner(contract_postgres_engine):
-    if contract_postgres_engine is None:
-        pytest.skip("Requires disposable PostgreSQL: locking and unique-key contention")
     import uuid
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier

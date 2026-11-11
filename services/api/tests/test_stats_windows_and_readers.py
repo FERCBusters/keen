@@ -74,8 +74,6 @@ def test_control_counts_to_an_end_date_include_that_day_only(counted):
 
 def test_a_chart_window_from_a_start_date_runs_to_today_by_source(counted):
     keen, event, reader = counted
-    if not keen.postgres:
-        pytest.skip("Chart buckets use PostgreSQL date_trunc")
     today = utc_now_naive().replace(hour=1, minute=0, second=0, microsecond=0)
     yesterday = today - timedelta(days=1)
     event(yesterday, source="jenkins")

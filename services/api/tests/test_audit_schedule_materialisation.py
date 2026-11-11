@@ -1,8 +1,7 @@
 """Scheduled audit templates: materialisation and audit reminders.
 
-Materialisation runs against persisted templates (PostgreSQL when
-KEEN_CONTRACT_TEST_DATABASE_URL is set) with the mailer replaced at its owning
-module. The shared occurrence rules are checked in test_schedules.py.
+Materialisation runs against templates persisted in PostgreSQL, with the mailer
+replaced at its owning module. The shared occurrence rules are checked in test_schedules.py.
 """
 
 import uuid

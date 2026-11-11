@@ -261,8 +261,6 @@ def test_event_counters_are_withheld_without_events_read(crosswalk):
 
 def test_volume_chart_counts_inherited_events_once(crosswalk):
     db = crosswalk.db
-    if db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Chart buckets use PostgreSQL date_trunc")
     for user, total, mapped in ((crosswalk.admin, 7, 4), (crosswalk.reader, 6, 3)):
         body = stats_service.stats_events_timeseries(
             context=ChangeContext(method="GET", path="/v1/charts", actor=user),

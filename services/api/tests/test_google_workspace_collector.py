@@ -9,6 +9,8 @@ import pytest
 from app.core.datetime_utils import to_utc_naive
 from app.ingest import google_workspace as gws
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge")
+
 
 @pytest.fixture
 def db():

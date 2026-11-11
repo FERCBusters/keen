@@ -5,7 +5,7 @@ works from what it saved: an edit never lands in an audit that was completed
 meanwhile, and two scope replacements never merge. Scheduled runs take the
 same lock on each template, so overlapping runs create one audit per run
 date and a template edit made during a run keeps its new schedule. The
-changes run on separate PostgreSQL connections, so these tests skip on SQLite.
+changes run on separate PostgreSQL connections.
 """
 
 import io

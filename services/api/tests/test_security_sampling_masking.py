@@ -673,10 +673,12 @@ def test_audit_administrator_can_edit_and_delete_but_still_needs_source_read(
         assert db.get(Audit, template_id) is None
 
 
-def test_audit_permission_migration_adds_no_implicit_grants(monkeypatch):
+def test_audit_permission_migration_adds_no_implicit_grants(
+    empty_schema_engine, monkeypatch
+):
     import importlib.util
 
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import text
 
     path = (
         Path(__file__).resolve().parents[1]
@@ -685,7 +687,7 @@ def test_audit_permission_migration_adds_no_implicit_grants(monkeypatch):
     spec = importlib.util.spec_from_file_location("audit_permissions_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    engine = create_engine("sqlite://")
+    engine = empty_schema_engine
     with engine.begin() as connection:
         connection.execute(
             text(

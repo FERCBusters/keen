@@ -42,13 +42,13 @@ def queued(monkeypatch):
 
 
 @pytest.fixture
-def agent_client(monkeypatch):
+def agent_client(postgres_engine, monkeypatch):
     from app.api.routes import agents as api
     from app.security import rate_limit
 
     from tests.test_keen_agent import setup
 
-    generator = setup.__wrapped__(monkeypatch)
+    generator = setup.__wrapped__(postgres_engine, monkeypatch)
     client, _factory, headers, _info, _stored, _app = next(generator)
     redis = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(api, "get_valkey", lambda: redis)
@@ -197,13 +197,13 @@ def test_source_connection_destination_change_requires_credentials(
     assert not contract_db.get(SourceConnection, row["id"]).encrypted_credentials
 
 
-def test_integration_origin_change_requires_credential(monkeypatch):
+def test_integration_origin_change_requires_credential(postgres_engine, monkeypatch):
     from app.api.routes import integrations as api
     from app.db.models import IntegrationConnection
 
     from tests.test_integration_builder import database
 
-    generator = database.__wrapped__(monkeypatch)
+    generator = database.__wrapped__(postgres_engine, monkeypatch)
     db, _factory = next(generator)
     try:
         monkeypatch.setenv(
@@ -412,8 +412,6 @@ def test_a_group_permission_change_waits_for_a_membership_change(
     from sqlalchemy.orm import Session
 
     engine = contract_postgres_engine
-    if engine is None:
-        pytest.skip("Needs separate PostgreSQL connections")
     tag = uuid.uuid4().hex[:10]
     with Session(engine) as db:
         actor = User(username="admin-" + tag, password_hash="x", role="admin")

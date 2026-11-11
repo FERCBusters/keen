@@ -178,8 +178,6 @@ def test_statistics_count_every_entry_for_every_evidence_reader(keen, entries): 
 
 
 def test_source_graph_counts_only_visible_entries(keen, entries):  # noqa: F811 - fixture imported above
-    if not keen.postgres:
-        pytest.skip("The graph aggregates run on PostgreSQL only")
     for name, client, visible, _ in _readers(keen, entries):
         graph = client.get("/v1/graph/control_source", params={"framework": FW})
         assert graph.status_code == 200, (name, graph.text)

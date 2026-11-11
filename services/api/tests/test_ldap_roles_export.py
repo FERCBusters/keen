@@ -30,11 +30,7 @@ from app.security.auth import authenticate_user
 from app.security.auth import cookie_name as session_cookie_name
 from app.services.errors import DomainError
 from fastapi import HTTPException
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
-
-from tests.db_helpers import create_sqlite_schema
 
 LDAP_UNAVAILABLE = (
     "LDAP authentication unavailable; check directory configuration and connectivity"
@@ -42,11 +38,8 @@ LDAP_UNAVAILABLE = (
 
 
 @pytest.fixture
-def db():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    create_sqlite_schema(engine)
+def db(postgres_engine):
+    engine = postgres_engine
     with Session(engine) as session:
         yield session
     engine.dispose()

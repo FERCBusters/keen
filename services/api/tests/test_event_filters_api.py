@@ -461,8 +461,6 @@ def test_mapping_rule_patterns_keep_the_python_engine_rules():
 
 def test_every_filtered_view_scans_with_the_budget(events):
     """Each view applies the budget and reports a stopped scan as a 400."""
-    if not events.keen.postgres:
-        pytest.skip("PostgreSQL statement budgets")
     params = {"framework": FW, "f": "summary:regex:review", **WINDOW}
     for path in FILTERED_VIEWS:
         assert events.reader.get(path, params=params).status_code == 200, path
@@ -749,8 +747,6 @@ def test_an_export_that_reaches_its_time_limit_says_so(events, monkeypatch, fmt)
 
 def test_a_stopped_export_is_reported(events, monkeypatch):
     """A count stopped by its budget is an error; a page stopped later ends the file."""
-    if not events.keen.postgres:
-        pytest.skip("PostgreSQL statement budgets")
     monkeypatch.setattr(event_operations, "EXPORT_PAGE_ROWS", 3)
     dialect = events.db.get_bind().engine.dialect
     stop = {"count": True}

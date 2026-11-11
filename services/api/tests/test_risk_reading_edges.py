@@ -8,7 +8,6 @@ removed lists the parties that remain.
 
 import uuid
 
-import pytest
 from app.db.models import (
     IsmsPerson,
     IsmsVendor,
@@ -80,8 +79,6 @@ def test_a_risk_read_while_its_affected_records_are_removed_lists_those_that_rem
     reg,
 ):
     db = reg.db
-    if db.get_bind().dialect.name != "postgresql":
-        pytest.skip("The removals are run on the PostgreSQL connection")
     person = IsmsPerson(name="Dana", position="DPO")
     gone_vendor = IsmsVendor(name="Cloud host", website="https://cloud.example")
     kept_vendor = IsmsVendor(name="Privacy Commissioner")

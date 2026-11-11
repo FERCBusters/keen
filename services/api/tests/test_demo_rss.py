@@ -1,8 +1,11 @@
 from unittest.mock import Mock
 
+import pytest
 from app.ingest import rss
 from app.ingest.demo_rss import FEED, RULE
 from app.mapping.rules import evaluate_by_framework, parse_rules
+
+pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
 
 
 def test_demo_rejects_other_feeds(monkeypatch):

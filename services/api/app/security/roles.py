@@ -82,10 +82,7 @@ def lock_admin_changes(db: Session) -> None:
     lock is released on commit or rollback, so concurrent demotions are counted
     one after another and cannot jointly remove the last administrator.
     """
-    if db.get_bind().dialect.name == "postgresql":
-        db.execute(
-            text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMIN_CHANGE_LOCK}
-        )
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMIN_CHANGE_LOCK})
 
 
 def count_effective_admins(db: Session, *, excluding_user_id=None) -> int:

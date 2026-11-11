@@ -24,24 +24,13 @@ from app.ingest import common
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy import event as sql_event
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from tests.db_helpers import create_sqlite_schema
 from tests.ueu_agent import FakeValkey
 
 
 def decode(data, agent_id):
     return decode_batch(data, agent_id).events
-
-
-@compiles(JSONB, "sqlite")
-def json_type(*a, **k):
-    return "JSON"
 
 
 def record(identity=None, body="package upgraded"):
@@ -81,23 +70,11 @@ def logs(doc):
 
 
 @pytest.fixture
-def setup(monkeypatch):
+def setup(postgres_engine, monkeypatch):
     # KEEN's agent keys are stored encrypted with the integration secret key.
     monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
+    engine = postgres_engine
 
-    @sql_event.listens_for(engine, "connect")
-    def connected(c, r):
-        c.isolation_level = None
-        c.create_function("NOW", 0, lambda: utc_now_naive().isoformat(" "))
-
-    @sql_event.listens_for(engine, "begin")
-    def begin(conn):
-        conn.exec_driver_sql("BEGIN")
-
-    create_sqlite_schema(engine)
     factory = sessionmaker(bind=engine, autoflush=False)
 
     def db():

@@ -1,7 +1,7 @@
 """Risk register workflows through the assembled application.
 
 Requests use real password sign-in, CSRF and permission resolution against
-persisted SQL state (PostgreSQL when KEEN_CONTRACT_TEST_DATABASE_URL is set).
+persisted PostgreSQL state.
 """
 
 import uuid
@@ -778,15 +778,14 @@ def test_register_filters_by_category_owner_and_risk_type(reg, register):
     for name, value in rejected.items():
         listed(status=400, **{name: value})
 
-    if reg.keen.postgres:  # JSON containment runs on PostgreSQL only.
-        assert _ids(listed(risk_type="availability")) == [
-            register.website["id"],
-            register.laptops["id"],
-        ]
-        assert _ids(listed(risk_type="Integrity, CONFIDENTIALITY")) == [
-            register.severe["id"],
-            register.website["id"],
-        ]
+    assert _ids(listed(risk_type="availability")) == [
+        register.website["id"],
+        register.laptops["id"],
+    ]
+    assert _ids(listed(risk_type="Integrity, CONFIDENTIALITY")) == [
+        register.severe["id"],
+        register.website["id"],
+    ]
 
 
 # --- Asset categories, subcategories and assets ---------------------------------
@@ -1504,8 +1503,6 @@ def test_links_go_with_the_records_they_name(reg):
     from app.db.models import AffectedLink, IsmsPerson, IsmsVendor
 
     db = reg.db
-    if db.get_bind().dialect.name != "postgresql":
-        pytest.skip("The database removes the links (ON DELETE CASCADE)")
     rows = _directory(db)
     created = _create(
         reg,

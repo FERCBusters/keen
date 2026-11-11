@@ -22,11 +22,9 @@ from app.security.diary_visibility import (
 from app.security.redaction import MASKED_EMAIL, MASKED_IP
 from app.services import events as events_service
 from app.services.event_filters import EventFilters
-from sqlalchemy import create_engine
 from sqlalchemy import event as sql_event
 from sqlalchemy.orm import Session
 
-from tests.db_helpers import create_sqlite_schema
 from tests.test_assembled_authority_regressions import keen as keen
 
 FW = "fw-edges"
@@ -137,13 +135,11 @@ def test_the_source_facet_can_be_left_out_while_controls_are_counted(keen):
     assert any(counts_sources(s) for s in statements[counted:])
 
 
-def test_rule_facets_match_the_framework_exactly_where_text_compares_without_case(
+def test_rule_facets_match_the_framework_in_its_exact_case(
+    postgres_engine,
     monkeypatch,
 ):
-    # SQLite compares LIKE patterns without case, so the database filter alone
-    # would also return another framework's rule mappings.
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+    engine = postgres_engine
     try:
         with Session(engine) as db:
             admin = User(username="admin", password_hash="x", role="admin")

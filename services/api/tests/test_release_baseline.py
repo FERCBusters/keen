@@ -2,7 +2,6 @@
 
 import gzip
 import json
-import os
 import re
 import uuid
 from pathlib import Path
@@ -13,13 +12,12 @@ from alembic.config import Config
 from app.core.config import settings
 from sqlalchemy import create_engine, text
 
+from tests.db_helpers import required_database_url
 from tests.test_builtin_rules import ALL_RULES as BUILTIN_RULES
 
 
 def test_release_schema_and_final_seed_data(monkeypatch):
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "release_" + uuid.uuid4().hex
@@ -196,9 +194,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
 
 
 def test_retiring_the_unused_counters_keeps_each_visualisation_preference():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "counters_" + uuid.uuid4().hex
@@ -294,9 +290,7 @@ def test_retiring_the_unused_counters_keeps_each_visualisation_preference():
 
 
 def test_measure_method_text_is_folded_into_the_description():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "measures_" + uuid.uuid4().hex
@@ -386,9 +380,7 @@ def test_measure_method_text_is_folded_into_the_description():
 
 
 def test_access_matrix_status_and_hosting_accounts_are_removed():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "matrix_" + uuid.uuid4().hex
@@ -463,9 +455,7 @@ def test_access_matrix_status_and_hosting_accounts_are_removed():
 
 
 def test_closing_times_and_failure_starts_are_added_empty():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "treated_" + uuid.uuid4().hex
@@ -515,9 +505,7 @@ def test_closing_times_and_failure_starts_are_added_empty():
 
 
 def test_interested_parties_recorded_per_framework_are_merged():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "parties_" + uuid.uuid4().hex
@@ -704,9 +692,7 @@ def test_interested_parties_recorded_per_framework_are_merged():
 
 
 def test_stories_take_the_new_record_kinds_and_downgrade_drops_them():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "story_kinds_" + uuid.uuid4().hex
@@ -787,9 +773,7 @@ def test_stories_take_the_new_record_kinds_and_downgrade_drops_them():
 
 
 def test_seeded_text_names_keen_and_downgrade_restores_it(monkeypatch):
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "seed_wording_" + uuid.uuid4().hex
@@ -892,9 +876,7 @@ def test_seeded_text_names_keen_and_downgrade_restores_it(monkeypatch):
 
 
 def test_dashboard_query_migrations_install_and_remove_cleanly():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "dashboard_" + uuid.uuid4().hex
@@ -998,9 +980,7 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
 
 
 def test_audit_trail_permission_is_removed_and_its_holders_refresh():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "audittrail_" + uuid.uuid4().hex
@@ -1122,9 +1102,7 @@ def test_audit_trail_permission_is_removed_and_its_holders_refresh():
 
 
 def test_interested_parties_are_removed_and_affected_links_added():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Requires PostgreSQL integration database")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     root = Path(__file__).resolve().parents[1]
     engine = create_engine(url)
     schema = "affected_" + uuid.uuid4().hex

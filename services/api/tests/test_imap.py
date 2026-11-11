@@ -20,6 +20,8 @@ from app.ingest.imap_support.mime import body_part, decode_body, structure
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
+
 PLAIN = b'("TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "7BIT" 12 1 NIL NIL)'
 HTML = b'("TEXT" "HTML" ("CHARSET" "UTF-8") NIL NIL "7BIT" 12 1 NIL NIL)'
 ATTACHMENT = b'("TEXT" "PLAIN" ("NAME" "secret.txt") NIL NIL "7BIT" 12 1 NIL ("ATTACHMENT" ("FILENAME" "secret.txt")))'
@@ -996,9 +998,6 @@ def test_a_cursor_removed_during_the_poll_is_recreated(monkeypatch):
 
         def rollback(self):
             pass
-
-        def get_bind(self):
-            return SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
 
         def scalar(self, *a):
             return None

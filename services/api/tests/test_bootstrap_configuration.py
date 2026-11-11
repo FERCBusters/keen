@@ -16,7 +16,7 @@ from app.security.passwords import hash_password, verify_password
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from tests.db_helpers import schema_engine
+from tests.db_helpers import required_database_url, schema_engine
 
 
 @pytest.mark.parametrize(
@@ -144,9 +144,7 @@ def test_no_credentials_or_hosted_mode_never_creates_an_account(monkeypatch):
 
 def test_api_workers_starting_together_create_one_account(monkeypatch):
     """Each API worker process bootstraps at start-up; one account results."""
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Set KEEN_RETENTION_TEST_DATABASE_URL for PostgreSQL concurrency")
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     schema = "bootstrap_" + uuid.uuid4().hex
     admin = create_engine(url)
     with admin.begin() as connection:

@@ -1,6 +1,6 @@
 """Source activity insights: quiet detection, spikes, repeats and suggestions.
 
-The service tests run on SQLite against a source's own history; the assembled
+The service tests run against a source's own history; the assembled
 application tests cover the permission boundary of the two new read routes.
 """
 
@@ -13,10 +13,7 @@ from app.db.models import ControlItem, Event, Framework, Mapping, User
 from app.services import source_insights as insights
 from app.services.errors import DomainError
 from app.services.events import event_control_suggestions
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-
-from tests.db_helpers import create_sqlite_schema
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen  # noqa: F401
@@ -33,9 +30,8 @@ def uncached(monkeypatch):
 
 
 @pytest.fixture
-def db():
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+def db(postgres_engine):
+    engine = postgres_engine
     with Session(engine) as session:
         session.add(Framework(slug=FW))
         session.add(

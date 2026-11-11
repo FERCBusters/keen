@@ -3,9 +3,7 @@
 The dashboard counters are recomputed whenever the brief Valkey mirror has
 expired, so the request path must stay cheap on hundreds of thousands of
 evidence events. Small fixtures pin the counters' exact semantics; a synthetic
-250k-event SQLite database pins the cost of a cold (uncached) overview.
-SQLite timings here are indicative: the equivalent PostgreSQL aggregates were
-measured separately at 250k events.
+250k-event database pins the cost of a cold (uncached) overview.
 """
 
 import time
@@ -28,11 +26,11 @@ from app.services import control_evidence_stats as ces
 from app.services import home as home_service
 from app.services import stats as stats_service
 from app.services.context import ChangeContext
-from sqlalchemy import create_engine, func, insert, select
 from sqlalchemy import event as sql_event
+from sqlalchemy import func, insert, select, text
 from sqlalchemy.orm import Session
 
-from tests.db_helpers import create_sqlite_schema
+from tests.conftest import migrated_schema
 from tests.timing import measured
 
 FW = "home-scale"
@@ -50,9 +48,8 @@ def cache_off(monkeypatch):
 def exact_db(contract_db, cache_off):
     """A small dataset whose counters are known by construction.
 
-    Runs on in-memory SQLite locally and against migrated PostgreSQL when the
-    contract database is supplied, so the counters are verified with the real
-    trigger-maintained coverage table as well.
+    The mappings maintain the coverage table through its triggers, so the
+    counters are verified against the real aggregate rows.
     """
     db = contract_db
     db.add_all([Framework(slug=FW), Framework(slug=OTHER)])
@@ -108,21 +105,6 @@ def exact_db(contract_db, cache_off):
             ),
         ]
     )
-    if db.get_bind().dialect.name != "postgresql":
-        # On PostgreSQL the mappings above maintain the coverage table through
-        # its triggers; SQLite has no triggers, so the same aggregate rows are
-        # inserted directly to exercise the read path.
-        db.add_all(
-            [
-                ControlEvidenceStats(
-                    control_item_id=controls["A.1"].id, evidence_count=2
-                ),
-                ControlEvidenceStats(
-                    control_item_id=controls["A.2"].id, evidence_count=1
-                ),
-                ControlEvidenceStats(control_item_id=out_of_scope.id, evidence_count=1),
-            ]
-        )
     user = User(
         id=uuid.uuid4(),
         username="reader",
@@ -211,6 +193,33 @@ def test_home_overview_reads_inheritance_and_coverage_once_per_request(exact_db)
     assert stats_reads == {"count": 0}
 
 
+def bulk_load(db, events, *mappings):
+    """Store events and their mappings as a production database would hold them.
+
+    Row triggers would spend minutes on half a million rows, so the load runs
+    without them and the coverage table they maintain is computed from the
+    stored mappings in one statement.
+    """
+    db.execute(text("ALTER TABLE events DISABLE TRIGGER USER"))
+    db.execute(text("ALTER TABLE mappings DISABLE TRIGGER USER"))
+    db.execute(insert(Event), events)
+    for rows in mappings:
+        db.execute(insert(Mapping), rows)
+    db.execute(text("ALTER TABLE events ENABLE TRIGGER USER"))
+    db.execute(text("ALTER TABLE mappings ENABLE TRIGGER USER"))
+    per_control = (
+        select(Mapping.control_item_id, func.count(func.distinct(Mapping.event_id)))
+        .group_by(Mapping.control_item_id)
+        .subquery()
+    )
+    db.execute(
+        insert(ControlEvidenceStats).from_select(
+            ["control_item_id", "evidence_count"],
+            select(per_control.c.control_item_id, per_control.c[1]),
+        )
+    )
+
+
 SCALE_EVENTS = 250_000
 SCALE_CONTROLS = 100
 
@@ -220,11 +229,9 @@ def scale_db():
     """A synthetic 250k-event database, one mapping per event plus overmaps.
 
     Seeded with Core bulk inserts so the suite pays seconds, not minutes, for
-    the production-scale shape. SQLite timings are indicative, not PostgreSQL.
+    the production-scale shape.
     """
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
-    create_sqlite_schema(engine)
-    with Session(engine) as db:
+    with migrated_schema("scale_") as engine, Session(engine) as db:
         db.add(Framework(slug=FW))
         db.add(
             ManagedConfiguration(
@@ -277,28 +284,7 @@ def scale_db():
             }
             for n in range(0, mapped_count, 20)
         ]
-        db.execute(insert(Event), events)
-        db.execute(insert(Mapping), mappings)
-        db.execute(insert(Mapping), extra)
-        # The trigger-maintained per-control coverage table, recomputed from
-        # the seeded mappings exactly as the PostgreSQL triggers would.
-        per_control = (
-            select(
-                Mapping.control_item_id,
-                func.count(func.distinct(Mapping.event_id)),
-            )
-            .group_by(Mapping.control_item_id)
-            .subquery()
-        )
-        db.execute(
-            insert(ControlEvidenceStats).from_select(
-                ["control_item_id", "evidence_count"],
-                select(
-                    per_control.c.control_item_id,
-                    per_control.c[1],
-                ),
-            )
-        )
+        bulk_load(db, events, mappings, extra)
         db.add(
             User(
                 id=uuid.uuid4(),
@@ -310,7 +296,6 @@ def scale_db():
         )
         db.commit()
         yield db
-    engine.dispose()
 
 
 def test_scale_overview_counters_and_budget(scale_db, cache_off):
@@ -339,9 +324,9 @@ def test_scale_overview_counters_and_budget(scale_db, cache_off):
         "with_evidence": SCALE_CONTROLS,
         "without_evidence": 0,
     }
-    # A cold (uncached) overview stays well inside a second at this scale:
-    # measured ~0.4s on in-memory SQLite at 250k events; the generous budget
-    # only fails when the request path regresses to unbounded aggregation.
+    # A cold (uncached) overview stays well inside a second at this scale;
+    # the generous budget only fails when the request path regresses to
+    # unbounded aggregation.
     assert elapsed < 2.5, f"home overview took {elapsed:.2f}s at {SCALE_EVENTS} events"
     assert len(statements) <= 26, [sql[:120] for sql in statements]
 
@@ -360,9 +345,7 @@ def inherited_scale_db():
     controls. Counting by (target, event) pairs would expand the evidence more
     than threefold before deduplicating it.
     """
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
-    create_sqlite_schema(engine)
-    with Session(engine) as db:
+    with migrated_schema("inherited_") as engine, Session(engine) as db:
         db.add_all([Framework(slug=TARGET), Framework(slug=SOURCE)])
         db.add(
             ManagedConfiguration(
@@ -421,8 +404,7 @@ def inherited_scale_db():
             }
             for n in range(0, mapped_count, 10)
         ]
-        db.execute(insert(Event), events)
-        db.execute(insert(Mapping), mappings)
+        bulk_load(db, events, mappings)
         db.add(
             User(
                 id=uuid.uuid4(),
@@ -434,7 +416,6 @@ def inherited_scale_db():
         )
         db.commit()
         yield db
-    engine.dispose()
 
 
 def test_scale_inherited_overview_and_summary_stay_per_control(
@@ -465,8 +446,7 @@ def test_scale_inherited_overview_and_summary_stay_per_control(
         "without_evidence": SCALE_CONTROLS - 3 * LINKED,
     }
     assert summary["controls"]["with_evidence_all"] == 3 * LINKED
-    # Each counter resolves controls first and semi-joins events once:
-    # measured ~0.5s on in-memory SQLite. Expanding (target, event) pairs
-    # first took several times longer.
+    # Each counter resolves controls first and semi-joins events once.
+    # Expanding (target, event) pairs first took several times longer.
     assert overview_elapsed < 2.0, f"overview took {overview_elapsed:.2f}s"
     assert summary_elapsed < 2.0, f"summary took {summary_elapsed:.2f}s"

@@ -1,11 +1,10 @@
 """Mapping rules suggested from unmapped events.
 
-The service tests run on SQLite and, when the contract database is configured,
-on PostgreSQL, where a run also takes its lock and query budget. The
-administrator routes are covered through the assembled application at the end.
+The service tests run on PostgreSQL, where a run takes its lock and query
+budget. The administrator routes are covered through the assembled application
+at the end.
 """
 
-import os
 import uuid
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -30,11 +29,8 @@ from app.worker import tasks
 from app.worker.celery_app import celery_app
 from psycopg2 import errors
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
-
-from tests.db_helpers import create_sqlite_schema
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -72,21 +68,10 @@ def labels(monkeypatch):
     monkeypatch.setattr(source_meta, "_configured_source_meta", lambda _: {})
 
 
-@pytest.fixture(params=["sqlite", "postgresql"])
-def db(request):
-    if request.param == "postgresql":
-        if not os.getenv("KEEN_CONTRACT_TEST_DATABASE_URL"):
-            pytest.skip("Set KEEN_CONTRACT_TEST_DATABASE_URL to run on PostgreSQL")
-        session = request.getfixturevalue("contract_db")
-        _catalogue(session)
-        yield session
-        return
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
-    with Session(engine) as session:
-        _catalogue(session)
-        yield session
-    engine.dispose()
+@pytest.fixture
+def db(contract_db):
+    _catalogue(contract_db)
+    return contract_db
 
 
 def _catalogue(session):
@@ -636,26 +621,22 @@ def test_a_failed_run_is_recorded_and_changes_nothing(db, monkeypatch):
     assert [r.id for r in open_rows(db)] == [row.id]
 
 
-def test_runs_take_turns_and_have_a_query_budget(db, request):
-    postgres = db.get_bind().dialect.name == "postgresql"
-    if postgres:
-        # Another run holds the lock: this one returns at once.
-        engine = request.getfixturevalue("contract_postgres_engine")
-        with engine.connect() as other:
+def test_runs_take_turns_and_have_a_query_budget(db, contract_postgres_engine):
+    # Another run holds the lock: this one returns at once.
+    with contract_postgres_engine.connect() as other:
+        other.execute(
+            text("SELECT pg_advisory_lock(:key)"), {"key": suggestions.LOCK_KEY}
+        )
+        try:
+            assert refresh(db) == {"status": "busy"}
+        finally:
             other.execute(
-                text("SELECT pg_advisory_lock(:key)"), {"key": suggestions.LOCK_KEY}
+                text("SELECT pg_advisory_unlock(:key)"),
+                {"key": suggestions.LOCK_KEY},
             )
-            try:
-                assert refresh(db) == {"status": "busy"}
-            finally:
-                other.execute(
-                    text("SELECT pg_advisory_unlock(:key)"),
-                    {"key": suggestions.LOCK_KEY},
-                )
     events(db, 6)
     assert refresh(db)["status"] == "completed"
-    if postgres:
-        assert db.scalar(text("SHOW statement_timeout")) == "30s"
+    assert db.scalar(text("SHOW statement_timeout")) == "30s"
 
 
 # --- Reviewing suggestions ------------------------------------------------------

@@ -7,15 +7,13 @@ import app.services.bookstack_sections as bookstack_sections_operations
 import pytest
 from app.api.routes import managed_configurations as routes
 from app.api.routes import webhooks
-from app.db.models import SourceConnection, SourceIngestionState, User
+from app.db.models import SourceIngestionState, User
 from app.db.session import get_db
 from app.services.errors import DomainError
 from app.services.ingestion_pause import POLLING_SOURCES, is_paused, pausable
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 # Imported fixtures are discovered by pytest by name.
 from tests.test_integration_builder import database as database
@@ -24,16 +22,9 @@ from tests.test_keen_agent import setup as agent_setup  # noqa: F401 - pytest fi
 
 
 @pytest.fixture
-def db():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SourceIngestionState.__table__.create(engine)
-    # Webhook routes resolve their connection before reporting a pause.
-    SourceConnection.__table__.create(engine)
-    with sessionmaker(bind=engine)() as session:
+def db(postgres_engine):
+    with sessionmaker(bind=postgres_engine)() as session:
         yield session
-    engine.dispose()
 
 
 def pause(db, source, value=True):

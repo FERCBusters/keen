@@ -24,11 +24,11 @@ first-party UI JavaScript syntax. pytest discovers both pytest functions and
 unittest classes. The script returns nonzero on any failure and writes JUnit XML
 to `test-results/pytest.xml`.
 
-Tests run serially. PostgreSQL suites use randomly named schemas, verify their
-selected schema, and drop their schema afterwards. SQLite adapter fixtures clone
-ORM metadata and translate the PostgreSQL UTC timestamp default only in that
-copy. PostgreSQL-specific retention SQL and triggers remain covered by the real
-PostgreSQL suites. Do not substitute SQLite for those suites.
+Tests run serially, and every database test runs on PostgreSQL. Suites use
+randomly named schemas, verify their selected schema, and drop their schema
+afterwards. Tests whose code commits its own work share one migrated schema
+through the `postgres_engine` fixture, which removes what each test stored;
+stand-in databases are for collectors whose subject is the upstream service.
 
 The Keen Agent wire-format fixture is committed under services/api/tests/fixtures;
 there is no requirement to check out the separate agent repository. Adapter tests
@@ -64,24 +64,29 @@ mapping conditions, collector configuration, redaction, webhook replay
 protection, event filtering/exports/facets, and cross-framework control links.
 External services use controlled fakes; no live provider credentials are needed.
 
-For a fast local pass without PostgreSQL:
+For a focused run, point the suite's database variables at the same disposable
+PostgreSQL database and name the tests:
 
 ```sh
 cd services/api
-KEEN_DATABASE_URL=sqlite:// KEEN_BOOTSTRAP_ADMIN_USERNAME=test \
-  KEEN_BOOTSTRAP_ADMIN_PASSWORD=test-only AWS_EC2_METADATA_DISABLED=true \
-  poetry run pytest tests -q --cov=app --cov-branch
+url='postgresql+psycopg2://keen_test:keen_test@localhost:5432/keen_test'
+KEEN_DATABASE_URL="$url" KEEN_CONTRACT_TEST_DATABASE_URL="$url" \
+  KEEN_RETENTION_TEST_DATABASE_URL="$url" KEEN_MFA_TEST_DATABASE_URL="$url" \
+  KEEN_HOME_TEST_DATABASE_URL="$url" KEEN_REDIS_URL='redis://localhost:6379/0' \
+  KEEN_BOOTSTRAP_ADMIN_USERNAME=test KEEN_BOOTSTRAP_ADMIN_PASSWORD=test-only \
+  AWS_EC2_METADATA_DISABLED=true \
+  poetry run pytest tests/test_features.py -q
 ```
 
 Keen requires `KEEN_PUBLIC_BASE_URL` at start-up; the suite sets it to the
 test client's origin, `http://testserver`, unless the environment provides one.
 
-This intentionally skips PostgreSQL-only tests and is not the release gate.
-The new database contracts use SQLite locally; `tests.sh` sets
-`KEEN_CONTRACT_TEST_DATABASE_URL` so CI runs them against the migrated release
-schema in PostgreSQL. Each module gets a random schema, each test gets a rolled
-back transaction, and route commits use savepoints. Existing migration,
-retention and concurrency tests continue using their native PostgreSQL fixtures.
+A focused run is not the release gate. Keen supports PostgreSQL only, and the
+database contracts run against the migrated release schema there: a test whose
+database variable is unset fails and names the variable. Each module gets a
+random schema, each test gets a rolled back transaction, and route commits use
+savepoints. Migration, retention and concurrency tests use their own PostgreSQL
+fixtures.
 
 The full runner writes backend HTML, JSON and XML coverage under `test-results/`
 and frontend reports alongside them. Both suites run even if backend tests fail.

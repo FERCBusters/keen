@@ -4,7 +4,7 @@ Handing in takes a shared lock on the round and closing it takes the row lock,
 so a round that closes while someone hands in counts their attempt in the
 average it records, and an attempt handed in while the round closes is
 refused rather than missed. The changes run on separate PostgreSQL
-connections, so these tests skip on SQLite.
+connections.
 """
 
 import uuid

@@ -43,7 +43,7 @@ def get_db():
 
 @event.listens_for(Session, "after_begin")
 def _coordinate_evidence_purge(session, transaction, connection):
-    if transaction.nested or connection.dialect.name != "postgresql":
+    if transaction.nested:
         return
     from app.services.ingestion_pause import INGESTION_LOCK_ID
 
@@ -63,10 +63,7 @@ def _coordinate_evidence_purge(session, transaction, connection):
 
 @event.listens_for(Session, "before_flush")
 def _pause_evidence_writers(session, flush_context, instances):
-    if (
-        session.info.get("evidence_purge_batch")
-        or session.get_bind().dialect.name != "postgresql"
-    ):
+    if session.info.get("evidence_purge_batch"):
         return
     # Covers adapters using the ORM directly as well as the common intake path.
     from app.db.models import Artifact, Event, Mapping

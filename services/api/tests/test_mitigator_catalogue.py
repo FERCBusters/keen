@@ -5,10 +5,6 @@ import os
 import sys
 from pathlib import Path
 
-from app.core.datetime_utils import utc_now_naive
-
-from tests.db_helpers import create_sqlite_schema
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("KEEN_DATABASE_URL", "postgresql://test:test@localhost/unused")
@@ -19,9 +15,6 @@ import yaml
 from app.db.models import ControlItem, RiskLibraryEntry
 from app.services.mitigator_catalogue import rank_library
 from app.services.risk_mitigator import analyse_risk_mitigation
-from sqlalchemy import create_engine, event
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 
 RISKS = json.loads((ROOT / "alembic/seed_assurance_risks.json").read_text())
@@ -75,20 +68,10 @@ def test_current_mapping_overrides_legacy_seed_mapping():
     assert rank_library([entry], issue="backup")[0]["control_refs"] == []
 
 
-@compiles(JSONB, "sqlite")
-def sqlite_json(*args, **kwargs):
-    return "JSON"
-
-
 @pytest.fixture
-def db():
-    engine = create_engine("sqlite://")
+def db(postgres_engine):
+    engine = postgres_engine
 
-    @event.listens_for(engine, "connect")
-    def functions(conn, record):
-        conn.create_function("NOW", 0, lambda: utc_now_naive().isoformat(" "))
-
-    create_sqlite_schema(engine)
     with Session(engine) as session:
         for slug, framework in FRAMEWORKS.items():
             for control in framework["controls"]:

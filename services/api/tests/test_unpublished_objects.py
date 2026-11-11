@@ -10,19 +10,13 @@ import logging
 
 import pytest
 from app.db.session import track_unpublished_object
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
-
-from tests.db_helpers import create_sqlite_schema
 
 
 @pytest.fixture
-def engine():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    create_sqlite_schema(engine)
+def engine(postgres_engine):
+    engine = postgres_engine
     yield engine
     engine.dispose()
 
@@ -88,10 +82,11 @@ def test_a_session_joined_to_a_connection_queues_in_its_transaction(contract_db)
 
 
 def test_objects_that_cannot_be_queued_are_logged_without_failing_the_rollback(
+    empty_schema_engine,
     caplog,
 ):
     # A database without the cleanup queue, as when it is unavailable.
-    bare = create_engine("sqlite://", poolclass=StaticPool)
+    bare = empty_schema_engine
     try:
         db = Session(bare)
         db.execute(text("SELECT 1"))

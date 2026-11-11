@@ -381,12 +381,7 @@ def _stats_controls(
             # many of the control's sources it is mapped to. Without a date
             # window, and when every event is visible to the caller, the
             # trigger-maintained per-control counters answer it.
-            if (
-                start_date is None
-                and end_date is None
-                and visibility is True
-                and db.get_bind().dialect.name == "postgresql"
-            ):
+            if start_date is None and end_date is None and visibility is True:
                 evidence = recorded_control_evidence(db, framework)
             else:
                 event_filters = [visibility]

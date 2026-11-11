@@ -340,8 +340,6 @@ def _agent(db, profile=None):
 
 @pytest.fixture
 def postgres(contract_postgres_engine):
-    if contract_postgres_engine is None:
-        pytest.skip("Requires PostgreSQL for row-lock concurrency")
     return contract_postgres_engine
 
 

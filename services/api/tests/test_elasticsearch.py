@@ -441,8 +441,6 @@ def elastic(contract_db, storage, monkeypatch):
 
     from app.ingest.connections import deployment_settings
 
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Connection runs hold a PostgreSQL advisory lock")
     monkeypatch.setattr(deployment_settings, "elasticsearch_enabled", True)
     server = Elastic()
     clients = []

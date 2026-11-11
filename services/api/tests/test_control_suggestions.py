@@ -12,10 +12,7 @@ from app.services.control_suggestions import activity_words, rank_controls
 from app.services.errors import DomainError
 from fastapi import HTTPException
 from pydantic import ValidationError
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-
-from tests.db_helpers import create_sqlite_schema
 
 SEEDS = json.loads(
     (Path(__file__).resolve().parents[1] / "alembic/seed_frameworks.json").read_text()
@@ -191,10 +188,9 @@ def test_custom_framework_uses_live_descriptions_and_no_urls():
 
 
 @pytest.fixture
-def db(monkeypatch):
+def db(postgres_engine, monkeypatch):
     monkeypatch.setattr(settings, "enabled_frameworks", "")
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+    engine = postgres_engine
     with Session(engine) as db:
         db.add_all(
             [

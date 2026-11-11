@@ -174,8 +174,6 @@ class FakeAuth0:
 
 @pytest.fixture
 def demo(keen, contract_db, monkeypatch):  # noqa: F811 - fixture imported above
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("The owner bootstrap holds a PostgreSQL advisory lock")
     expires_at = _expiry()
     environment, tenant = _tenant_settings(monkeypatch, expires_at)
     # The application runs with the tenant's settings; the fixture keeps its

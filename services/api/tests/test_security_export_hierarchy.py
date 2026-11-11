@@ -78,8 +78,6 @@ def test_postgres_concurrent_reparenting_rechecks_after_lock(contract_postgres_e
     from sqlalchemy.orm import Session
 
     engine = contract_postgres_engine
-    if engine is None:
-        pytest.skip("PostgreSQL required for transaction-lock regression")
     ids = [uuid.uuid4(), uuid.uuid4()]
     with Session(engine) as db:
         db.add_all([IsmsOrgNode(id=ids[0], name="A"), IsmsOrgNode(id=ids[1], name="B")])

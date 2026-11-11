@@ -19,6 +19,8 @@ from app.security.regex import compile_pattern
 from app.services.errors import DomainError
 from app.services.managed_configurations import _validate_connector
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge")
+
 PAGE_LIST_ITEM = {
     "id": 11,
     "name": "Access Control Policy",

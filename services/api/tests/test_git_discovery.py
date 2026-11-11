@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 from app.ingest import forgejo, gitea, gitea_compatible, gitlab
 from app.mapping.collector import (
     collector_id,
@@ -15,6 +16,8 @@ from app.services.managed_configurations import (
     _validate_connector,
 )
 from fastapi import HTTPException
+
+pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
 
 
 class GitDiscoveryTests(unittest.TestCase):

@@ -2,8 +2,8 @@
 
 Requests pass through the production middleware, real password sign-in, CSRF,
 session storage and permission resolution. The session store is an in-memory
-Valkey substitute; PostgreSQL is used when KEEN_CONTRACT_TEST_DATABASE_URL is
-set (SQLite otherwise, which does not establish locking behaviour).
+Valkey substitute; the database is the migrated PostgreSQL schema of
+KEEN_CONTRACT_TEST_DATABASE_URL.
 """
 
 import asyncio
@@ -93,9 +93,6 @@ def keen(contract_db, tmp_path, monkeypatch):
     class Keen:
         db = contract_db
         store = valkey.get_valkey()
-        # date_trunc aggregates run only on PostgreSQL; SQLite runs still cover
-        # every rejection, which happens before any aggregate query.
-        postgres = contract_db.get_bind().dialect.name == "postgresql"
 
         def user(self, *codes, role="normal"):
             row = User(
@@ -145,12 +142,11 @@ def test_daily_bucket_budget_rejects_wide_windows_before_work(keen, monkeypatch)
 
     client = keen.client(keen.user("events.read"))
     path = "/v1/charts/event_volume_timeseries"
-    if keen.postgres:
-        within = client.get(
-            path, params={"start_date": "2016-01-01", "end_date": "2026-01-01"}
-        )
-        assert within.status_code == 200, within.text
-        assert len(within.json()["items"]) <= stats.MAX_TIMESERIES_BUCKETS
+    within = client.get(
+        path, params={"start_date": "2016-01-01", "end_date": "2026-01-01"}
+    )
+    assert within.status_code == 200, within.text
+    assert len(within.json()["items"]) <= stats.MAX_TIMESERIES_BUCKETS
 
     # Rejection happens before any aggregate query runs.
     monkeypatch.setattr(
@@ -236,12 +232,11 @@ def test_event_aggregates_require_events_read(keen):
         "mapped": 0,
         "unmapped": 0,
     }
-    if keen.postgres:
-        for path in (
-            "/v1/graph/control_source",
-            "/v1/charts/event_volume_timeseries",
-        ):
-            assert reader.get(path).status_code == 200, path
+    for path in (
+        "/v1/graph/control_source",
+        "/v1/charts/event_volume_timeseries",
+    ):
+        assert reader.get(path).status_code == 200, path
 
 
 # --- Organisation roles that own risks ----------------------------------------
@@ -1005,10 +1000,9 @@ def test_question_attachments_are_not_presented_as_event_evidence(
     assert attachment["filename"] == "screenshot.png"
     download = reader.get(attachment["download_url"].removeprefix("/api"))
     assert download.status_code == 200 and download.content == png
-    if keen.postgres:
-        listed = reader.get("/v1/events", params={"source": "synthetic"}).json()
-        row = next(i for i in listed["items"] if i["id"] == str(event.id))
-        assert row["artifact_count"] == 0
+    listed = reader.get("/v1/events", params={"source": "synthetic"}).json()
+    row = next(i for i in listed["items"] if i["id"] == str(event.id))
+    assert row["artifact_count"] == 0
 
 
 # --- Password confirmation attempts per account -----------------------------
@@ -1299,21 +1293,18 @@ def test_out_of_range_request_values_are_client_errors(keen):
         400,
         {"detail": "A request value is out of range"},
     )
-    if keen.postgres:
-        export = client.get(
-            "/v1/events/export",
-            params={"start_date": "9999-12-01", "end_date": "9999-12-31"},
-        )
-        assert export.status_code == 200, export.status_code
-        chart = client.get(
-            "/v1/charts/event_volume_timeseries", params={"start_ts": "-1"}
-        )
-        assert (chart.status_code, chart.json()) == (
-            400,
-            {
-                "detail": "The requested window needs more than 5000 daily buckets; narrow the date range"
-            },
-        )
+    export = client.get(
+        "/v1/events/export",
+        params={"start_date": "9999-12-01", "end_date": "9999-12-31"},
+    )
+    assert export.status_code == 200, export.status_code
+    chart = client.get("/v1/charts/event_volume_timeseries", params={"start_ts": "-1"})
+    assert (chart.status_code, chart.json()) == (
+        400,
+        {
+            "detail": "The requested window needs more than 5000 daily buckets; narrow the date range"
+        },
+    )
 
 
 def test_document_managers_reach_the_bookstack_catalogue(keen, monkeypatch):

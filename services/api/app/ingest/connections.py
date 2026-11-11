@@ -276,7 +276,7 @@ def resolve(connection):
 @contextmanager
 def run_lock(db, key):
     """Keep a session lock on a dedicated handle across adapter commits."""
-    if db is None or db.get_bind().dialect.name != "postgresql":
+    if db is None:
         yield True
         return
     number = int.from_bytes(

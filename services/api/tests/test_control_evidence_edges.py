@@ -86,8 +86,6 @@ def _event(db, name, *controls, **columns):
 
 def test_an_event_removed_while_its_control_is_listed_is_left_out(contract_db):
     db = contract_db
-    if db.get_bind().dialect.name != "postgresql":
-        pytest.skip("The removal is run on the PostgreSQL connection")
     control = ControlItem(framework_slug=TGT, ref="C1", type="control")
     db.add(control)
     db.flush()

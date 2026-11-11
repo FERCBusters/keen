@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import httpx
 import yaml
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -2154,10 +2154,7 @@ def remove_evidence_connection(
     if settings.demo_mode:
         raise DomainError(403, "Connection removal is unavailable in demo environments")
     kind, _, identity = key.partition(":")
-    if db.get_bind().dialect.name == "postgresql":
-        from sqlalchemy import text
-
-        db.execute(text("SELECT pg_advisory_xact_lock(1262830926)"))
+    db.execute(text("SELECT pg_advisory_xact_lock(1262830926)"))
     # Serialize against collector scheduling/edits and already-running backfill batches.
     if kind == "api":
         db.query(IntegrationConnection).filter_by(id=identity).with_for_update().all()

@@ -2,7 +2,6 @@
 
 Each check sends identical requests at the same moment over separate
 connections. Row locks must let exactly one (or the configured number) succeed.
-SQLite-backed test runs cannot establish this; a PostgreSQL deployment can.
 """
 
 from __future__ import annotations

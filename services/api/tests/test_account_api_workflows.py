@@ -1,7 +1,7 @@
 """Account self-service and user administration through the assembled application.
 
 Requests use real password sign-in, CSRF, session storage and the admin-namespace
-middleware. PostgreSQL is used when KEEN_CONTRACT_TEST_DATABASE_URL is set.
+middleware, against persisted PostgreSQL state.
 """
 
 import re

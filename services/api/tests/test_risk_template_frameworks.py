@@ -18,18 +18,14 @@ from app.db.models import (
     RiskLibraryEntry,
     User,
 )
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
-from tests.db_helpers import create_sqlite_schema
-
 
 @pytest.fixture
-def db(monkeypatch):
+def db(postgres_engine, monkeypatch):
     monkeypatch.setattr(settings, "enabled_frameworks", "")
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+    engine = postgres_engine
     with Session(engine) as db:
         yield db
     engine.dispose()

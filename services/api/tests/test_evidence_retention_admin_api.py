@@ -27,8 +27,6 @@ PURGE_ALL = {"mode": "all", "confirmation": "PURGE EVIDENCE"}
 
 @pytest.fixture
 def lab(keen, monkeypatch, tmp_path):  # noqa: F811 - fixture imported above
-    if not keen.postgres:
-        pytest.skip("Retention SQL and advisory locks require PostgreSQL")
     db = keen.db
     webhooks = tmp_path / "webhooks.yml"
     webhooks.write_text("providers:\n  synthetic:\n    secret_header: X-Synthetic\n")

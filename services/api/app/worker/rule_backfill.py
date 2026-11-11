@@ -7,7 +7,7 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, func, or_
+from sqlalchemy import ColumnElement, and_, func, or_, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.datetime_utils import utc_now_naive
@@ -50,10 +50,7 @@ def _target_rows(db, rules) -> dict[tuple[str, str, str | None], uuid.UUID]:
 def process_batch(job_id: uuid.UUID) -> bool:
     """Commit mappings and cursor together; return True if more work remains."""
     with SessionLocal() as db:
-        if db.get_bind().dialect.name == "postgresql":
-            from sqlalchemy import text
-
-            db.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
+        db.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
         job = (
             db.query(RuleBackfillJob)
             .filter_by(id=job_id)

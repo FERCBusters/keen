@@ -27,12 +27,7 @@ from app.integrations.templates import templates
 from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
-from sqlalchemy import create_engine, event
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
-
-from tests.db_helpers import create_sqlite_schema
 
 NO_SKIPS = skipped_summary({})
 
@@ -257,21 +252,9 @@ def test_all_templates_validate_and_jenkins_milliseconds():
     assert f["timestamp"].startswith("2026-01-01") and f["outcome"] == "success"
 
 
-@compiles(JSONB, "sqlite")
-def sqlite_json(*a, **k):
-    return "JSON"
-
-
 @pytest.fixture
-def database(monkeypatch):
-    engine = create_engine("sqlite://")
-
-    @event.listens_for(engine, "connect")
-    def functions(c, r):
-        c.create_function("NOW", 0, lambda: utc_now_naive().isoformat(" "))
-
-    create_sqlite_schema(engine)
-    factory = sessionmaker(bind=engine)
+def database(postgres_engine, monkeypatch):
+    factory = sessionmaker(bind=postgres_engine)
     monkeypatch.setattr(runtime, "SessionLocal", factory)
     db = factory()
     c = Connection(
@@ -283,11 +266,12 @@ def database(monkeypatch):
         connection_id="connection",
         draft=Definition().model_dump(),
     )
-    db.add_all([c, collector])
+    db.add(c)
+    db.flush()
+    db.add(collector)
     db.commit()
     yield db, factory
     db.close()
-    engine.dispose()
 
 
 def test_draft_publish_rollback_and_conflict(database, monkeypatch):

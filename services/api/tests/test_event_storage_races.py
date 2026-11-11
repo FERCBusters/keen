@@ -22,8 +22,6 @@ from sqlalchemy.exc import IntegrityError
 
 @pytest.fixture
 def pg(contract_db, contract_postgres_engine):
-    if contract_postgres_engine is None:
-        pytest.skip("A competing worker needs its own PostgreSQL connection")
     return SimpleNamespace(db=contract_db, engine=contract_postgres_engine)
 
 

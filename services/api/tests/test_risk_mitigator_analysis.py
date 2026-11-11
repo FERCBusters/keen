@@ -1,8 +1,6 @@
 """Keen Mitigator analysis against persisted registers and explicit rules.
 
 The rules are supplied by the test so each signal can be traced to its cause.
-PostgreSQL is used when KEEN_CONTRACT_TEST_DATABASE_URL is set; the full-text
-contribution is checked only there.
 """
 
 import uuid
@@ -403,9 +401,6 @@ def test_long_issues_are_bounded_in_the_draft(contract_db, monkeypatch):
 
 
 def test_full_text_search_contributes_on_postgresql(contract_db, monkeypatch):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        assert mitigator._fts_scores(contract_db, framework="A", terms=["backup"]) == {}
-        return
     control = _control(contract_db, "KM-20", "Backup policy")
     _control(contract_db, "KM-21", "Visitor badges")
     scores = mitigator._fts_scores(contract_db, framework="A", terms=["backup", "ab"])
@@ -423,8 +418,6 @@ def test_full_text_search_contributes_on_postgresql(contract_db, monkeypatch):
 def test_full_text_search_matches_controls_that_share_any_of_the_words(
     contract_db,
 ):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        return
     one = _control(contract_db, "KM-30", "Backup policy")
     two = _control(contract_db, "KM-31", "Backup encryption standard")
     _control(contract_db, "KM-32", "Visitor badges")

@@ -12,18 +12,15 @@ from app.worker.sql_trace import connect_task_labels, disconnect_task_labels
 from celery.signals import task_postrun, task_prerun
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, text
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import event, text
 
 LABEL = re.compile(r"^/\* keen (req|task)=([0-9a-f]{12}) (.*?) \*/ (.*)$", re.S)
 
 
 @pytest.fixture
-def engine():
+def engine(postgres_engine):
     # One shared connection, closed by dispose, also for handler threads.
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
+    engine = postgres_engine
     install_statement_labels(engine)
     seen = []
     event.listen(

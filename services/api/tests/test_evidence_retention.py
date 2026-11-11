@@ -22,7 +22,7 @@ from app.storage import s3
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from tests.db_helpers import schema_engine
+from tests.db_helpers import required_database_url, schema_engine
 
 
 class StorageTests(unittest.TestCase):
@@ -134,14 +134,14 @@ class RetentionDatabaseTests(unittest.TestCase):
     def setUpClass(cls):
         # The optional bridge is used by the bundle's WASM PostgreSQL validation.
         bridge = os.environ.get("KEEN_RETENTION_TEST_BRIDGE")
-        url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
         cls.engine = None
         if bridge:
             spec = importlib.util.spec_from_file_location("bridge", bridge)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             cls.session = module.Session
-        elif url:
+        else:
+            url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
             cls.schema = "retention_test_" + uuid.uuid4().hex
             cls.engine = create_engine(url)
             with cls.engine.begin() as c:
@@ -211,10 +211,6 @@ class RetentionDatabaseTests(unittest.TestCase):
                 ):
                     module.upgrade()
             cls.session = sessionmaker(bind=cls.engine)
-        else:
-            raise unittest.SkipTest(
-                "Set KEEN_RETENTION_TEST_DATABASE_URL to run PostgreSQL integration tests"
-            )
 
     @classmethod
     def tearDownClass(cls):

@@ -114,11 +114,10 @@ def lock_agent_name(db: Session, name: str) -> None:
     Profile enrolments and administrator registrations take it, so a profile
     enrolment's check sees every agent that claimed the name before it.
     """
-    if db.get_bind().dialect.name == "postgresql":
-        db.execute(
-            text("SELECT pg_advisory_xact_lock(:space, hashtext(:name))"),
-            {"space": _AGENT_NAME_LOCK, "name": name.lower()},
-        )
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(:space, hashtext(:name))"),
+        {"space": _AGENT_NAME_LOCK, "name": name.lower()},
+    )
 
 
 def name_held_outside(db: Session, name: str, profile_id: str) -> bool:

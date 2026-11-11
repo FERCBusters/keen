@@ -22,11 +22,10 @@ from app.services.control_inheritance import (
     inherited_control_ids,
 )
 from app.services.frameworks import FrameworkNodeInput
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tests.crosswalk_reference import reference_rows, resolved_rows
-from tests.db_helpers import create_sqlite_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,9 +41,8 @@ def migration():
 
 
 @pytest.fixture
-def db():
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+def db(postgres_engine):
+    engine = postgres_engine
     with Session(engine) as db:
         yield db
     engine.dispose()

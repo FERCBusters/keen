@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 from app.ingest import redmine as r
 from app.mapping.collector import (
     collector_id,
@@ -15,6 +16,8 @@ from app.mapping.collector import (
 )
 from app.security.redaction import redact_obj
 from app.services.errors import DomainError
+
+pytestmark = pytest.mark.usefixtures("no_evidence_purge")
 
 PROJECT = {"id": 2, "identifier": "infra", "name": "Infrastructure"}
 ISSUE = {

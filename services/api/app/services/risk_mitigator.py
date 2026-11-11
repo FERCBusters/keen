@@ -278,15 +278,13 @@ def _fts_scores(db: Session, *, framework: str, terms: list[str]) -> dict[str, f
         """)  # noqa: S608
     params = {"framework": framework}
     params.update({f"w{index}": word for index, word in enumerate(words)})
-    if db.get_bind().dialect.name != "postgresql":
-        return {}
     try:
         # A failed optional search must not poison the surrounding transaction.
         with db.begin_nested():
             rows = db.execute(sql, params).mappings().all()
     except Exception:
-        # Keep the wizard usable on non-Postgres dev/test databases. The Python
-        # scorer still works; the migration provides the production FTS index.
+        # The search is optional: when it fails, the Python scorer still ranks
+        # the controls. The migration provides the production FTS index.
         return {}
     return {str(r["id"]): float(r.get("rank") or 0.0) for r in rows}
 

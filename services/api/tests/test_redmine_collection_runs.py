@@ -85,8 +85,6 @@ class Redmine:
 
 @pytest.fixture
 def tracker(contract_db, monkeypatch, tmp_path):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Redmine runs hold a PostgreSQL advisory lock")
     for name, value in {
         "demo_mode": False,
         "redmine_enabled": True,

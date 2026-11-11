@@ -18,6 +18,8 @@ from app.services.errors import DomainError
 from celery.exceptions import SoftTimeLimitExceeded
 from cryptography.fernet import Fernet
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
+
 
 def connection(key, source="loki", **kwargs):
     return sc.Connection(

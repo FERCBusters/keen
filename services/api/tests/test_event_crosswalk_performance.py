@@ -19,21 +19,19 @@ from app.services.control_inheritance import (
     evidence_pairs,
     page_controls,
 )
-from sqlalchemy import create_engine, select
 from sqlalchemy import event as sql_event
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from tests.crosswalk_reference import reference_pair_set, reference_rows, resolved_rows
-from tests.db_helpers import create_sqlite_schema
 
 
 @pytest.fixture
-def catalogue(monkeypatch):
+def catalogue(postgres_engine, monkeypatch):
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "enabled_frameworks", "")
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+    engine = postgres_engine
     with Session(engine) as db:
         controls = []
         for i in range(12):
@@ -163,6 +161,7 @@ def test_query_count_does_not_grow_with_page_or_sources(catalogue):
     sql_event.listen(db.bind, "before_cursor_execute", capture)
     try:
         # Each call starts a transaction, so neither reuses the other's links.
+        db.commit()
         page_controls(db, "F0", ids[:1])
         db.commit()
         count = len(statements)

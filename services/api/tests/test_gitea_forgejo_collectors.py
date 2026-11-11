@@ -10,6 +10,8 @@ from app.ingest import forgejo as fg
 from app.ingest import gitea as gt
 from app.ingest import gitea_compatible as gc
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge")
+
 ACTIVITY = {
     "id": 9,
     "op_type": "commit_repo",

@@ -45,7 +45,7 @@
 ## Validation
 
 - Use `.github/workflows/tests.yml` and `tests.sh` as the authoritative test workflow. Run against a disposable PostgreSQL database and Valkey; the suite changes database contents. Never point tests at an operational installation.
-- For focused local work, run the affected backend tests and `bash tests-ui.sh`. SQLite runs skip PostgreSQL-specific behavior and cannot establish migration, locking or concurrency correctness.
+- For focused local work, run the affected backend tests against the same disposable PostgreSQL database, as `TESTING.md` shows, and `bash tests-ui.sh`. Keen supports PostgreSQL only; the database contracts fail without one.
 - Measure every time budget in a test with `tests.timing.measured`, which keeps collection of the rest of the test process out of the budget; `tests/test_time_budgets.py` refuses a bare clock.
 - For security changes, add a reproducible negative test demonstrating the attack prerequisite and rejection. Test both permitted behavior and the boundary being protected, using synthetic credentials and local fixtures.
 - Run the assembled-application contracts in `tests/test_security_design_contracts.py` after route, middleware, session or policy changes. Preserve the local TLS hostname verification regression.
@@ -54,7 +54,7 @@
 - Keep `poetry run ruff check ../..` and `poetry run ruff format --check ../..` (from `services/api`) clean; CI and the pre-commit hooks run both. Keep imports at the top of each module.
 - Keep `poetry run mypy` (from `services/api`) free of findings. Make types visible to the checker with annotations and narrowing that the code can rely on; use `typing.cast` only where third-party type information is wrong or too loose, and `# type: ignore[code]` only with its reason on the same line.
 - Validate the exact final working tree after formatter or lint fixes. Include a fresh-process application import and the lifespan tests; earlier results from a different tree do not validate the delivered code. Imported fixtures and public re-exports may be used indirectly: mark them explicitly and preserve their contracts.
-- Report what passed, what failed and what could not run. Do not equate a green SQLite or mocked UI suite with full PostgreSQL CI, production-browser validation or a penetration test.
+- Report what passed, what failed and what could not run. Do not equate a focused run or a mocked UI suite with full PostgreSQL CI, production-browser validation or a penetration test.
 
 ## Security re-review whenever completing a round of work
 

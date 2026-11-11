@@ -27,8 +27,6 @@ FW = "fw-stats"
 
 @pytest.fixture
 def evidence(contract_db, monkeypatch):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Evidence statistics are maintained by PostgreSQL triggers")
     redis = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(stats, "get_valkey", lambda: redis)
     monkeypatch.setattr("app.core.cache.get_valkey", lambda: redis)

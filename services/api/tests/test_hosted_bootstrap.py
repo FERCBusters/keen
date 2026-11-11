@@ -20,8 +20,6 @@ EMAIL = "owner@example.com"
 
 @pytest.fixture
 def db(contract_db):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("The bootstrap serialises runs with a PostgreSQL advisory lock")
     assert contract_db.query(User).count() == 0
     return contract_db
 

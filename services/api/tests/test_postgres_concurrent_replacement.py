@@ -4,7 +4,7 @@ A second text save, a second file upload, or a deletion that overlaps an
 upload waits for the first change to commit and then works from what it
 saved. A stale text save is refused with the usual conflict, and every stored
 file that no record references any more is queued for deletion. The changes
-run on separate PostgreSQL connections, so these tests skip on SQLite.
+run on separate PostgreSQL connections.
 """
 
 import io
@@ -34,8 +34,6 @@ STALE = "Document changed since it was opened. Reload before saving."
 @pytest.fixture
 def race(contract_postgres_engine, monkeypatch, tmp_path):
     engine = contract_postgres_engine
-    if engine is None:
-        pytest.skip("Row locks need separate PostgreSQL connections")
     monkeypatch.setattr(settings, "artifact_storage_backend", "local")
     monkeypatch.setattr(settings, "artifact_local_dir", str(tmp_path))
     with Session(engine) as db:

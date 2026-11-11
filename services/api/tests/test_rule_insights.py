@@ -1,11 +1,10 @@
 """Mapping rule insights: quiet rules, their sources and consolidation suggestions.
 
-Each test runs on SQLite and, when the contract database is configured, on
-PostgreSQL, since the hourly activity is counted in SQL. The administrator
-route is covered through the assembled application in test_rule_lifecycle_api.
+The hourly activity is counted in SQL, so each test runs on PostgreSQL. The
+administrator route is covered through the assembled application in
+test_rule_lifecycle_api.
 """
 
-import os
 import re
 import uuid
 from datetime import datetime, timedelta
@@ -20,11 +19,8 @@ from app.services import rule_insights as insights
 from app.services.errors import DomainError
 from app.services.mapping_provenance import rule_of_rationale
 from psycopg2 import errors
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
-
-from tests.db_helpers import create_sqlite_schema
 
 NOW = datetime(2026, 10, 10, 12, 0, 0)
 FW = "fw-rule-insights"
@@ -37,21 +33,10 @@ def uncached(monkeypatch):
     monkeypatch.setattr(cache.settings, "aggregate_cache_ttl_seconds", 0)
 
 
-@pytest.fixture(params=["sqlite", "postgresql"])
-def db(request):
-    if request.param == "postgresql":
-        if not os.getenv("KEEN_CONTRACT_TEST_DATABASE_URL"):
-            pytest.skip("Set KEEN_CONTRACT_TEST_DATABASE_URL to run on PostgreSQL")
-        session = request.getfixturevalue("contract_db")
-        _catalogue(session)
-        yield session
-        return
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
-    with Session(engine) as session:
-        _catalogue(session)
-        yield session
-    engine.dispose()
+@pytest.fixture
+def db(contract_db):
+    _catalogue(contract_db)
+    return contract_db
 
 
 def _catalogue(session):
@@ -945,12 +930,10 @@ def test_an_existence_check_with_a_stray_value_is_compared_without_it(db):
 
 def test_slow_insights_stop_and_say_so(db, monkeypatch):
     save(db, rule("deploys"))
-    postgres = db.get_bind().dialect.name == "postgresql"
     monkeypatch.setattr(insights, "QUERY_TIMEOUT_MS", 1)
 
     def slow(db, *args):
-        if postgres:
-            db.execute(text("SELECT pg_sleep(0.2)"))
+        db.execute(text("SELECT pg_sleep(0.2)"))
         raise OperationalError(
             "SELECT 1", {}, errors.QueryCanceled("canceling statement")
         )
@@ -968,8 +951,7 @@ def test_slow_insights_stop_and_say_so(db, monkeypatch):
     )
     # The session is usable again, and the budget ended with the transaction.
     assert db.execute(text("SELECT 1")).scalar() == 1
-    if postgres:
-        assert db.execute(text("SHOW statement_timeout")).scalar() == "0"
+    assert db.execute(text("SHOW statement_timeout")).scalar() == "0"
 
 
 def test_other_database_failures_are_not_reported_as_slowness(db, monkeypatch):

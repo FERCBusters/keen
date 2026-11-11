@@ -105,8 +105,6 @@ class RiskLedger:
 
 @pytest.fixture
 def ledger(contract_db, monkeypatch, tmp_path):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Risk Ledger imports hold a PostgreSQL advisory lock")
     for name, value in {
         "demo_mode": False,
         "riskledger_enabled": True,

@@ -22,8 +22,6 @@ FW, OTHER = "fw-volume", "fw-other"
 
 @pytest.fixture
 def chart(keen):  # noqa: F811 - fixture imported above
-    if not keen.postgres:
-        pytest.skip("Chart buckets use PostgreSQL date_trunc")
     db = keen.db
     db.add_all([Framework(slug=FW), Framework(slug=OTHER)])
     controls = {

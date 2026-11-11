@@ -397,16 +397,10 @@ def _evidencing_pairs(db, framework):
     """(control, source) pairs for the framework's controls, each with itself.
 
     Only sources with evidence are kept: a source without mappings evidences
-    nothing, however many frameworks are enabled. PostgreSQL's per-control
-    counters name those sources; other databases, used in tests, read them
-    from the mappings.
+    nothing, however many frameworks are enabled. The per-control counters
+    name those sources.
     """
-    if db.get_bind().dialect.name == "postgresql":
-        evidenced = _recorded_evidence(db).keys()
-    else:
-        evidenced = set(
-            db.execute(select(Mapping.control_item_id).distinct()).scalars()
-        )
+    evidenced = _recorded_evidence(db).keys()
     return [
         (target, source)
         for target, found in framework_evidence_sources(db, framework).items()

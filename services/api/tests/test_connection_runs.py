@@ -21,8 +21,6 @@ INGEST = Path(sc.__file__).resolve().parent
 
 @pytest.fixture
 def pg(contract_db):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Run locks are PostgreSQL advisory locks")
     return contract_db
 
 

@@ -4,7 +4,7 @@ import hashlib
 from datetime import datetime
 from typing import Any, NamedTuple, Optional, cast
 
-from sqlalchemy import String
+from sqlalchemy import String, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -74,10 +74,7 @@ def ensure_controls(
 
 def apply_rules(db: Session, ev: Event) -> int:
     # Coordinate rule evaluation with connection removal, until this transaction commits.
-    if db.get_bind().dialect.name == "postgresql":
-        from sqlalchemy import text
-
-        db.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
+    db.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
     rules = load_rules(settings.rules_path, db=db)
     event_dict = {
         "source": ev.source,

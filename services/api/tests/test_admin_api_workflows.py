@@ -1,7 +1,7 @@
 """Administrator workflows through the assembled application.
 
 Requests use real password sign-in, CSRF, the admin-namespace middleware and
-persisted SQL state (PostgreSQL when KEEN_CONTRACT_TEST_DATABASE_URL is set).
+persisted PostgreSQL state.
 Worker dispatch and rule evaluation are replaced at their owning modules.
 """
 

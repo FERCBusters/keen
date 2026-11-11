@@ -10,6 +10,8 @@ from app.core.datetime_utils import to_utc_naive
 from app.ingest import jenkins as jk
 from sqlalchemy.dialects import postgresql
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge")
+
 
 @contextlib.contextmanager
 def serving(handler):

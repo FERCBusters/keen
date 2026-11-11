@@ -317,9 +317,8 @@ def _rule_facet(db: Session, filters: EventFilters, user) -> list[dict[str, Any]
     )
     counts: dict[str, int] = {}
     for rationale, count in rows:
-        if rationale.endswith(suffix):
-            rule_id = rationale[len("auto by rule ") : -len(suffix)]
-            counts[rule_id] = counts.get(rule_id, 0) + int(count)
+        rule_id = rationale[len("auto by rule ") : -len(suffix)]
+        counts[rule_id] = counts.get(rule_id, 0) + int(count)
     described = rule_descriptions(db)
     facet = [
         {
@@ -337,10 +336,10 @@ def _control_facet(db: Session, framework: str, conditions: list) -> list[tuple]
     """(ref, title, type, count) of the framework controls the events evidence.
 
     Ordered by count, most first, then by reference as the database orders
-    text. When every event counts, PostgreSQL's per-control counters answer
+    text. When every event counts, the per-control counters answer
     it without reading the evidence of each control's largest source.
     """
-    if not conditions and db.get_bind().dialect.name == "postgresql":
+    if not conditions:
         counts = {
             control_id: count
             for control_id, (count, _) in recorded_control_evidence(

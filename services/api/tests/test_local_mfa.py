@@ -1,10 +1,7 @@
-"""Local MFA behaviour tests; PostgreSQL also exercises the shipped migrations.
+"""Local MFA behaviour tests, which also exercise the shipped migrations.
 
-Without KEEN_MFA_TEST_DATABASE_URL, run behaviour checks on in-memory SQLite.
-SQLite does not validate database locks or concurrency.
-
-KEEN_MFA_TEST_DATABASE_URL=postgresql+psycopg2://... python -m unittest tests.test_local_mfa
-Creates and drops a random schema; never uses production tables.
+They run on the PostgreSQL database of KEEN_MFA_TEST_DATABASE_URL, in a random
+schema that is created and dropped; production tables are never used.
 """
 
 import hashlib
@@ -54,7 +51,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from tests.db_helpers import schema_engine
+from tests.db_helpers import required_database_url, schema_engine
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (  # noqa: F401
@@ -62,8 +59,6 @@ from tests.test_assembled_authority_regressions import (  # noqa: F401
     PASSWORD,
     keen,
 )
-
-URL = os.environ.get("KEEN_MFA_TEST_DATABASE_URL")
 
 INVALID_CODE = (400, {"detail": "Invalid or already-used code"})
 EXPIRED = (401, {"detail": "Verification expired; start again"})
@@ -84,50 +79,58 @@ def outcome(response):
 class LocalMfaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not URL:
-            from sqlalchemy.pool import StaticPool
-
-            from tests.db_helpers import create_sqlite_schema
-
-            cls.engine = create_engine(
-                "sqlite://",
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool,
-            )
-            create_sqlite_schema(cls.engine)
-            cls.Session = sessionmaker(bind=cls.engine)
-        else:
-            cls.engine = create_engine(URL, connect_args={"options": "-c timezone=UTC"})
-            cls.schema = "test_mfa_" + uuid.uuid4().hex
-            with cls.engine.begin() as conn:
-                conn.execute(text(f"CREATE SCHEMA {cls.schema}"))
-            cls.engine.dispose()
-            cls.engine = schema_engine(URL, cls.schema)
-            cls.Session = sessionmaker(bind=cls.engine)
-            names = {
-                "users",
-                "groups",
-                "permissions",
-                "user_groups",
-                "user_permissions",
-                "group_permissions",
-                "audit_logs",
-            }
-            Base.metadata.create_all(
-                cls.engine,
-                tables=[t for t in Base.metadata.sorted_tables if t.name in names],
-            )
-            # Exercise the shipped migration against the pre-MFA user shape.
-            with cls.engine.begin() as conn:
-                conn.execute(
-                    text(
-                        "ALTER TABLE users DROP COLUMN mfa_enabled,DROP COLUMN mfa_version,DROP COLUMN mfa_totp_secret,DROP COLUMN mfa_totp_last_step,DROP COLUMN mfa_code_failures,DROP COLUMN mfa_code_failures_since"
-                    )
+        url = required_database_url("KEEN_MFA_TEST_DATABASE_URL")
+        cls.engine = create_engine(url, connect_args={"options": "-c timezone=UTC"})
+        cls.schema = "test_mfa_" + uuid.uuid4().hex
+        with cls.engine.begin() as conn:
+            conn.execute(text(f"CREATE SCHEMA {cls.schema}"))
+        cls.engine.dispose()
+        cls.engine = schema_engine(url, cls.schema)
+        cls.Session = sessionmaker(bind=cls.engine)
+        names = {
+            "users",
+            "groups",
+            "permissions",
+            "user_groups",
+            "user_permissions",
+            "group_permissions",
+            "audit_logs",
+        }
+        Base.metadata.create_all(
+            cls.engine,
+            tables=[t for t in Base.metadata.sorted_tables if t.name in names],
+        )
+        # Exercise the shipped migration against the pre-MFA user shape.
+        with cls.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE users DROP COLUMN mfa_enabled,DROP COLUMN mfa_version,DROP COLUMN mfa_totp_secret,DROP COLUMN mfa_totp_last_step,DROP COLUMN mfa_code_failures,DROP COLUMN mfa_code_failures_since"
                 )
+            )
+            spec = importlib.util.spec_from_file_location(
+                "mfa_migration",
+                Path(__file__).parents[1]
+                / "tests/fixtures/historical_migrations/0084_local_mfa.py",
+            )
+            migration = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(migration)
+            with patch.object(
+                migration, "op", Operations(MigrationContext.configure(conn))
+            ):
+                migration.upgrade()
+            for name, path in (
+                (
+                    "notification_migration",
+                    "tests/fixtures/historical_migrations/0085_security_notifications.py",
+                ),
+                # The shipped migration counting each account's wrong codes.
+                (
+                    "code_failures_migration",
+                    "alembic/versions/0041_mfa_code_failures.py",
+                ),
+            ):
                 spec = importlib.util.spec_from_file_location(
-                    "mfa_migration",
-                    Path(__file__).parents[1]
-                    / "tests/fixtures/historical_migrations/0084_local_mfa.py",
+                    name, Path(__file__).parents[1] / path
                 )
                 migration = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(migration)
@@ -135,26 +138,6 @@ class LocalMfaTests(unittest.TestCase):
                     migration, "op", Operations(MigrationContext.configure(conn))
                 ):
                     migration.upgrade()
-                for name, path in (
-                    (
-                        "notification_migration",
-                        "tests/fixtures/historical_migrations/0085_security_notifications.py",
-                    ),
-                    # The shipped migration counting each account's wrong codes.
-                    (
-                        "code_failures_migration",
-                        "alembic/versions/0041_mfa_code_failures.py",
-                    ),
-                ):
-                    spec = importlib.util.spec_from_file_location(
-                        name, Path(__file__).parents[1] / path
-                    )
-                    migration = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(migration)
-                    with patch.object(
-                        migration, "op", Operations(MigrationContext.configure(conn))
-                    ):
-                        migration.upgrade()
         cls.app = FastAPI()
         cls.app.include_router(login_routes.router)
         cls.app.include_router(routes.router)
@@ -172,9 +155,8 @@ class LocalMfaTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        if URL:
-            with cls.engine.begin() as conn:
-                conn.execute(text(f"DROP SCHEMA {cls.schema} CASCADE"))
+        with cls.engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {cls.schema} CASCADE"))
         cls.engine.dispose()
 
     def setUp(self):

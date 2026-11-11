@@ -10,10 +10,7 @@ _LOCK_KEYS = {IsmsOrgNode: 75431001, IsmsDocumentFolder: 75431002}
 
 def validate_parent(db, model, parent_id, node_id=None):
     # Serialise reparenting so two concurrent edits cannot jointly form a cycle.
-    if db.get_bind().dialect.name == "postgresql":
-        db.execute(
-            text("SELECT pg_advisory_xact_lock(:key)"), {"key": _LOCK_KEYS[model]}
-        )
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _LOCK_KEYS[model]})
     seen = {node_id} if node_id else set()
     current = parent_id
     while current is not None:

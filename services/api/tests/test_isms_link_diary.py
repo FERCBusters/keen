@@ -383,8 +383,6 @@ def test_deletion_keeps_entries_referenced_by_another_record(db):
 
 
 def test_deletion_keeps_audit_held_entries(db):
-    if db.get_bind().dialect.name != "postgresql":
-        pytest.skip("audit holds are maintained by PostgreSQL triggers")
     editor = _user(db, "editor")
     risk = _risk(db)
     from app.services import risks
@@ -439,8 +437,6 @@ def _start_manual_purge(db):
 
 
 def test_link_changes_pause_during_a_manual_purge(db):
-    if db.get_bind().dialect.name != "postgresql":
-        pytest.skip("the evidence purge pause applies on PostgreSQL")
     editor = _user(db, "editor")
     linked, unlinked = _document(db, "Linked"), _document(db, "Unlinked")
     _link(db, linked, editor, "A.5.1")

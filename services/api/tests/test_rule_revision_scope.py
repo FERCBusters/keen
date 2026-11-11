@@ -15,16 +15,12 @@ from app.db.models import (
 )
 from app.services.errors import DomainError
 from app.services.managed_configurations import RestoreInput
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-
-from tests.db_helpers import create_sqlite_schema
 
 
 @pytest.fixture
-def db():
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+def db(postgres_engine):
+    engine = postgres_engine
     with Session(engine) as session:
         session.add(
             ControlItem(framework_slug="TEST", type="custom", ref="1", title="Test")

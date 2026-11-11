@@ -503,7 +503,7 @@ Reviewers check these boundaries after every round of changes and before a relea
 - **Class sweeps:** for each confirmed issue, record the property it violates, the search that found every path sharing it, and the contract or budget test that enforces it across the codebase. A fix at the reported site alone leaves the class open.
 - **Untrusted data and isolation:** exercise SQL/configuration injection, stored and reflected XSS, unsafe links, CSV formulas, regex resource exhaustion and malicious upstream evidence. Trace credentials, caches, cursors, artifacts and redaction through two connections of the same provider. Check audit output, errors, logs and exports for leaks and preserve evidence identity and ownership.
 
-The full validation workflow uses PostgreSQL and Valkey. SQLite, mocked transports and DOM tests are useful focused checks with a narrower reach: PostgreSQL locking/migrations, real-browser behaviour and resistance to sustained distributed attacks lie outside them. Treat missing coverage as an explicit review limitation that needs follow-up.
+The full validation workflow uses PostgreSQL and Valkey. Mocked transports and DOM tests are useful focused checks with a narrower reach: real-browser behaviour and resistance to sustained distributed attacks lie outside them. Treat missing coverage as an explicit review limitation that needs follow-up.
 
 ## Required review procedure
 
@@ -563,7 +563,7 @@ Use a disposable installation and synthetic data. Verify each security property 
 | Destination restrictions, TLS verification and credential ordering | Local network and certificate fixtures exercising the actual transport and supported dependency versions |
 | Artifact persistence, downloads, immutability and cleanup | Representative local and S3 storage paths, including actual-byte checks and controlled failures |
 
-`tools/security_e2e` exercises the browser, proxy, API and PostgreSQL concurrency rows above against a running installation, using synthetic accounts and data; see its README before use. Static inspection, SQLite, DOM tests and mocks provide useful evidence within their limits. Identify those limits explicitly. An inventory or static configuration assertion does not replace a browser or proxy test; a mocked transport does not establish its library's real network behaviour. Do not infer that an untested deployment surface is safe because a substitute test passed.
+`tools/security_e2e` exercises the browser, proxy, API and PostgreSQL concurrency rows above against a running installation, using synthetic accounts and data; see its README before use. Static inspection, DOM tests and mocks provide useful evidence within their limits. Identify those limits explicitly. An inventory or static configuration assertion does not replace a browser or proxy test; a mocked transport does not establish its library's real network behaviour. Do not infer that an untested deployment surface is safe because a substitute test passed.
 
 ### Record evidence and change impact
 

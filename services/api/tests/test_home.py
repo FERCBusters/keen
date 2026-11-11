@@ -1,6 +1,5 @@
-"""Framework home tests. Set KEEN_HOME_TEST_DATABASE_URL to an isolated PostgreSQL DB."""
+"""Framework home tests, on the PostgreSQL database of KEEN_HOME_TEST_DATABASE_URL."""
 
-import os
 import unittest
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -33,7 +32,7 @@ from fastapi import Request
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from tests.db_helpers import schema_engine
+from tests.db_helpers import required_database_url, schema_engine
 
 
 def home_request():
@@ -89,13 +88,10 @@ class HomeLogicTests(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(
-    os.environ.get("KEEN_HOME_TEST_DATABASE_URL"), "Set KEEN_HOME_TEST_DATABASE_URL"
-)
 class HomeDatabaseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        url = os.environ["KEEN_HOME_TEST_DATABASE_URL"]
+        url = required_database_url("KEEN_HOME_TEST_DATABASE_URL")
         cls.schema = "home_test_" + uuid.uuid4().hex
         engine = create_engine(url)
         with engine.begin() as c:

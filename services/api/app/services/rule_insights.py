@@ -89,9 +89,8 @@ def rule_insights(
 
 
 def _compute(rules: dict, window_days: int, clock: datetime, db: Session) -> dict:
-    if db.get_bind().dialect.name == "postgresql":
-        # The budget ends with the request's transaction.
-        db.execute(text(f"SET LOCAL statement_timeout = {int(QUERY_TIMEOUT_MS)}"))
+    # The budget ends with the request's transaction.
+    db.execute(text(f"SET LOCAL statement_timeout = {int(QUERY_TIMEOUT_MS)}"))
     try:
         return _insights(rules, window_days, clock, db)
     except OperationalError as exc:

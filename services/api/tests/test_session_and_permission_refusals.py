@@ -33,11 +33,8 @@ from app.security.sessions import (
     session_key,
     update_session_authz,
 )
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import event
 
-from tests.db_helpers import create_sqlite_schema
 from tests.test_assembled_authority_regressions import (  # noqa: F401 - fixtures
     BASE,
     PASSWORD,
@@ -351,22 +348,10 @@ def test_blank_overlong_and_repeated_permission_codes_are_ignored(keen):  # noqa
     assert [p.code for p in keen.db.get(User, target.id).permissions] == ["events.read"]
 
 
-def test_administrator_changes_take_a_database_lock_only_on_postgresql(contract_db):
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    try:
-        create_sqlite_schema(engine)
-        with Session(engine) as sqlite:
-            with statements(sqlite) as seen:
-                roles.lock_admin_changes(sqlite)
-            assert seen == []
-    finally:
-        engine.dispose()
-    if contract_db.get_bind().dialect.name == "postgresql":
-        with statements(contract_db) as seen:
-            roles.lock_admin_changes(contract_db)
-        assert "SELECT pg_advisory_xact_lock(%(key)s)" in seen
+def test_administrator_changes_take_a_database_lock(contract_db):
+    with statements(contract_db) as seen:
+        roles.lock_admin_changes(contract_db)
+    assert "SELECT pg_advisory_xact_lock(%(key)s)" in seen
 
 
 # -- client addresses -------------------------------------------------------

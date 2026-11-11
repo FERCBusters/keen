@@ -69,8 +69,6 @@ def test_a_record_for_an_account_that_no_longer_exists_is_refused(contract_db):
 def test_a_record_linked_concurrently_to_the_same_account_is_used(
     contract_postgres_engine,
 ):
-    if contract_postgres_engine is None:
-        pytest.skip("A concurrent link needs separate PostgreSQL connections")
     engine = contract_postgres_engine
     with Session(engine) as setup:
         account = _account()

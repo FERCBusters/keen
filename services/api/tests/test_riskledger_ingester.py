@@ -29,10 +29,7 @@ from app.mapping.collector import (
     collector_pointer_filter,
     event_collector,
 )
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-
-from tests.db_helpers import create_sqlite_schema
 
 ORG, SUP, RID, CTL, DOM, LEVEL = [
     f"00000000-0000-4000-8000-00000000000{i}" for i in range(1, 7)
@@ -40,9 +37,8 @@ ORG, SUP, RID, CTL, DOM, LEVEL = [
 
 
 @pytest.fixture
-def db(monkeypatch):
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+def db(postgres_engine, monkeypatch):
+    engine = postgres_engine
     monkeypatch.setattr(settings, "demo_mode", False)
     monkeypatch.setattr(settings, "event_data_masking", "false")
     monkeypatch.setattr(

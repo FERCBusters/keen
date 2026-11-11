@@ -5,13 +5,14 @@ import json
 import os
 import sys
 from collections import Counter, defaultdict
+from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 
 from app.core.datetime_utils import utc_now_naive
 
+from tests.conftest import migrated_schema
 from tests.crosswalk_reference import reference_pair_set
-from tests.db_helpers import create_sqlite_schema
 
 os.environ.setdefault("KEEN_DATABASE_URL", "postgresql://test:test@localhost/unused")
 os.environ.setdefault("KEEN_BOOTSTRAP_ADMIN_USERNAME", "test")
@@ -36,9 +37,7 @@ from app.db.models import (
 )
 from app.services.control_inheritance import evidence_pairs
 from seed_demo_data import DemoConfig, DemoSeeder, seed
-from sqlalchemy import create_engine, event, select, text
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 SHOWCASE = (
@@ -48,11 +47,6 @@ SHOWCASE = (
     "soc2_tsc",
     "pci_dss_v4",
 )
-
-
-@compiles(JSONB, "sqlite")
-def sqlite_json(*a, **k):
-    return "JSON"
 
 
 @pytest.fixture(autouse=True)
@@ -65,15 +59,8 @@ def artifact_storage(tmp_path, monkeypatch):
     return tmp_path / "artifacts"
 
 
-def catalogue_session(foreign_keys=False):
-    """An in-memory database holding the frameworks and one administrator."""
-    engine = create_engine("sqlite://")
-
-    @event.listens_for(engine, "connect")
-    def functions(conn, record):
-        conn.create_function("NOW", 0, lambda: utc_now_naive().isoformat(" "))
-
-    create_sqlite_schema(engine)
+def catalogue_session(engine):
+    """A session whose database holds the frameworks and one administrator."""
     session = Session(engine)
     session.add(
         User(username="demo", password_hash="disabled", role="admin", is_active=True)
@@ -99,17 +86,14 @@ def catalogue_session(foreign_keys=False):
 
     migration().seed_catalogue(session.connection())
     session.commit()
-    if foreign_keys:
-        session.execute(text("PRAGMA foreign_keys=ON"))
-    return session, engine
+    return session
 
 
 @pytest.fixture
-def db():
-    session, engine = catalogue_session()
+def db(postgres_engine):
+    session = catalogue_session(postgres_engine)
     yield session
     session.close()
-    engine.dispose()
 
 
 def migrate(db, monkeypatch):
@@ -367,12 +351,13 @@ def seeded(tmp_path_factory):
     """One full demo dataset, shared by the read-only checks below."""
     from app.core.config import settings
 
-    with pytest.MonkeyPatch.context() as patch:
+    with pytest.MonkeyPatch.context() as patch, ExitStack() as stack:
         patch.setattr(settings, "artifact_storage_backend", "local")
         patch.setattr(
             settings, "artifact_local_dir", str(tmp_path_factory.mktemp("artifacts"))
         )
-        session, engine = catalogue_session()
+        engine = stack.enter_context(migrated_schema("seeded_"))
+        session = catalogue_session(engine)
         seeder = DemoSeeder(
             session, DemoConfig("iso_27001_2022", "Demo", None, False, True)
         )
@@ -380,7 +365,6 @@ def seeded(tmp_path_factory):
         session.flush()
         yield session, seeder
         session.close()
-        engine.dispose()
 
 
 def test_annex_references_never_resolve_to_their_clause_twins(seeded):
@@ -845,13 +829,12 @@ def test_seeded_frameworks_join_the_selection_with_iso_as_default(db, monkeypatc
     assert selection["default"] == "iso_27001_2022"
 
 
-def test_teardown_removes_the_seeded_dataset(artifact_storage):
+def test_teardown_removes_the_seeded_dataset(artifact_storage, postgres_engine):
     from app.db.models import IsmsDocument
     from teardown_demo_data import DemoTeardown, TeardownConfig
 
-    db, engine = catalogue_session(foreign_keys=True)
+    db = catalogue_session(postgres_engine)
     try:
-        assert db.execute(text("PRAGMA foreign_keys")).scalar() == 1
         # Records that merely resemble the prefix stay.
         db.add(IsmsDocument(title="Demonstration notes"))
         db.add(
@@ -905,7 +888,6 @@ def test_teardown_removes_the_seeded_dataset(artifact_storage):
         assert db.query(Event).one().external_id == "real-event"
     finally:
         db.close()
-        engine.dispose()
 
 
 @pytest.mark.parametrize("script", ["seed_demo_data", "teardown_demo_data"])

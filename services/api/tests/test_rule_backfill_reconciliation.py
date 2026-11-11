@@ -16,12 +16,9 @@ from app.db.models import (
 )
 from app.mapping.collector import collector_id
 from app.worker import rule_backfill
-from sqlalchemy import create_engine, insert
 from sqlalchemy import event as sql_event
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
-
-from tests.db_helpers import create_sqlite_schema
 
 
 def rule(refs=("keep",), **when):
@@ -386,8 +383,6 @@ def test_a_mapping_another_writer_adds_during_the_batch_is_kept_uncounted(setup)
 
 def test_a_rule_for_one_collection_item_examines_only_that_items_events(setup):
     db, controls, event, mapping, job, clear = setup
-    if db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Provenance containment runs on PostgreSQL JSONB")
     for name in ("deploy", "nightly"):
         db.add(
             Event(
@@ -410,11 +405,10 @@ def test_a_rule_for_one_collection_item_examines_only_that_items_events(setup):
     ]
 
 
-def test_a_batch_on_another_database_takes_no_postgresql_lock(monkeypatch):
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    create_sqlite_schema(engine)
+def test_a_batch_takes_the_shared_rule_lock_before_reading_its_job(
+    postgres_engine, monkeypatch
+):
+    engine = postgres_engine
     statements = []
     sql_event.listen(
         engine,
@@ -462,6 +456,11 @@ def test_a_batch_on_another_database_takes_no_postgresql_lock(monkeypatch):
         with Session(engine) as db:
             assert db.get(RuleBackfillJob, task_id).status == "completed"
             assert [m.control_item_id for m in db.query(Mapping)] == [control_id]
-        assert statements and not any("pg_advisory" in s for s in statements)
+        # Connection removal takes the same lock exclusively, so a batch waits
+        # for it before reading the job it would otherwise map from.
+        lock = "SELECT pg_advisory_xact_lock_shared(1262830926)"
+        batch = statements[statements.index(lock) :]
+        assert batch.count(lock) == 1
+        assert "FROM rule_backfill_jobs" in batch[1]
     finally:
         engine.dispose()

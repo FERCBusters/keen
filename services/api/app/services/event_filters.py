@@ -306,7 +306,7 @@ def scan_budget(
     limits = [REGEX_SCAN_TIMEOUT_MS] if filters.uses_regex else []
     if within_ms is not None:
         limits.append(within_ms)
-    if limits and db.get_bind().dialect.name == "postgresql":
+    if limits:
         # PostgreSQL reads zero as no limit, so the shortest budget is 1 ms.
         budget = max(1, int(min(limits)))
         db.execute(text(f"SET LOCAL statement_timeout = {budget}"))

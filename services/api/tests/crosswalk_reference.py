@@ -6,8 +6,6 @@ short queries and paired shared references in Python. Tests compare the
 resolver and the readers built on it with this relation on the same data.
 """
 
-import uuid
-
 from app.db.models import (
     ControlItem,
     CrossFrameworkControlLink,
@@ -93,11 +91,6 @@ def reference_links(*, source_ids=None, target_framework=None, enabled=None):
     return explicit.union_all(derived).subquery("effective_cross_framework_links")
 
 
-def _text_id(value):
-    """An id in PostgreSQL's text form; SQLite stores UUIDs as bare hex."""
-    return ":".join(str(uuid.UUID(part)) for part in value.split(":"))
-
-
 def _ordered(rows):
     return sorted(rows, key=lambda row: (str(row[2]), str(row[1]), row[0]))
 
@@ -110,7 +103,7 @@ def reference_rows(db, *, target_ids=None, **restrictions):
         query = query.where(links.c.target_control_id.in_(target_ids))
     return _ordered(
         (
-            _text_id(row.id),
+            row.id,
             row.source_control_id,
             row.target_control_id,
             row.rationale,

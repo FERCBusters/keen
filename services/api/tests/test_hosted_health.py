@@ -20,8 +20,6 @@ SUBJECT = "owner-subject"
 
 @pytest.fixture
 def probe(contract_db, monkeypatch):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("The owner bootstrap holds a PostgreSQL advisory lock")
     for name, value in {
         "hosted_mode": True,
         "oidc_issuer": ISSUER,

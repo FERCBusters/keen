@@ -20,7 +20,6 @@ from app.services.ingestion_pause import (
 def test_active_job_and_cooldown_gate(active, offset, paused):
     now = datetime(2026, 10, 8)
     db = Mock()
-    db.get_bind.return_value.dialect.name = "postgresql"
     db.execute.return_value.mappings.return_value.one.return_value = {
         "active": active,
         "resume_at": now + timedelta(seconds=offset) if offset is not None else None,
@@ -42,7 +41,6 @@ def test_active_job_and_cooldown_gate(active, offset, paused):
 
 def test_reader_shared_and_purge_exclusive_lock_before_any_application_sql():
     connection = Mock()
-    connection.dialect.name = "postgresql"
     session = Mock()
     session.info = {}
     transaction = Mock()
@@ -59,3 +57,35 @@ def test_reader_shared_and_purge_exclusive_lock_before_any_application_sql():
     transaction.nested = True
     _coordinate_evidence_purge(session, transaction, connection)
     connection.execute.assert_not_called()
+
+
+def test_only_a_purge_batch_stores_evidence_without_the_purge_check(
+    postgres_engine, monkeypatch
+):
+    from app.db.models import Event
+    from app.services import ingestion_pause
+    from sqlalchemy.orm import Session
+
+    checked = []
+    monkeypatch.setattr(ingestion_pause, "require_purge_receiving", checked.append)
+
+    def store(db, name):
+        db.add(
+            Event(
+                source="test",
+                external_id=name,
+                timestamp=datetime(2026, 1, 1),
+                summary=name,
+            )
+        )
+        db.flush()
+
+    # The purge deletes evidence under the lock that pauses every other
+    # writer, so its own session is the one that is never asked to wait.
+    with Session(postgres_engine, info={"evidence_purge_batch": True}) as purge:
+        store(purge, "during-purge")
+        assert checked == []
+        purge.commit()
+    with Session(postgres_engine) as writer:
+        store(writer, "ordinary")
+        assert checked == [writer]

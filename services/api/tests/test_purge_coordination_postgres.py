@@ -1,6 +1,5 @@
 """Real PostgreSQL concurrency regression. Runs in the normal GitHub CI database."""
 
-import os
 import threading
 import time
 import uuid
@@ -16,16 +15,12 @@ from app.services.ingestion_pause import is_paused, require_receiving
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from tests.db_helpers import schema_engine
+from tests.db_helpers import required_database_url, schema_engine
 
 
 @pytest.fixture
 def database():
-    url = os.environ.get("KEEN_RETENTION_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip(
-            "Set KEEN_RETENTION_TEST_DATABASE_URL for real PostgreSQL concurrency tests"
-        )
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
     schema = "purge_coord_" + uuid.uuid4().hex
     admin = create_engine(url)
     with admin.begin() as c:

@@ -167,10 +167,6 @@ def crosswalk(contract_db, monkeypatch):
     )
 
 
-def postgresql(db):
-    return db.get_bind().dialect.name == "postgresql"
-
-
 def reference(db, framework, *conditions):
     """{control: (events, newest)} from the relation, for the events selected."""
     pairs = reference_evidence_pairs(framework, db)
@@ -270,8 +266,7 @@ def test_a_framework_without_controls_has_no_evidence(crosswalk):
     db = crosswalk.db
     assert framework_evidence_sources(db, "count-absent") == {}
     assert control_event_counts(db, "count-absent") == {}
-    if postgresql(db):
-        assert recorded_control_evidence(db, "count-absent") == {}
+    assert recorded_control_evidence(db, "count-absent") == {}
 
 
 def test_sources_name_each_inheriting_control(crosswalk):
@@ -319,8 +314,6 @@ def test_counts_match_the_relation_for_every_restriction(crosswalk):
 
 def test_recorded_counters_match_the_relation(crosswalk):
     db = crosswalk.db
-    if not postgresql(db):
-        pytest.skip("Per-control counters are maintained by PostgreSQL triggers")
     for framework in (TGT, SRC, ALSO):
         assert recorded_control_evidence(db, framework) == reference(db, framework)
     # The figures follow removed evidence too.

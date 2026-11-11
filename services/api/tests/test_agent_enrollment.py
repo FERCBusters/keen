@@ -162,8 +162,6 @@ def test_profile_keys_cannot_enrol_under_another_devices_name(fleet):
 
 
 def test_agent_name_claims_are_serialised_on_postgres(contract_postgres_engine):
-    if contract_postgres_engine is None:
-        pytest.skip("Requires PostgreSQL for advisory-lock concurrency")
     with (
         Session(contract_postgres_engine) as first,
         Session(contract_postgres_engine) as second,
@@ -452,8 +450,6 @@ def test_postgres_revocation_request_has_valid_http_context():
 def test_profile_locks_serialize_revocation_on_postgres(
     contract_postgres_engine, monkeypatch
 ):
-    if contract_postgres_engine is None:
-        pytest.skip("Requires PostgreSQL for row-lock concurrency")
     import uuid
 
     from app.agents.credentials import authenticate

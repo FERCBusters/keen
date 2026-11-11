@@ -58,8 +58,7 @@ LOCK_WAIT_SECONDS = 5
 @contextmanager
 def bounded_lock_wait(db, *, locking=True):
     """Answer 429 once a row lock held elsewhere has been waited for briefly."""
-    postgres = locking and db.get_bind().dialect.name == "postgresql"
-    if postgres:
+    if locking:
         db.execute(text(f"SET LOCAL lock_timeout = '{LOCK_WAIT_SECONDS}s'"))
     try:
         yield
@@ -71,7 +70,7 @@ def bounded_lock_wait(db, *, locking=True):
                 headers={"Retry-After": "5"},
             ) from None
         raise
-    if postgres:
+    if locking:
         db.execute(text("SET LOCAL lock_timeout TO DEFAULT"))
 
 

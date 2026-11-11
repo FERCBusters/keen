@@ -5,9 +5,7 @@ import json
 from pathlib import Path
 
 from app.db.models import ControlItem, Framework, FrameworkClause
-from sqlalchemy import create_engine, select, update
-
-from tests.db_helpers import create_sqlite_schema
+from sqlalchemy import select, update
 
 PATH = (
     Path(__file__).resolve().parent
@@ -49,9 +47,8 @@ def test_catalogue_structure_and_provenance():
     assert "Document why" in sec["164.306(d)(3)"]["metadata"]["description"]
 
 
-def test_seed_roundtrip_parents_idempotence_and_preserve_edits():
-    engine = create_engine("sqlite://")
-    create_sqlite_schema(engine)
+def test_seed_roundtrip_parents_idempotence_and_preserve_edits(postgres_engine):
+    engine = postgres_engine
     with engine.begin() as conn:
         migration.seed_catalogues(conn)
         before = conn.execute(select(ControlItem.__table__)).mappings().all()

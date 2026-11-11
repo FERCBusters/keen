@@ -640,12 +640,9 @@ def refresh_suggestions(db: Session, *, now: datetime | None = None) -> dict:
     framework = list_frameworks(db=db)["default"]
     if not framework:
         return {"status": "no_framework"}
-    if db.get_bind().dialect.name == "postgresql":
-        if not db.scalar(
-            text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_KEY}
-        ):
-            return {"status": "busy"}
-        db.execute(text(f"SET LOCAL statement_timeout = {int(QUERY_TIMEOUT_MS)}"))
+    if not db.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_KEY}):
+        return {"status": "busy"}
+    db.execute(text(f"SET LOCAL statement_timeout = {int(QUERY_TIMEOUT_MS)}"))
     try:
         result = _refresh(db, framework, clock)
         db.commit()

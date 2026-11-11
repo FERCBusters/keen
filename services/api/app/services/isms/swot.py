@@ -87,8 +87,7 @@ def require_access(db, user, *, write=False):
 def _lock(db):
     # Serialize structural edits, including reparenting and deletion. Row locks
     # alone cannot prevent two simultaneous edits from introducing a cycle.
-    if db.bind.dialect.name == "postgresql":
-        db.execute(text("SELECT pg_advisory_xact_lock(724103610)"))
+    db.execute(text("SELECT pg_advisory_xact_lock(724103610)"))
 
 
 def _version(row, expected):

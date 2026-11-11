@@ -15,6 +15,8 @@ from app.ingest.log_pipeline import (
     try_parse_json_line,
 )
 
+pytestmark = pytest.mark.usefixtures("no_evidence_purge")
+
 MS = 1_760_000_000_000
 
 

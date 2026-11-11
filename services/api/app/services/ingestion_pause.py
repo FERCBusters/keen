@@ -41,8 +41,6 @@ INGESTION_LOCK_ID = 836210090
 
 
 def purge_pause_status(db):
-    if db.get_bind().dialect.name != "postgresql":
-        return {"paused": False, "resume_at": None}
     row = (
         db.execute(
             text("""SELECT

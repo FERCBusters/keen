@@ -71,8 +71,6 @@ class Upstream:
 
 @pytest.fixture
 def lk(contract_db, monkeypatch, tmp_path):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Loki collection contracts run against PostgreSQL")
     clock = SimpleNamespace(now=NOW)
 
     class Clock(datetime):

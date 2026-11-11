@@ -3,7 +3,6 @@ connections.
 
 A request that loses the race to add the identity key or a new encryption key
 returns the key the other request committed, and only that key is stored.
-These tests skip on SQLite.
 """
 
 import pytest
@@ -17,8 +16,6 @@ from sqlalchemy.orm import Session
 
 @pytest.fixture
 def engine(contract_postgres_engine, monkeypatch):
-    if contract_postgres_engine is None:
-        pytest.skip("Requires PostgreSQL for concurrent transactions")
     monkeypatch.setenv("KEEN_INTEGRATION_SECRET_KEY", Fernet.generate_key().decode())
     yield contract_postgres_engine
     with Session(contract_postgres_engine) as db:

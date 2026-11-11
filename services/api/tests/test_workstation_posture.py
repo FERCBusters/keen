@@ -608,11 +608,12 @@ def test_expiry_retention_and_ordinary_server_evidence(setup):
         assert summary(db, pid)["devices"][0]["checks"][2]["status"] == "stale"
     assert send(sim, make_posture(sim)).status_code == 401
     with factory() as db:
-        # Even where a test DB lacks FK cascades, a removed event cannot survive
-        # in the summary: facts are read from the retained Event, not a copy.
-        from app.db.models import UeuEvidence
+        # A removed event cannot survive in the summary: facts are read from
+        # the retained Event, not a copy.
+        from app.db.models import Artifact, UeuEvidence
 
         db.query(UeuEvidence).delete()
+        db.query(Artifact).delete()
         db.query(Event).delete()
         db.commit()
         assert summary(db, pid)["devices"][0]["checks"][2]["observations"] == []
@@ -770,8 +771,6 @@ def test_device_pagination_and_person_isolation(setup):
 def test_postgres_backfill_preserves_links_and_person_deletion(
     contract_db, monkeypatch
 ):
-    if contract_db.get_bind().dialect.name != "postgresql":
-        pytest.skip("Migration and FK semantics require disposable PostgreSQL")
     import importlib.util
     from pathlib import Path
 
