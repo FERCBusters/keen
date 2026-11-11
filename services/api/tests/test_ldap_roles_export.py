@@ -1,5 +1,6 @@
 """LDAP trust boundaries, role ownership, and round-trippable rule exports."""
 
+import logging
 import re
 import ssl
 import uuid
@@ -63,6 +64,9 @@ def directory(monkeypatch):
         ldap_email_attribute="mail",
         ldap_id_attribute="entryUUID",
         ldap_auto_provision=True,
+        ldap_group_filter="",
+        ldap_group_base_dn="",
+        ldap_group_member_attribute="member",
     ).items():
         monkeypatch.setattr(settings, key, value)
     events = []
@@ -111,6 +115,13 @@ def directory(monkeypatch):
             return True
 
         def search(self, base, query, **kw):
+            state.setdefault("searched_as", []).append(self.kw["user"])
+            if kw["attributes"] == ldap.NO_ATTRIBUTES:
+                # The group lookup asks for no attributes.
+                state["group_search"] = (base, query, kw)
+                self.entries = state.get("groups", [])
+                self.result = {"result": state.get("group_result", 0)}
+                return True
             state["search"] = (base, query, kw)
             self.entries = state["entries"]
             self.result = {"result": state.get("result", 0)}
@@ -221,6 +232,177 @@ def test_unsafe_directory_settings_refuse_sign_in_before_connecting(
 
     assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
     assert directory[1] == []
+
+
+POSIX_GROUPS = "(&(objectClass=posixGroup)(|(cn=staff)(cn=auditors)))"
+GROUP = SimpleNamespace(entry_dn="cn=staff,ou=Groups,dc=example")
+
+
+def test_without_a_group_filter_no_group_search_runs(directory):
+    assert ldap.directory_identity("alice", "secret")["subject"] == "immutable-id"
+    assert "group_search" not in directory[0]
+
+
+def test_a_posix_group_member_signs_in_by_the_directory_username(
+    directory, monkeypatch
+):
+    state, events, _ = directory
+    monkeypatch.setattr(settings, "ldap_group_filter", POSIX_GROUPS)
+    monkeypatch.setattr(settings, "ldap_group_member_attribute", "memberUid")
+    state["groups"] = [GROUP]
+
+    # memberUid matches exactly, so the directory's spelling is sent, not the typed one.
+    assert ldap.directory_identity(" ALICE ", "secret")["username"] == "alice"
+
+    base, query, kw = state["group_search"]
+    assert base == settings.ldap_base_dn
+    assert query == f"(&{POSIX_GROUPS}(memberUid=alice))"
+    assert kw["size_limit"] == 1 and kw["dereference_aliases"] == ldap.DEREF_NEVER
+    assert kw["time_limit"] == settings.ldap_timeout_seconds
+    # Both searches use the service account, before the user's password is sent.
+    assert state["searched_as"] == ["cn=reader,dc=example"] * 2
+    assert events.count(("bind", "uid=alice,ou=People,dc=example")) == 1
+
+
+def test_a_dn_valued_group_attribute_is_escaped_and_searched_below_its_own_base(
+    directory, monkeypatch
+):
+    state = directory[0]
+    monkeypatch.setattr(settings, "ldap_group_filter", "(objectClass=groupOfNames)")
+    monkeypatch.setattr(settings, "ldap_group_base_dn", "ou=Groups,dc=example")
+    state["entries"][0].entry_dn = "uid=al(ice)*,ou=People,dc=example"
+    state["entries"][0].entry_attributes_as_dict["uid"] = ["al*)(cn=*"]
+    state["groups"] = [GROUP]
+
+    assert ldap.directory_identity("alice", "secret") is not None
+
+    base, query, _ = state["group_search"]
+    assert base == "ou=Groups,dc=example"
+    assert query == (
+        "(&(objectClass=groupOfNames)"
+        r"(member=uid=al\28ice\29\2a,ou=People,dc=example))"
+    )
+
+
+def test_a_hostile_directory_username_cannot_widen_the_group_filter(
+    directory, monkeypatch
+):
+    state = directory[0]
+    monkeypatch.setattr(settings, "ldap_group_filter", POSIX_GROUPS)
+    monkeypatch.setattr(settings, "ldap_group_member_attribute", "MemberUID")
+    state["entries"][0].entry_attributes_as_dict["uid"] = ["al*)(cn=*"]
+    state["groups"] = [GROUP]
+
+    ldap.directory_identity("alice", "secret")
+
+    assert state["group_search"][1] == (
+        f"(&{POSIX_GROUPS}" r"(MemberUID=al\2a\29\28cn=\2a))"
+    )
+
+
+def test_someone_outside_the_groups_is_refused_before_their_password_is_tried(
+    directory, db, monkeypatch
+):
+    state, events, _ = directory
+    monkeypatch.setattr(settings, "ldap_group_filter", POSIX_GROUPS)
+    monkeypatch.setattr(settings, "ldap_group_member_attribute", "memberUid")
+    store = ldap.get_valkey()
+
+    # The same answer as an unknown name: no account, no bind, no entry attempt.
+    assert ldap.authenticate_ldap(db, "alice", "secret") is None
+    assert db.query(User).count() == 0
+    assert ("bind", "uid=alice,ou=People,dc=example") not in events
+    assert store.keys("*") == []
+
+    # Membership is read at each password check, so joining a group admits them
+    # and leaving it refuses the next sign-in and reauthentication.
+    state["groups"] = [GROUP]
+    user = ldap.authenticate_ldap(db, "alice", "secret")
+    assert user.username == "ldap:alice"
+    assert ldap.verify_ldap_user(db, user, "secret") is True
+    state["groups"] = []
+    assert ldap.authenticate_ldap(db, "alice", "secret") is None
+    assert ldap.verify_ldap_user(db, user, "secret") is False
+
+
+def test_a_member_of_several_matching_groups_is_admitted(directory, monkeypatch):
+    state = directory[0]
+    monkeypatch.setattr(settings, "ldap_group_filter", POSIX_GROUPS)
+    # The directory returns the first group and reports that more matched.
+    state["groups"] = [GROUP]
+    state["group_result"] = 4
+    assert ldap.directory_identity("alice", "secret") is not None
+    state["groups"] = []
+    assert ldap.directory_identity("alice", "secret") is None
+
+
+@pytest.mark.parametrize("result", [1, 10, 32, 50])
+def test_a_group_search_the_directory_cannot_answer_is_not_a_refusal(
+    directory, monkeypatch, result
+):
+    state, events, _ = directory
+    monkeypatch.setattr(settings, "ldap_group_filter", POSIX_GROUPS)
+    # A referral, a missing base or denied access says nothing about membership,
+    # even when entries came back with it.
+    state["groups"] = [GROUP]
+    state["group_result"] = result
+    with pytest.raises(HTTPException) as error:
+        ldap.directory_identity("alice", "secret")
+    assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
+    assert ("bind", "uid=alice,ou=People,dc=example") not in events
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"ldap_group_member_attribute": "member)(cn=*"},
+        {"ldap_group_member_attribute": ""},
+        {"ldap_group_base_dn": "not a distinguished name"},
+    ],
+    ids=["filter-in-attribute", "no-attribute", "malformed-group-base"],
+)
+def test_unsafe_group_settings_refuse_sign_in_before_connecting(
+    directory, monkeypatch, changes
+):
+    monkeypatch.setattr(settings, "ldap_group_filter", POSIX_GROUPS)
+    for key, value in changes.items():
+        monkeypatch.setattr(settings, key, value)
+
+    with pytest.raises(HTTPException) as error:
+        ldap.directory_identity("alice", "secret")
+
+    assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
+    assert directory[1] == []
+
+
+def test_the_log_names_why_directory_sign_in_is_unavailable_without_directory_data(
+    directory, monkeypatch, caplog
+):
+    caplog.set_level(logging.WARNING, logger="app.security.ldap")
+    monkeypatch.setattr(settings, "ldap_bind_dn", "")
+    with pytest.raises(HTTPException):
+        ldap.directory_identity("alice", "secret")
+    assert caplog.messages == [
+        "LDAP sign-in unavailable: Supply both service bind DN and password"
+    ]
+
+    # A library or network failure may quote DNs, hosts or server diagnostics:
+    # only its type is logged, and the response stays the fixed message.
+    caplog.clear()
+    monkeypatch.setattr(settings, "ldap_bind_dn", "cn=reader,dc=example")
+
+    def failing_search(self, base, query, **kw):
+        raise ldap.LDAPException(
+            "uid=alice,ou=People,dc=example refused: synthetic-diagnostic"
+        )
+
+    monkeypatch.setattr(ldap.Connection, "search", failing_search)
+    with pytest.raises(HTTPException) as error:
+        ldap.directory_identity("alice", "secret")
+    assert error.value.detail == LDAP_UNAVAILABLE
+    assert caplog.messages == ["LDAP sign-in unavailable: LDAPException"]
+    assert "alice" not in caplog.text and "synthetic-diagnostic" not in caplog.text
+    assert "search-secret" not in caplog.text
 
 
 @pytest.mark.parametrize("result", [49, 52])

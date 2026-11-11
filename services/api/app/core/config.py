@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     ldap_email_attribute: str = "mail"
     ldap_id_attribute: str = "entryUUID"
     ldap_user_filter: str = "(objectClass=person)"
+    # Optional: sign-in also needs a group matching this filter to list the
+    # user. For directories that record membership on the group entry.
+    ldap_group_filter: str = ""
+    ldap_group_base_dn: str = ""
+    ldap_group_member_attribute: str = "member"
     ldap_ca_cert_path: str = ""
     ldap_timeout_seconds: int = Field(default=5, ge=1, le=30)
     ldap_auto_provision: bool = True

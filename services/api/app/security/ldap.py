@@ -2,12 +2,23 @@
 
 import base64
 import hashlib
+import logging
 import ssl
 import uuid
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException
-from ldap3 import ANONYMOUS, DEREF_NEVER, NONE, SIMPLE, SUBTREE, Connection, Server, Tls
+from ldap3 import (
+    ANONYMOUS,
+    DEREF_NEVER,
+    NO_ATTRIBUTES,
+    NONE,
+    SIMPLE,
+    SUBTREE,
+    Connection,
+    Server,
+    Tls,
+)
 from ldap3.core.exceptions import LDAPException
 from ldap3.utils.conv import escape_filter_chars
 from ldap3.utils.dn import parse_dn
@@ -19,6 +30,42 @@ from app.core.valkey import get_valkey
 from app.db.models import User, UserIdentity
 from app.security import sign_in_throttle as throttle
 from app.security.regex import scan_pattern
+
+log = logging.getLogger(__name__)
+
+_ATTRIBUTE = scan_pattern(r"[A-Za-z][A-Za-z0-9-]*")
+
+
+class DirectoryUnavailable(ValueError):
+    """The directory or its configuration cannot answer a sign-in.
+
+    Its message is fixed text written in this module, so it is safe to log.
+    """
+
+
+def _in_required_group(search, base, entry_dn, uid) -> bool:
+    """Whether a group matching KEEN_LDAP_GROUP_FILTER lists the entry.
+
+    Groups that record membership on the group entry (posixGroup's memberUid,
+    groupOfNames' member) cannot be matched by a filter on the user's entry,
+    so the service connection searches the groups for the member instead.
+    memberUid holds the directory's username; other attributes hold the DN.
+    """
+    attribute = settings.ldap_group_member_attribute
+    member = uid if attribute.lower() == "memberuid" else entry_dn
+    search.search(
+        base,
+        f"(&{settings.ldap_group_filter}({attribute}={escape_filter_chars(member)}))",
+        search_scope=SUBTREE,
+        attributes=NO_ATTRIBUTES,
+        dereference_aliases=DEREF_NEVER,
+        size_limit=1,
+        time_limit=settings.ldap_timeout_seconds,
+    )
+    # One matching group is enough; sizeLimitExceeded (4) means there are more.
+    if search.result.get("result") not in (0, 4):
+        raise DirectoryUnavailable("Directory group search failed")
+    return len(search.entries) >= 1
 
 
 def _entry_key(issuer, subject) -> str:
@@ -65,19 +112,24 @@ def directory_identity(username, password, *, recognised: bool = False):
             or url.query
             or url.fragment
         ):
-            raise ValueError("Invalid LDAP URL")
+            raise DirectoryUnavailable("Invalid LDAP URL")
         if not settings.ldap_base_dn.strip():
-            raise ValueError("LDAP search base is required")
+            raise DirectoryUnavailable("LDAP search base is required")
         parse_dn(settings.ldap_base_dn)
         attrs = [
             settings.ldap_username_attribute,
             settings.ldap_email_attribute,
             settings.ldap_id_attribute,
         ]
-        if any(not scan_pattern(r"[A-Za-z][A-Za-z0-9-]*").fullmatch(a) for a in attrs):
-            raise ValueError("Invalid LDAP attribute")
+        if any(not _ATTRIBUTE.fullmatch(a) for a in attrs):
+            raise DirectoryUnavailable("Invalid LDAP attribute")
+        group_base = settings.ldap_group_base_dn.strip() or settings.ldap_base_dn
+        if settings.ldap_group_filter:
+            if not _ATTRIBUTE.fullmatch(settings.ldap_group_member_attribute):
+                raise DirectoryUnavailable("Invalid LDAP group member attribute")
+            parse_dn(group_base)
         if bool(settings.ldap_bind_dn) != bool(settings.ldap_bind_password):
-            raise ValueError("Supply both service bind DN and password")
+            raise DirectoryUnavailable("Supply both service bind DN and password")
         # ldap3 performs its own hostname check with CERT_REQUIRED, before
         # open()/start_tls() returns. Bind credentials only after those succeed.
         tls = Tls(
@@ -106,12 +158,12 @@ def directory_identity(username, password, *, recognised: bool = False):
             try:
                 c.open()
                 if c.closed or (url.scheme == "ldap" and not c.start_tls()):
-                    raise ValueError("Secure LDAP connection failed")
+                    raise DirectoryUnavailable("Secure LDAP connection failed")
                 if not c.bind():
                     if c.result.get("result") == 49:
                         c.unbind()
                         return None
-                    raise ValueError("Directory bind failed")
+                    raise DirectoryUnavailable("Directory bind failed")
                 return c
             except Exception:
                 c.unbind()
@@ -119,7 +171,7 @@ def directory_identity(username, password, *, recognised: bool = False):
 
         search = connect(settings.ldap_bind_dn, settings.ldap_bind_password)
         if search is None:
-            raise ValueError("Service bind failed")
+            raise DirectoryUnavailable("Service bind failed")
         query = f"(&{settings.ldap_user_filter}({attrs[0]}={escape_filter_chars(username.strip())}))"
         search.search(
             settings.ldap_base_dn,
@@ -154,9 +206,15 @@ def directory_identity(username, password, *, recognised: bool = False):
             or len(uid) > 128
         ):
             return None
+        # Checked before the password is tried: someone outside the required
+        # groups is answered as an unknown name and spends no entry attempts.
+        if settings.ldap_group_filter and not _in_required_group(
+            search, group_base, entry.entry_dn, uid
+        ):
+            return None
         issuer = f"ldap:{url.scheme}://{url.hostname.lower()}:{url.port or (636 if url.scheme == 'ldaps' else 389)}"
         if len(issuer) > 512:
-            raise ValueError("LDAP URL too long")
+            raise DirectoryUnavailable("LDAP URL too long")
         if not _entry_allowed(issuer, subject, recognised=recognised):
             return None
         bound = connect(entry.entry_dn, password)
@@ -169,8 +227,16 @@ def directory_identity(username, password, *, recognised: bool = False):
             "username": uid,
             "email": single_mailbox(email) if isinstance(email, str) else None,
         }
-    except (LDAPException, ValueError, OSError):
-        # Library exceptions may contain DNs or server diagnostics; keep them out of responses.
+    except (LDAPException, ValueError, OSError) as error:
+        # Library exceptions may contain DNs or server diagnostics; keep them out
+        # of responses and logs. The operator's log names Keen's own fixed reason,
+        # or only the type of a library or network failure.
+        log.warning(
+            "LDAP sign-in unavailable: %s",
+            str(error)
+            if isinstance(error, DirectoryUnavailable)
+            else type(error).__name__,
+        )
         raise HTTPException(
             503,
             "LDAP authentication unavailable; check directory configuration and connectivity",
