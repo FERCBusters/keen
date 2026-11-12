@@ -157,6 +157,129 @@ def test_five_wrong_passwords_end_a_browsers_recognition(signin):
     assert signin.store.get(key) == "1"
 
 
+def _burst(signin, monkeypatch, username, cookie, size):
+    """Send ``size`` wrong passwords with one device cookie, each arriving
+    while every earlier one is still being verified, as attempts sent together
+    are while a password hash runs. Returns how many were heard as a
+    recognised and as an unrecognised browser's, and the responses in order
+    of arrival."""
+    heard = {True: 0, False: 0}
+    responses = []
+    real = auth_routes.login_service.authenticate_password
+
+    def guess():
+        browser = signin.client()
+        browser.cookies.set(throttle.device_cookie_name(), cookie)
+        position = len(responses)
+        responses.append(None)
+        responses[position] = signin.attempt(username, "wrong", client=browser)
+
+    def in_flight(db, context, *, recognised, **credentials):
+        heard[recognised] += 1
+        if len(responses) < size:
+            guess()
+        return real(db, context, recognised=recognised, **credentials)
+
+    monkeypatch.setattr(auth_routes.login_service, "authenticate_password", in_flight)
+    guess()
+    return heard, [response.status_code for response in responses]
+
+
+def test_attempts_sent_together_share_a_recognised_browsers_allowance(
+    signin, monkeypatch
+):
+    user = signin.user()
+    owner = signin.client()
+    assert signin.attempt(user.username, client=owner).status_code == 200
+    cookie = owner.cookies.get(throttle.device_cookie_name())
+
+    heard, statuses = _burst(signin, monkeypatch, user.username, cookie, 40)
+
+    # Each attempt was counted before its password was checked, so five were
+    # heard as the recognised browser and the rest as any other browser: the
+    # account's free failures, the attempt that opens its wait, then refusal.
+    assert heard == {
+        True: throttle.DEVICE_FAILURES,
+        False: throttle.FREE_FAILURES + 1,
+    }
+    assert statuses == [401] * (len(statuses) - 1) + [429]
+    assert len(statuses) == sum(heard.values()) + 1
+    assert signin.store.keys("keen:login:device:*") == []
+
+
+def test_counting_only_after_judging_would_hear_every_attempt_sent_together(
+    signin, monkeypatch
+):
+    """The defect the test above guards against, reproduced by counting a
+    recognised attempt only once its password has been judged."""
+    user = signin.user()
+    owner = signin.client()
+    assert signin.attempt(user.username, client=owner).status_code == 200
+    cookie = owner.cookies.get(throttle.device_cookie_name())
+
+    def count_afterwards(r, device):
+        if int(r.hincrby(f"keen:login:device:{device}", "failures", 1)) >= (
+            throttle.DEVICE_FAILURES
+        ):
+            throttle.revoke_device(r, device)
+
+    monkeypatch.setattr(throttle, "reserve_device_attempt", lambda r, device: True)
+    monkeypatch.setattr(throttle, "device_failed", count_afterwards)
+
+    heard, statuses = _burst(signin, monkeypatch, user.username, cookie, 40)
+
+    assert heard == {True: 40, False: 0}
+    assert statuses == [401] * 40
+
+
+def test_a_recognised_attempt_is_counted_before_its_password_is_judged(signin):
+    r = signin.store
+    token = throttle.issue_device(r, user_id="account", key="name")
+    device = throttle.recognised_device(r, token, "name")
+    key = f"keen:login:device:{device}"
+
+    for attempt in range(1, throttle.DEVICE_FAILURES + 1):
+        assert throttle.reserve_device_attempt(r, device) is True
+        assert r.hget(key, "failures") == str(attempt)
+    # No password has been judged, and the allowance is already spent.
+    assert throttle.reserve_device_attempt(r, device) is False
+    assert r.exists(key) == 0 and r.zcard("keen:login:devices:account") == 0
+    # Counting a revoked device leaves nothing behind for it.
+    assert throttle.reserve_device_attempt(r, device) is False
+    assert r.exists(key) == 0
+    throttle.release_device_attempt(r, device)
+    assert r.exists(key) == 0
+
+
+def test_a_directory_outage_spends_none_of_a_browsers_recognition(
+    signin,
+    directory,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "ldap_enabled", True)
+    state, _, _ = directory
+    owner = signin.client()
+    assert (
+        signin.attempt("alice", "password", method="ldap", client=owner).status_code
+        == 200
+    )
+    device = signin.store.keys("keen:login:device:*")[0]
+    state["service_bind"] = 52
+
+    for _ in range(throttle.DEVICE_FAILURES + 2):
+        outage = signin.attempt("alice", "password", method="ldap", client=owner)
+        assert outage.status_code == 503
+        assert signin.store.hget(device, "failures") == "0"
+    # A browser the account does not recognise is answered the same way.
+    assert signin.attempt("alice", "password", method="ldap").status_code == 503
+
+    del state["service_bind"]
+    assert (
+        signin.attempt("alice", "password", method="ldap", client=owner).status_code
+        == 200
+    )
+
+
 def test_recognised_browsers_skip_the_address_allowance(signin, monkeypatch):
     user = signin.user()
     owner = signin.client()
@@ -485,6 +608,36 @@ def test_spellings_that_reach_one_directory_entry_share_one_allowance(
     assert locked.status_code == wrong.status_code == 401
     assert locked.json() == wrong.json()
     assert events.count(entry) == 6 and not signin.session_set(locked)
+
+
+@pytest.mark.parametrize("password", ["\u00ad", "\t", "\u0000", "\ufeff\u200b"])
+def test_a_password_the_directory_library_cannot_prepare_shows_nothing_about_a_name(
+    signin,
+    directory,  # noqa: F811 - fixture imported above
+    monkeypatch,
+    password,
+):
+    """ldap3 refuses to prepare such a password as text, once a search has
+    matched an entry; that refusal was answered 503 while unknown names and
+    names outside the required group got 401."""
+    monkeypatch.setattr(settings, "ldap_enabled", True)
+    state, events, _ = directory
+    state["bind"] = False
+    state["sent"] = []
+    held = signin.attempt("alice", password, method="ldap")
+    state["entries"], kept = [], state["entries"]
+    unknown = signin.attempt("nobody-here", password, method="ldap")
+    state["entries"] = kept
+    monkeypatch.setattr(settings, "ldap_group_filter", "(objectClass=groupOfNames)")
+    state["groups"] = []
+    outside = signin.attempt("alice", password, method="ldap")
+
+    for response in (held, unknown, outside):
+        assert (response.status_code, response.json()) == (
+            401,
+            {"detail": "Invalid username or password"},
+        )
+        assert not signin.session_set(response)
 
 
 def test_a_recognised_browser_reaches_a_held_directory_entry(

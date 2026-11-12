@@ -6,7 +6,9 @@ the OWASP device-cookie protocol:
 * A browser that has proved an account's password holds a device cookie for
   that account. Its attempts skip the per-address allowance and the account's
   throttle, and draw on their own allowance: five wrong passwords in a row
-  revoke the cookie, after which the browser counts as unrecognised.
+  revoke the cookie, after which the browser counts as unrecognised. Each
+  attempt is counted before its password is checked, so attempts sent
+  together share the five.
 * Attempts from any other browser draw on the account's throttle. The first
   five consecutive failures are free; each later attempt opens a wait, 30
   seconds doubling to an hour, before the next one is heard, and after 100
@@ -138,11 +140,39 @@ def clear_throttle(r: Redis, key: str) -> None:
     r.delete(_failures_key(key), _gate_key(key))
 
 
-def device_failed(r: Redis, device: str) -> None:
-    """Count a wrong password from a recognised browser; the fifth in a row
-    revokes its recognition."""
+def reserve_device_attempt(r: Redis, device: str) -> bool:
+    """Admit one attempt from a recognised browser, counting it first.
 
-    if int(r.hincrby(_device_key(device), "failures", 1)) >= DEVICE_FAILURES:
+    The attempt is counted as a failure before the password is checked, as an
+    unrecognised browser's is, so attempts sent together cannot each be heard
+    before any of them is counted. A correct password replaces the device and
+    its count; an attempt that never reached a password gives its count back.
+    Once the allowance is spent the device is revoked and the attempt is heard
+    as an unrecognised browser's.
+    """
+
+    key = _device_key(device)
+    attempt = int(r.hincrby(key, "failures", 1))
+    # A device revoked meanwhile would be recreated by the count alone.
+    if attempt > DEVICE_FAILURES or r.hget(key, "name") is None:
+        revoke_device(r, device)
+        return False
+    return True
+
+
+def release_device_attempt(r: Redis, device: str) -> None:
+    """Give back the count of an attempt whose password was never judged."""
+
+    key = _device_key(device)
+    if r.hget(key, "name") is not None:
+        r.hincrby(key, "failures", -1)
+
+
+def device_failed(r: Redis, device: str) -> None:
+    """A recognised browser sent a wrong password, already counted when it was
+    admitted; the fifth in a row revokes its recognition."""
+
+    if int(r.hget(_device_key(device), "failures") or 0) >= DEVICE_FAILURES:
         revoke_device(r, device)
 
 

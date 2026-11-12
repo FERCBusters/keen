@@ -16,11 +16,13 @@ import pytest
 from app import main
 from app.core.config import settings
 from app.db.models import AuditLog
+from app.security import auth as security_auth
 from app.security import request_limits
 from app.security.errors import collection_error
 from app.security.regex import compile_pattern
 from app.security.request_limits import RequestBodyLimitMiddleware
 from app.security.rich_text import sanitize_rich_text_html
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import event
 
 from tests.test_assembled_authority_regressions import (  # noqa: F401 - fixtures
@@ -49,21 +51,94 @@ def test_a_csrf_token_with_non_ascii_characters_is_refused(keen):  # noqa: F811
     )
 
 
+def test_a_csrf_token_the_session_never_issued_proves_nothing(keen):  # noqa: F811
+    """A site on a sibling subdomain can plant a cookie for the parent domain
+    and knows its value. Matching cookie and header is then no proof: the
+    token must be the one issued with the session."""
+    user = keen.user()
+    client = keen.client(user)
+    issued = client.cookies.get("keen_csrf")
+    stored = keen.store.get(keen.store.keys("keen:session:*")[0])
+    assert issued and f'"csrf": "{issued}"' in stored
+
+    client.cookies.delete("keen_csrf")
+    client.cookies.set("keen_csrf", "planted-by-a-sibling-site")
+    planted = client.patch(
+        "/v1/me/preferences",
+        json={"theme": "ocean"},
+        headers={"Origin": BASE, "X-CSRF-Token": "planted-by-a-sibling-site"},
+    )
+    assert (planted.status_code, planted.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
+    assert client.get("/v1/me/preferences").json()["theme"] != "ocean"
+
+    # Another signed-in account's token is no better.
+    other = keen.client(keen.user()).cookies.get("keen_csrf")
+    client.cookies.delete("keen_csrf")
+    client.cookies.set("keen_csrf", other)
+    borrowed = client.patch(
+        "/v1/me/preferences",
+        json={"theme": "ocean"},
+        headers={"Origin": BASE, "X-CSRF-Token": other},
+    )
+    assert borrowed.status_code == 403
+
+    client.cookies.delete("keen_csrf")
+    client.cookies.set("keen_csrf", issued)
+    own = client.patch(
+        "/v1/me/preferences",
+        json={"theme": "ocean"},
+        headers={"Origin": BASE, "X-CSRF-Token": issued},
+    )
+    assert own.status_code == 200 and own.json()["theme"] == "ocean"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [RedisConnectionError("synthetic outage"), TimeoutError("synthetic outage")],
+    ids=["store-refuses", "store-times-out"],
+)
+def test_a_session_store_outage_is_answered_as_an_outage(keen, monkeypatch, failure):  # noqa: F811
+    client = keen.client(keen.user())
+
+    def unavailable(*args, **kwargs):
+        raise failure
+
+    with monkeypatch.context() as outage:
+        outage.setattr(security_auth, "get_session", unavailable)
+        response = client.get("/v1/me")
+
+    # Nobody is recognised, no account is named, and the client knows to retry.
+    assert (response.status_code, response.json()) == (
+        503,
+        {"detail": "Service temporarily unavailable. Please try again later."},
+    )
+    assert response.headers["retry-after"] == "5"
+    assert "set-cookie" not in response.headers
+    # The session is still there once the store answers again.
+    assert client.get("/v1/me").status_code == 200
+
+
 def test_a_browser_keeps_working_when_its_replacement_csrf_token_cannot_be_made(
     keen,  # noqa: F811
     monkeypatch,
 ):
     user = keen.user()
     client = keen.client(user)
+    issued = client.cookies.get("keen_csrf")
     client.cookies.delete("keen_csrf")
     replaced = client.get("/v1/me")
+    # The replacement is the token the session was issued with.
     assert replaced.status_code == 200 and len(_csrf_cookies(replaced)) == 1
+    assert client.cookies.get("keen_csrf") == issued
     client.cookies.delete("keen_csrf")
 
-    def unavailable():
-        raise OSError("synthetic randomness failure")
+    def unavailable(response, token):
+        raise OSError("synthetic cookie failure")
 
-    monkeypatch.setattr(main, "generate_csrf_token", unavailable)
+    monkeypatch.setattr(main, "set_csrf_cookie", unavailable)
 
     response = client.get("/v1/me")
 

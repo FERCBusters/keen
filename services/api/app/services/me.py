@@ -621,7 +621,9 @@ def change_my_password(
         raise DomainError(status_code=400, detail="Current password is incorrect")
 
     try:
-        user.password_hash = hash_password(payload.new_password or "")
+        user.password_hash = hash_password(
+            payload.new_password or "", username=user.username
+        )
         user.mfa_version += 1
     except ValueError as e:
         raise DomainError(status_code=400, detail=str(e))

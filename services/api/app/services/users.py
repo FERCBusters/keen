@@ -380,7 +380,9 @@ def set_user_password_admin(
     try:
         if target.auth_backend == "ldap":
             raise DomainError(400, "Change LDAP passwords in the directory")
-        target.password_hash = hash_password(payload.new_password or "")
+        target.password_hash = hash_password(
+            payload.new_password or "", username=target.username
+        )
         target.mfa_version += 1
     except ValueError as e:
         raise DomainError(status_code=400, detail=str(e))

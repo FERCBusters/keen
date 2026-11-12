@@ -685,6 +685,72 @@ def test_an_id_token_with_a_blank_subject_cannot_sign_in(sso):
     assert sso.db.query(UserIdentity).count() == 0
 
 
+def _key_set_reads(sso):
+    return sso.provider.requests.count(("GET", f"{ISSUER}/jwks"))
+
+
+def test_a_rotated_signing_key_is_read_once_the_cached_set_is_a_minute_old(sso):
+    """A provider that rotates its key signs with one the cached set lacks.
+    The set is read again, at most once a minute, so sign-in resumes without
+    waiting out the hour the set is otherwise kept."""
+    sso.account(subject="idp-subject")
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+    assert _key_set_reads(sso) == 1
+    sso.provider.key = RSAKey.generate_key(2048, {"kid": "rotated-key"})
+
+    # Within the minute the cached set stands: tokens naming unknown keys
+    # cannot make Keen read the provider on every callback.
+    for _ in range(3):
+        refused = sso.sign_in(sso.keen.client())
+        assert refused.status_code == 400 and not _sets_session(refused)
+    assert _key_set_reads(sso) == 1
+
+    keys, expires = oidc._JWKS_CACHE[f"{ISSUER}/jwks"]
+    oidc._JWKS_CACHE[f"{ISSUER}/jwks"] = (keys, expires - timedelta(minutes=2))
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+    assert _key_set_reads(sso) == 2
+    # The new set holds the key, so it is kept as any other.
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+    assert _key_set_reads(sso) == 2
+
+
+def test_only_a_named_key_missing_from_the_cached_set_reads_it_again(sso):
+    sso.account(subject="idp-subject")
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+    keys, expires = oidc._JWKS_CACHE[f"{ISSUER}/jwks"]
+    oidc._JWKS_CACHE[f"{ISSUER}/jwks"] = (keys, expires - timedelta(minutes=2))
+    genuine = sso.provider.key
+
+    # A token signed by the cached key, however old the set, reads nothing.
+    assert sso.sign_in(sso.keen.client()).status_code == 302
+    # Nor does a token that names no key, or is no token at all.
+    for token in ("not-a-token", "e30.e30.", "W10.e30.", "eyJraWQiOiA3fQ.e30."):
+        sso.provider.token_response = httpx2.Response(
+            200,
+            json={"access_token": "a", "token_type": "Bearer", "id_token": token},
+        )
+        refused = sso.sign_in(sso.keen.client())
+        assert refused.status_code == 400 and not _sets_session(refused)
+    assert _key_set_reads(sso) == 1
+
+    # A forger's key is read for once, found absent from the provider's own
+    # set, and refused.
+    sso.provider.token_response = None
+    sso.provider.key = RSAKey.generate_key(2048, {"kid": "forged-key"})
+    sso.provider.jwks_response = httpx2.Response(
+        200, json={"keys": [genuine.as_dict(private=False)]}
+    )
+    refused = sso.sign_in(sso.keen.client())
+    assert refused.status_code == 400 and not _sets_session(refused)
+    assert _key_set_reads(sso) == 2
+
+
+def test_a_key_set_that_lists_no_keys_holds_none(sso):
+    assert oidc._holds_key({"keys": "not-a-list"}, "idp-key") is False
+    assert oidc._holds_key({"keys": ["not-a-key", {"kid": "idp-key"}]}, "idp-key")
+    assert oidc._holds_key({"keys": []}, None) is True
+
+
 def test_an_id_token_from_another_key_cannot_sign_in(sso):
     sso.account(subject="idp-subject")
     forger = RSAKey.generate_key(2048, {"kid": "idp-key"})

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 from datetime import datetime, timezone
@@ -18,7 +19,14 @@ def make_session_id() -> str:
 
 
 def session_key(session_id: str) -> str:
-    return f"{SESSION_PREFIX}{session_id}"
+    """The store key of a session: the SHA-256 of its identifier.
+
+    The store, its snapshot file and anyone holding its password then see no
+    identifier a browser could present, as with device cookies and pending
+    second-factor ceremonies.
+    """
+    digest = hashlib.sha256(session_id.encode("utf-8", "surrogatepass")).hexdigest()
+    return f"{SESSION_PREFIX}{digest}"
 
 
 def create_session(
@@ -34,6 +42,7 @@ def create_session(
     effective_role: str | None = None,
     permission_codes: list[str] | set[str] | tuple[str, ...] | None = None,
     authz_version: int | None = None,
+    csrf_token: str | None = None,
 ) -> str:
     session_id = make_session_id()
     key = session_key(session_id)
@@ -53,6 +62,9 @@ def create_session(
         payload["permission_codes"] = sorted({str(c) for c in permission_codes if c})
     if authz_version is not None:
         payload["authz_version"] = int(authz_version)
+    if csrf_token:
+        # The token this session's unsafe requests must echo (security/csrf.py).
+        payload["csrf"] = csrf_token
     redis_client.set(key, json.dumps(payload), ex=int(ttl_seconds))
     return session_id
 

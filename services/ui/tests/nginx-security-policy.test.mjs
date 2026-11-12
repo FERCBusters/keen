@@ -15,10 +15,17 @@ test('cache policies preserve inherited security headers on every location and e
     'Strict-Transport-Security',
     'Cross-Origin-Opener-Policy',
     'Cross-Origin-Embedder-Policy',
+    'Permissions-Policy',
+    'X-XSS-Protection',
   ]) {
     assert.match(server, new RegExp(`add_header ${header} \\$[a-z_]+ always;`));
   }
   assert.match(server, /add_header Cache-Control \$keen_cache_control always;/);
+  // Browsers' XSS auditors are retired; any that remain are switched off.
+  assert.match(
+    conf,
+    /map \$upstream_http_x_xss_protection \$x_xss_protection_value \{\s*default "";\s*"" "0";/,
+  );
   assert.match(conf, /map \$status \$keen_vendor_cache_control\s*\{\s*default "no-store";/);
   assert.match(conf, /~\^\/vendor\/ \$keen_vendor_cache_control;/);
   assert.match(conf, /~\^\/pages\/ "no-store";/);

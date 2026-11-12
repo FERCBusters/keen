@@ -1343,7 +1343,7 @@ def test_assembled_remote_user_uses_direct_peer_and_rejects_duplicates(
 
     monkeypatch.setattr(settings, "trust_remote_user", True)
     monkeypatch.setattr(settings, "oidc_enabled", False)
-    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "127.0.0.1/32")
+    monkeypatch.setattr(settings, "remote_user_trusted_cidrs", "127.0.0.1/32")
     client = TestClient(main.app, base_url="https://keen.example", client=(peer, 12345))
     try:
         checked = client.get("/v1/auth/check", headers=headers)
@@ -1367,7 +1367,7 @@ def test_a_signed_in_browser_without_a_csrf_token_receives_one_for_its_writes(
     if signed_in_by == "trusted proxy":
         monkeypatch.setattr(settings, "trust_remote_user", True)
         monkeypatch.setattr(settings, "oidc_enabled", False)
-        monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "127.0.0.1/32")
+        monkeypatch.setattr(settings, "remote_user_trusted_cidrs", "127.0.0.1/32")
     main.app.dependency_overrides[get_db] = lambda: contract_db
     browsers = []
 

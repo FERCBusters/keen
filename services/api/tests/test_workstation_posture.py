@@ -487,7 +487,7 @@ def test_provisioning_idempotently_creates_person(contract_db):
     u = create_user(
         contract_db,
         username="new-user",
-        password="test-only",
+        password="test-only-synthetic-passphrase",
         role="normal",
         email="person@example.test",
     )
@@ -699,7 +699,7 @@ def test_account_does_not_claim_an_unlinked_matching_person(contract_db):
     account = create_user(
         contract_db,
         username="same-name",
-        password="test-only",
+        password="test-only-synthetic-passphrase",
         role="normal",
         email="same@example.test",
     )

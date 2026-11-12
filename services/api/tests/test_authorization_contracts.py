@@ -172,9 +172,9 @@ def test_malformed_password_hash_fails_closed(raw):
     assert passwords.verify_password("password", raw) is False
 
 
-@pytest.mark.parametrize("password", ["", "short", "1234567"])
+@pytest.mark.parametrize("password", ["", "short", "1234567", "fourteen-chars"])
 def test_short_password_rejected(password):
-    with pytest.raises(ValueError, match="^Password must be at least 8 characters$"):
+    with pytest.raises(ValueError, match="^Password must be at least 15 characters$"):
         passwords.hash_password(password)
 
 

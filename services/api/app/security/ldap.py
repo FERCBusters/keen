@@ -34,6 +34,13 @@ from app.security.regex import scan_pattern
 log = logging.getLogger(__name__)
 
 _ATTRIBUTE = scan_pattern(r"[A-Za-z][A-Za-z0-9-]*")
+# Result codes, besides invalidCredentials (49), by which directories refuse
+# one entry's sign-in: a locked, expired, disabled or password-less account
+# (constraintViolation, noSuchObject, inappropriateAuthentication,
+# insufficientAccessRights, unwillingToPerform). Each is answered as a wrong
+# password; answering it as an outage would show that the name matched an
+# entry. The operator's log names the code.
+_ENTRY_REFUSALS = frozenset({19, 32, 48, 50, 53})
 
 
 class DirectoryUnavailable(ValueError):
@@ -91,6 +98,21 @@ def _entry_allowed(issuer, subject, *, recognised: bool) -> bool:
     return allowed
 
 
+def _typed_bytes(password) -> bytes | None:
+    """The password as the bytes the person typed, or None if it has none.
+
+    ldap3 prepares a text password with SASLprep and refuses one it cannot
+    prepare, which happens only once a search has matched an entry; given
+    bytes, it sends them as they are. Every password is therefore judged by
+    the directory, whichever name it was typed with.
+    """
+    try:
+        return password.encode("utf-8") or None
+    except UnicodeEncodeError:
+        # A lone surrogate is no character anyone can type.
+        return None
+
+
 def directory_identity(username, password, *, recognised: bool = False):
     if (
         not settings.ldap_enabled
@@ -99,6 +121,9 @@ def directory_identity(username, password, *, recognised: bool = False):
         or len(username) > 128
         or len(password) > 1024
     ):
+        return None
+    typed = _typed_bytes(password)
+    if typed is None:
         return None
     search = bound = None
     try:
@@ -144,7 +169,9 @@ def directory_identity(username, password, *, recognised: bool = False):
             connect_timeout=settings.ldap_timeout_seconds,
         )
 
-        def connect(dn, secret):
+        def connect(dn, secret: bytes, *, service: bool):
+            """A bound connection, or None when the directory refuses the
+            credentials; any other failure makes the directory unavailable."""
             c = Connection(
                 server,
                 user=dn or None,
@@ -160,7 +187,12 @@ def directory_identity(username, password, *, recognised: bool = False):
                 if c.closed or (url.scheme == "ldap" and not c.start_tls()):
                     raise DirectoryUnavailable("Secure LDAP connection failed")
                 if not c.bind():
-                    if c.result.get("result") == 49:
+                    code = c.result.get("result")
+                    if code == 49 or (not service and code in _ENTRY_REFUSALS):
+                        if code != 49:
+                            log.warning(
+                                "LDAP sign-in bind refused with result code %s", code
+                            )
                         c.unbind()
                         return None
                     raise DirectoryUnavailable("Directory bind failed")
@@ -169,7 +201,11 @@ def directory_identity(username, password, *, recognised: bool = False):
                 c.unbind()
                 raise
 
-        search = connect(settings.ldap_bind_dn, settings.ldap_bind_password)
+        search = connect(
+            settings.ldap_bind_dn,
+            settings.ldap_bind_password.encode("utf-8"),
+            service=True,
+        )
         if search is None:
             raise DirectoryUnavailable("Service bind failed")
         query = f"(&{settings.ldap_user_filter}({attrs[0]}={escape_filter_chars(username.strip())}))"
@@ -217,7 +253,7 @@ def directory_identity(username, password, *, recognised: bool = False):
             raise DirectoryUnavailable("LDAP URL too long")
         if not _entry_allowed(issuer, subject, recognised=recognised):
             return None
-        bound = connect(entry.entry_dn, password)
+        bound = connect(entry.entry_dn, typed, service=False)
         if bound is None:
             return None
         throttle.clear_throttle(get_valkey(), _entry_key(issuer, subject))

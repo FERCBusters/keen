@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import current_connection, load_document, namespace
+from app.security.placeholders import is_placeholder
 
 # The providers defined in the webhooks.yml Keen ships. Each has its own
 # delivery allowance per client address; any other provider name shares one.
@@ -27,7 +28,9 @@ def load_webhook_policies(path: str) -> dict[str, Any]:
 
 def _secret_matches(got, expected) -> bool:
     # compare_digest raises TypeError for non-ASCII str; compare UTF-8 bytes.
-    if not got or not expected:
+    # A placeholder left in the environment is no secret: anyone can read it
+    # in the example file, so it verifies nothing.
+    if not got or not expected or is_placeholder(str(expected)):
         return False
     return hmac.compare_digest(
         str(got).encode("utf-8", "surrogatepass"),

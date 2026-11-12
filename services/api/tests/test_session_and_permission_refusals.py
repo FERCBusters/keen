@@ -8,6 +8,7 @@ from a request; the store and lock helpers are called directly with the input
 their guards exist for.
 """
 
+import hashlib
 import json
 import logging
 import threading
@@ -106,6 +107,25 @@ def test_a_blank_session_id_never_reads_or_changes_the_bare_session_key():
 
     assert store.get(SESSION_PREFIX) == planted
     assert store.ttl(SESSION_PREFIX) == -1
+
+
+def test_the_store_holds_no_session_identifier_a_browser_could_present():
+    """A copy of the store, its snapshot file or its password gives no one a
+    session: the key is the identifier's SHA-256, as device cookies are kept."""
+    store = _store()
+    sid = create_session(store, user_id="u-1", ttl_seconds=600, csrf_token="issued")
+
+    keys = store.keys("*")
+    assert keys == [SESSION_PREFIX + hashlib.sha256(sid.encode()).hexdigest()]
+    assert keys == [session_key(sid)]
+    assert sid not in keys[0] and sid not in store.get(keys[0])
+    # The original defect: the identifier itself was the key.
+    assert store.get(SESSION_PREFIX + sid) is None
+    assert get_session(store, sid)["csrf"] == "issued"
+    # A stolen key is no identifier: presenting it finds nothing.
+    assert get_session(store, keys[0].removeprefix(SESSION_PREFIX)) is None
+    revoke_session(store, sid)
+    assert store.keys("*") == []
 
 
 def test_a_session_read_survives_a_failed_expiry_refresh():
@@ -208,7 +228,7 @@ def test_a_trusted_proxy_mapping_without_the_identity_header_names_no_one(
     monkeypatch.setattr(settings, "trust_remote_user", True)
     monkeypatch.setattr(settings, "oidc_enabled", False)
     monkeypatch.setattr(settings, "remote_user_header_name", "REMOTE_USER")
-    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "10.0.0.0/8")
+    monkeypatch.setattr(settings, "remote_user_trusted_cidrs", "10.0.0.0/8")
 
     assert _remote_user_from_headers({}, peer="10.0.0.5") is None
     assert _remote_user_from_headers({"REMOTE_USER": "alice"}, peer="10.0.0.5") == (

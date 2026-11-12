@@ -90,6 +90,9 @@ def login(
         device = throttle.recognised_device(
             r, request.cookies.get(throttle.device_cookie_name()), key
         )
+        if device is not None and not throttle.reserve_device_attempt(r, device):
+            # Its allowance is spent, so it is heard as any other browser.
+            device = None
         if device is None:
             # An allowance of zero or less is unlimited: the limiter allows it
             # without counting.
@@ -124,6 +127,11 @@ def login(
     except DomainError:
         if device is not None:
             throttle.device_failed(r, device)
+        raise
+    except HTTPException:
+        # The directory could not answer, so no password was judged.
+        if device is not None:
+            throttle.release_device_attempt(r, device)
         raise
 
     # The password is proven: the account's count ends, and this browser is
@@ -168,6 +176,7 @@ def complete_local_login(
     db, user, request, *, mfa_verified=False, verified_version=None
 ):
     # Freeze the version proven by this ceremony before any commit expires ORM state.
+    csrf_token = generate_csrf_token()
     sid, result = login_service.complete_local_login(
         db,
         user,
@@ -175,10 +184,11 @@ def complete_local_login(
         context=change_context(request),
         mfa_verified=mfa_verified,
         verified_version=verified_version,
+        csrf_token=csrf_token,
     )
     response = JSONResponse(result)
     set_session_cookie(response, sid)
-    set_csrf_cookie(response, generate_csrf_token())
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
@@ -217,6 +227,7 @@ async def _complete_sso_callback(
 ) -> Response:
     context = change_context(request)
     account_id = None
+    csrf_token = generate_csrf_token()
     try:
         user, next_url, id_token, provider = await handle_callback(
             request, db, provider_key=provider_key
@@ -231,6 +242,7 @@ async def _complete_sso_callback(
                 id_token=id_token,
                 existing_sid=request.cookies.get(session_cookie_name()),
                 context=context,
+                csrf_token=csrf_token,
             )
         )
     except (HTTPException, DomainError) as error:
@@ -252,7 +264,7 @@ async def _complete_sso_callback(
     dest = next_url or "/"
     resp = RedirectResponse(dest, status_code=302)
     set_session_cookie(resp, sid)
-    set_csrf_cookie(resp, generate_csrf_token())
+    set_csrf_cookie(resp, csrf_token)
     resp.delete_cookie(
         sso_binding_cookie(),
         path="/",

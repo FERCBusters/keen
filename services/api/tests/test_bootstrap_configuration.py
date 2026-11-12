@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import uuid
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -13,6 +14,7 @@ from app import main
 from app.core.config import Settings, settings
 from app.db.models import Base, User
 from app.security.passwords import hash_password, verify_password
+from app.security.placeholders import is_placeholder
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -95,7 +97,18 @@ def test_existing_account_password_is_preserved(
 
 @pytest.mark.parametrize(
     "username,password",
-    [("initial-admin", ""), ("", "synthetic-password"), ("initial-admin", "short")],
+    [
+        ("initial-admin", ""),
+        ("", "synthetic-password"),
+        ("initial-admin", "short"),
+        # The placeholder .env.example once shipped, and any other.
+        ("admin", "<GENERATE_STRONG_PASSWORD>"),
+        ("admin", " <replace-with-a-long-passphrase> "),
+        # The rules every new password meets apply to the first one too.
+        ("initial-admin", "fourteen-chars"),
+        ("initial-admin", "passwordpassword"),
+        ("initial-admin", "initial-admin-passphrase"),
+    ],
 )
 def test_invalid_credentials_on_empty_database_fail_without_creating_account(
     bootstrap_db, monkeypatch, username, password, capsys
@@ -106,6 +119,8 @@ def test_invalid_credentials_on_empty_database_fail_without_creating_account(
         main.bootstrap_initial_admin()
     assert "synthetic-password" not in str(exc.value)
     assert "short" not in str(exc.value)
+    assert not password or password.strip() not in str(exc.value)
+    assert "at least 15 characters" in str(exc.value)
     assert capsys.readouterr().out == ""
     with bootstrap_db() as db:
         assert db.query(User).count() == 0
@@ -197,3 +212,36 @@ def test_api_workers_starting_together_create_one_account(monkeypatch):
         with admin.begin() as connection:
             connection.execute(text(f"DROP SCHEMA {schema} CASCADE"))
         admin.dispose()
+
+
+# -- example files ----------------------------------------------------------------
+
+
+def _example_values(path):
+    for line in path.read_text(encoding="utf-8").splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name.isupper() and not name.startswith("#"):
+            yield name, value
+
+
+@pytest.mark.parametrize("name", [".env.example", "tools/staging/staging.env.example"])
+def test_no_example_file_ships_a_value_that_works_as_a_credential(name):
+    """An operator copies the example file and fills in what start-up asks
+    for. A placeholder left in a credential is then a secret anyone can read,
+    so the examples ship those settings empty and nothing accepts one."""
+    path = Path(__file__).resolve().parents[3] / name
+    values = dict(_example_values(path))
+    assert len(values) > 50
+    assert [n for n, value in values.items() if is_placeholder(value)] == []
+    # The original defect: these two were placeholders that Keen accepted.
+    assert is_placeholder("<GENERATE_STRONG_PASSWORD>")
+    assert is_placeholder(" <GENERATE_RANDOM_SECRET> ")
+    assert (
+        not is_placeholder("")
+        and not is_placeholder("<")
+        and not is_placeholder("a<b>")
+    )
+    if name == ".env.example":
+        assert values["KEEN_BOOTSTRAP_ADMIN_PASSWORD"] == ""
+        assert values["ENROLL_WEBHOOK_SECRET"] == ""
+        assert "KEEN_WEBHOOKS_REQUIRE_SECRET" not in values

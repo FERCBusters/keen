@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 from datetime import datetime
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -144,6 +145,19 @@ class Settings(BaseSettings):
             raise ValueError("MFA policy must be optional, admins or all")
         return value
 
+    # Characters a new local password needs. NIST SP 800-63B-4 asks for 15
+    # where a password can be an account's only factor, and allows as few as
+    # eight where every account also uses a second factor.
+    password_min_length: int = Field(default=15, ge=8, le=128)
+
+    @model_validator(mode="after")
+    def validate_password_min_length(self):
+        if self.password_min_length < 15 and self.mfa_policy != "all":
+            raise ValueError(
+                "KEEN_PASSWORD_MIN_LENGTH below 15 requires KEEN_MFA_POLICY=all"
+            )
+        return self
+
     # Trusted proxy auth (REMOTE_USER)
     # When enabled, an upstream reverse proxy can authenticate a user and pass
     # their username via a header (default: REMOTE_USER). If present, this
@@ -154,6 +168,29 @@ class Settings(BaseSettings):
     # REMOTE_USER even if this is accidentally enabled.
     trust_remote_user: bool = Field(default=False)
     remote_user_header_name: str = Field(default="REMOTE_USER")
+    # The authenticating proxies whose identity header Keen accepts, as
+    # comma-separated addresses or CIDRs. This is a separate list from
+    # KEEN_SECURITY_TRUSTED_PROXY_CIDRS: a hop trusted to forward client
+    # addresses is not thereby trusted to name the signed-in account. Required
+    # while KEEN_TRUST_REMOTE_USER is on; there is no default.
+    remote_user_trusted_cidrs: str = Field(default="")
+
+    @field_validator("remote_user_trusted_cidrs")
+    @classmethod
+    def validate_remote_user_proxies(cls, value):
+        for entry in value.split(","):
+            if entry.strip():
+                ipaddress.ip_network(entry.strip())
+        return value
+
+    @model_validator(mode="after")
+    def validate_remote_user_trust(self):
+        if self.trust_remote_user and not self.remote_user_trusted_cidrs.strip(", "):
+            raise ValueError(
+                "KEEN_TRUST_REMOTE_USER requires KEEN_REMOTE_USER_TRUSTED_CIDRS: "
+                "the addresses of the proxies that authenticate users"
+            )
+        return self
 
     # Optional sign-out address of the trusted proxy that authenticates users.
     # Native OIDC uses KEEN_OIDC_END_SESSION_ENDPOINT and the ID token stored in
@@ -309,8 +346,6 @@ class Settings(BaseSettings):
     @field_validator("security_trusted_proxy_cidrs")
     @classmethod
     def validate_security_proxies(cls, value):
-        import ipaddress
-
         for entry in value.split(","):
             if entry.strip():
                 ipaddress.ip_network(entry.strip())
@@ -691,9 +726,8 @@ class Settings(BaseSettings):
     # Webhooks
     # -----------------------------------------------------------------------------
     webhooks_path: str = Field(default="/app/config/webhooks.yml")
-    # If true (recommended), webhook providers MUST be configured with a secret
-    # header + an environment variable containing the expected secret.
-    # When false, providers without a secret configuration are accepted.
+    # Every provider needs a secret header and the environment variable holding
+    # its secret; a provider without them is refused. No setting changes that.
 
     # -----------------------------------------------------------------------------
     # Ingestion SSRF protection

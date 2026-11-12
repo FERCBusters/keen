@@ -124,7 +124,7 @@ def validation_errors(error):
             (
                 "too_long",
                 "fields",
-                "Dictionary should have at most 128 items after validation, not 129",
+                "Dictionary should have at most 128 items after validation, not more",
             ),
         ),
         (

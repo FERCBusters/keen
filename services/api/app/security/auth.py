@@ -11,7 +11,12 @@ from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.db.models import User
 from app.security.csrf import samesite_policy
-from app.security.passwords import hash_password, verify_password
+from app.security.passwords import (
+    derive_password_hash,
+    hash_password,
+    needs_rehash,
+    verify_password,
+)
 from app.security.sessions import delete_session, get_session
 
 ROLE_ADMIN = "admin"
@@ -19,7 +24,7 @@ ROLE_NORMAL = "normal"
 ROLE_INHERIT = "inherit"
 
 # A fixed-cost miss path prevents local account discovery through password work.
-_DUMMY_PASSWORD_HASH = hash_password(uuid.uuid4().hex)
+_DUMMY_PASSWORD_HASH = derive_password_hash(uuid.uuid4().hex)
 
 
 def _remote_user_from_headers(headers: Mapping[str, str], *, peer=None) -> str | None:
@@ -46,11 +51,16 @@ def _remote_user_from_headers(headers: Mapping[str, str], *, peer=None) -> str |
 
     from app.security.client_ip import normalise_ip
 
+    # The identity header is believed only from the authenticating proxies
+    # named for it. Proxies trusted to forward client addresses
+    # (KEEN_SECURITY_TRUSTED_PROXY_CIDRS) are a separate list: the Compose
+    # default there includes the network gateway, which every process on the
+    # Docker host connects through.
     address = normalise_ip(peer)
     try:
         trusted = address and any(
             ipaddress.ip_address(address) in ipaddress.ip_network(c.strip())
-            for c in settings.security_trusted_proxy_cidrs.split(",")
+            for c in settings.remote_user_trusted_cidrs.split(",")
             if c.strip()
         )
     except ValueError:
@@ -162,6 +172,8 @@ def get_current_user_from_headers_cookies(
     # authority separate from the DB.
     user.session_id = sid
     user.session_authz_version = sess.get("authz_version")
+    token = sess.get("csrf")
+    user.session_csrf = token if isinstance(token, str) and token else None
     if sess.get("effective_role"):
         user.effective_role = str(sess.get("effective_role"))
     codes = sess.get("permission_codes")
@@ -214,13 +226,38 @@ def clear_session_cookie(response: Response) -> None:
     )
 
 
+def _raise_work_factor(db: Session, user: User, password: str) -> None:
+    """Store the proven password at the current work factor.
+
+    The hash is replaced only if it is still the one that was verified, so a
+    password changed meanwhile is never undone. A pending second-factor
+    ceremony or SSO email link made against the previous hash ends with it.
+    """
+    verified = user.password_hash
+    replaced = (
+        db.query(User)
+        .filter(User.id == user.id, User.password_hash == verified)
+        .update(
+            {User.password_hash: derive_password_hash(password)},
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    if replaced:
+        db.refresh(user)
+
+
 def authenticate_user(db: Session, username: str, password: str) -> User | None:
     u = (username or "").strip()
     user = db.query(User).filter(User.username == u).one_or_none()
     if user is None or not user.is_active or user.auth_backend == "ldap":
         verify_password(password or "", _DUMMY_PASSWORD_HASH)
         return None
-    return user if verify_password(password or "", user.password_hash) else None
+    if not verify_password(password or "", user.password_hash):
+        return None
+    if needs_rehash(user.password_hash):
+        _raise_work_factor(db, user, password)
+    return user
 
 
 def create_user(
@@ -240,7 +277,7 @@ def create_user(
 
     user = User(
         username=uname,
-        password_hash=hash_password(password),
+        password_hash=hash_password(password, username=uname),
         email=(email or "").strip() or None,
         role=r,
         is_active=True,

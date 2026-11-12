@@ -101,11 +101,13 @@ def complete_local_login(
     context: ChangeContext,
     mfa_verified=False,
     verified_version=None,
+    csrf_token=None,
 ):
     """Issue a fresh session after password (and any MFA) verification.
 
     The browser loads its capabilities from /v1/me after signing in, so the
-    response identifies the account only.
+    response identifies the account only. ``csrf_token`` is the token the
+    adapter sends as the CSRF cookie; the session keeps it.
     """
     account_session_version = user.session_version
     session_version = user.mfa_version if verified_version is None else verified_version
@@ -143,6 +145,7 @@ def complete_local_login(
         effective_role=eff,
         permission_codes=permission_codes,
         authz_version=authz_version,
+        csrf_token=csrf_token,
     )
 
     security_notifications.record_login(db, user, ip=context.client_ip)
@@ -155,7 +158,9 @@ def complete_local_login(
     return sid, {"user": user.username, "user_id": str(user.id)}
 
 
-def complete_sso_login(db, user, *, provider, id_token, existing_sid, context):
+def complete_sso_login(
+    db, user, *, provider, id_token, existing_sid, context, csrf_token=None
+):
     # Read the active state and session version together under the row lock: a
     # deactivation committed since the identity check then refuses the sign-in,
     # and one that waits for this lock advances the version issued here.
@@ -184,6 +189,7 @@ def complete_sso_login(db, user, *, provider, id_token, existing_sid, context):
         effective_role=eff,
         permission_codes=permission_codes,
         authz_version=authz_version,
+        csrf_token=csrf_token,
     )
 
     security_notifications.record_login(db, user, ip=context.client_ip)

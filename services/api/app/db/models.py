@@ -910,6 +910,8 @@ class User(Base):
     effective_permission_codes: set[str] | None = None
     session_id: str | None = None
     session_authz_version: int | None = None
+    # The CSRF token issued with the session, when it has one (security/csrf.py).
+    session_csrf: str | None = None
 
     # -------------------------------------------------------------------------
     # RBAC: groups + permissions

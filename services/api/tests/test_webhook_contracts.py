@@ -59,6 +59,24 @@ def test_unconfigured_and_missing_secret_fail_closed(policy, monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "placeholder", ["<GENERATE_RANDOM_SECRET>", " <set-a-secret> ", "<>"]
+)
+def test_a_placeholder_left_in_the_environment_is_no_secret(
+    policy, monkeypatch, placeholder
+):
+    """The example file once shipped a provider's secret as a placeholder,
+    which anyone could read there and send."""
+    monkeypatch.setenv("KEEN_TEST_WEBHOOK_SECRET", placeholder)
+    assert not webhooks.verify_secret("monitor", {"X-Monitor-Secret": placeholder})
+    assert not webhooks.verify_secret(
+        "monitor", {"X-Monitor-Secret": placeholder.strip()}
+    )
+    assert webhooks._secret_matches(placeholder, placeholder) is False
+    monkeypatch.setenv("KEEN_TEST_WEBHOOK_SECRET", "a<real>secret")
+    assert webhooks.verify_secret("monitor", {"X-Monitor-Secret": "a<real>secret"})
+
+
+@pytest.mark.parametrize(
     "age,rejected", [(0, False), (899, False), (900, False), (901, True), (-1, True)]
 )
 def test_replay_timestamp_boundaries(monkeypatch, age, rejected):

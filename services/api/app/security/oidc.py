@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import math
 import secrets
 from dataclasses import dataclass
@@ -340,6 +342,10 @@ def _require_provider_config(provider_key: str | None) -> SsoProvider:
 
 
 _JWKS_CACHE: dict[str, tuple[KeySetSerialization, datetime]] = {}
+_JWKS_LIFETIME = timedelta(hours=1)
+# A token naming a key the cached set lacks is the sign of a provider's key
+# rotation, so the set is read again, at most this often for each provider.
+_JWKS_REREAD_AFTER = timedelta(minutes=1)
 
 
 def _new_client(provider: SsoProvider, *, redirect_uri: str) -> AsyncOAuth2Client:
@@ -357,12 +363,40 @@ def _new_client(provider: SsoProvider, *, redirect_uri: str) -> AsyncOAuth2Clien
     )
 
 
-async def _get_jwks(jwks_uri: str) -> KeySetSerialization:
+def _token_key_id(id_token: str) -> str | None:
+    """The key a token says signed it, read before anything is verified.
+
+    It only decides whether the provider's key set is worth reading again;
+    the signature is verified against the set whatever this returns.
+    """
+    try:
+        segment = id_token.split(".", 1)[0]
+        header = json.loads(
+            base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+        )
+        kid = header["kid"]
+    except (ValueError, TypeError, KeyError):
+        return None
+    return kid if isinstance(kid, str) and kid else None
+
+
+def _holds_key(data: KeySetSerialization, kid: str | None) -> bool:
+    keys = data["keys"]
+    return kid is None or (
+        isinstance(keys, list)
+        and any(isinstance(key, dict) and key.get("kid") == kid for key in keys)
+    )
+
+
+async def _get_jwks(jwks_uri: str, kid: str | None = None) -> KeySetSerialization:
     now = _now()
     cached = _JWKS_CACHE.get(jwks_uri)
     if cached:
         data, expires_at = cached
-        if now < expires_at:
+        read_at = expires_at - _JWKS_LIFETIME
+        if now < expires_at and (
+            _holds_key(data, kid) or now - read_at < _JWKS_REREAD_AFTER
+        ):
             return data
 
     async with httpx.AsyncClient(**client_options()) as client:
@@ -372,7 +406,7 @@ async def _get_jwks(jwks_uri: str) -> KeySetSerialization:
     if not isinstance(data, dict) or "keys" not in data:
         raise HTTPException(status_code=500, detail="OIDC JWKS response invalid")
 
-    _JWKS_CACHE[jwks_uri] = (data, now + timedelta(hours=1))
+    _JWKS_CACHE[jwks_uri] = (data, now + _JWKS_LIFETIME)
     return data
 
 
@@ -779,7 +813,7 @@ async def _handle_oidc_callback(
             status_code=400, detail="OIDC token response missing id_token"
         )
 
-    jwks = await _get_jwks(provider.jwks_uri)
+    jwks = await _get_jwks(provider.jwks_uri, _token_key_id(str(id_token)))
 
     claims_options = {
         "iss": {"essential": True, "values": issuer_values},

@@ -455,7 +455,7 @@ def test_password_change_verifies_the_current_password_and_revokes_sessions(keen
     )
     assert (weak.status_code, weak.json()) == (
         400,
-        {"detail": "Password must be at least 8 characters"},
+        {"detail": "Password must be at least 15 characters"},
     )
     before = keen.db.get(User, user.id).mfa_version
     ok = client.post(
@@ -571,7 +571,7 @@ def test_administrators_create_update_and_delete_users(keen, admin_client):  # n
             headers=h,
             json={
                 "username": "riley",
-                "password": "synthetic-password-riley",
+                "password": "synthetic-passphrase-one",
                 "role": "inherit",
                 "email": " riley@example.test ",
             },
@@ -582,7 +582,7 @@ def test_administrators_create_update_and_delete_users(keen, admin_client):  # n
     refused = client.post(
         "/v1/users",
         headers=h,
-        json={"username": "riley", "password": "synthetic-password-riley"},
+        json={"username": "riley", "password": "synthetic-passphrase-one"},
     )
     assert (refused.status_code, refused.json()) == (
         400,
@@ -786,7 +786,7 @@ def test_administrators_reset_local_passwords_only(keen, admin_client):  # noqa:
     )
     assert (refused.status_code, refused.json()) == (
         400,
-        {"detail": "Password must be at least 8 characters"},
+        {"detail": "Password must be at least 15 characters"},
     )
     directory = keen.user()
     row = keen.db.get(User, directory.id)

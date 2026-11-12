@@ -13,6 +13,7 @@ from fastapi.openapi.docs import (
 )
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 from starlette.concurrency import run_in_threadpool
 
 from app.api.context import machine_credential
@@ -45,6 +46,7 @@ from app.security.permissions import (
     ensure_session_authorization_current,
     has_permission,
 )
+from app.security.placeholders import is_placeholder
 from app.security.rate_limit import address_window_allow, fixed_window_allow
 from app.security.redaction import redact_query_string, redact_str
 from app.security.regex import scan_pattern
@@ -152,8 +154,9 @@ def bootstrap_initial_admin():
             raise ValueError(
                 "Supply both bootstrap credentials for initial account creation"
             )
-        if len(pwd) < 8:
-            raise ValueError("Bootstrap password must be at least eight characters")
+        if is_placeholder(pwd):
+            raise ValueError("Replace the placeholder bootstrap password")
+        # The password meets the rules every new password does.
         create_user(db, username=uname, password=pwd, role=ROLE_ADMIN)
         print(f"[keen] Bootstrapped initial admin user: {uname}")
     except Exception:
@@ -162,7 +165,9 @@ def bootstrap_initial_admin():
         raise RuntimeError(
             "Initial administrator creation failed; on an empty installation supply "
             "both KEEN_BOOTSTRAP_ADMIN_USERNAME and KEEN_BOOTSTRAP_ADMIN_PASSWORD "
-            "(at least eight characters), and check database availability"
+            f"(at least {settings.password_min_length} characters, hard to guess, "
+            "and never an example file's placeholder), and check database "
+            "availability"
         ) from None
     finally:
         db.close()
@@ -202,10 +207,11 @@ async def csrf_middleware(request: Request, call_next):
 
     # Browsers signed in by a trusted proxy have no Keen sign-in response to
     # carry the CSRF cookie, and a browser may lose the cookie before its
-    # session ends; either receives a token with this response.
+    # session ends; either receives a token with this response: the session's
+    # own where it holds one.
     if user and not mcp and not get_csrf_token_from_request(request):
         try:
-            set_csrf_cookie(response, generate_csrf_token())
+            set_csrf_cookie(response, user.session_csrf or generate_csrf_token())
         except Exception:
             # CSRF cookie minting should never break the main request path.
             pass
@@ -312,7 +318,19 @@ def _authenticate(request: Request) -> JSONResponse | None:
     try:
         inner_token = request.scope.get(INNER_TOKEN)
         if inner_token is None:
-            user = get_current_user_from_request(request, db)
+            try:
+                user = get_current_user_from_request(request, db)
+            except (RedisError, OSError):
+                # Without the session store nobody can be recognised; say so
+                # as an outage, as sign-in does, and name no account.
+                return JSONResponse(
+                    {
+                        "detail": "Service temporarily unavailable. "
+                        "Please try again later."
+                    },
+                    status_code=503,
+                    headers={"Retry-After": "5"},
+                )
         else:
             found = _mcp_user(db, request, inner_token)
             if isinstance(found, JSONResponse):

@@ -8,11 +8,12 @@ sign-in. Requests run through the production middleware.
 """
 
 import pytest
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.db.models import UserIdentity
 from app.security import auth, sessions
 from app.security.auth import cookie_name as session_cookie_name
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from starlette.datastructures import Headers
 
 # Imported fixture: the production middleware with an in-memory session store.
@@ -23,7 +24,7 @@ from tests.test_security_design_contracts import production_client  # noqa: F401
 def proxy(monkeypatch):
     monkeypatch.setattr(settings, "trust_remote_user", True)
     monkeypatch.setattr(settings, "oidc_enabled", False)
-    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "127.0.0.1/32")
+    monkeypatch.setattr(settings, "remote_user_trusted_cidrs", "127.0.0.1/32")
     monkeypatch.setattr(settings, "remote_user_header_name", "REMOTE_USER")
 
 
@@ -78,8 +79,21 @@ def test_only_the_configured_header_names_the_user(proxy, monkeypatch):
 
 @pytest.mark.parametrize("cidrs", ["127.0.0.1/33", "not-an-address", ""])
 def test_an_unusable_proxy_list_trusts_no_one(proxy, monkeypatch, cidrs):
-    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", cidrs)
+    monkeypatch.setattr(settings, "remote_user_trusted_cidrs", cidrs)
     assert _identity({"REMOTE_USER": "alice"}) is None
+
+
+def test_a_proxy_trusted_for_client_addresses_names_no_account(proxy, monkeypatch):
+    """Forwarding trust and identity trust are separate lists: the Compose
+    default trusts the network gateway to forward addresses, and every process
+    on the Docker host connects through it."""
+    monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "172.30.65.1/32")
+    monkeypatch.setattr(settings, "remote_user_trusted_cidrs", "172.30.65.10/32")
+    assert _identity({"REMOTE_USER": "alice"}, peer="172.30.65.1") is None
+    assert _identity({"REMOTE_USER": "alice"}, peer="172.30.65.10") == "alice"
+    # The original defect: the forwarding list alone named accounts.
+    monkeypatch.setattr(settings, "remote_user_trusted_cidrs", "")
+    assert _identity({"REMOTE_USER": "alice"}, peer="172.30.65.1") is None
 
 
 def test_the_proxy_names_only_active_accounts(production_client, proxy, contract_db):  # noqa: F811 - fixture imported above
@@ -164,3 +178,37 @@ def test_a_hosted_workspace_admits_only_its_owners_sign_in(
         status, sid = check(user, method)
         assert status == 401, (user.username, method)
         assert sessions.get_session(redis, sid) is None
+
+
+@pytest.mark.parametrize(
+    "values,problem",
+    [
+        ({"trust_remote_user": True}, "KEEN_REMOTE_USER_TRUSTED_CIDRS"),
+        (
+            {"trust_remote_user": True, "remote_user_trusted_cidrs": " , "},
+            "KEEN_REMOTE_USER_TRUSTED_CIDRS",
+        ),
+        (
+            # The forwarding list is no substitute.
+            {
+                "trust_remote_user": True,
+                "security_trusted_proxy_cidrs": "172.30.65.10/32",
+            },
+            "KEEN_REMOTE_USER_TRUSTED_CIDRS",
+        ),
+        ({"remote_user_trusted_cidrs": "not-an-address"}, "not-an-address"),
+        ({"remote_user_trusted_cidrs": "10.0.0.1/33"}, "10.0.0.1/33"),
+    ],
+)
+def test_remote_user_mode_does_not_start_without_its_own_proxy_list(values, problem):
+    with pytest.raises(ValidationError) as refused:
+        Settings(**values)
+    assert problem in str(refused.value)
+
+
+def test_remote_user_mode_starts_with_its_proxies_named():
+    assert Settings().remote_user_trusted_cidrs == ""
+    configured = Settings(
+        trust_remote_user=True, remote_user_trusted_cidrs="10.0.0.5/32, 10.1.0.0/16"
+    )
+    assert configured.remote_user_trusted_cidrs == "10.0.0.5/32, 10.1.0.0/16"

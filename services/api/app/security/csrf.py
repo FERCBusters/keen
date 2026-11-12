@@ -113,7 +113,24 @@ def request_origin_allowed(request, *, require_origin=False) -> bool:
         return False
 
 
+def session_csrf_token(request: Request) -> str | None:
+    """The token issued with the request's session, when it has one.
+
+    Sign-in stores the token it sends as the CSRF cookie in the session. A
+    request authenticated without a Keen session (a trusted proxy's identity
+    header) has none, and neither has a route that runs before authentication.
+    """
+    user = getattr(request.state, "user", None)
+    return getattr(user, "session_csrf", None)
+
+
 def csrf_valid(request: Request) -> bool:
+    """Whether an unsafe request carries this browser's CSRF proof.
+
+    The header must repeat the cookie, and for a session that holds a token it
+    must also be that session's token. A cookie planted from a sibling
+    subdomain is one the session never issued, so it proves nothing.
+    """
     if not request_origin_allowed(request, require_origin=settings.hosted_mode):
         return False
     cookie_token = get_csrf_token_from_request(request)
@@ -121,6 +138,9 @@ def csrf_valid(request: Request) -> bool:
     if not cookie_token or not header_token:
         return False
     try:
-        return secrets.compare_digest(cookie_token, header_token)
+        if not secrets.compare_digest(cookie_token, header_token):
+            return False
+        issued = session_csrf_token(request)
+        return issued is None or secrets.compare_digest(header_token, issued)
     except Exception:
         return False

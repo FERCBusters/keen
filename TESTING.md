@@ -73,7 +73,7 @@ url='postgresql+psycopg2://keen_test:keen_test@localhost:5432/keen_test'
 KEEN_DATABASE_URL="$url" KEEN_CONTRACT_TEST_DATABASE_URL="$url" \
   KEEN_RETENTION_TEST_DATABASE_URL="$url" KEEN_MFA_TEST_DATABASE_URL="$url" \
   KEEN_HOME_TEST_DATABASE_URL="$url" KEEN_REDIS_URL='redis://localhost:6379/0' \
-  KEEN_BOOTSTRAP_ADMIN_USERNAME=test KEEN_BOOTSTRAP_ADMIN_PASSWORD=test-only \
+  KEEN_BOOTSTRAP_ADMIN_USERNAME=test KEEN_BOOTSTRAP_ADMIN_PASSWORD=test-only-synthetic-passphrase \
   AWS_EC2_METADATA_DISABLED=true \
   poetry run pytest tests/test_features.py -q
 ```

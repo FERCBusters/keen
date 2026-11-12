@@ -30,6 +30,8 @@ from app.security.auth import authenticate_user
 from app.security.auth import cookie_name as session_cookie_name
 from app.services.errors import DomainError
 from fastapi import HTTPException
+from ldap3.core.exceptions import LDAPException
+from ldap3.operation.bind import bind_operation
 from sqlalchemy.orm import Session
 
 LDAP_UNAVAILABLE = (
@@ -96,6 +98,13 @@ def directory(monkeypatch):
 
         def bind(self):
             events.append(("bind", self.kw["user"]))
+            if "sent" in state:
+                # Build the request as ldap3 does, so its own preparation of
+                # the password runs, and keep the bytes it would send.
+                request = bind_operation(
+                    3, ldap.SIMPLE, self.kw["user"], self.kw["password"]
+                )
+                state["sent"].append(bytes(request["authentication"]["simple"]))
             if self.kw["user"].startswith("uid=") and not state["bind"]:
                 self.result = {"result": 49}
                 return False
@@ -409,15 +418,98 @@ def test_a_refused_service_bind_makes_directory_sign_in_unavailable(directory, r
     assert ("bind", "uid=alice,ou=People,dc=example") not in directory[1]
 
 
-def test_a_directory_failure_during_the_user_bind_is_not_a_wrong_password(directory):
-    # Only result 49 (invalid credentials) denies the user; anything else means
-    # the directory could not answer.
-    directory[0]["user_bind"] = 52
+@pytest.mark.parametrize("result", [1, 51, 52, 80])
+def test_a_directory_failure_during_the_user_bind_is_not_a_wrong_password(
+    directory, result
+):
+    # A result that describes the directory, such as busy or unavailable,
+    # means it could not answer.
+    directory[0]["user_bind"] = result
     with pytest.raises(HTTPException) as error:
         ldap.directory_identity("alice", "secret")
     assert (error.value.status_code, error.value.detail) == (503, LDAP_UNAVAILABLE)
     directory[0]["user_bind"] = 49
     assert ldap.directory_identity("alice", "secret") is None
+
+
+@pytest.mark.parametrize("result", sorted(ldap._ENTRY_REFUSALS))
+def test_a_directory_refusing_one_entry_is_answered_as_a_wrong_password(
+    directory, caplog, result
+):
+    """Directories refuse a locked, expired or disabled account with result
+    codes of their own. Answered as an outage, they would show that the typed
+    name matched an entry, which a wrong password never shows."""
+    caplog.set_level("WARNING", logger="app.security.ldap")
+    directory[0]["user_bind"] = result
+    assert ldap.directory_identity("alice", "secret") is None
+    # The operator's log names the code and nothing about the entry.
+    assert caplog.messages == [f"LDAP sign-in bind refused with result code {result}"]
+    assert "alice" not in caplog.text and "secret" not in caplog.text
+    # The same code from the service account still means the directory is
+    # misconfigured or unavailable.
+    del directory[0]["user_bind"]
+    directory[0]["service_bind"] = result
+    with pytest.raises(HTTPException) as error:
+        ldap.directory_identity("alice", "secret")
+    assert error.value.status_code == 503
+
+
+UNPREPARABLE = [
+    "\u00ad",  # soft hyphen: prepared to nothing
+    "\u200d\u200d",  # zero-width joiners: prepared to nothing
+    "\t",  # a control character
+    "\ufffd",  # what a NUL in a JSON body becomes
+    "pass\ue000word",  # a private-use character
+]
+
+
+@pytest.mark.parametrize("password", UNPREPARABLE)
+def test_ldap3_refuses_to_prepare_these_passwords_as_text(password):
+    """The defect the next test guards against: ldap3 prepares a text password
+    with SASLprep inside bind(), which Keen reaches only for a name that
+    matched an entry, and its refusal was answered as an outage (503) while
+    every other name got a wrong password (401)."""
+    with pytest.raises(LDAPException):
+        bind_operation(3, ldap.SIMPLE, "uid=alice,ou=People,dc=example", password)
+
+
+@pytest.mark.parametrize("password", UNPREPARABLE + ["pässword \u00a0\uff21"])
+def test_every_name_gets_the_same_answer_whatever_the_password_holds(
+    directory, monkeypatch, password
+):
+    state, events, connections = directory
+    state["bind"] = False
+    state["sent"] = []
+    entry = ("bind", "uid=alice,ou=People,dc=example")
+
+    # A name the directory holds: the password is sent as typed and refused.
+    assert ldap.directory_identity("alice", password) is None
+    assert events.count(entry) == 1
+    assert state["sent"] == [b"search-secret", password.encode()]
+    assert connections[-1].kw["password"] == password.encode()
+
+    # A name it does not hold, and one outside the required group.
+    state["entries"], kept = [], state["entries"]
+    assert ldap.directory_identity("nobody", password) is None
+    state["entries"] = kept
+    monkeypatch.setattr(settings, "ldap_group_filter", "(objectClass=groupOfNames)")
+    state["groups"] = []
+    assert ldap.directory_identity("alice", password) is None
+    assert events.count(entry) == 1
+
+    # The right bytes still sign in.
+    monkeypatch.setattr(settings, "ldap_group_filter", "")
+    state["bind"] = True
+    assert ldap.directory_identity("alice", password)["subject"] == "immutable-id"
+
+
+def test_a_password_no_keyboard_can_type_is_refused_before_the_directory_is_asked(
+    directory,
+):
+    _, events, _ = directory
+    # A lone surrogate has no UTF-8 form.
+    assert ldap.directory_identity("alice", "pass\ud800word") is None
+    assert events == []
 
 
 def test_directory_attributes_are_read_as_single_values_whatever_their_shape(
