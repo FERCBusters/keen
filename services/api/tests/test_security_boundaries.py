@@ -31,19 +31,64 @@ def request(headers=None, peer="192.0.2.5"):
     "headers,valid",
     [
         ({}, False),
-        ({"cookie": "keen_csrf=a"}, False),
+        ({"cookie": "__Host-keen_csrf=a"}, False),
         ({"x-csrf-token": "a"}, False),
-        ({"cookie": "keen_csrf=a", "x-csrf-token": "b"}, False),
-        ({"cookie": "keen_csrf=a", "x-csrf-token": "a"}, True),
-        ({"cookie": "keen_csrf=a", "x-csrftoken": "a"}, True),
-        ({"cookie": "keen_csrf=a", "x-xsrf-token": "a"}, True),
+        ({"cookie": "__Host-keen_csrf=a", "x-csrf-token": "b"}, False),
+        ({"cookie": "__Host-keen_csrf=a", "x-csrf-token": "a"}, True),
+        ({"cookie": "__Host-keen_csrf=a", "x-csrftoken": "a"}, True),
+        ({"cookie": "__Host-keen_csrf=a", "x-xsrf-token": "a"}, True),
+        # A cookie under the bare name is one a sibling site could have set.
+        ({"cookie": "keen_csrf=a", "x-csrf-token": "a"}, False),
+        ({"cookie": "keen_csrf=a; __Host-keen_csrf=b", "x-csrf-token": "a"}, False),
+        ({"cookie": "keen_csrf=a; __Host-keen_csrf=b", "x-csrf-token": "b"}, True),
+        ({"cookie": "__Secure-keen_csrf=a", "x-csrf-token": "a"}, False),
+        ({"cookie": "__host-keen_csrf=a", "x-csrf-token": "a"}, False),
     ],
 )
 def test_csrf_requires_matching_cookie_and_header(monkeypatch, headers, valid):
     monkeypatch.setattr(settings, "hosted_mode", False)
     monkeypatch.setattr(settings, "csrf_cookie_name", "keen_csrf")
     monkeypatch.setattr(settings, "csrf_header_name", "X-CSRF-Token")
+    monkeypatch.setattr(settings, "cookie_secure", True)
+    monkeypatch.setattr(settings, "cookie_domain", "")
     assert csrf.csrf_valid(request(headers)) is valid
+
+
+@pytest.mark.parametrize(
+    "secure,domain,configured,name",
+    [
+        (True, "", "keen_csrf", "__Host-keen_csrf"),
+        (True, "", "  ", "__Host-keen_csrf"),
+        (True, "", "custom_csrf", "__Host-custom_csrf"),
+        # A browser refuses a __Host- cookie that names a Domain or lacks Secure.
+        (True, "example.org", "keen_csrf", "keen_csrf"),
+        (False, "", "keen_csrf", "keen_csrf"),
+        (False, "example.org", "keen_csrf", "keen_csrf"),
+        # A configured prefix is kept as it is.
+        (True, "", "__Host-own_csrf", "__Host-own_csrf"),
+        (True, "", "__Secure-own_csrf", "__Secure-own_csrf"),
+    ],
+)
+def test_the_csrf_cookie_is_host_bound_only_when_it_can_be(
+    monkeypatch, secure, domain, configured, name
+):
+    monkeypatch.setattr(settings, "hosted_mode", False)
+    monkeypatch.setattr(settings, "cookie_secure", secure)
+    monkeypatch.setattr(settings, "cookie_domain", domain)
+    monkeypatch.setattr(settings, "csrf_cookie_name", configured)
+    assert csrf.csrf_cookie_name() == name
+    assert csrf.csrf_valid(request({"cookie": f"{name}=a", "x-csrf-token": "a"}))
+    response = Response()
+    csrf.set_csrf_cookie(response, "token")
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith(f"{name}=token;") and "Path=/" in cookie
+    assert ("Secure" in cookie) is secure
+    assert ("Domain=example.org" in cookie) is bool(domain)
+    response = Response()
+    csrf.clear_csrf_cookie(response)
+    cleared = response.headers["set-cookie"]
+    assert cleared.startswith(f'{name}="";') and "Max-Age=0" in cleared
+    assert ("Secure" in cleared) is secure
 
 
 @pytest.mark.parametrize(
@@ -61,7 +106,13 @@ def test_hosted_csrf_requires_exact_tenant_origin(monkeypatch, origin, valid):
     monkeypatch.setattr(settings, "public_base_url", "https://tenant.example")
     assert (
         csrf.csrf_valid(
-            request({"cookie": "keen_csrf=a", "x-csrf-token": "a", "origin": origin})
+            request(
+                {
+                    "cookie": "__Host-keen_csrf=a",
+                    "x-csrf-token": "a",
+                    "origin": origin,
+                }
+            )
         )
         is valid
     )
@@ -73,12 +124,14 @@ def test_csrf_custom_names_and_cookie_flags(monkeypatch):
     monkeypatch.setattr(settings, "csrf_header_name", "X-Custom-Csrf")
     monkeypatch.setattr(settings, "cookie_secure", True)
     monkeypatch.setattr(settings, "csrf_cookie_samesite", "invalid")
+    monkeypatch.setattr(settings, "cookie_domain", "")
     assert csrf.csrf_valid(
-        request({"cookie": "custom_csrf=token", "x-custom-csrf": "token"})
+        request({"cookie": "__Host-custom_csrf=token", "x-custom-csrf": "token"})
     )
     response = Response()
     csrf.set_csrf_cookie(response, "token")
     cookie = response.headers["set-cookie"]
+    assert cookie.startswith("__Host-custom_csrf=token;")
     assert (
         "Secure" in cookie and "SameSite=strict" in cookie and "HttpOnly" not in cookie
     )

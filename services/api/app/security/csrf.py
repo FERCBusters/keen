@@ -17,8 +17,22 @@ def samesite_policy(value: str, default: SameSite) -> SameSite:
 
 
 def csrf_cookie_name() -> str:
-    # Allow override, but keep a stable default.
-    return settings.csrf_cookie_name.strip() or "keen_csrf"
+    """The CSRF cookie's name.
+
+    A Secure cookie without a Domain attribute takes the ``__Host-`` prefix, as
+    the session cookie does: a browser accepts that name only from this host
+    over HTTPS, so another site under the same parent domain can neither plant
+    nor shadow the token. The UI reads the prefixed cookie first and the
+    configured name otherwise.
+    """
+    name = settings.csrf_cookie_name.strip() or "keen_csrf"
+    if (
+        settings.cookie_secure
+        and not settings.cookie_domain.strip()
+        and not name.startswith(("__Host-", "__Secure-"))
+    ):
+        return "__Host-" + name
+    return name
 
 
 def csrf_header_name() -> str:

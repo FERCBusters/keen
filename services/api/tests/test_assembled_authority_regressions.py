@@ -131,7 +131,7 @@ def keen(contract_db, tmp_path, monkeypatch):
 
 
 def unsafe(client):
-    return {"Origin": BASE, "X-CSRF-Token": client.cookies.get("keen_csrf")}
+    return {"Origin": BASE, "X-CSRF-Token": client.cookies.get("__Host-keen_csrf")}
 
 
 # --- Bounded chart work -------------------------------------------------------

@@ -64,7 +64,10 @@ class Mcp:
         assert signed_in.status_code == 200, signed_in.text
 
     def unsafe(self):
-        return {"Origin": BASE, "X-CSRF-Token": self.client.cookies.get("keen_csrf")}
+        return {
+            "Origin": BASE,
+            "X-CSRF-Token": self.client.cookies.get("__Host-keen_csrf"),
+        }
 
     def register(self, **metadata):
         body = {"client_name": "Claude Code", "redirect_uris": [REDIRECT], **metadata}
@@ -218,7 +221,10 @@ def test_every_mcp_route_answers_404_while_mcp_is_off(keen, monkeypatch):
         refused = client.post(
             "/v1/me/mcp/consent/view",
             json={"request": "kcr_x"},
-            headers={"Origin": BASE, "X-CSRF-Token": client.cookies.get("keen_csrf")},
+            headers={
+                "Origin": BASE,
+                "X-CSRF-Token": client.cookies.get("__Host-keen_csrf"),
+            },
         )
         assert refused.status_code == 404
 

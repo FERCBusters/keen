@@ -272,6 +272,8 @@ class Settings(BaseSettings):
     # CSRF (double-submit cookie)
     # - Token is stored in a non-HttpOnly cookie so the UI can echo it in a header.
     # - For unsafe methods, the API requires the header value to match the cookie.
+    # - With Secure cookies and no cookie domain the name takes the __Host-
+    #   prefix (security/csrf.py); the UI reads that cookie first.
     csrf_cookie_name: str = Field(default="keen_csrf")
     csrf_header_name: str = Field(default="X-CSRF-Token")
     csrf_cookie_samesite: str = Field(default="strict")  # lax|strict|none

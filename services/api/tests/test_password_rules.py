@@ -160,7 +160,7 @@ def test_a_shorter_minimum_needs_a_second_factor_on_every_account(values, accept
 
 def test_setting_a_password_applies_the_rules_through_the_api(keen):  # noqa: F811
     admin = keen.client(keen.user(role="admin"))
-    headers = {"Origin": BASE, "X-CSRF-Token": admin.cookies.get("keen_csrf")}
+    headers = {"Origin": BASE, "X-CSRF-Token": admin.cookies.get("__Host-keen_csrf")}
     common = "Password is too common; choose a phrase of several unrelated words"
     named = "Password must not contain the username"
 
@@ -187,7 +187,7 @@ def test_setting_a_password_applies_the_rules_through_the_api(keen):  # noqa: F8
     assert (reset.status_code, reset.json()) == (400, {"detail": named})
 
     owner = keen.client(target)
-    own = {"Origin": BASE, "X-CSRF-Token": owner.cookies.get("keen_csrf")}
+    own = {"Origin": BASE, "X-CSRF-Token": owner.cookies.get("__Host-keen_csrf")}
     for new_password, detail in [
         ("Password123456!", common),
         (target.username.upper() + "-walks-at-dawn", named),

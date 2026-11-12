@@ -27,6 +27,7 @@ from sqlalchemy import event
 
 from tests.test_assembled_authority_regressions import (  # noqa: F401 - fixtures
     BASE,
+    PASSWORD,
     keen,
     unsafe,
 )
@@ -52,21 +53,20 @@ def test_a_csrf_token_with_non_ascii_characters_is_refused(keen):  # noqa: F811
 
 
 def test_a_csrf_token_the_session_never_issued_proves_nothing(keen):  # noqa: F811
-    """A site on a sibling subdomain can plant a cookie for the parent domain
-    and knows its value. Matching cookie and header is then no proof: the
-    token must be the one issued with the session."""
+    """Matching cookie and header is no proof by itself: the token must be the
+    one issued with the session, whatever wrote the cookie."""
     user = keen.user()
     client = keen.client(user)
-    issued = client.cookies.get("keen_csrf")
+    issued = client.cookies.get("__Host-keen_csrf")
     stored = keen.store.get(keen.store.keys("keen:session:*")[0])
     assert issued and f'"csrf": "{issued}"' in stored
 
-    client.cookies.delete("keen_csrf")
-    client.cookies.set("keen_csrf", "planted-by-a-sibling-site")
+    client.cookies.delete("__Host-keen_csrf")
+    client.cookies.set("__Host-keen_csrf", "written-by-something-else")
     planted = client.patch(
         "/v1/me/preferences",
         json={"theme": "ocean"},
-        headers={"Origin": BASE, "X-CSRF-Token": "planted-by-a-sibling-site"},
+        headers={"Origin": BASE, "X-CSRF-Token": "written-by-something-else"},
     )
     assert (planted.status_code, planted.json()) == (
         403,
@@ -75,9 +75,9 @@ def test_a_csrf_token_the_session_never_issued_proves_nothing(keen):  # noqa: F8
     assert client.get("/v1/me/preferences").json()["theme"] != "ocean"
 
     # Another signed-in account's token is no better.
-    other = keen.client(keen.user()).cookies.get("keen_csrf")
-    client.cookies.delete("keen_csrf")
-    client.cookies.set("keen_csrf", other)
+    other = keen.client(keen.user()).cookies.get("__Host-keen_csrf")
+    client.cookies.delete("__Host-keen_csrf")
+    client.cookies.set("__Host-keen_csrf", other)
     borrowed = client.patch(
         "/v1/me/preferences",
         json={"theme": "ocean"},
@@ -85,14 +85,71 @@ def test_a_csrf_token_the_session_never_issued_proves_nothing(keen):  # noqa: F8
     )
     assert borrowed.status_code == 403
 
-    client.cookies.delete("keen_csrf")
-    client.cookies.set("keen_csrf", issued)
+    client.cookies.delete("__Host-keen_csrf")
+    client.cookies.set("__Host-keen_csrf", issued)
     own = client.patch(
         "/v1/me/preferences",
         json={"theme": "ocean"},
         headers={"Origin": BASE, "X-CSRF-Token": issued},
     )
     assert own.status_code == 200 and own.json()["theme"] == "ocean"
+
+
+def test_only_the_host_bound_csrf_cookie_is_read(keen):  # noqa: F811
+    """A site on a sibling subdomain can set ``keen_csrf`` for the parent
+    domain and knows its value; a browser lets only this host set
+    ``__Host-keen_csrf``. Sign-out runs before authentication, where the
+    cookie and header are the whole token check."""
+    client = keen.client(keen.user())
+    issued = client.cookies.get("__Host-keen_csrf")
+    assert issued and client.cookies.get("keen_csrf") is None
+
+    client.cookies.delete("__Host-keen_csrf")
+    client.cookies.set("keen_csrf", "planted-by-a-sibling-site")
+    planted = client.post(
+        "/v1/auth/logout",
+        headers={"Origin": BASE, "X-CSRF-Token": "planted-by-a-sibling-site"},
+    )
+    assert planted.status_code == 403
+    assert not planted.headers.get_list("set-cookie")
+    assert client.get("/v1/auth/check").status_code == 204
+
+    # Beside the planted cookie, the host-bound one is the one that counts.
+    client.cookies.set("__Host-keen_csrf", issued)
+    still_planted = client.post(
+        "/v1/auth/logout",
+        headers={"Origin": BASE, "X-CSRF-Token": "planted-by-a-sibling-site"},
+    )
+    assert still_planted.status_code == 403
+    signed_out = client.post(
+        "/v1/auth/logout", headers={"Origin": BASE, "X-CSRF-Token": issued}
+    )
+    assert signed_out.status_code == 204
+    assert client.get("/v1/auth/check").status_code == 401
+
+
+def test_sign_in_sets_and_sign_out_clears_the_host_bound_csrf_cookie(keen):  # noqa: F811
+    client = keen.client()
+    user = keen.user()
+    signed_in = client.post(
+        "/v1/auth/login",
+        json={"username": user.username, "password": PASSWORD},
+        headers={"Origin": BASE},
+    )
+    assert signed_in.status_code == 200, signed_in.text
+    (cookie,) = _csrf_cookies(signed_in)
+    attributes = [part.strip().lower() for part in cookie.split(";")]
+    # The attributes a browser demands of a __Host- cookie, and no HttpOnly:
+    # the UI reads the token to repeat it in a header.
+    assert cookie.startswith("__Host-keen_csrf=")
+    assert "secure" in attributes and "path=/" in attributes
+    assert not any(a.startswith("domain") for a in attributes)
+    assert "httponly" not in attributes and "samesite=strict" in attributes
+
+    signed_out = client.post("/v1/auth/logout", headers=unsafe(client))
+    (cleared,) = _csrf_cookies(signed_out)
+    assert cleared.startswith("__Host-keen_csrf=") and "Max-Age=0" in cleared
+    assert "secure" in cleared.lower() and "domain" not in cleared.lower()
 
 
 @pytest.mark.parametrize(
@@ -127,13 +184,13 @@ def test_a_browser_keeps_working_when_its_replacement_csrf_token_cannot_be_made(
 ):
     user = keen.user()
     client = keen.client(user)
-    issued = client.cookies.get("keen_csrf")
-    client.cookies.delete("keen_csrf")
+    issued = client.cookies.get("__Host-keen_csrf")
+    client.cookies.delete("__Host-keen_csrf")
     replaced = client.get("/v1/me")
     # The replacement is the token the session was issued with.
     assert replaced.status_code == 200 and len(_csrf_cookies(replaced)) == 1
-    assert client.cookies.get("keen_csrf") == issued
-    client.cookies.delete("keen_csrf")
+    assert client.cookies.get("__Host-keen_csrf") == issued
+    client.cookies.delete("__Host-keen_csrf")
 
     def unavailable(response, token):
         raise OSError("synthetic cookie failure")

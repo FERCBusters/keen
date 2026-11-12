@@ -28,6 +28,12 @@ test('cache policies preserve inherited security headers on every location and e
   );
   assert.match(conf, /map \$status \$keen_vendor_cache_control\s*\{\s*default "no-store";/);
   assert.match(conf, /~\^\/vendor\/ \$keen_vendor_cache_control;/);
+  // The design system changes with Keen at a stable URL, so browsers check it
+  // before each use. nginx applies the first matching pattern.
+  const cachePolicy = conf.slice(conf.indexOf('map $uri $keen_cache_control'));
+  const designSystem = cachePolicy.indexOf('~^/vendor/mosp-design-system/ "no-cache";');
+  assert.notEqual(designSystem, -1);
+  assert.ok(designSystem < cachePolicy.indexOf('~^/vendor/ $keen_vendor_cache_control;'));
   assert.match(conf, /~\^\/pages\/ "no-store";/);
 });
 
