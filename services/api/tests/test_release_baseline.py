@@ -144,6 +144,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0050_external_auditor_questions",
         "0049_default_groups",
         "0048_events_retention_time",
         "0047_affected_links",
@@ -1625,6 +1626,134 @@ def test_starting_groups_arrive_and_the_reserved_permission_code_goes():
             conn.commit()
             command.upgrade(config, "0049_default_groups")
             assert groups(conn)["Staff"] == (None, ["events.read", "isms.read"])
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_external_auditors_gain_stories_and_questions_while_the_group_is_unchanged():
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "auditors_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def run(conn, sql, **params):
+        return conn.execute(text(sql), params)
+
+    def held(conn):
+        return list(
+            run(
+                conn,
+                "SELECT p.code FROM groups g"
+                " JOIN group_permissions gp ON gp.group_id = g.id"
+                " JOIN permissions p ON p.id = gp.permission_id"
+                " WHERE g.name = 'External auditors' ORDER BY p.code",
+            ).scalars()
+        )
+
+    def description(conn):
+        return run(
+            conn, "SELECT description FROM groups WHERE name = 'External auditors'"
+        ).scalar()
+
+    def versions(conn):
+        return dict(run(conn, "SELECT username, authz_version FROM users").all())
+
+    at_0049 = [
+        "audits.manage",
+        "events.read",
+        "isms.read",
+        "pestle.read",
+        "quiz.read",
+        "risk.read",
+    ]
+    at_0050 = sorted(at_0049 + ["question.create", "stories.read"])
+    ids = {key: uuid.uuid4() for key in ("auditor", "other")}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0048_events_retention_time")
+            run(conn, "DELETE FROM permissions")
+            for code in at_0050 + ["question.delete", "stories.manage"]:
+                run(
+                    conn,
+                    "INSERT INTO permissions (id, code, created_at)"
+                    " VALUES (:id, :code, now())",
+                    id=uuid.uuid4(),
+                    code=code,
+                )
+            for name in ("auditor", "other"):
+                run(
+                    conn,
+                    "INSERT INTO users (id, username, password_hash, created_at,"
+                    " updated_at, pref_auto_apply_filters, pref_source_colors,"
+                    " pref_landing_page, pref_date_format, authz_version)"
+                    " VALUES (:id, :name, 'unused', now(), now(), false, '{}',"
+                    " '/', 'dmy', 3)",
+                    id=ids[name],
+                    name=name,
+                )
+            conn.commit()
+            # An installation that already ran 0049 and gave the group a member.
+            command.upgrade(config, "0049_default_groups")
+            assert held(conn) == at_0049
+            assert description(conn).endswith("Change nothing else.")
+            run(
+                conn,
+                "INSERT INTO user_groups (user_id, group_id)"
+                " SELECT :u, id FROM groups WHERE name = 'External auditors'",
+                u=ids["auditor"],
+            )
+            conn.commit()
+
+            command.upgrade(config, "0050_external_auditor_questions")
+
+            # Stories and questions arrive; nothing that edits a record does.
+            assert held(conn) == at_0050
+            assert description(conn).endswith("Change no record.")
+            # The member's session refreshes; nobody else's does.
+            assert versions(conn) == {"auditor": 4, "other": 3}
+            staff = run(
+                conn,
+                "SELECT count(*) FROM group_permissions gp JOIN groups g"
+                " ON g.id = gp.group_id WHERE g.name = 'Staff'",
+            ).scalar()
+            assert staff == 2
+
+            # A downgrade takes the two back and the upgrade gives them again.
+            command.downgrade(config, "0049_default_groups")
+            assert held(conn) == at_0049
+            assert description(conn).endswith("Change nothing else.")
+            assert versions(conn) == {"auditor": 5, "other": 3}
+            command.upgrade(config, "0050_external_auditor_questions")
+            assert held(conn) == at_0050
+
+            # A group an administrator has redescribed is the installation's
+            # own: neither direction touches it.
+            command.downgrade(config, "0049_default_groups")
+            run(
+                conn,
+                "UPDATE groups SET description = 'Our certification body'"
+                " WHERE name = 'External auditors'",
+            )
+            conn.commit()
+            before = versions(conn)
+            command.upgrade(config, "0050_external_auditor_questions")
+            assert held(conn) == at_0049
+            assert description(conn) == "Our certification body"
+            assert versions(conn) == before
+            command.downgrade(config, "0049_default_groups")
+            assert held(conn) == at_0049
+            assert versions(conn) == before
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

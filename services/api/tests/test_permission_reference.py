@@ -14,7 +14,9 @@ from tests.test_access_policy_inventory import _policy
 
 ROOT = Path(__file__).resolve().parents[3]
 HELP = ROOT / "services/ui/public/help/administrator-identity.html"
-MIGRATION = ROOT / "services/api/alembic/versions/0049_default_groups.py"
+VERSIONS = ROOT / "services/api/alembic/versions"
+MIGRATION = VERSIONS / "0049_default_groups.py"
+LATER = VERSIONS / "0050_external_auditor_questions.py"
 
 
 def _section(start, end):
@@ -27,11 +29,20 @@ def _rows(section):
     return [re.findall(r"<td>(.*?)</td>", row, re.S) for row in table.split("<tr>")[1:]]
 
 
-def _starting_groups():
-    spec = importlib.util.spec_from_file_location("keen_default_groups", MIGRATION)
+def _migration(path):
+    spec = importlib.util.spec_from_file_location("keen_" + path.stem, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.GROUPS
+    return module
+
+
+def _starting_groups():
+    """Each starting group with the permissions it holds once every migration
+    has run: 0049 adds the groups and 0050 adds to one of them."""
+    groups = {name: list(codes) for name, _, codes in _migration(MIGRATION).GROUPS}
+    later = _migration(LATER)
+    groups[later.GROUP] += later.ADDED
+    return groups
 
 
 def test_help_lists_exactly_the_permissions_the_api_checks():
@@ -54,19 +65,23 @@ def test_starting_groups_hold_real_permissions_and_help_describes_them():
         _section('id="starting-groups"', 'id="security-notification-delivery"')
     )
     described = {row[0]: re.findall(r"<code>([a-z.]+)</code>", row[1]) for row in rows}
-    groups = {name: list(codes) for name, _, codes in _starting_groups()}
-    assert described == groups
+    groups = _starting_groups()
+    assert {name: sorted(codes) for name, codes in described.items()} == {
+        name: sorted(codes) for name, codes in groups.items()
+    }
     for name, codes in groups.items():
         assert set(codes) <= known and len(set(codes)) == len(codes), name
     writes = {
         name: {c for c in codes if not c.endswith(".read")}
         for name, codes in groups.items()
     }
-    # Staff change nothing; external auditors change audits and nothing else.
+    # Staff change nothing. External auditors run audits and ask questions,
+    # and hold no permission that edits or deletes a record.
     assert writes["Staff"] == set()
-    assert writes["External auditors"] == {"audits.manage"}
-    # stories.read comments on stories, so the two read-only groups go without it.
-    assert "stories.read" not in groups["Staff"] + groups["External auditors"]
+    assert writes["External auditors"] == {"audits.manage", "question.create"}
+    # stories.read comments on stories: auditors may, staff go without it.
+    assert "stories.read" in groups["External auditors"]
+    assert "stories.read" not in groups["Staff"]
     # Internal auditors reach every permission, directly or through one that
     # includes it, and no group sets the administrator role (the migration
     # inserts no role).
