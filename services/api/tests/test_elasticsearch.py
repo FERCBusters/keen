@@ -184,6 +184,32 @@ def test_incomplete_window_keeps_cursor_and_closes_pit(
     assert calls[-1][0] == "DELETE"
 
 
+def test_a_document_utf8_and_jsonb_cannot_hold_as_written_is_stored(
+    contract_db, storage
+):
+    # Elasticsearch returns _source as it was indexed, so an escape such as
+    # \\ud800 written by a log's author reaches Keen as a lone surrogate, and a
+    # number such as 1e999 as infinity. The document is stored regardless.
+    odd = hit(
+        _source={
+            "message": "Login \ud800 failed",
+            "user": {"name": "al\udfffice"},
+            "load": float("inf"),
+        }
+    )
+    with scoped():
+        result = es._store_hit(contract_db, odd, input_config())
+        contract_db.commit()
+
+    assert "deduped" not in result
+    event = contract_db.query(Event).one()
+    assert event.summary == "Login \ufffd failed"
+    assert event.actor == "al\ufffdice"
+    assert event.normalized_payload["load"] == "inf"
+    (artifact,) = storage.values()
+    assert json.loads(artifact.decode("utf-8"))["message"] == "Login \ufffd failed"
+
+
 def test_page_limit_commits_hits_but_never_skips_unread_window(contract_db, storage):
     calls = []
     with scoped(), mock_client([page([hit()])], calls) as client:

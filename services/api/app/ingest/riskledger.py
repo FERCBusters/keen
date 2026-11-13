@@ -37,7 +37,12 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.http import client as ingestion_client
-from app.security.redaction import mask_event_data_obj, redact_obj
+from app.security.redaction import (
+    mask_event_data_obj,
+    redact_obj,
+    storable_text,
+    utf8_bytes,
+)
 from app.services.ingestion_pause import pausable
 from app.services.isms.link_diary import sync_entity_link_diary
 
@@ -406,7 +411,7 @@ def _risk(db, org, row, vendor, control):
             asset_id=asset.id,
             threat_summary=_text(row, "name") + "\n\n" + _text(row, "description"),
             note="Imported from Risk Ledger; review ownership, score and treatment in Keen. Original values: "
-            + json.dumps(context, ensure_ascii=False),
+            + storable_text(json.dumps(context, ensure_ascii=False)),
             mitigator_context={"riskledger": {"organisation_id": org, **context}},
             risk_types=[],
         )
@@ -439,9 +444,9 @@ def _snapshot(db, org, selector, label, kind, row, fields=None):
             **(fields or {}),
         },
     }
-    content = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode()
+    content = utf8_bytes(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    )
     digest = hashlib.sha256(content).hexdigest()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     result = store_event_with_artifact(

@@ -808,6 +808,101 @@ def test_a_measure_owner_hears_when_its_latest_result_falls_outside(people):
     assert _items(own)["items"] == []
 
 
+def test_read_all_neither_counts_nor_marks_what_the_person_cannot_open(people):
+    # A measure's owner need not be able to read ISMS records. Their
+    # notification then waits unread in Keen until they can open it, and no
+    # inbox answer may count it meanwhile: the count would report a result
+    # outside the threshold of a record the account may not read.
+    app, who = people
+    manager = app.client(who["manager"])
+    owner_user = app.user()
+    owner = app.client(owner_user)
+
+    def send(path, body):
+        response = manager.post(
+            path, params={"framework": FW}, json=body, headers=unsafe(manager)
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    measure = send(
+        "/v1/isms/effectiveness-measures",
+        {
+            "summary": "Patched within 14 days",
+            "metric_key": "patching",
+            "target_value": 95,
+            "target_unit": "%",
+            "threshold_operator": "gte",
+            "owner_user_id": str(owner_user.id),
+        },
+    )
+    path = f"/v1/isms/effectiveness-measures/{measure['id']}/metrics"
+    for value, day in ((97, 10), (80, 11)):
+        send(
+            path,
+            {
+                "metric_value": value,
+                "metric_unit": "%",
+                "recorded_at": f"2026-10-{day}T09:00:00",
+            },
+        )
+    stored = app.db.query(InboxItem).filter_by(user_id=owner_user.id).one()
+    assert (stored.kind, stored.read_at) == ("measure_outside", None)
+    assert _items(owner) == {"items": [], "unread_count": 0}
+
+    hidden = _post(owner, "/v1/me/inbox/read-all")
+
+    assert hidden.json() == {"marked": 0, "unread_count": 0}
+    app.db.expire_all()
+    assert app.db.get(InboxItem, stored.id).read_at is None
+    # Once the owner can read the measure, the notification is there, unread,
+    # and read-all then counts and marks it.
+    (isms_read,) = app.user("isms.read").permissions
+    owner_user.permissions.append(isms_read)
+    app.db.commit()
+    reader = app.client(owner_user)
+    assert _unread(reader) == 1
+    assert _post(reader, "/v1/me/inbox/read-all").json() == {
+        "marked": 1,
+        "unread_count": 0,
+    }
+    app.db.expire_all()
+    assert app.db.get(InboxItem, stored.id).read_at is not None
+
+
+def test_notification_mail_waiting_for_one_account_is_capped(people, monkeypatch):
+    # Whatever makes notifications for an account, a measure's submission
+    # secret for one, cannot fill the outbox every account's security mail
+    # shares: past a few waiting messages a notification stays in Keen only.
+    app, who = people
+    db = app.db
+    monkeypatch.setattr(inbox, "smtp_configured", lambda: True)
+    owner = db.get(User, who["attendee"].id)
+    owner.email, owner.pref_notification_delivery = "owner@example.test", "email"
+    db.commit()
+    manager = app.client(who["manager"])
+    told = inbox.PENDING_EMAILS + 2
+
+    for _ in range(told):
+        _audit(manager, [{"user_id": str(owner.id)}])
+
+    db.expire_all()
+    queued = db.query(SecurityNotification).filter_by(user_id=owner.id).all()
+    assert len(queued) == inbox.PENDING_EMAILS
+    assert {mail.recipient for mail in queued} == {"owner@example.test"}
+    items = db.query(InboxItem).filter_by(user_id=owner.id).all()
+    assert len(items) == told
+    # Emailed notifications are listed as read for someone who chose email
+    # only; the two kept in Keen wait there unread.
+    assert sum(item.read_at is None for item in items) == 2
+    # Once the waiting mail is sent, the next notification is emailed again.
+    for mail in queued:
+        mail.status = "sent"
+    db.commit()
+    _audit(manager, [{"user_id": str(owner.id)}])
+    assert inbox.pending_for(db, owner.id) == 1
+
+
 def test_a_measure_without_an_owner_or_a_numeric_threshold_tells_nobody(people):
     app, who = people
     db = app.db

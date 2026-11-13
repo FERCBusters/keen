@@ -16,6 +16,7 @@ from app.db.models import (
     IsmsPerson,
     Quiz,
     QuizAttempt,
+    QuizParticipant,
     User,
 )
 from app.services.quizzes import attempts, audience, authoring, rounds
@@ -177,3 +178,107 @@ def test_an_attempt_handed_in_while_its_round_closes_is_refused(race):  # noqa: 
         assert db.get(QuizAttempt, state.attempt_id).status == "in_progress"
     # Two completed responses stay with quiz.manage.
     assert _recorded(race, state) == []
+
+
+def _assigned_but_not_started(race, state):  # noqa: F811 - fixture imported above
+    """Add a fourth person to the open round's audience; returns their account,
+    their People record and the three people already taking part."""
+    with race.session() as db:
+        admin = db.get(User, race.user_id)
+        account = User(
+            username="student-late-" + uuid.uuid4().hex[:8],
+            password_hash="unused",
+            is_active=True,
+        )
+        db.add(account)
+        db.flush()
+        person = IsmsPerson(name="Student late", user_id=account.id)
+        db.add(person)
+        db.flush()
+        others = [
+            row.person_id
+            for row in db.query(QuizParticipant).filter_by(round_id=state.round_id)
+        ]
+        ids = account.id, person.id
+        db.commit()
+        audience.replace_audience(
+            quiz_id=state.quiz_id,
+            payload=QuizAudienceInput(person_ids=[*others, ids[1]]),
+            context=None,
+            db=db,
+            user=admin,
+        )
+        return ids[0], ids[1], others
+
+
+def _started(race, round_id, person_id):  # noqa: F811 - fixture imported above
+    with race.session() as db:
+        return (
+            db.query(QuizAttempt)
+            .filter_by(round_id=round_id, person_id=person_id)
+            .count()
+        )
+
+
+def test_a_person_removed_while_their_start_waits_cannot_sit_the_round(race):  # noqa: F811
+    # The manager's audience change removes the person and holds the round's
+    # row lock; the person's first start waits on that lock. Decided before
+    # the wait, the start would be accepted for someone no longer taking part,
+    # and their score would count in the round's average while the manager's
+    # list left them out.
+    state = open_round(race)
+    account_id, person_id, others = _assigned_but_not_started(race, state)
+
+    def remove(db, user):
+        audience.replace_audience(
+            quiz_id=state.quiz_id,
+            payload=QuizAudienceInput(person_ids=others),
+            context=None,
+            db=db,
+            user=user,
+        )
+
+    def start(db, user):
+        attempts.start_attempt(
+            round_id=state.round_id, db=db, user=db.get(User, account_id)
+        )
+
+    outcome = race.run(
+        remove,
+        start,
+        # The change holds here, with the participant removed and the round locked.
+        pause_at=(audience, "record_quiz_change"),
+    )
+
+    assert outcome == ("done", (404, "Quiz round not found"))
+    assert _started(race, state.round_id, person_id) == 0
+    with race.session() as db:
+        taking_part = {
+            row.person_id
+            for row in db.query(QuizParticipant).filter_by(round_id=state.round_id)
+        }
+    assert taking_part == set(others)
+
+
+def test_a_person_still_in_the_audience_starts_while_it_is_being_saved(race):  # noqa: F811
+    state = open_round(race)
+    account_id, person_id, others = _assigned_but_not_started(race, state)
+
+    def keep(db, user):
+        audience.replace_audience(
+            quiz_id=state.quiz_id,
+            payload=QuizAudienceInput(person_ids=[*others, person_id]),
+            context=None,
+            db=db,
+            user=user,
+        )
+
+    def start(db, user):
+        attempts.start_attempt(
+            round_id=state.round_id, db=db, user=db.get(User, account_id)
+        )
+
+    outcome = race.run(keep, start, pause_at=(audience, "record_quiz_change"))
+
+    assert outcome == ("done", "done")
+    assert _started(race, state.round_id, person_id) == 1

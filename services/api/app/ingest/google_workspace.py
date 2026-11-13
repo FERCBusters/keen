@@ -40,6 +40,7 @@ from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.security.errors import collection_error
 from app.security.provider_logging import suppress_provider_logs
+from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -463,9 +464,11 @@ def ingest_google_workspace_stream(
             },
             "fetched_at": utc_now_naive().isoformat(),
         }
-        payload_bytes = json.dumps(
-            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode("utf-8")
+        payload_bytes = utf8_bytes(
+            json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            )
+        )
 
         ext_id = _external_id(cursor_name, application, a, payload_bytes)
 

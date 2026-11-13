@@ -469,6 +469,70 @@ def test_an_attendee_whose_account_is_deactivated_gets_no_reminder(
     assert [m["to_email"] for m in reminders] == ["guest@example.test"]
 
 
+def test_deleting_an_account_or_a_person_ends_their_audit_mail(contract_db, reminders):
+    # An attendee row keeps a copy of the address of the account or People
+    # record it was added for, and loses its link when either is deleted. The
+    # row must not then be read as an external attendee typed in by hand, or
+    # audit mail would start again for someone who has left.
+    from app.services import assurance, users
+    from app.services.context import ChangeContext
+
+    db = contract_db
+    audit = _audit(db, date(2026, 4, 11))
+    admin = User(username="admin", password_hash="x", role="admin", is_active=True)
+    leaver = User(
+        username="leaver",
+        password_hash="x",
+        role="normal",
+        is_active=True,
+        email="leaver@example.test",
+    )
+    db.add_all([admin, leaver])
+    db.flush()
+    contractor = IsmsPerson(name="Contractor", email="contractor@example.test")
+    db.add(contractor)
+    db.flush()
+    db.add_all(
+        [
+            AuditAttendee(
+                audit_id=audit.id,
+                name="Leaver (account)",
+                email="leaver@example.test",
+                user_id=leaver.id,
+            ),
+            AuditAttendee(
+                audit_id=audit.id,
+                name="Contractor",
+                email="contractor@example.test",
+                person_id=contractor.id,
+            ),
+            AuditAttendee(audit_id=audit.id, name="Guest", email="guest@example.test"),
+        ]
+    )
+    db.commit()
+    admin.effective_role = "admin"
+
+    users.delete_user_admin(
+        user_id=leaver.id,
+        context=ChangeContext(method="DELETE", path="/v1/users/x", actor=admin),
+        db=db,
+    )
+    assurance.delete_person(person_id=contractor.id, user=admin, db=db)
+
+    db.expire_all()
+    rows = {row.name: row for row in db.query(AuditAttendee)}
+    # The rows stay, by name, with no account, person or address.
+    assert {
+        name: (row.user_id, row.person_id, row.email) for name, row in rows.items()
+    } == {
+        "Leaver (account)": (None, None, None),
+        "Contractor": (None, None, None),
+        "Guest": (None, None, "guest@example.test"),
+    }
+    assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 1
+    assert [m["to_email"] for m in reminders] == ["guest@example.test"]
+
+
 def test_an_attendee_named_through_people_is_reminded_by_their_account(
     contract_db, reminders
 ):

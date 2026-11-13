@@ -85,9 +85,15 @@ jobs:
           branch="${BRANCH_PREFIX}${KEY}"
 
           # A pull request for exactly these digests already settles them,
-          # including one a maintainer closed.
-          existing=$(gh pr list --state all --head "$branch" --json number,state \
-            --jq 'first // empty | "\(.number) \(.state)"')
+          # including one a maintainer closed. Only this workflow's own
+          # proposals count: the branch name is derived from public values, so
+          # anyone can open a pull request from a fork with the same head
+          # branch name, and that must neither stand in for the proposal nor
+          # be named as superseding earlier ones.
+          existing=$(gh pr list --state all --head "$branch" \
+            --json number,state,isCrossRepository,author \
+            --jq '[.[] | select((.isCrossRepository | not) and .author.is_bot)]
+              | first // empty | "\(.number) \(.state)"')
           if [ -n "$existing" ]; then
             read -r number state <<< "$existing"
             echo "Pull request #$number ($state) already proposes these digests."

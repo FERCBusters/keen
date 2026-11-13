@@ -1,10 +1,14 @@
 """Secret redaction and sample masking preserve useful non-sensitive evidence."""
 
+import ast
 import json
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from app.security import redaction as r
+
+APP = Path(r.__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
@@ -205,6 +209,52 @@ def test_tuples_are_redacted_masked_and_made_storable():
     assert r.prepare_event_fields({"pair": value}, mask=True) == {
         "pair": ("token=REDACTED", "from [MASKED_IP]", "a�b")
     }
+
+
+def test_text_and_numbers_postgresql_cannot_hold_are_made_storable():
+    # A JSON escape such as \\ud800 decodes to a lone surrogate, which has no
+    # UTF-8 form, and JSON parsers read NaN, Infinity and 1e999 as non-finite
+    # floats, which JSONB refuses. Keys are made storable like values.
+    value = {
+        "user\ud800": ["a\x00b", "caf\u00e9\x00", "\udc00 low", "plain"],
+        "numbers": (float("inf"), float("-inf"), float("nan"), 1.5, 7),
+        "nested": {"deep": [{"ms": float("inf")}]},
+    }
+
+    stored = r.storable(value)
+
+    assert stored == {
+        "user\ufffd": ["a\ufffdb", "caf\u00e9\ufffd", "\ufffd low", "plain"],
+        "numbers": ("inf", "-inf", "nan", 1.5, 7),
+        "nested": {"deep": [{"ms": "inf"}]},
+    }
+    # Every string now encodes, and the document is standard JSON.
+    assert json.loads(json.dumps(stored, allow_nan=False).encode("utf-8")) == {
+        **stored,
+        "numbers": list(stored["numbers"]),
+    }
+    # A surrogate pair is the character it encodes, as a JSON parser reads it.
+    assert r.storable_text("\ud83d\ude00") == "\U0001f600"
+    assert r.utf8_bytes("x\ud800y") == "x\ufffdy".encode()
+
+
+@pytest.mark.parametrize(
+    "protect, content",
+    [
+        (r.redact_bytes, b'{"user": "\\ud800", "token": "DO-NOT-LEAK"}'),
+        (r.redact_bytes, b'{"user": "\\ud800"}'),
+        (r.mask_event_data_bytes, b'{"user": "\\ud800", "from": "192.0.2.1"}'),
+    ],
+)
+def test_a_json_artifact_holding_a_lone_surrogate_is_written_as_utf8(protect, content):
+    # The artifact is re-serialised from its parsed form, which holds a string
+    # UTF-8 cannot encode; one such artifact must not fail its record's storage.
+    written, status = protect(content, "application/json")
+
+    assert status == "redacted"
+    document = json.loads(written.decode("utf-8"))
+    assert document["user"] == "\ufffd"
+    assert "DO-NOT-LEAK" not in written.decode() and "192.0.2.1" not in written.decode()
 
 
 @pytest.mark.parametrize("protect", [r.redact_bytes, r.mask_event_data_bytes])
@@ -440,3 +490,45 @@ def test_embedded_json_cannot_exhaust_the_stack():
     while "wrap" in value:
         value = json.loads(value["wrap"])[0][0][0]
     assert value == {"password": "REDACTED"}
+
+
+def strict_encodes_of_unescaped_json(root):
+    """Where text from json.dumps(..., ensure_ascii=False) is encoded directly.
+
+    Written that way, a string holding a lone surrogate is passed through as
+    it is and has no UTF-8 form, so the encode raises. utf8_bytes encodes it.
+    """
+    found = []
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "encode"
+                and isinstance(node.func.value, ast.Call)
+            ):
+                continue
+            dumped = node.func.value
+            if ast.unparse(dumped.func) == "json.dumps" and any(
+                keyword.arg == "ensure_ascii" and ast.unparse(keyword.value) == "False"
+                for keyword in dumped.keywords
+            ):
+                found.append(f"{path.relative_to(root)}:{node.lineno}")
+    return found
+
+
+def test_unescaped_json_is_encoded_only_through_the_shared_helper():
+    assert strict_encodes_of_unescaped_json(APP) == []
+
+
+def test_the_encoding_check_finds_a_direct_encode(tmp_path):
+    (tmp_path / "collector.py").write_text(
+        "import json\n"
+        "safe = json.dumps(record).encode()\n"
+        "unsafe = json.dumps(record, sort_keys=True, ensure_ascii=False).encode('utf-8')\n"
+    )
+
+    assert strict_encodes_of_unescaped_json(tmp_path) == ["collector.py:3"]
+    # The defect the check guards against: such text does not encode.
+    with pytest.raises(UnicodeEncodeError):
+        json.dumps({"user": "\ud800"}, ensure_ascii=False).encode("utf-8")

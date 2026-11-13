@@ -637,3 +637,79 @@ def test_collected_source_names_reach_only_event_readers(keen):  # noqa: F811
 
     assert sources("isms.read") == ["ci", "other"]
     assert "synthetic-private-source" in sources("isms.read", "events.read")
+
+
+@pytest.mark.parametrize("permission", ["isms.manage", "risk.manage"])
+def test_saving_a_measure_does_not_say_whether_a_guessed_source_is_collected(
+    keen,  # noqa: F811
+    permission,
+):
+    # The measure form lists collected sources to event readers only. A save
+    # checks a source against the names the saver's form offers, so someone
+    # who manages measures without reading events gets one answer for a
+    # collected source and for one that does not exist, on every save route.
+    keen.db.add(
+        Event(
+            timestamp=utc_now_naive(),
+            source="synthetic-private-source",
+            summary="x",
+            raw_pointer={},
+            normalized_payload={},
+            external_id="bounded-" + secrets.token_hex(4),
+        )
+    )
+    named = IsmsEffectivenessMeasure(
+        framework_slug="keen",
+        summary="Measured",
+        metric_key="m-" + secrets.token_hex(4),
+        source_type="ci",
+    )
+    keen.db.add(named)
+    keen.db.commit()
+    manager = keen.client(keen.user(permission))
+    refused = (
+        400,
+        "Invalid metric source type; choose an existing Keen source or other",
+    )
+
+    def save(method, path, **body):
+        answer = manager.request(
+            method,
+            path,
+            params={"framework": "keen"},
+            json=body,
+            headers=unsafe(manager),
+        )
+        return answer.status_code, answer.json().get("detail")
+
+    measures = "/v1/isms/effectiveness-measures"
+    metrics = f"{measures}/{named.id}/metrics"
+    for guess in ("synthetic-private-source", "Synthetic_Private-Source", "no-such"):
+        new = {"summary": "Probe", "metric_key": "probe-" + secrets.token_hex(4)}
+        assert save("POST", measures, **new, source_type=guess) == refused, guess
+        # The answer is the same with a second problem in the request.
+        assert (
+            save("POST", measures, **new, source_type=guess, clauses=["4.1"]) == refused
+        )
+        assert save("PATCH", f"{measures}/{named.id}", source_type=guess) == refused
+        assert save("POST", metrics, metric_value=1, source_type=guess) == refused
+    assert keen.db.query(IsmsEffectivenessMeasure).count() == 1
+
+    # A source a measure already names is offered to them, and saved.
+    assert save("POST", metrics, metric_value=1, source_type="CI")[0] == 200
+    assert save("PATCH", f"{measures}/{named.id}", source_type="other")[0] == 200
+
+    # An event reader's form lists the collected source, and their save takes it.
+    reader = keen.client(keen.user(permission, "events.read"))
+    saved = reader.post(
+        measures,
+        params={"framework": "keen"},
+        json={
+            "summary": "Collected",
+            "metric_key": "collected-" + secrets.token_hex(4),
+            "source_type": "Synthetic_Private-Source",
+        },
+        headers=unsafe(reader),
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["source_type"] == "synthetic-private-source"

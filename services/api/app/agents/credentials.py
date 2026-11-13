@@ -56,15 +56,18 @@ LOCK_WAIT_SECONDS = 5
 
 
 @contextmanager
-def bounded_lock_wait(db, *, locking=True):
-    """Answer 429 once a row lock held elsewhere has been waited for briefly."""
+def bounded_lock_wait(db, *, locking=True, busy: Exception | None = None):
+    """Answer 429 once a lock held elsewhere has been waited for briefly.
+
+    ``busy`` replaces that answer for callers outside the agent routes.
+    """
     if locking:
         db.execute(text(f"SET LOCAL lock_timeout = '{LOCK_WAIT_SECONDS}s'"))
     try:
         yield
     except OperationalError as error:
         if getattr(error.orig, "pgcode", None) == LOCK_NOT_AVAILABLE:
-            raise HTTPException(
+            raise busy or HTTPException(
                 429,
                 "The agent's identity is busy; retry shortly",
                 headers={"Retry-After": "5"},

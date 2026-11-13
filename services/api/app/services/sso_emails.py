@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as now
+from app.core.email_address import compared_mailbox
 from app.core.valkey import get_valkey
 from app.db.models import SsoEmailChallenge, User, UserSsoEmail
 from app.security.rate_limit import fixed_window_allow
@@ -39,7 +40,7 @@ def clean_email(value):
     email = text.clean_email(value)
     if not email:
         raise DomainError(400, "Invalid email address")
-    return email.lower()
+    return compared_mailbox(email)
 
 
 def lock_user(db, user):

@@ -20,14 +20,47 @@ const FORM = `<form id="form">
 // every input event, from a bubbling listener on the document. The elements
 // that re-parsing creates are recorded in editors.reparsed: a browser loads
 // an image created this way, and runs its handlers, even though the element
-// is never attached to the page.
+// is never attached to the page. Before it wraps text, Wysi unwraps every
+// element outside the tags of its tools and the custom tags it was given,
+// leaving that element's text at the top level; the stand-in does the same
+// when it is given the editor's options.
+const WYSI_TOOL_TAGS = {
+  format: ['p', 'h1', 'h2', 'h3', 'h4'],
+  quote: ['blockquote'],
+  bold: ['strong', 'b'],
+  italic: ['em', 'i'],
+  underline: ['u'],
+  strike: ['s', 'del', 'strike'],
+  ul: ['ul', 'li'],
+  ol: ['ol', 'li'],
+  link: ['a'],
+  hr: ['hr'],
+};
+
+function wysiKeeps({ tools, customTags = [] }) {
+  return new Set([
+    'p',
+    'br',
+    ...tools.flatMap((tool) => WYSI_TOOL_TAGS[tool] || []),
+    ...customTags.flatMap((custom) => custom.tags),
+  ]);
+}
+
+function wysiUnwrap(node, keeps) {
+  for (const child of Array.from(node.children)) {
+    wysiUnwrap(child, keeps);
+    if (!keeps.has(child.tagName.toLowerCase())) child.replaceWith(...child.childNodes);
+  }
+}
+
 function installWysi(window, { fail = () => false } = {}) {
   const editors = [];
   editors.reparsed = [];
   const doc = window.document;
-  const wysiContent = (raw) => {
+  const wysiContent = (raw, keeps = null) => {
     const template = doc.createElement('template');
     template.innerHTML = String(raw || '').trim();
+    if (keeps) wysiUnwrap(template.content, keeps);
     for (const node of Array.from(template.content.childNodes)) {
       if (node.nodeType !== window.Node.TEXT_NODE) continue;
       const p = doc.createElement('p');
@@ -53,13 +86,16 @@ function installWysi(window, { fail = () => false } = {}) {
     editable.setAttribute('contenteditable', 'true');
     wrapper.append(toolbar, editable);
     options.el.after(wrapper);
+    const keeps = wysiKeeps(options);
     editor.started = options.el.value;
-    editable.innerHTML = wysiContent(options.el.value);
+    editable.innerHTML = wysiContent(options.el.value, keeps);
     editor.editable = editable;
     // Wysi reports edits with its own re-parsed copy of the editor content,
     // read in a bubbling input listener on the document.
     doc.addEventListener('input', (event) => {
-      if (event.target === editable) options.onChange(wysiContent(editable.innerHTML));
+      if (event.target === editable) {
+        options.onChange(wysiContent(editable.innerHTML, keeps));
+      }
     });
     editor.input = (init = {}) =>
       editable.dispatchEvent(new window.InputEvent('input', { bubbles: true, ...init }));
@@ -302,6 +338,86 @@ test('the stand-in editor detects a re-parse of top-level text', async (t) => {
   t.after(ui.close);
   ui.window.editors.wysiContent(HOSTILE_RICH);
   assert.deepEqual(ui.window.editors.reparsed, ['IMG']);
+});
+
+for (const tag of ['pre', 'div', 'h5', 'h6', 'code']) {
+  test(`escaped markup saved inside <${tag}> stays text when the record is edited`, async (t) => {
+    // The sanitiser keeps this element. An editor that did not would unwrap
+    // it on the first edit, and re-parse its text as HTML in the page of
+    // whoever opened the record.
+    const saved = `<${tag}>&lt;img src="/x" id="probe" onerror="x()"&gt;</${tag}>`;
+    const ui = await loadUi('app.js', {
+      html: '<div class="rich-text-editor"><textarea id="notes" data-rich-text="1"></textarea></div>',
+      setup(window) {
+        window.editors = installWysi(window);
+      },
+    });
+    t.after(ui.close);
+    ui.document.getElementById('notes').value = saved;
+    ui.api.initRichTextEditors(ui.document);
+    const [notes] = ui.window.editors;
+    const element = notes.editable.querySelector(tag);
+    assert.equal(element.textContent, '<img src="/x" id="probe" onerror="x()">');
+
+    element.append('z');
+    notes.input({ inputType: 'insertText', data: 'z' });
+
+    assert.deepEqual(ui.window.editors.reparsed, []);
+    assert.equal(ui.document.getElementById('probe'), null);
+    assert.equal(
+      notes.editable.querySelector(tag).textContent,
+      '<img src="/x" id="probe" onerror="x()">z',
+    );
+    assert.match(ui.document.getElementById('notes').value, new RegExp(`^(<p>)?<${tag}>&lt;img`));
+  });
+}
+
+test('the editor is told to keep every tag the sanitiser allows', async (t) => {
+  const ui = await editorPage(t);
+  ui.api.initRichTextEditors(ui.document);
+  const [scope] = ui.editors();
+  // With the standard tools, these are the sanitiser's tags no tool covers.
+  assert.deepEqual(JSON.parse(JSON.stringify(scope.options.customTags)), [
+    { tags: ['code', 'div', 'h5', 'h6', 'pre'], attributes: ['href', 'target', 'rel'] },
+  ]);
+  // Whatever tools an editor is given, the tags it keeps cover the sanitiser's.
+  const sanitised = ui.api.sanitizeRichTextHtml(
+    [...'a blockquote code div em h1 h2 h3 h4 h5 h6 li ol p pre s strike strong u ul'.split(' ')]
+      .map((tag) => `<${tag}>x</${tag}>`)
+      .join('') + '<br><hr>',
+  );
+  const allowed = new Set(
+    [...sanitised.matchAll(/<([a-z0-9]+)/g)].map((match) => match[1]).concat('strike'),
+  );
+  for (const tools of [[...scope.options.tools], ['bold'], []]) {
+    const other = await editorPage(t);
+    other.api.initRichTextEditors(other.el('scope').parentElement, { tools });
+    const keeps = wysiKeeps(other.editors()[0].options);
+    assert.deepEqual(
+      [...allowed].filter((tag) => !keeps.has(tag)),
+      [],
+      `tools: ${tools}`,
+    );
+  }
+});
+
+test('the stand-in editor unwraps a tag it was not told to keep', async (t) => {
+  // The checks above would fail without the custom tags: with the tools
+  // alone, the stand-in unwraps the element and re-parses its text.
+  const ui = await loadUi('app.js', {
+    html: '<div></div>',
+    setup(window) {
+      window.editors = installWysi(window);
+    },
+  });
+  t.after(ui.close);
+  const tools = ['format', 'bold', 'ul', 'link'];
+  const saved = '<pre>&lt;img src="/x" id="probe" onerror="x()"&gt;</pre>';
+  ui.window.editors.wysiContent(saved, wysiKeeps({ tools }));
+  assert.deepEqual(ui.window.editors.reparsed, ['IMG']);
+  ui.window.editors.reparsed.length = 0;
+  ui.window.editors.wysiContent(saved, wysiKeeps({ tools, customTags: [{ tags: ['pre'] }] }));
+  assert.deepEqual(ui.window.editors.reparsed, []);
 });
 
 test('text that reaches the top level is moved into a paragraph before Wysi reads it', async (t) => {

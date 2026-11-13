@@ -3,10 +3,12 @@
 import contextlib
 import uuid
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from app.worker import tasks as wt
+from sqlalchemy.exc import OperationalError
 
 RESULT = [{"ok": True}]
 
@@ -539,6 +541,41 @@ def test_backfill_rule_task_failures_mark_the_job_failed():
         wt.backfill_rule_task("11111111-1111-1111-1111-111111111111")
     assert done_job.status == "completed"
     dbs2[0].commit.assert_not_called()
+
+
+@pytest.mark.parametrize("pgcode", ["40P01", "55P03"], ids=["deadlock", "lock-timeout"])
+def test_a_backfill_batch_that_loses_a_lock_is_left_for_the_recovery_task(pgcode):
+    # A batch commits whole or rolls back whole. One that loses a deadlock or
+    # a lock wait to other evidence writers changed nothing, so the job is not
+    # failed: the recovery task continues it from its cursor.
+    lost = OperationalError("INSERT", {}, SimpleNamespace(pgcode=pgcode))
+    dbs = [MagicMock()]
+    with (
+        running_session(dbs),
+        patch("app.worker.rule_backfill.process_batch", side_effect=lost) as batch,
+        patch.object(wt.backfill_rule_task, "delay") as requeue,
+    ):
+        wt.backfill_rule_task("11111111-1111-1111-1111-111111111111")
+    batch.assert_called_once()
+    requeue.assert_not_called()
+    # No session was opened to mark the job failed.
+    dbs[0].get.assert_not_called()
+    dbs[0].commit.assert_not_called()
+
+
+def test_a_backfill_batch_that_fails_at_the_database_otherwise_fails_the_job():
+    refused = OperationalError("SELECT", {}, SimpleNamespace(pgcode="57014"))
+    dbs = [MagicMock()]
+    job = MagicMock(status="running")
+    dbs[0].get.return_value = job
+    with (
+        running_session(dbs),
+        patch("app.worker.rule_backfill.process_batch", side_effect=refused),
+        patch.object(wt.backfill_rule_task, "delay"),
+    ):
+        wt.backfill_rule_task("11111111-1111-1111-1111-111111111111")
+    assert job.status == "failed"
+    dbs[0].commit.assert_called_once()
 
 
 def test_recover_rule_backfills_task_requeues():

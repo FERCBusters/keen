@@ -21,7 +21,7 @@ from app.db.models import (
 from app.db.session import track_unpublished_object
 from app.ingest.bookstack import _client
 from app.security.permissions import has_permission
-from app.security.redaction import prepare_event_fields
+from app.security.redaction import prepare_event_fields, utf8_bytes
 from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 from app.storage.s3 import put_bytes
@@ -141,8 +141,8 @@ def capture_section(*, payload: SectionInput, user, db: Session):
         "permalink": permalink,
         "bookstack_page": page,
     }
-    raw = json.dumps(snapshot, sort_keys=True, ensure_ascii=False, default=str).encode(
-        "utf-8"
+    raw = utf8_bytes(
+        json.dumps(snapshot, sort_keys=True, ensure_ascii=False, default=str)
     )
     stored = put_bytes(
         f"bookstack-policy/{document.id}/{uuid.uuid4()}.json", raw, "application/json"

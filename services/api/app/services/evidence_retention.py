@@ -75,6 +75,19 @@ def policy(db):
     )
 
 
+def _counted(alias):
+    """The time an event counts from for retention, as SQL.
+
+    This is the source's own date, and never later than the moment Keen
+    collected the event. A source can date an event ahead of the present; by
+    its own date alone it would hold a place among the newest events, and stay
+    younger than any age limit, for as long as it claimed, while evidence
+    collected after it was deleted in its place. ix_events_retention_time
+    indexes the expression.
+    """
+    return f"LEAST({alias}.timestamp, {alias}.created_at)"
+
+
 def candidates(mode, value, cutoff, overrides=None):
     params = {"cutoff": cutoff, "global_mode": mode, "global_value": value}
     predicate = f"e.created_at <= :cutoff AND {UNPROTECTED}"
@@ -85,18 +98,18 @@ def candidates(mode, value, cutoff, overrides=None):
         if mode == "disabled":
             return predicate + " AND false", {"cutoff": cutoff}
         if mode == "age":
-            return predicate + " AND e.timestamp < :oldest", {
+            return predicate + f" AND {_counted('e')} < :oldest", {
                 "cutoff": cutoff,
                 "oldest": cutoff - timedelta(days=value),
             }
         # The predicate joins constant SQL fragments; every value is bound.
         return (
             predicate  # noqa: S608
-            + """ AND e.id NOT IN (
+            + f""" AND e.id NOT IN (
             SELECT newest.id FROM events newest
             WHERE newest.created_at<=:cutoff AND NOT EXISTS (
                 SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=newest.id)
-            ORDER BY newest.timestamp DESC,newest.id DESC LIMIT :keep)""",
+            ORDER BY {_counted("newest")} DESC,newest.id DESC LIMIT :keep)""",  # noqa: S608 - constant fragments, as above
             {"cutoff": cutoff, "keep": value},
         )
     override_table = "evidence_retention_overrides"
@@ -126,14 +139,14 @@ def candidates(mode, value, cutoff, overrides=None):
             LEFT JOIN policies p ON p.scope='source' AND p.key=ev.source
             WHERE NOT EXISTS (SELECT 1 FROM rule_events r WHERE r.event_id=ev.id)
         ), ranked AS (
-            SELECT a.*, ev.timestamp,
-                   row_number() OVER (PARTITION BY a.scope,a.key ORDER BY ev.timestamp DESC,ev.id DESC) AS position
+            SELECT a.*, {_counted("ev")} AS counted,
+                   row_number() OVER (PARTITION BY a.scope,a.key ORDER BY {_counted("ev")} DESC,ev.id DESC) AS position
             FROM assignments a JOIN events ev ON ev.id=a.event_id
             WHERE ev.created_at<=:cutoff AND NOT EXISTS (
                 SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=ev.id)
         )
         SELECT event_id FROM ranked GROUP BY event_id HAVING bool_and(
-            CASE mode WHEN 'age' THEN timestamp < CAST(:cutoff AS timestamp) - value * INTERVAL '1 day'
+            CASE mode WHEN 'age' THEN counted < CAST(:cutoff AS timestamp) - value * INTERVAL '1 day'
                       WHEN 'count' THEN position > value ELSE false END)
     )"""  # noqa: S608
     return predicate, params

@@ -790,9 +790,10 @@ def test_a_pattern_over_its_budget_does_not_match_and_the_run_continues(lk, capl
 
 
 def test_a_retry_after_a_failed_chunk_stores_every_line(lk, monkeypatch):
-    # A chunk commits once, with its cursor. When it fails after storing one
-    # line's artifact, the rollback leaves that object behind; stored objects
-    # are never replaced, so the retry must not reuse its key.
+    # Each line commits by itself. When a chunk fails partway, the lines before
+    # the failure are kept and the cursor stays behind them. The failed line's
+    # rollback leaves its object behind; stored objects are never replaced, so
+    # the retry must not reuse its key.
     lines = [
         _line(NOW - timedelta(minutes=9), json.dumps(OSSEC)),
         _line(NOW - timedelta(minutes=7), "second line"),
@@ -811,27 +812,144 @@ def test_a_retry_after_a_failed_chunk_stores_every_line(lk, monkeypatch):
     lk.upstream.replies.append(stream)
     (first,) = lk.run()
     assert "error" in first
-    assert lk.events() == []
-    # Both objects the failed attempt stored are queued for the retention worker.
+    assert [e.normalized_payload["line"] for e in lk.events()] == [json.dumps(OSSEC)]
+    # The chunk did not finish, so its cursor has not moved.
+    assert lk.cursor().last_ts is None
+    # The object the failed line stored is queued for the retention worker.
     queued = set(
         lk.db.execute(
             sqlalchemy.text("SELECT storage_uri FROM evidence_object_cleanup")
         ).scalars()
     )
-    assert sorted(uri.rsplit(".", 1)[1] for uri in queued) == ["json", "log"]
+    assert [uri.rsplit(".", 1)[1] for uri in queued] == ["log"]
     assert all("/loki/ssh/" in uri for uri in queued)
 
     monkeypatch.setattr(common, "apply_rules", real_rules)
     lk.upstream.replies.append(stream)
     (second,) = lk.run()
     assert "error" not in second, second
-    assert second["created_events"] == 2
+    # The line stored by the failed attempt is recognised, not stored again.
+    assert second["created_events"] == 1
     assert len(lk.events()) == 2
-    # The retry stored fresh objects; the failed attempt's objects stay queued.
+    # The retry stored a fresh object; the failed attempt's object stays queued.
     stored = {
         artifact.storage_uri for event in lk.events() for artifact in event.artifacts
     }
     assert len(stored) == 2 and not stored & queued
+
+
+def test_each_line_commits_before_the_next_is_stored(lk, monkeypatch):
+    # A mapping locks its control's evidence-count row, and rule evaluation
+    # holds the shared rules lock, until the transaction ends. Deliveries from
+    # other sources wait on both, so no transaction spans more than one line.
+    lines = [
+        _line(NOW - timedelta(minutes=9 - index), json.dumps({**OSSEC, "n": index}))
+        for index in range(3)
+    ]
+    lk.upstream.replies.append([{"stream": {"app": "sshd"}, "values": lines}])
+    real_store = common.store_event_with_artifact
+    commits = []
+    committed_before_each = []
+
+    def recording(db, **fields):
+        committed_before_each.append(len(commits))
+        return real_store(db, **fields)
+
+    real_commit = lk.db.commit
+    monkeypatch.setattr(loki, "store_event_with_artifact", recording)
+    monkeypatch.setattr(lk.db, "commit", lambda: (commits.append(1), real_commit())[1])
+
+    (result,) = lk.run()
+
+    assert result["created_events"] == 3 and result["created_mappings"] == 3
+    # Each line was committed before the next was stored.
+    assert committed_before_each == [0, 1, 2]
+    # One commit for each line, then one for the chunk's cursor.
+    assert len(commits) == 4
+
+
+def test_lines_beyond_the_query_limit_are_left_for_the_next_run(lk):
+    # A server may return more lines than the query asked for. Only the limit
+    # is stored in one chunk, oldest first, and the cursor stops at the newest
+    # stored line so the next run asks for the rest.
+    lk.configure(lk.query(limit=2))
+    lines = [
+        _line(NOW - timedelta(minutes=minutes), f"line {minutes}")
+        for minutes in (3, 9, 5, 7)
+    ]
+    lk.upstream.replies.append(
+        [
+            {"stream": {"app": "sshd"}, "values": lines[:2]},
+            {"stream": {"app": "cron"}, "values": lines[2:]},
+        ]
+    )
+
+    (result,) = lk.run()
+
+    (chunk,) = result["chunks"]
+    assert chunk["returned_values"] == 4 and chunk["hit_limit"] is True
+    assert result["created_events"] == 2
+    assert [e.normalized_payload["line"] for e in lk.events()] == ["line 9", "line 7"]
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW - timedelta(
+        minutes=7
+    )
+    assert lk.upstream.requests[0].url.params["limit"] == "2"
+
+    lk.upstream.replies.append([{"stream": {"app": "sshd"}, "values": lines[::2]}])
+    (again,) = lk.run()
+    start, _ = lk.upstream.window()
+    assert abs(start - (_ns(NOW - timedelta(minutes=7)) + 1000)) < 1000
+    assert again["created_events"] == 2
+    assert [e.normalized_payload["line"] for e in lk.events()] == [
+        "line 9",
+        "line 7",
+        "line 5",
+        "line 3",
+    ]
+
+
+@pytest.mark.parametrize(
+    "document, stored_json",
+    [
+        # A lone surrogate has no UTF-8 form and PostgreSQL text cannot hold it.
+        ('{"user": "\\ud800", "n": 1}', {"user": "\ufffd", "n": 1}),
+        ('{"\\udfff": "key"}', {"\ufffd": "key"}),
+        # JSON parsers read these as non-finite numbers, which JSONB refuses.
+        ('{"ms": 1e999}', {"ms": "inf"}),
+        ('{"ms": -1e999}', {"ms": "-inf"}),
+        ('{"ms": NaN}', {"ms": "nan"}),
+        ('{"ms": [Infinity, -Infinity, 1.5]}', {"ms": ["inf", "-inf", 1.5]}),
+    ],
+)
+def test_a_line_the_database_cannot_hold_as_written_is_stored_and_the_run_continues(
+    lk, document, stored_json
+):
+    # One log line must not fail the run and hold the cursor back for every
+    # later line: values PostgreSQL cannot hold are stored in a form it can.
+    lk.upstream.replies.append(
+        [
+            {
+                "stream": {"app": "api"},
+                "values": [
+                    _line(NOW - timedelta(minutes=6), "plain before"),
+                    _line(NOW - timedelta(minutes=5), document),
+                    _line(NOW - timedelta(minutes=4), "plain after"),
+                ],
+            }
+        ]
+    )
+
+    (result,) = lk.run()
+
+    assert "error" not in result and result["created_events"] == 3, result
+    by_line = {event.normalized_payload["line"]: event for event in lk.events()}
+    assert set(by_line) == {"plain before", document, "plain after"}
+    assert by_line[document].normalized_payload["json"] == stored_json
+    # The artifact is stored too, as text UTF-8 can hold.
+    (artifact,) = by_line[document].artifacts
+    assert lk.stored(artifact).decode("utf-8")
+    # The cursor moves past the window, so later runs continue after it.
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW
 
 
 def test_a_username_without_a_password_sends_no_basic_credentials(lk, monkeypatch):

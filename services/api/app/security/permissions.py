@@ -217,6 +217,24 @@ def has_any_permission(db: Session, user: User | None, *codes: str) -> bool:
     return any(has_permission(db, user, code) for code in codes)
 
 
+def has_shared_permission(db: Session, user: User | None, *codes: str) -> bool:
+    """Whether a person holds one of ``codes`` where it stands in for another
+    domain's permission.
+
+    In Keen a risk reader also reads the ISMS registers and PESTLE(E)
+    factors, and a risk manager manages them. That rule is for a person
+    acting as their account. An MCP connection acts with the scopes its person
+    approved, and a scope counts for its own domain only: the consent a person
+    gave an app names what the app reads and changes. So a connection is never
+    admitted here, on any route, whatever its scopes.
+    """
+    return (
+        user is not None
+        and not user.scope_limited
+        and has_any_permission(db, user, *codes)
+    )
+
+
 def can_read_events(db: Session, user: User | None) -> bool:
     """Evidence records, and aggregates derived from them, require events.read."""
     if not is_active_user(user):

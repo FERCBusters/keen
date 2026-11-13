@@ -583,6 +583,31 @@ def test_an_expired_refresh_token_or_access_token_is_refused(mcp):
     assert refreshed.status_code == 401
 
 
+def test_a_spent_refresh_token_revokes_its_grant_after_its_own_expiry_too(mcp):
+    # A refresh token lapses 30 days after it was issued; its grant runs for
+    # 90. Whoever copied a token and rotated it first keeps the connection
+    # alive, so the real app's token, presented whenever it returns within
+    # those 90 days, must still be recognised as spent and end the grant.
+    connection = mcp.connect(mcp.keen.user("isms.read"), ["isms.read"])
+    form = dict(grant_type="refresh_token", client_id=connection.client["client_id"])
+    fresh = mcp.token(**form, refresh_token=connection.refresh_token).json()
+    spent = mcp.db.query(McpToken).filter(McpToken.used_at.isnot(None)).one()
+    spent.expires_at = utc_now_naive() - timedelta(seconds=1)
+    mcp.db.commit()
+    assert inner("/v1/isms/swot", fresh["access_token"]).status_code == 200
+
+    replayed = mcp.token(**form, refresh_token=connection.refresh_token)
+
+    assert replayed.status_code == 401
+    mcp.db.expire_all()
+    assert mcp.db.query(McpGrant).one().revoked_at is not None
+    assert inner("/v1/isms/swot", fresh["access_token"]).status_code == 401
+    assert mcp.token(**form, refresh_token=fresh["refresh_token"]).status_code == 401
+    # The spent row goes with its grant, so none is kept beyond it.
+    mcp_oauth.remove_expired(mcp.db)
+    assert mcp.db.query(McpToken).count() == 0
+
+
 def test_revocation_ends_the_grant_behind_either_token(mcp):
     for kind in ("access_token", "refresh_token"):
         connection = mcp.connect(mcp.keen.user("isms.read"), ["isms.read"])
@@ -1053,3 +1078,164 @@ def test_the_connection_email_names_where_to_revoke_it(mcp, monkeypatch):
     assert "revoke connected apps under Account, Security" in message.body
     # The app's self-chosen name stays out of the email.
     assert "Claude Code" not in message.body
+
+
+# --- A scope counts for its own domain only -------------------------------------
+
+
+def _link_entry(db, record_type, summary):
+    """An automatic framework-link diary entry about a record of that type."""
+    entry = Event(
+        timestamp=utc_now_naive(),
+        source="diary",
+        system="isms",
+        action="isms_link",
+        actor="recorder",
+        summary=summary,
+        external_id=f"isms-link:{record_type}:{uuid.uuid4()}",
+    )
+    db.add(entry)
+    db.commit()
+    return entry
+
+
+def _summaries(mcp, token, **arguments):
+    items = mcp.tool(token, "search_evidence", arguments)["structuredContent"]["items"]
+    return sorted(item["untrusted"]["summary"] for item in items)
+
+
+def test_a_risk_scope_reads_no_isms_or_pestle_records_through_any_tool(mcp):
+    # In Keen a risk reader also reads the ISMS registers and PESTLE(E)
+    # factors. A connection carries the scopes its person approved, and the
+    # risk scope names risks: it must learn nothing of the other registers,
+    # not even how many records they hold.
+    admin = mcp.keen.user(role="admin")
+    mcp.sign_in(admin)
+    for path, body in (
+        ("/v1/isms/objectives", {"requirement": "Awareness", "goal": "Train"}),
+        ("/v1/isms/documents", {"title": "Access policy", "content_html": "<p>x</p>"}),
+        ("/v1/pestle/items", {"type": "Legal", "lens": "External", "item": "Law"}),
+    ):
+        created = mcp.client.post(path, json=body, headers=mcp.unsafe())
+        assert created.status_code == 200, created.text
+    reader = mcp.keen.user("risk.read", "isms.read", "pestle.read")
+
+    # The person, and a connection granted those registers, see the counts.
+    wide = mcp.connect(reader, ["risk.read", "isms.read", "pestle.read"]).access_token
+    counts = mcp.tool(wide, "keen_overview")["structuredContent"]["record_counts"]
+    assert (counts["isms_objectives"], counts["isms_documents"], counts["pestle"]) == (
+        1,
+        1,
+        1,
+    )
+
+    risk_only = mcp.connect(reader, ["risk.read"]).access_token
+    for tool in ("keen_overview", "get_statement_of_applicability"):
+        counts = mcp.tool(risk_only, tool)["structuredContent"]["record_counts"]
+        assert (
+            counts["isms_objectives"],
+            counts["isms_documents"],
+            counts["pestle"],
+        ) == (0, 0, 0), tool
+    # The routes behind the tools refuse it too, whatever the tool checks.
+    for path in ("/v1/isms/objectives", "/v1/isms/people", "/v1/pestle/items"):
+        refused = inner(path, risk_only)
+        assert refused.status_code == 403, (path, refused.text)
+    # Its own domain still answers.
+    assert mcp.tool(risk_only, "list_risks").get("isError") is not True
+
+
+def test_a_connection_reads_only_the_link_entries_its_own_scopes_name(mcp):
+    # Entries about risks follow the risk scope and entries about other ISMS
+    # records the ISMS scope. In Keen a risk reader opens both.
+    _link_entry(mcp.db, "risk", "diary: Risk linked to framework controls")
+    _link_entry(mcp.db, "objective", "diary: Objective linked to framework controls")
+    mcp.db.add(
+        Event(
+            timestamp=utc_now_naive(),
+            source="ci",
+            summary="ordinary evidence",
+            external_id="ci:1",
+        )
+    )
+    mcp.db.commit()
+    person = mcp.keen.user("events.read", "risk.read", "isms.read")
+    risk, objective, ordinary = (
+        "diary: Risk linked to framework controls",
+        "diary: Objective linked to framework controls",
+        "ordinary evidence",
+    )
+
+    def read(*scopes):
+        return _summaries(mcp, mcp.connect(person, list(scopes)).access_token)
+
+    assert read("events.read") == [ordinary]
+    assert read("events.read", "risk.read") == sorted([ordinary, risk])
+    assert read("events.read", "isms.read") == sorted([objective, ordinary])
+    assert read("events.read", "risk.read", "isms.read") == sorted(
+        [objective, ordinary, risk]
+    )
+    # A person holding the risk permission alone still reads both in Keen.
+    risk_reader = mcp.keen.user("events.read", "risk.read")
+    mcp.sign_in(risk_reader)
+    listed = mcp.client.get("/v1/events", params={"framework": FW}).json()["items"]
+    assert sorted(item["summary"] for item in listed) == sorted(
+        [objective, ordinary, risk]
+    )
+    # A single entry's own routes follow the same rule.
+    scoped, _ = mcp_oauth.scoped_user(
+        mcp.db, mcp.connect(person, ["events.read", "risk.read"]).access_token
+    )
+    from app.security.diary_visibility import is_diary_event_visible
+
+    by_summary = {event.summary: event.id for event in mcp.db.query(Event)}
+    assert is_diary_event_visible(mcp.db, scoped, by_summary[risk]) is True
+    assert is_diary_event_visible(mcp.db, scoped, by_summary[objective]) is False
+
+
+def test_a_cached_page_is_served_only_to_the_authority_it_was_computed_for(
+    mcp, monkeypatch
+):
+    # Event pages and a control's evidence summary are cached. One account can
+    # act as itself and as each connection it approved, with different
+    # authority, so an answer cached for one is never served to another.
+    import fakeredis
+    from app.core import cache
+
+    store = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(cache, "get_valkey", lambda: store)
+    monkeypatch.setattr(settings, "aggregate_cache_ttl_seconds", 60)
+    risk = "diary: Risk linked to framework controls"
+    _link_entry(mcp.db, "risk", risk)
+    person = mcp.keen.user("events.read", "risk.read")
+    narrow = mcp.connect(person, ["events.read"]).access_token
+    query = {"framework": FW, "limit": 20, "offset": 0}
+
+    def session_page():
+        mcp.sign_in(person)
+        page = mcp.client.get("/v1/events", params=query).json()
+        mcp.client.cookies.clear()
+        return sorted(item["summary"] for item in page["items"])
+
+    # The person's own session caches the page first, with the entry in it.
+    assert session_page() == [risk]
+    assert len(store.keys("keen:cache:v1:*")) >= 1
+    # The connection asks for the same page and is not given that answer.
+    assert _summaries(mcp, narrow, limit=20) == []
+    # Nor is the session then given the connection's narrower page.
+    assert session_page() == [risk]
+    # Each authority has its own scope; the same authority shares one.
+    scoped, _ = mcp_oauth.scoped_user(mcp.db, narrow)
+    as_connection = cache.user_cache_scope(scoped)
+    # The same codes held by the person themselves are a different authority:
+    # a person's codes also stand in for other domains'.
+    as_person = SimpleNamespace(
+        id=person.id,
+        effective_role=scoped.effective_role,
+        effective_permission_codes={"events.read"},
+        scope_limited=False,
+    )
+    assert as_connection != cache.user_cache_scope(as_person)
+    again, _ = mcp_oauth.scoped_user(mcp.db, narrow)
+    assert cache.user_cache_scope(again) == as_connection
+    assert cache.user_cache_scope(None) == "anonymous"

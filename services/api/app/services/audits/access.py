@@ -5,11 +5,11 @@ import uuid
 from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.references import try_uuid
 from app.db.models import Audit, AuditAttendee, Event, IsmsPerson, Risk, User
 from app.security.diary_visibility import is_diary_event_visible
 from app.security.permissions import has_permission
 from app.security.roles import is_active_user
-from app.services.audits.validation import try_uuid
 from app.services.errors import DomainError
 
 AUDIT_MANAGE_PERMISSION = "audits.manage"

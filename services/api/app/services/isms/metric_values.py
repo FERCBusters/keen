@@ -44,6 +44,7 @@ def _metric_key_from_payload(raw: str | None) -> str | None:
 def _validate_effectiveness_measure_payload(
     db: Session,
     payload: EffectivenessMeasurePayload,
+    user: User | None,
     *,
     fields: set[str] | None = None,
     row_id: uuid.UUID | None = None,
@@ -70,7 +71,7 @@ def _validate_effectiveness_measure_payload(
             if qry.first():
                 raise DomainError(status_code=400, detail="metric_key already exists")
     if fields is None or "source_type" in fields:
-        _coerce_metric_source_type(db, payload.source_type)
+        _coerce_metric_source_type(db, payload.source_type, user)
     if (fields is None or "clauses" in fields) and payload.clauses:
         raise DomainError(
             status_code=400,
@@ -82,6 +83,7 @@ def _apply_effectiveness_measure_payload(
     db: Session,
     row: IsmsEffectivenessMeasure,
     payload: EffectivenessMeasurePayload,
+    user: User | None,
     *,
     partial: bool = False,
 ) -> None:
@@ -110,7 +112,7 @@ def _apply_effectiveness_measure_payload(
     if "metric_key" in fields:
         row.metric_key = _metric_key_from_payload(payload.metric_key)
     if "source_type" in fields:
-        row.source_type = _coerce_metric_source_type(db, payload.source_type)
+        row.source_type = _coerce_metric_source_type(db, payload.source_type, user)
     if "target_value" in fields:
         row.target_value = payload.target_value
     if "target_unit" in fields:
@@ -137,27 +139,35 @@ def _actual_effectiveness_metric_source_names(db: Session) -> list[str]:
     return [str(src).strip() for (src,) in rows if str(src or "").strip()]
 
 
+def _listed_metric_source_names(db: Session, user: User | None) -> list[str]:
+    """The evidence sources a person's measure form offers.
+
+    Collected source names derive from events, so only event readers are
+    offered them all; other ISMS readers are offered the sources measures
+    already name. A source named in a save is checked against the same names,
+    so saving cannot tell such a person whether a name they guess is collected.
+    """
+    if can_read_events(db, user):
+        return _actual_effectiveness_metric_source_names(db)
+    return sorted(
+        {
+            source
+            for (source,) in db.query(IsmsEffectivenessMeasure.source_type)
+            .distinct()
+            .all()
+            if source and source != EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
+        },
+        key=str.lower,
+    )
+
+
 def _effectiveness_metric_sources_out(
     db: Session, user: User | None = None
 ) -> list[dict[str, str]]:
     overrides = (
         getattr(user, "pref_source_colors", None) if isinstance(user, User) else None
     )
-    # Collected source names derive from events, so only event readers see
-    # them all; other ISMS readers see the sources measures already name.
-    if can_read_events(db, user):
-        names = _actual_effectiveness_metric_source_names(db)
-    else:
-        names = sorted(
-            {
-                source
-                for (source,) in db.query(IsmsEffectivenessMeasure.source_type)
-                .distinct()
-                .all()
-                if source and source != EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
-            },
-            key=str.lower,
-        )
+    names = _listed_metric_source_names(db, user)
     items: list[dict[str, str]] = []
     for source in names:
         meta = apply_user_source_overrides(get_source_meta(source), overrides)
@@ -180,11 +190,15 @@ def _effectiveness_metric_sources_out(
     return items
 
 
-def resolve_metric_source_type(db: Session, raw: str | None) -> str | None:
+def resolve_metric_source_type(
+    db: Session, raw: str | None, *, among: list[str] | None = None
+) -> str | None:
     """Return the collected Keen source named by ``raw``, "other", or None.
 
     Blank input means "other". Spelling variants (case, hyphen/underscore) name
     the same collected source. None means no collected source has that name.
+    ``among`` narrows the sources to those a person's form offers; without it,
+    for values Keen supplies itself, every collected source counts.
     """
 
     source_type = clean_text(raw, max_len=64).strip()
@@ -192,7 +206,7 @@ def resolve_metric_source_type(db: Session, raw: str | None) -> str | None:
         return EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
     if source_type.lower() == EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE:
         return EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
-    sources = _actual_effectiveness_metric_source_names(db)
+    sources = _actual_effectiveness_metric_source_names(db) if among is None else among
     for source in sources:
         if source_type == source:
             return source
@@ -203,8 +217,11 @@ def resolve_metric_source_type(db: Session, raw: str | None) -> str | None:
     return None
 
 
-def _coerce_metric_source_type(db: Session, raw: str | None) -> str:
-    resolved = resolve_metric_source_type(db, raw)
+def _coerce_metric_source_type(db: Session, raw: str | None, user: User | None) -> str:
+    """The source a person's save names, from those their form offers."""
+    resolved = resolve_metric_source_type(
+        db, raw, among=_listed_metric_source_names(db, user)
+    )
     if resolved is None:
         raise DomainError(
             status_code=400,
@@ -261,7 +278,11 @@ def threshold_status(
 
 
 def _validate_metric_entry_payload(
-    db: Session, payload: EffectivenessMetricEntryPayload, *, partial: bool = False
+    db: Session,
+    payload: EffectivenessMetricEntryPayload,
+    user: User | None,
+    *,
+    partial: bool = False,
 ) -> None:
     fields = set(payload.model_fields_set or set()) if partial else set()
     qualitative = clean_text(payload.qualitative_value, max_len=20000)
@@ -279,7 +300,7 @@ def _validate_metric_entry_payload(
             status_code=400, detail="period_end must be after period_start"
         )
     if not partial or "source_type" in fields:
-        _coerce_metric_source_type(db, payload.source_type)
+        _coerce_metric_source_type(db, payload.source_type, user)
     if payload.source_event_id:
         if not db.query(Event.id).filter(Event.id == payload.source_event_id).first():
             raise DomainError(status_code=400, detail="Unknown source event")
@@ -289,6 +310,7 @@ def _apply_metric_entry_payload(
     row: IsmsEffectivenessMetricEntry,
     payload: EffectivenessMetricEntryPayload,
     db: Session,
+    user: User | None,
     *,
     partial: bool = False,
 ) -> None:
@@ -324,7 +346,7 @@ def _apply_metric_entry_payload(
     if "qualitative_value" in fields:
         row.qualitative_value = clean_text(payload.qualitative_value, max_len=20000)
     if "source_type" in fields:
-        row.source_type = _coerce_metric_source_type(db, payload.source_type)
+        row.source_type = _coerce_metric_source_type(db, payload.source_type, user)
     if "source_title" in fields:
         row.source_title = clean_text(payload.source_title, max_len=256)
     if "source_url" in fields:

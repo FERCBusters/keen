@@ -396,7 +396,18 @@ def _own_round(db: Session, person_id: uuid.UUID, round_id: uuid.UUID) -> QuizRo
         .filter(QuizParticipant.person_id == person_id)
         .one_or_none()
     )
-    if round_ is None:
+    # Read again under the round's lock. The statement above decided who takes
+    # part before it waited for that lock, so it still saw a participant whom
+    # an audience change removed while it waited. That change holds the
+    # round's row lock, so this read stays true until the attempt is stored.
+    if round_ is None or not (
+        db.query(QuizParticipant.id)
+        .filter(
+            QuizParticipant.round_id == round_id,
+            QuizParticipant.person_id == person_id,
+        )
+        .first()
+    ):
         raise DomainError(status_code=404, detail="Quiz round not found")
     return round_
 

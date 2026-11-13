@@ -930,11 +930,15 @@ def test_login_issuers_capture_account_session_version(
     assert sessions.get_session(redis, sid)["session_version"] == 7
 
 
-def test_login_completion_replaces_the_old_session_and_tolerates_bookkeeping_failures(
+def test_login_completion_replaces_the_old_session_and_tolerates_a_failed_revocation(
     production_client, contract_db, monkeypatch
 ):
     # Signing in revokes the session the browser arrived with; a store failure
-    # on that revocation or on the last-login timestamp never blocks sign-in.
+    # on that revocation never blocks sign-in. The last sign-in time is stored
+    # in the one commit that records the sign-in, so the account row stays
+    # locked from the active check until the session exists.
+    from app.core.datetime_utils import utc_now_naive
+    from app.db.models import User
     from app.services import security_notifications
 
     _, redis, _, user = production_client
@@ -961,16 +965,15 @@ def test_login_completion_replaces_the_old_session_and_tolerates_bookkeeping_fai
         "delete_session",
         lambda *args: (_ for _ in ()).throw(ConnectionError("store down")),
     )
-    attempts = []
+    commits = []
     real_commit = contract_db.commit
 
-    def flaky_commit():
-        attempts.append(True)
-        if len(attempts) == 1:
-            raise RuntimeError("timestamp write failed")
+    def counted_commit():
+        commits.append(True)
         real_commit()
 
-    monkeypatch.setattr(contract_db, "commit", flaky_commit)
+    monkeypatch.setattr(contract_db, "commit", counted_commit)
+    before = utc_now_naive()
     fresh, profile = login_operations.complete_local_login(
         contract_db,
         user,
@@ -980,7 +983,9 @@ def test_login_completion_replaces_the_old_session_and_tolerates_bookkeeping_fai
     assert fresh != sid
     assert sessions.get_session(redis, fresh)["user_id"] == str(user.id)
     assert profile["user"] == user.username
-    assert len(attempts) >= 2
+    assert commits == [True]
+    contract_db.expire_all()
+    assert contract_db.get(User, user.id).last_login_at >= before
 
 
 def test_admin_source_types_expose_display_labels(

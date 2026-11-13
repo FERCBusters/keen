@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive as utcnow
+from app.core.references import try_uuid
 from app.db.models import (
     Audit,
     AuditScopedClause,
@@ -18,7 +19,6 @@ from app.db.models import (
     IsmsEntityControlLink,
     User,
 )
-from app.services.audits.validation import try_uuid
 from app.services.control_refs import control_by_id_or_ref
 from app.services.errors import DomainError
 from app.services.isms.access import can_read_isms

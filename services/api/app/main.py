@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import asynccontextmanager
+from typing import cast
 
 import anyio
 from fastapi import FastAPI, Request
@@ -14,6 +16,7 @@ from fastapi.openapi.docs import (
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
+from sqlalchemy import String
 from starlette.concurrency import run_in_threadpool
 
 from app.api.context import machine_credential
@@ -62,6 +65,8 @@ from app.security.route_policy import (
 )
 from app.services.errors import DomainError
 from app.services.mcp_oauth import scoped_user
+
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -493,9 +498,13 @@ async def audit_trail_middleware(request: Request, call_next):
                 await run_in_threadpool(
                     _record_request, request, path, status_code, dur_ms
                 )
-        except Exception:
-            # Audit logging must never break the main request path.
-            pass
+        except Exception as error:
+            # Audit logging must never break the main request path. The loss
+            # is logged without anything the request carried.
+            log.warning(
+                "A request audit record could not be written (%s)",
+                type(error).__name__,
+            )
 
 
 def _record_request(request: Request, path: str, status_code: int, dur_ms: int):
@@ -527,6 +536,12 @@ def _record_request(request: Request, path: str, status_code: int, dur_ms: int):
         ua = ua[:256]
     if ref and len(ref) > 512:
         ref = ref[:512]
+    # Every value the caller chooses is cut to its column's width: one the
+    # column refused would cost the whole record, and the request would be
+    # served without a trace.
+    columns = AuditLog.__table__.c
+    method = request.method[: cast(String, columns.method.type).length]
+    path = path[: cast(String, columns.path.type).length]
 
     db = SessionLocal()
     try:
@@ -534,7 +549,7 @@ def _record_request(request: Request, path: str, status_code: int, dur_ms: int):
             AuditLog(
                 ts=utc_now_naive(),
                 username=username,
-                method=request.method,
+                method=method,
                 path=path,
                 query_string=qs,
                 status_code=int(status_code or 0),

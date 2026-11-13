@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.references import try_uuid
 from app.db.models import (
     BookStackSectionEvidence,
     ControlClauseLink,
@@ -32,7 +33,6 @@ from app.security.regex import scan_pattern
 from app.services.audits.references import control_out
 from app.services.audits.validation import (
     AUDIT_SAMPLE_ENTITY_LABELS,
-    try_uuid,
 )
 from app.services.errors import DomainError
 

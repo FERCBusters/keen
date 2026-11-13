@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
-from app.core.email_address import single_mailbox
+from app.core.email_address import compared_mailbox, single_mailbox
 from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
 from app.security.sso_http import client_options
 
@@ -517,7 +517,7 @@ def _allowed_by_domain(provider: SsoProvider, claims: dict[str, Any]) -> bool:
 
 def _claim_email(claims: dict[str, Any]) -> str | None:
     email = single_mailbox(claims.get("email"))
-    return email.lower() if email else None
+    return compared_mailbox(email) if email else None
 
 
 def _email_is_verified(provider: SsoProvider, claims: dict[str, Any]) -> bool:
@@ -723,7 +723,7 @@ async def _fetch_github_claims(
             status_code=400, detail="GitHub user response missing id/login"
         )
 
-    email = str(user_info.get("email") or "").strip().lower() or None
+    email = compared_mailbox(str(user_info.get("email") or "").strip()) or None
     email_verified = False
     primary_verified = next(
         (
@@ -738,7 +738,9 @@ async def _fetch_github_claims(
     # A public GitHub profile email carries no verification flag. It is kept for
     # display and never links accounts across providers.
     if primary_verified:
-        email = str(primary_verified.get("email") or "").strip().lower() or email
+        email = (
+            compared_mailbox(str(primary_verified.get("email") or "").strip()) or email
+        )
         email_verified = True
 
     claims = {

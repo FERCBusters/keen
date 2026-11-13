@@ -375,12 +375,18 @@ def test_a_private_feed_token_never_reaches_stored_evidence(gh, monkeypatch):
     assert TOKEN not in json.dumps(cursor.meta) and TOKEN not in cursor.name
 
 
+def _feed_time(**ago):
+    moment = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(**ago)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def test_feed_entries_follow_the_cursor_and_are_stored_once(gh):
     feed = "https://feeds.example/acme.atom"
+    newest = _feed_time(hours=1)
     entries = [
-        (3, "PullRequestEvent", "newest", "2099-01-03T00:00:00Z", "carol"),
-        (2, "PushEvent", "middle", "2099-01-02T00:00:00Z", "bob"),
-        (1, "PushEvent", "oldest", "2099-01-01T00:00:00Z", "alice"),
+        (3, "PullRequestEvent", "newest", newest, "carol"),
+        (2, "PushEvent", "middle", _feed_time(hours=2), "bob"),
+        (1, "PushEvent", "oldest", _feed_time(hours=3), "alice"),
     ]
     gh.fake.routes[("feeds.example", "/acme.atom")] = httpx.Response(
         200, text=_atom(*entries)
@@ -392,7 +398,46 @@ def test_feed_entries_follow_the_cursor_and_are_stored_once(gh):
     assert (first["created_events"], second["created_events"]) == (3, 0)
     assert [e.actor for e in gh.events()] == ["alice", "bob", "carol"]
     assert gh.events()[-1].action == "PullRequestEvent"
-    assert first["cursor_last_ts"] == "2099-01-03T00:00:00"
+    assert first["cursor_last_ts"] == newest.rstrip("Z")
+
+
+def test_an_entry_dated_ahead_does_not_carry_the_feed_cursor_with_it(gh):
+    # The cursor follows the newest entry date, which is the publisher's own.
+    # One entry dated far ahead would otherwise move it past everything the
+    # feed publishes until then, while every run went on reporting success.
+    feed = "https://feeds.example/acme.atom"
+    ahead = (5, "PushEvent", "dated ahead", "2999-01-01T00:00:00Z", "mallory")
+    earlier = (1, "PushEvent", "earlier", _feed_time(hours=2), "alice")
+    gh.fake.routes[("feeds.example", "/acme.atom")] = httpx.Response(
+        200, text=_atom(ahead, earlier)
+    )
+
+    first = github.ingest_github_atom_feed(gh.db, feed)
+
+    assert first["created_events"] == 2
+    cursor = gh.db.query(IngestionCursor).one()
+    assert cursor.last_ts <= utc_now_naive()
+    assert cursor.last_ts > utc_now_naive() - timedelta(minutes=1)
+
+    # Entries published after that run are still collected.
+    later = [
+        (7, "PushEvent", "later two", _feed_time(seconds=1), "carol"),
+        (6, "PushEvent", "later one", _feed_time(seconds=2), "bob"),
+    ]
+    gh.fake.routes[("feeds.example", "/acme.atom")] = httpx.Response(
+        200, text=_atom(*later, ahead, earlier)
+    )
+    gh.db.expire_all()
+    cursor = gh.db.query(IngestionCursor).one()
+    # As the next run finds it, a moment later.
+    cursor.last_ts = cursor.last_ts - timedelta(seconds=5)
+    gh.db.commit()
+
+    second = github.ingest_github_atom_feed(gh.db, feed)
+
+    assert second["created_events"] == 2
+    assert sorted(e.actor for e in gh.events()) == ["alice", "bob", "carol", "mallory"]
+    assert gh.db.query(IngestionCursor).one().last_ts <= utc_now_naive()
 
 
 def test_feed_entries_older_than_the_lookback_are_ignored(gh):

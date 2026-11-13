@@ -19,6 +19,7 @@ from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
+from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -229,7 +230,7 @@ def _store_hit(db, hit, entry):
         normalized_payload=doc,
         external_id=external_id,
         artifact_kind="log_document",
-        artifact_bytes=json.dumps(doc, ensure_ascii=False).encode(),
+        artifact_bytes=utf8_bytes(json.dumps(doc, ensure_ascii=False)),
         artifact_content_type="application/json",
         artifact_key=f"elasticsearch/{external_id}.json",
         captured_by="keen:elasticsearch",

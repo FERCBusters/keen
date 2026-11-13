@@ -34,9 +34,29 @@ def test_download_header_is_ascii_and_cannot_inject_headers(filename):
         assert decoded == filename
 
 
-@pytest.mark.parametrize("value", [None, 0, -2, "plain", "a,b", "hello\nworld"])
+@pytest.mark.parametrize(
+    "value",
+    [None, 0, -2, "plain", "a,b", "hello\nworld", "a; b", "x;y=1", "tab\tseparated"],
+)
 def test_csv_preserves_nonformula_values(value):
     assert spreadsheet_cell(value) == value
+
+
+@pytest.mark.parametrize(
+    "value, guarded",
+    [
+        ("=1+1", "'=1+1"),
+        # A reader that splits on semicolons or tabs starts a new cell there,
+        # whatever the file's delimiter and quoting.
+        ("x;=1+1;y", "x;'=1+1;y"),
+        ("x; \t=HYPERLINK(1)", "x; \t'=HYPERLINK(1)"),
+        ("a\t@SUM(1)", "a\t'@SUM(1)"),
+        ("a;+1;-1", "a;'+1;'-1"),
+        ("=1;=2", "'=1;'=2"),
+    ],
+)
+def test_csv_guards_a_formula_wherever_a_reader_could_start_a_cell(value, guarded):
+    assert spreadsheet_cell(value) == guarded
 
 
 @pytest.mark.parametrize("model", [IsmsOrgNode, IsmsDocumentFolder])

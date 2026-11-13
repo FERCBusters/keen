@@ -45,7 +45,7 @@ from app.services.isms.access import can_read_isms, meeting_ids_for
 from app.services.isms.metric_values import threshold_status
 from app.services.mailer import smtp_configured, user_email
 from app.services.schedules import today_for_schedule
-from app.services.security_notifications import queue_email
+from app.services.security_notifications import pending_for, queue_email
 
 AUDIT_STARTED = "audit_started"
 QUIZ_ROUND = "quiz_round"
@@ -53,6 +53,10 @@ MEETING_MINUTES = "meeting_minutes"
 MEASURE_OUTSIDE = "measure_outside"
 # The inbox lists this many of a person's latest items it can show.
 LIST_LIMIT = 100
+# The most messages that may wait in the outbox for one account before a new
+# notification is kept in Keen only. A measure's submission secret, for one,
+# can make notifications faster than mail is sent.
+PENDING_EMAILS = 10
 # Read items are removed after this long, and unread ones after a year.
 KEEP_READ_DAYS = 90
 KEEP_UNREAD_DAYS = 365
@@ -95,6 +99,12 @@ def notify(
     for account in accounts:
         delivery = account.pref_notification_delivery
         address = user_email(account) if mail and delivery != "app" else None
+        if address and pending_for(db, account.id) >= PENDING_EMAILS:
+            # The mail already waiting for this account is not added to: the
+            # notification stays in Keen, unread, and the outbox it shares
+            # with every account's security mail stays short whatever makes
+            # notifications for one account.
+            address = None
         item = {
             "id": uuid.uuid4(),
             "user_id": account.id,
@@ -445,13 +455,25 @@ def mark_read(*, item_id: str, db: Session, user: User) -> dict[str, int]:
 
 
 def mark_all_read(*, db: Session, user: User) -> dict[str, int]:
-    marked = (
+    """Mark as read every notification the person can open.
+
+    Like every other inbox figure, the count covers only those. One whose
+    record the person cannot open yet stays unread and unreported until they
+    can, so the answer says nothing about records they may not read.
+    """
+    unread = (
         db.query(InboxItem)
         .filter(InboxItem.user_id == user.id, InboxItem.read_at.is_(None))
+        .all()
+    )
+    openable = [uuid.UUID(view["id"]) for view in _shown(db, user, unread)]
+    marked = (
+        db.query(InboxItem)
+        .filter(InboxItem.id.in_(openable), InboxItem.read_at.is_(None))
         .update({InboxItem.read_at: utc_now_naive()}, synchronize_session=False)
     )
     db.commit()
-    return {"marked": marked, "unread_count": 0}
+    return {"marked": marked, "unread_count": unread_count(db, user)}
 
 
 def remove_old_items(db: Session, *, now=None) -> int:

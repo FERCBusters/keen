@@ -17,7 +17,7 @@ from app.db.models import Artifact, ControlItem, Event, Framework, Mapping
 from app.ingest import common
 from app.mapping.rules import parse_rules
 from sqlalchemy import delete, event, insert
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 
 
 @pytest.fixture
@@ -135,6 +135,77 @@ def test_a_constraint_failure_without_a_stored_event_is_raised(pg, written):
     assert written == []
 
 
+@pytest.mark.parametrize(
+    "hostile",
+    [float("inf"), float("-inf"), float("nan"), "lone \ud800 surrogate", "nul \x00"],
+    ids=["inf", "-inf", "nan", "surrogate", "nul"],
+)
+def test_every_collected_value_reaches_postgresql_in_a_form_it_can_hold(
+    pg, written, hostile
+):
+    # Shared storage is the one step every collector, webhook and agent passes
+    # through, so a value PostgreSQL text or JSONB refuses is made storable
+    # here: in the payload, a dictionary key, the pointer and the text columns.
+    text = hostile if isinstance(hostile, str) else "plain"
+    result = common.store_event_with_artifact(
+        pg.db,
+        timestamp=datetime(2026, 10, 1, 9, 0),
+        source="race-test",
+        system=text,
+        actor=text,
+        action=text,
+        outcome=text,
+        severity=2,
+        summary=text,
+        raw_pointer={"pointer": [hostile]},
+        normalized_payload={"value": hostile, text: {"nested": (hostile, 1.5)}},
+        external_id="odd-" + text,
+        artifact_kind="json",
+        artifact_bytes=b"{}",
+        artifact_content_type="application/json",
+        artifact_key="race/odd.json",
+        captured_by="test",
+        commit=False,
+    )
+    pg.db.flush()
+    pg.db.expire_all()
+
+    stored = pg.db.get(Event, uuid.UUID(result["event_id"]))
+    expected = {
+        float("inf"): "inf",
+        float("-inf"): "-inf",
+        "lone \ud800 surrogate": "lone \ufffd surrogate",
+        "nul \x00": "nul \ufffd",
+    }.get(hostile, "nan")
+    kept = expected if isinstance(hostile, str) else "plain"
+    assert stored.raw_pointer == {"pointer": [expected]}
+    assert stored.normalized_payload == {
+        "value": expected,
+        kept: {"nested": [expected, 1.5]},
+    }
+    assert (stored.system, stored.actor, stored.action, stored.outcome) == (kept,) * 4
+    assert stored.summary == kept
+    assert stored.external_id.endswith("odd-" + kept)
+
+
+def test_storable_is_what_lets_postgresql_take_those_values(pg):
+    # The values the test above stores are refused as they are written.
+    for refused in (float("inf"), "lone \ud800 surrogate"):
+        row = Event(
+            timestamp=datetime(2026, 10, 1, 9, 0),
+            source="race-test",
+            summary="as written",
+            raw_pointer={},
+            normalized_payload={"value": refused},
+            external_id=uuid.uuid4().hex,
+        )
+        with pytest.raises((DataError, UnicodeEncodeError)):
+            with pg.db.begin_nested():
+                pg.db.add(row)
+                pg.db.flush()
+        pg.db.expunge_all()
+
+
 def test_a_reference_two_targets_name_gets_one_placeholder_control(
     contract_db, monkeypatch
 ):
@@ -175,3 +246,64 @@ def test_a_reference_two_targets_name_gets_one_placeholder_control(
         None,
     )
     assert [m.control_item_id for m in contract_db.query(Mapping)] == [placeholder.id]
+
+
+def test_an_events_mappings_are_stored_in_control_order(contract_db, monkeypatch):
+    # Each mapping locks its control's evidence-count row until the transaction
+    # ends. Two events stored at once for the same controls would each wait for
+    # the other if their mappings went in different orders, so every event's
+    # go in control order, whatever order the rules name them in.
+    contract_db.add_all([Framework(slug="RACE"), Framework(slug="RACE2")])
+    controls = [
+        ControlItem(
+            id=uuid.UUID(int=number),
+            framework_slug=slug,
+            type="annex_control",
+            ref=ref,
+        )
+        for number, slug, ref in (
+            (3, "RACE", "A.1"),
+            (1, "RACE", "A.2"),
+            (2, "RACE2", "B.1"),
+        )
+    ]
+    contract_db.add_all(controls)
+    contract_db.flush()
+    rules = parse_rules(
+        {
+            "rules": [
+                {
+                    "id": "several",
+                    "when": {"source": "race-test"},
+                    "map_to": [
+                        {"framework": "RACE", "ref": "A.1"},
+                        {"framework": "RACE2", "ref": "B.1"},
+                        {"framework": "RACE", "ref": "A.2"},
+                    ],
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(common, "load_rules", lambda *a, **k: rules)
+    row = Event(
+        source="race-test",
+        summary="Release deployed",
+        timestamp=datetime(2026, 10, 1, 9, 0),
+        external_id=uuid.uuid4().hex,
+        raw_pointer={},
+        normalized_payload={},
+    )
+    contract_db.add(row)
+    contract_db.flush()
+    inserted = []
+
+    def record(mapper, connection, mapping):
+        inserted.append(mapping.control_item_id.int)
+
+    event.listen(Mapping, "before_insert", record)
+    try:
+        assert common.apply_rules(contract_db, row) == 3
+    finally:
+        event.remove(Mapping, "before_insert", record)
+
+    assert inserted == [1, 2, 3]

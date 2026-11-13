@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from app.core.email_address import single_mailbox
+from app.core.email_address import compared_mailbox, single_mailbox
 from app.services import mailer, security_notifications
 from app.services.errors import DomainError
 from app.services.text import clean_email
@@ -61,6 +61,16 @@ def test_lists_and_malformed_values_are_refused(value):
 def test_one_mailbox_is_kept_trimmed(value):
     assert single_mailbox(value) == value.strip()
     assert clean_email(value) == value.strip()
+
+
+def test_addresses_are_compared_by_their_ascii_letters_only():
+    assert compared_mailbox("Lead.Auditor@Example.TEST") == "lead.auditor@example.test"
+    # Characters outside ASCII are kept as written: lower() would fold the
+    # Kelvin sign to "k" and make two different addresses compare equal.
+    kelvin = "\u212aate@example.test"
+    assert kelvin.lower() == "kate@example.test"
+    assert compared_mailbox(kelvin) == kelvin
+    assert compared_mailbox("\u00c9lise@example.test") == "\u00c9lise@example.test"
 
 
 def test_blank_values_are_absent_unless_required():

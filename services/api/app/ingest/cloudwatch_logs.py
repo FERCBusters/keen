@@ -336,8 +336,9 @@ def ingest_cloudwatch_logs_once(
                     f"{make_fingerprint(ext_id)}.{ext}"
                 ),
                 captured_by="keen:cloudwatch_logs",
-                # The run commits once, together with its cursor.
-                commit=False,
+                # Each event commits by itself, so the rows and locks a mapping
+                # takes are held for one event, never across a page or a
+                # request to AWS.
             )
             if not stored.get("deduped"):
                 created_events += 1
@@ -347,6 +348,16 @@ def ingest_cloudwatch_logs_once(
             # Advance max_seen_ts even for deduped events.
             if (max_seen_ts is None) or (ts > max_seen_ts):
                 max_seen_ts = ts
+
+        # Keep each finished page: a run that is stopped, by its time limit
+        # or a failed request, continues from the newest event stored. Events
+        # sharing that moment on a later page are covered by the overlap, and
+        # repeats are recognised by their identifiers.
+        if max_seen_ts is not None:
+            cur.last_ts = max_seen_ts
+            cur.updated_at = utc_now_naive()
+            db.add(cur)
+            db.commit()
 
         next_token = resp.get("nextToken")
         if not next_token:

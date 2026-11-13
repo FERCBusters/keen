@@ -6,7 +6,12 @@ from sqlalchemy import CompoundSelect, select
 from sqlalchemy.orm import Session
 
 from app.db.models import IsmsMeetingAttendee, IsmsMeetingPerson, IsmsPerson, User
-from app.security.permissions import ISMS_READ_PERMISSION, has_any_permission
+from app.security.permissions import (
+    ISMS_READ_PERMISSION,
+    has_any_permission,
+    has_permission,
+    has_shared_permission,
+)
 from app.security.roles import is_active_user
 
 from .constants import (
@@ -17,18 +22,17 @@ from .constants import (
 
 
 def can_read_isms(db: Session, user: User | None) -> bool:
+    # Risk readers and managers also read the ISMS registers.
     return has_any_permission(
-        db,
-        user,
-        ISMS_READ_PERMISSION,
-        ISMS_MANAGE_PERMISSION,
-        RISK_READ_PERMISSION,
-        RISK_MANAGE_PERMISSION,
-    )
+        db, user, ISMS_READ_PERMISSION, ISMS_MANAGE_PERMISSION
+    ) or has_shared_permission(db, user, RISK_READ_PERMISSION, RISK_MANAGE_PERMISSION)
 
 
 def can_manage_isms(db: Session, user: User | None) -> bool:
-    return has_any_permission(db, user, ISMS_MANAGE_PERMISSION, RISK_MANAGE_PERMISSION)
+    # Risk managers also manage the ISMS registers.
+    return has_permission(db, user, ISMS_MANAGE_PERMISSION) or has_shared_permission(
+        db, user, RISK_MANAGE_PERMISSION
+    )
 
 
 def meeting_ids_for(user: User) -> CompoundSelect:

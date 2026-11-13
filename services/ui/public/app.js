@@ -585,8 +585,10 @@ export function refreshRichTextEditorStates(root = document) {
 // every edit. Every editor therefore starts from an empty textarea, receives
 // its content only through setRichTextEditorValue and the shared sanitiser,
 // has pasted HTML sanitised here before Wysi's own paste handler can see it,
-// and keeps all top-level text inside paragraphs: when content is loaded, and
-// before Wysi reads each edit. This is the only place that starts Wysi.
+// keeps all top-level text inside paragraphs (when content is loaded, and
+// before Wysi reads each edit), and tells Wysi to keep every tag the sanitiser
+// allows, so none is unwrapped to the top level. This is the only place that
+// starts Wysi.
 //
 // Wysi builds its editor once the document has loaded, so a value set before
 // then waits in _pendingRichText, and the textarea stays empty until the
@@ -701,6 +703,55 @@ function _keepRichTextInParagraphs(event) {
   selection.setBaseAndExtent(...anchor, ...focus);
 }
 
+// The elements Wysi 0.5.1 keeps for each tool (its toolset); it always keeps
+// paragraphs and line breaks. When it reads the editor's content it unwraps
+// every other element, which leaves that element's text at the top level,
+// where it is re-parsed as HTML: escaped markup inside a saved <pre> would
+// become elements in the page of whoever edits the record. So every tag the
+// shared sanitiser can leave in an editor is one Wysi is told to keep: those
+// its tools do not cover are named as custom tags, with the attributes the
+// sanitiser allows.
+const _WYSI_TOOL_TAGS = {
+  format: ['h1', 'h2', 'h3', 'h4'],
+  quote: ['blockquote'],
+  bold: ['strong'],
+  italic: ['em'],
+  underline: ['u'],
+  strike: ['s', 'strike'],
+  ul: ['ul', 'li'],
+  ol: ['ol', 'li'],
+  link: ['a'],
+  hr: ['hr'],
+};
+
+function _richTextCustomTags(tools) {
+  const kept = new Set(['p', 'br', ...tools.flatMap((tool) => _WYSI_TOOL_TAGS[tool] || [])]);
+  return [
+    {
+      tags: [...RICH_TEXT_ALLOWED_TAGS].filter((tag) => !kept.has(tag)),
+      attributes: ['href', 'target', 'rel'],
+    },
+  ];
+}
+
+const _RICH_TEXT_TOOLS = [
+  'format',
+  '|',
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  '|',
+  'ul',
+  'ol',
+  '|',
+  'link',
+  'hr',
+  'quote',
+  '|',
+  'removeFormat',
+];
+
 let _richTextPasteGuarded = false;
 
 export function initRichTextEditors(root = document, opts = {}) {
@@ -720,29 +771,15 @@ export function initRichTextEditors(root = document, opts = {}) {
     textarea.setAttribute('data-wysi-fallback', '1');
     const saved = textarea.value || '';
     textarea.value = '';
+    const tools = opts.tools || _RICH_TEXT_TOOLS;
     try {
       window.Wysi({
         el: textarea,
         height: opts.height || Number(textarea.dataset.richTextHeight || 260),
         autoGrow: opts.autoGrow ?? true,
         autoHide: opts.autoHide ?? false,
-        tools: opts.tools || [
-          'format',
-          '|',
-          'bold',
-          'italic',
-          'underline',
-          'strike',
-          '|',
-          'ul',
-          'ol',
-          '|',
-          'link',
-          'hr',
-          'quote',
-          '|',
-          'removeFormat',
-        ],
+        tools,
+        customTags: _richTextCustomTags(tools),
         // Wysi reports its own re-parsed copy of the content; the form
         // keeps what the editor shows, through the shared sanitiser.
         onChange: () => {

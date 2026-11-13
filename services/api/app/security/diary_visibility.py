@@ -5,7 +5,9 @@ events. Automatic framework-link entries describe risk and ISMS records, whose
 read access is granted separately from evidence access, so each entry follows
 the read rule of the record type it describes. Entries about risks require
 risk read or manage permission. Entries about other ISMS records require ISMS
-read access, which risk read or manage permission also grants.
+read access, which risk read or manage permission also grants to a person. An
+MCP connection reads the entries its own scopes name: risk entries with the
+risk scope, entries about other ISMS records with the ISMS scope.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.models import Event, User
-from app.security.permissions import has_permission
+from app.security.permissions import has_any_permission, has_shared_permission
 from app.security.roles import is_active_user
 
 DIARY_SOURCE = "diary"
@@ -41,14 +43,10 @@ def _link_entry_access(db: Session, user: User) -> tuple[bool, bool]:
     tests hold them in step.
     """
 
-    risks = has_permission(db, user, "risk.read") or has_permission(
-        db, user, "risk.manage"
-    )
-    isms = (
-        risks
-        or has_permission(db, user, "isms.read")
-        or has_permission(db, user, "isms.manage")
-    )
+    risks = has_any_permission(db, user, "risk.read", "risk.manage")
+    isms = has_any_permission(
+        db, user, "isms.read", "isms.manage"
+    ) or has_shared_permission(db, user, "risk.read", "risk.manage")
     return risks, isms
 
 
@@ -58,18 +56,21 @@ def diary_filter_condition(db: Session, user: User):
     if not is_active_user(user):
         return Event.source != DIARY_SOURCE
     risks, isms = _link_entry_access(db, user)
-    if risks:
+    if risks and isms:
         return True
     not_link_entry = or_(
         Event.source != DIARY_SOURCE,
         Event.system.is_(None),
         Event.system != LINK_ENTRY_SYSTEM,
     )
+    about_a_risk = Event.external_id.startswith(RISK_LINK_ENTRY_PREFIX, autoescape=True)
     allowed = [not_link_entry]
     if isms:
-        allowed.append(
-            ~Event.external_id.startswith(RISK_LINK_ENTRY_PREFIX, autoescape=True)
-        )
+        allowed.append(~about_a_risk)
+    if risks:
+        # An MCP connection granted the risk scope alone: a person who reads
+        # risks reads the other entries too.
+        allowed.append(about_a_risk)
     return or_(*allowed)
 
 

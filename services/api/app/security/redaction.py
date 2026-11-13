@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import os
 import re
 from contextvars import ContextVar
@@ -513,7 +514,8 @@ def mask_event_data_bytes(data: bytes, content_type: str | None) -> tuple[bytes,
 
     if new_txt == txt:
         return data, "clean"
-    return new_txt.encode("utf-8"), "redacted"
+    # A JSON artifact can decode to text UTF-8 cannot hold.
+    return utf8_bytes(new_txt), "redacted"
 
 
 def combine_redaction_status(*statuses: str | None) -> str:
@@ -582,21 +584,48 @@ def redact_bytes(data: bytes, content_type: str | None) -> tuple[bytes, str]:
 
     if new_txt == txt:
         return data, "clean"
-    return new_txt.encode("utf-8"), "redacted"
+    # A JSON artifact can decode to text UTF-8 cannot hold.
+    return utf8_bytes(new_txt), "redacted"
+
+
+def storable_text(text: str) -> str:
+    """The text as PostgreSQL and UTF-8 can hold it.
+
+    PostgreSQL text and JSON values cannot hold a NUL character, and no UTF-8
+    encoding exists for a surrogate that is not half of a pair, which JSON
+    escapes such as ``\\ud800`` decode to. Each becomes the replacement
+    character, which keeps its position visible; a surrogate pair becomes the
+    character it encodes.
+    """
+    if not text.isascii():
+        try:
+            text.encode("utf-8")
+        except UnicodeEncodeError:
+            text = text.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+    return text.replace("\x00", "\ufffd") if "\x00" in text else text
+
+
+def utf8_bytes(text: str) -> bytes:
+    """Encode text written from collected values, which may hold lone surrogates."""
+    return storable_text(text).encode("utf-8")
 
 
 def storable(value: Any) -> Any:
-    """Replace NUL characters, which PostgreSQL text and JSON values cannot hold.
+    """Replace what PostgreSQL text and JSON values cannot hold.
 
-    Collected evidence can contain NUL characters from upstream systems. The
-    replacement character keeps the position visible, and the record is stored
+    Collected evidence can contain NUL characters, lone surrogates and
+    non-finite numbers (NaN, Infinity and numbers too large for a float, which
+    JSON parsers read as Infinity) from upstream systems. Characters become
+    the replacement character and numbers their text, and the record is stored
     instead of failing the whole collection batch. Containers nested more than
     MAX_DEPTH deep become NESTED_TOO_DEEPLY.
     """
 
     def walk(item: Any, depth: int) -> Any:
         if isinstance(item, str):
-            return item.replace("\x00", "\ufffd") if "\x00" in item else item
+            return storable_text(item)
+        if isinstance(item, float):
+            return item if math.isfinite(item) else str(item)
         if isinstance(item, (list, tuple, dict)) and depth > MAX_DEPTH:
             return NESTED_TOO_DEEPLY
         if isinstance(item, list):

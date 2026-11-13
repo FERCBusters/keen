@@ -17,6 +17,7 @@ from app.security.passwords import (
     needs_rehash,
     verify_password,
 )
+from app.security.rate_limit import login_name
 from app.security.sessions import delete_session, get_session
 
 ROLE_ADMIN = "admin"
@@ -274,6 +275,15 @@ def create_user(
     existing = db.query(User).filter(User.username == uname).one_or_none()
     if existing:
         raise ValueError("username already exists")
+    # Sign-in limits and browser recognition are kept by compared name, so two
+    # accounts whose names compare equal would share them: one account's
+    # holder would be recognised, and exempt from the limits, for the other.
+    compared = login_name(uname)
+    if any(login_name(name) == compared for (name,) in db.query(User.username)):
+        raise ValueError(
+            "a username that differs only in case, width, spacing or invisible"
+            " characters already exists"
+        )
 
     user = User(
         username=uname,

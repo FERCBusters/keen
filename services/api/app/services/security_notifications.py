@@ -79,24 +79,51 @@ def record_login(db, user, *, ip):
         enqueue(db, user, "login-ip", ip=address)
 
 
+def pending_for(db, user_id) -> int:
+    """How many messages are waiting to be sent to an account."""
+    return (
+        db.query(SecurityNotification)
+        .filter_by(user_id=user_id, status="pending")
+        .count()
+    )
+
+
+def _next_pending(db, served):
+    return (
+        db.query(SecurityNotification)
+        .filter(
+            SecurityNotification.status == "pending",
+            SecurityNotification.next_attempt_at <= now(),
+            SecurityNotification.recipient.notin_(served),
+        )
+        .order_by(SecurityNotification.created_at)
+        .with_for_update(skip_locked=True)
+        .first()
+    )
+
+
 def deliver_pending(limit=10):
+    """Send waiting messages, oldest first, taking each recipient in turn.
+
+    One recipient's backlog, however long, takes one place in each turn: a
+    message for anyone else, such as a verification link that expires or a
+    security alert, is sent in the run that finds it and never waits behind
+    the backlog.
+    """
     if not smtp_configured():
         return 0
     sent = 0
+    served: list[str] = []
     for _ in range(limit):
         with SessionLocal() as db:
-            row = (
-                db.query(SecurityNotification)
-                .filter(
-                    SecurityNotification.status == "pending",
-                    SecurityNotification.next_attempt_at <= now(),
-                )
-                .order_by(SecurityNotification.created_at)
-                .with_for_update(skip_locked=True)
-                .first()
-            )
+            row = _next_pending(db, served)
+            if row is None and served:
+                # Everyone waiting has had a turn; start the next one.
+                served.clear()
+                row = _next_pending(db, served)
             if row is None:
                 break
+            served.append(row.recipient)
             row.attempts += 1
             try:
                 send_email(to_email=row.recipient, subject=row.subject, body=row.body)

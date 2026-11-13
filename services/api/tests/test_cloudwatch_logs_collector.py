@@ -14,6 +14,7 @@ from app.ingest.log_pipeline import (
     truncate,
     try_parse_json_line,
 )
+from celery.exceptions import SoftTimeLimitExceeded
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge")
 
@@ -216,7 +217,8 @@ def test_once_streams_events_and_paginates(db):
     assert result["log_group"] == "/prod/app"
     assert result["region"] == "ap-southeast-2"
     assert cursor.last_ts == datetime(2025, 10, 9, 8, 53, 29, tzinfo=timezone.utc)
-    db.commit.assert_called_once_with()
+    # The cursor is saved as each page finishes, then once more for the run.
+    assert db.commit.call_count == 3
     db.rollback.assert_not_called()
     assert calls[0]["logGroupName"] == "/prod/app"
     assert calls[0]["filterPattern"] == "ERROR"
@@ -228,8 +230,8 @@ def test_once_streams_events_and_paginates(db):
     assert {e["source"] for e in stored} == {"cloudwatch_logs"}
     assert {e["system"] for e in stored} == {"prod"}
     assert stored[0]["severity"] == 5
-    # The run commits once, with its cursor, rather than per event.
-    assert {e["commit"] for e in stored} == {False}
+    # Shared storage commits each event by itself: none defers its commit.
+    assert all("commit" not in e for e in stored)
     assert all(e["timestamp"].tzinfo is None for e in stored)
     assert result["cursor_last_ts"] == "2025-10-09T08:53:29+00:00"
 
@@ -302,7 +304,8 @@ def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):
     assert result["created_artifacts"] == 0
     assert result["created_mappings"] == 0
     assert result["cursor_last_ts"] == "2025-10-09T08:53:20+00:00"
-    db.commit.assert_called_once_with()
+    # One commit for the page's cursor and one for the run.
+    assert db.commit.call_count == 2
 
 
 def test_once_repeated_token_stops(db):
@@ -535,4 +538,71 @@ def test_paging_stops_at_the_page_limit_with_the_cursor_at_the_newest_event(db):
     assert calls[1]["nextToken"] == "tok-1"
     assert [event["external_id"] for event in stored] == ["ev1", "ev2"]
     assert cursor.last_ts == datetime.fromtimestamp((MS + 2000) / 1000, tz=timezone.utc)
-    db.commit.assert_called_once_with()
+    assert db.commit.call_count == 3
+
+
+def test_a_run_stopped_partway_keeps_the_pages_it_finished(db):
+    # A query whose pages cannot all be stored within the run's time limit must
+    # still advance: each finished page saves the cursor, so the next run starts
+    # after it instead of reading the same pages again.
+    saved = []
+    cursor = MagicMock(last_ts=None)
+    db.commit.side_effect = lambda: saved.append(cursor.last_ts)
+
+    def paginate(**params):
+        if "nextToken" in params:
+            raise SoftTimeLimitExceeded()
+        return {
+            "events": [
+                {"timestamp": MS, "eventId": "ev1", "message": "one"},
+                {"timestamp": MS + 4000, "eventId": "ev2", "message": "two"},
+            ],
+            "nextToken": "tok-1",
+        }
+
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.side_effect = paginate
+    set_cursor(db, cursor)
+    with configured() as stored, fake["factory"]:
+        with pytest.raises(SoftTimeLimitExceeded):
+            cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
+
+    newest = datetime.fromtimestamp((MS + 4000) / 1000, tz=timezone.utc)
+    assert [event["external_id"] for event in stored] == ["ev1", "ev2"]
+    # The first page's cursor was committed before the second page was asked for.
+    assert saved == [newest]
+
+    # The next run continues from that cursor, less the overlap.
+    captured = {}
+
+    def later(**params):
+        captured.update(params)
+        return {"events": []}
+
+    fake["client"].filter_log_events.side_effect = later
+    with configured(), fake["factory"]:
+        cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
+    assert captured["startTime"] == MS + 4000 - 2000
+
+
+def test_the_task_time_limit_ends_the_run_and_is_not_reported_as_one_query_failing(
+    db,
+):
+    # The time limit is not one query's failure: the run stops there, after a
+    # rollback, and no later query is started.
+    started = []
+
+    def once(db, name, q, defaults):
+        started.append(name)
+        raise SoftTimeLimitExceeded()
+
+    cfg = {"queries": [{"name": "first", "log_group": "/g"}, {"name": "second"}]}
+    with (
+        patch.object(cl.settings, "cloudwatch_logs_enabled", True),
+        patch.object(cl, "load_cloudwatch_logs_config", return_value=cfg),
+        patch.object(cl, "ingest_cloudwatch_logs_once", side_effect=once),
+    ):
+        with pytest.raises(SoftTimeLimitExceeded):
+            cl.ingest_cloudwatch_logs_all(db)
+    assert started == ["first"]
+    db.rollback.assert_called_once_with()

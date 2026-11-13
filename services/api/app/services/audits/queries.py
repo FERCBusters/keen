@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from app.core.references import try_uuid
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -50,7 +51,6 @@ from app.services.audits.validation import (
     clean_framework,
     clean_status,
     date_overlaps,
-    try_uuid,
 )
 from app.services.errors import DomainError
 from app.services.isms.access import can_read_isms

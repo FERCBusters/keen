@@ -268,6 +268,72 @@ def test_a_pause_cancels_queued_runs_at_the_next_tick(
     )
 
 
+def test_records_the_database_cannot_hold_as_written_are_stored(
+    database,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    # Upstream JSON can decode to lone surrogates and non-finite numbers,
+    # which PostgreSQL text and JSONB refuse. One such record, wherever the
+    # value sits, must not fail the run, hold the cursor back and count
+    # towards pausing the collector.
+    db, _ = database
+    run_id = published(db)
+    page = [
+        {
+            "id": "check-\ud800",
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "Lone \udfff surrogate",
+            "extra": {"key\ud800": [float("inf"), "x\x00y"]},
+        },
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:05:00Z",
+            "title": "Not a number",
+            "load": float("nan"),
+            "floor": float("-inf"),
+        },
+        {"id": 3, "created_at": "2026-01-01T12:10:00Z", "title": "Restore tested"},
+    ]
+    monkeypatch.setattr(
+        runtime, "collect", partial(engine.collect, fetch=lambda *a, **k: (page, {}))
+    )
+    import app.ingest.common as common
+
+    written = []
+
+    def put_bytes(**stored):
+        written.append(stored["data"])
+        return SimpleNamespace(uri="test://artifact", sha256="0" * 64, size_bytes=50)
+
+    monkeypatch.setattr(common, "put_bytes", put_bytes)
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
+    collector = db.get(Collector, "collector")
+    collector.cursor = "2025-12-31T00:00:00+00:00"
+    collector.failures = 2
+    db.commit()
+
+    runtime.run_job(run_id)
+
+    status, message = outcome(db, run_id)
+    assert (status, message) == ("succeeded", "3 new records; 0 duplicates.")
+    events = {e.summary: e for e in db.query(Event).all()}
+    assert set(events) == {"Lone \ufffd surrogate", "Not a number", "Restore tested"}
+    surrogate = events["Lone \ufffd surrogate"].normalized_payload
+    assert surrogate["id"] == "check-\ufffd"
+    assert surrogate["extra"] == {"key\ufffd": ["inf", "x\ufffdy"]}
+    numbers = events["Not a number"].normalized_payload
+    assert (numbers["load"], numbers["floor"]) == ("nan", "-inf")
+    # Every artifact was written as UTF-8.
+    assert len(written) == 3 and all(data.decode("utf-8") for data in written)
+    # Records whose identifiers differ only in a lone surrogate stay distinct.
+    assert engine.external_id("c", "check-\ud800") != engine.external_id(
+        "c", "check-\ud801"
+    )
+    collector = db.get(Collector, "collector")
+    assert collector.cursor == "2026-01-01T12:10:00+00:00"
+    assert collector.failures == 0 and collector.enabled
+
+
 def test_an_unusable_record_is_left_out_of_a_stored_run(
     database,  # noqa: F811 - fixture imported above
     monkeypatch,

@@ -22,6 +22,7 @@ from app.ingest.http import client as ingestion_client
 from app.ingest.http import retained_listing
 from app.mapping.targets import resolve_targets
 from app.security.errors import collection_error
+from app.security.redaction import utf8_bytes
 from app.security.regex import (
     MATCH_CONCURRENTLY,
     MATCH_TIMEOUT_SECONDS,
@@ -1161,9 +1162,14 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                     },
                     "page": page_snapshot,
                 }
-                payload_bytes = json.dumps(
-                    payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-                ).encode("utf-8")
+                payload_bytes = utf8_bytes(
+                    json.dumps(
+                        payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    )
+                )
                 updated_at_raw = str(
                     page_full.get("updated_at") or page_list.get("updated_at") or ""
                 ).strip()

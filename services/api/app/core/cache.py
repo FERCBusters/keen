@@ -30,12 +30,28 @@ def _normalise_part(value: Any) -> Any:
 
 
 def user_cache_scope(user: Any) -> str:
-    """Return a conservative per-user cache scope for visibility-sensitive data."""
+    """Return a conservative cache scope for visibility-sensitive data.
+
+    What a request may see follows the authority it acts with, and one account
+    can act with more than one: its own session, and each MCP connection it
+    approved, narrowed to that connection's scopes. The scope names the
+    account and that authority, so a cached answer is only returned to a
+    request acting with the authority it was computed for. A permission
+    change reaches these answers at once for the same reason.
+    """
 
     uid = getattr(user, "id", None)
-    if uid:
-        return f"user:{uid}"
-    return "anonymous"
+    if not uid:
+        return "anonymous"
+    codes = getattr(user, "effective_permission_codes", None)
+    authority = json.dumps(
+        [
+            getattr(user, "effective_role", None),
+            None if codes is None else sorted(codes),
+            bool(getattr(user, "scope_limited", False)),
+        ]
+    )
+    return f"user:{uid}:{hashlib.sha256(authority.encode()).hexdigest()[:32]}"
 
 
 def make_cache_key(namespace: str, parts: dict[str, Any] | None = None) -> str:

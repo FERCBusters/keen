@@ -13,6 +13,7 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
+from sqlalchemy import ColumnElement
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -60,6 +61,22 @@ def _attendee_notification_email(db: Session, attendee: AuditAttendee) -> str | 
         return None
     return single_mailbox(attendee.email) or (
         user_email(user) if user is not None else None
+    )
+
+
+def end_attendee_mail(db: Session, named: ColumnElement[bool]) -> None:
+    """Remove the address from attendee rows that name a departing account
+    or People record; the caller deletes it and commits.
+
+    A row keeps a copy of the address of the account or person it was added
+    for, and loses its link to either when that is deleted. It would then
+    read as an external attendee typed in by hand, and scheduled audits and
+    reminders would be mailed to the address again. ``named`` selects the
+    rows, by ``AuditAttendee.user_id`` or ``AuditAttendee.person_id``. The
+    name stays for the record.
+    """
+    db.query(AuditAttendee).filter(named).update(
+        {AuditAttendee.email: None}, synchronize_session=False
     )
 
 

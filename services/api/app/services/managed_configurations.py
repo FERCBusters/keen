@@ -15,6 +15,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.agents.credentials import LOCK_WAIT_SECONDS, bounded_lock_wait
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.managed_configuration import load_document
@@ -2154,7 +2155,18 @@ def remove_evidence_connection(
     if settings.demo_mode:
         raise DomainError(403, "Connection removal is unavailable in demo environments")
     kind, _, identity = key.partition(":")
-    db.execute(text("SELECT pg_advisory_xact_lock(1262830926)"))
+    # Every later evidence write queues behind a request that waits for this
+    # lock, so the wait is bounded: while a collection is storing evidence the
+    # removal is refused and nothing waits behind it for longer.
+    with bounded_lock_wait(
+        db,
+        busy=DomainError(
+            409,
+            "Evidence is being stored at the moment. Try the removal again shortly.",
+            headers={"Retry-After": str(LOCK_WAIT_SECONDS)},
+        ),
+    ):
+        db.execute(text("SELECT pg_advisory_xact_lock(1262830926)"))
     # Serialize against collector scheduling/edits and already-running backfill batches.
     if kind == "api":
         db.query(IntegrationConnection).filter_by(id=identity).with_for_update().all()

@@ -9,13 +9,14 @@ cursors use the contract database and local artefact storage.
 import base64
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import httpx
 import pytest
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import Artifact, Event, IngestionCursor
 from app.ingest import rss
 from app.ingest.connections import Connection, connection_scope, namespace
@@ -192,6 +193,65 @@ def test_a_later_run_reconsiders_only_the_overlap_window(feeds):
     later = [e.summary for e in feeds.events() if "Entry" in e.summary]
     assert later == ["[Advisories] Entry 2", "[Advisories] Entry 3"]
     assert feeds.cursor().last_ts == datetime(2026, 1, 9, 8)
+
+
+def test_an_entry_dated_ahead_does_not_hold_back_the_entries_after_it(feeds):
+    # The cursor follows the newest entry date, which is the publisher's own.
+    # One entry dated ahead of the present would otherwise carry it past
+    # everything the feed publishes until that date, while every run reported
+    # success and stored nothing. The cursor stops at the present.
+    feeds.server.bodies[FEED_URL] = items(
+        "Mon, 05 Jan 2026 09:00:00 GMT", "Thu, 01 Jan 2999 00:00:00 GMT"
+    )
+
+    first = collect(feeds, overlap_minutes=60)
+
+    assert first["created_events"] == 2
+    cursor = feeds.cursor().last_ts
+    assert utc_now_naive() - timedelta(minutes=1) < cursor <= utc_now_naive()
+    assert first["cursor_last_ts"] == cursor.isoformat()
+
+    # Entries published after that run are dated after the cursor and stored.
+    def stamp(moment):
+        return moment.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    feeds.server.bodies[FEED_URL] = items(
+        "Mon, 05 Jan 2026 09:00:00 GMT",
+        "Thu, 01 Jan 2999 00:00:00 GMT",
+        stamp(utc_now_naive()),
+        stamp(utc_now_naive() + timedelta(seconds=1)),
+    )
+
+    second = collect(feeds, overlap_minutes=60)
+
+    assert second["created_events"] == 2
+    assert sorted(e.summary for e in feeds.events())[-2:] == [
+        "[Advisories] Entry 3",
+        "[Advisories] Entry 4",
+    ]
+    assert feeds.cursor().last_ts <= utc_now_naive()
+
+
+def test_a_cursor_is_never_set_after_the_present():
+    # Every collector keeps its place in an IngestionCursor, so the bound
+    # holds for all of them, in naive UTC or with a zone.
+    ahead = utc_now_naive() + timedelta(days=30)
+    past = datetime(2026, 1, 5, 9)
+    cursor = IngestionCursor(name="bound", last_ts=past)
+    assert cursor.last_ts == past
+
+    cursor.last_ts = ahead
+    assert utc_now_naive() - timedelta(minutes=1) < cursor.last_ts <= utc_now_naive()
+    assert cursor.last_ts.tzinfo is None
+
+    cursor.last_ts = ahead.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    assert now - timedelta(minutes=1) < cursor.last_ts <= now
+    cursor.last_ts = past.replace(tzinfo=timezone(timedelta(hours=11)))
+    assert cursor.last_ts == past.replace(tzinfo=timezone(timedelta(hours=11)))
+
+    cursor.last_ts = None
+    assert cursor.last_ts is None
 
 
 def test_a_feed_contributes_at_most_its_newest_entries(feeds):

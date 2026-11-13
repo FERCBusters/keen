@@ -368,6 +368,86 @@ class RetentionDatabaseTests(unittest.TestCase):
         r.database_batch()
         self.assertEqual(self.left(), {str(new), str(held), str(other)})
 
+    def _future_dated_feed(self):
+        """Two events a feed dated ten years ahead, collected days ago, and
+        another source's evidence from before and after them."""
+        ahead = r.now() + timedelta(days=3650)
+        first, second = (
+            self.insert(
+                models.Event,
+                timestamp=ahead,
+                created_at=r.now() - timedelta(days=days),
+                source="rss",
+                summary="feed item",
+                external_id=uuid.uuid4().hex,
+            )
+            for days in (3, 2)
+        )
+        before = self.event(5, created_at=r.now() - timedelta(days=5))
+        after = self.event(1, created_at=r.now() - timedelta(days=1))
+        return first, second, before, after
+
+    def test_a_future_dated_event_holds_no_place_among_the_newest(self):
+        # A source can date its events ahead of the present. Counted by that
+        # date they would stay the newest for good, and evidence collected
+        # after them would be deleted in their place. Each counts from the
+        # moment Keen collected it instead.
+        for ranked_path in (False, True):
+            with self.subTest(ranked_path=ranked_path):
+                self.setUp()
+                first, second, before, after = self._future_dated_feed()
+                if ranked_path:
+                    # An override elsewhere sends the selection down the
+                    # per-policy ranking.
+                    self.override("rule", "unrelated", "disabled")
+                with self.session() as db:
+                    self.assertEqual(r.preview(db, "count", 2)["eligible_events"], 2)
+                self.job("count", 2)
+                r.database_batch()
+                # The newest two by collection: the later feed item and the
+                # evidence collected after it.
+                self.assertEqual(self.left(), {str(second), str(after)})
+
+    def test_a_future_dated_event_ages_from_the_day_it_was_collected(self):
+        for ranked_path in (False, True):
+            with self.subTest(ranked_path=ranked_path):
+                self.setUp()
+                old_but_dated_ahead = self.insert(
+                    models.Event,
+                    timestamp=r.now() + timedelta(days=3650),
+                    created_at=r.now() - timedelta(days=40),
+                    source="rss",
+                    summary="feed item",
+                    external_id=uuid.uuid4().hex,
+                )
+                recent = self.event(1, created_at=r.now() - timedelta(days=1))
+                # A historical import keeps the past date its source gave it.
+                imported = self.event(90)
+                if ranked_path:
+                    self.override("rule", "unrelated", "disabled")
+                self.job("age", 30)
+                r.database_batch()
+                self.assertEqual(self.left(), {str(recent)})
+                self.assertNotIn(str(old_but_dated_ahead), self.left())
+                self.assertNotIn(str(imported), self.left())
+
+    def test_the_newest_events_are_read_from_the_retention_index(self):
+        # The count window orders every event by the time retention counts it
+        # from; the index holds that order, so a purge batch does not sort the
+        # whole table. The query text and the index must name one expression.
+        self.event(1)
+        where, params = r.candidates("count", 2, r.now(), [])
+        with self.session() as db:
+            db.execute(text("SET LOCAL enable_seqscan = off"))
+            db.execute(text("SET LOCAL enable_sort = off"))
+            plan = "\n".join(
+                db.execute(
+                    text(f"EXPLAIN SELECT e.id FROM events e WHERE {where}"), params
+                ).scalars()
+            )
+        self.assertIn("ix_events_retention_time", plan)
+        self.assertIn("LEAST(newest.timestamp, newest.created_at)", where)
+
     def test_global_count_excludes_overridden_groups(self):
         _old, new, special = self.event(90), self.event(1), self.event()
         self.rule_mapping(special, "saved")

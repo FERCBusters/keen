@@ -72,6 +72,57 @@ def test_a_delivery_run_stops_at_its_limit_and_leaves_the_rest_queued(outbox):
     assert sent[-1]["to_email"] == "person2@example.test"
 
 
+def test_one_recipients_backlog_does_not_hold_up_anyone_elses_mail(outbox):
+    # Notification mail shares the outbox with every account's security mail.
+    # A long run of messages for one recipient, queued first, takes one place
+    # in each turn, so a verification link or an alert for someone else goes
+    # out in the next run instead of waiting behind all of it.
+    db, rows, sent = outbox
+    for row in rows:
+        db.delete(row)
+    created = utc_now_naive() - timedelta(minutes=5)
+    backlog = [
+        SecurityNotification(
+            recipient="owner@example.test",
+            subject=f"Keen: Measure outside its threshold {n}",
+            body="x",
+            created_at=created + timedelta(seconds=n),
+            next_attempt_at=created,
+        )
+        for n in range(12)
+    ]
+    urgent = [
+        SecurityNotification(
+            recipient="other@example.test",
+            subject=subject,
+            body="x",
+            created_at=created + timedelta(seconds=20 + n),
+            next_attempt_at=created,
+        )
+        for n, subject in enumerate(
+            ["Verify your Keen SSO email address", "Keen security: password changed"]
+        )
+    ]
+    db.add_all([*backlog, *urgent])
+    db.commit()
+
+    assert security_notifications.deliver_pending(limit=6) == 6
+
+    # Each recipient in turn, oldest first within each; once the other
+    # recipient has nothing left, the turns are all the backlog's.
+    assert [(mail["to_email"], mail["subject"]) for mail in sent] == [
+        ("owner@example.test", backlog[0].subject),
+        ("other@example.test", urgent[0].subject),
+        ("owner@example.test", backlog[1].subject),
+        ("other@example.test", urgent[1].subject),
+        ("owner@example.test", backlog[2].subject),
+        ("owner@example.test", backlog[3].subject),
+    ]
+    db.expire_all()
+    assert {row.status for row in urgent} == {"sent"}
+    assert [row.status for row in backlog].count("pending") == 8
+
+
 def test_nothing_is_read_or_sent_without_mail_settings(outbox, monkeypatch):
     db, rows, sent = outbox
     monkeypatch.setattr(security_notifications, "smtp_configured", lambda: False)

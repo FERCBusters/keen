@@ -1,4 +1,5 @@
-"""Bound request bodies and screen request targets before handlers see them."""
+"""Bound request bodies and screen request targets and cookies before handlers
+see them."""
 
 import re
 import tempfile
@@ -111,11 +112,45 @@ def target_traverses(scope) -> bool:
     )
 
 
+def _named_plainly(pair: bytes) -> bool:
+    name = pair.split(b"=", 1)[0]
+    # Printable ASCII, with the spaces and tabs allowed around a name.
+    return all(0x20 <= byte <= 0x7E or byte == 0x09 for byte in name)
+
+
+def screen_cookies(scope) -> None:
+    """Drop cookies whose names hold bytes outside printable ASCII.
+
+    A cookie name is an ASCII token. The framework reads the Cookie header as
+    Latin-1 text and strips each name of everything Python counts as white
+    space, which includes the bytes 0x85 and 0xA0 and some control
+    characters. A cookie named with one of those before or after
+    ``__Host-keen_session`` would so be read as Keen's own session cookie,
+    although a browser applies the ``__Host-`` rule, which keeps a site on a
+    sibling subdomain from setting that cookie, only to the exact name. Such
+    pairs are removed from the header before anything reads it, for HTTP
+    requests and WebSockets alike.
+    """
+    headers = scope.get("headers") or []
+    if any(key.lower() == b"cookie" for key, _ in headers):
+        scope["headers"] = [
+            (
+                key,
+                b";".join(pair for pair in value.split(b";") if _named_plainly(pair))
+                if key.lower() == b"cookie"
+                else value,
+            )
+            for key, value in headers
+        ]
+
+
 class RequestBodyLimitMiddleware:
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            screen_cookies(scope)
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         limit = body_limit(scope["path"])

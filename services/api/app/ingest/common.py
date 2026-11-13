@@ -39,7 +39,7 @@ def is_safe_url(url: str) -> bool:
 def fingerprint(parts: list[str], payload: bytes) -> str:
     h = hashlib.sha256()
     for p in parts:
-        h.update(p.encode("utf-8"))
+        h.update(p.encode("utf-8", "surrogatepass"))
         h.update(b"|")
     h.update(payload)
     return h.hexdigest()[:32]
@@ -102,7 +102,7 @@ def apply_rules(db: Session, ev: Event) -> int:
         )
     }
 
-    created = 0
+    new: list[Mapping] = []
     for framework_slug, entries in matched.items():
         rows = ensure_controls(
             db,
@@ -127,13 +127,17 @@ def apply_rules(db: Session, ev: Event) -> int:
                 rationale=item["rationale"],
                 mapped_by="system",
             )
-            db.add(mp)
-            created += 1
+            new.append(mp)
 
+    # Each mapping locks its control's evidence-count row until the transaction
+    # ends. Every event's mappings are inserted in control order, so two events
+    # stored at once for the same controls cannot each wait for the other.
+    new.sort(key=lambda mapping: mapping.control_item_id)
+    db.add_all(new)
     # Flush once (faster, and any unexpected constraint errors will surface here).
-    if created:
+    if new:
         db.flush()
-    return created
+    return len(new)
 
 
 class NormalisedFields(NamedTuple):

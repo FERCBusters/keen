@@ -7,9 +7,11 @@ Keen accepts into a record, reads from an identity provider or directory, or
 sends to passes through single_mailbox, so a field names exactly one mailbox.
 """
 
+import string
 from email.utils import getaddresses
 
 MAX_EMAIL_LENGTH = 256
+_ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 # RFC 5322 specials outside a quoted local part, which Keen does not accept.
 _SPECIALS = frozenset('<>()[]:;,"\\')
 
@@ -40,3 +42,15 @@ def single_mailbox(raw: object) -> str | None:
     if getaddresses([value]) != [("", value)]:
         return None
     return value
+
+
+def compared_mailbox(address: str) -> str:
+    """The address in the form Keen compares addresses in, to decide whether
+    two are the same mailbox: its ASCII letters in lower case.
+
+    ``str.lower`` also turns U+212A KELVIN SIGN into "k", so an address a
+    provider verified with that character would compare equal to a different,
+    plain address that someone else proved in Keen. Every character outside
+    ASCII is kept as written.
+    """
+    return address.translate(_ASCII_LOWER)

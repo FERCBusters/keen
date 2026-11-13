@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import (
+    AuditAttendee,
     IsmsOrgNode,
     IsmsPerson,
     IsmsPersonAsset,
@@ -19,6 +20,7 @@ from app.db.models import (
     RiskAsset,
     User,
 )
+from app.services.audit_schedules import end_attendee_mail
 from app.services.errors import DomainError
 from app.services.isms.organisation import require_quiz_authority_for_audience_roles
 from app.services.people import ensure_person_for_user as ensure_person_for_user
@@ -231,6 +233,7 @@ def delete_person(*, person_id: uuid.UUID, user, db: Session):
     require_quiz_authority_for_audience_roles(
         db, user, [row.org_node_id], "delete someone in"
     )
+    end_attendee_mail(db, AuditAttendee.person_id == row.id)
     db.delete(row)
     db.commit()
 

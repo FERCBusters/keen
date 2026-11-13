@@ -173,7 +173,7 @@ def collect(definition, base_url, auth, cursor=None, preview=False, fetch=reques
                         raise UnusableRecord(
                             "Detail path references a missing/non-scalar field"
                         )
-                    return quote(str(value), safe="")
+                    return quote(str(value), safe="", errors="replace")
 
                 path = _DETAIL_FIELD.sub(substitute, detail.path)
                 if has_dot_segment(path):
@@ -292,4 +292,7 @@ def next_link(headers) -> str | None:
 
 
 def external_id(collector_id, record_id):
-    return hashlib.sha256((collector_id + "\0" + str(record_id)).encode()).hexdigest()
+    # An upstream identifier can hold a lone surrogate, which has no UTF-8 form.
+    return hashlib.sha256(
+        (collector_id + "\0" + str(record_id)).encode("utf-8", "surrogatepass")
+    ).hexdigest()

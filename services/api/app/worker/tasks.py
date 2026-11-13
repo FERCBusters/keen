@@ -4,8 +4,10 @@ import logging
 import time
 import uuid
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.agents.credentials import LOCK_NOT_AVAILABLE
 from app.core.config import settings
 from app.db.models import (
     Artifact,
@@ -58,6 +60,9 @@ from app.services.rule_suggestions import refresh_suggestions
 from app.worker.celery_app import celery_app
 
 log = logging.getLogger(__name__)
+
+# PostgreSQL's deadlock_detected, and a lock not granted within its timeout.
+_LOST_LOCK = frozenset({"40P01", LOCK_NOT_AVAILABLE})
 
 
 @celery_app.task(name="app.worker.tasks.ingest_elasticsearch_all_task")
@@ -587,6 +592,15 @@ def backfill_rule_task(job_id: str) -> None:
                 return
         backfill_rule_task.delay(job_id)
     except Exception as exc:
+        if (
+            isinstance(exc, OperationalError)
+            and getattr(exc.orig, "pgcode", None) in _LOST_LOCK
+        ):
+            # A batch commits whole or not at all, so one that lost a lock to
+            # other evidence writers changed nothing; the recovery task
+            # continues the job from its cursor.
+            log.warning("Rule backfill %s lost a lock; it will be resumed", job_id)
+            return
         log.error("Rule backfill %s failed (%s)", job_id, type(exc).__name__)
         with SessionLocal() as db:
             job = db.get(RuleBackfillJob, uuid.UUID(job_id))

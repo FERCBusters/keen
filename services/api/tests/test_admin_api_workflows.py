@@ -829,6 +829,11 @@ def test_permissions_are_created_once_with_valid_codes(admin):
     admin.call("POST", "/v1/admin/permissions", {"code": "reports.export"}, status=400)
     admin.call("POST", "/v1/admin/permissions", {"code": "has space"}, status=400)
     admin.call("POST", "/v1/admin/permissions", {"code": "   "}, status=400)
+    # "*" stands for an administrator in a permission snapshot, so no
+    # permission may carry that name: whoever was granted it would pass every
+    # permission check.
+    reserved = admin.call("POST", "/v1/admin/permissions", {"code": "*"}, status=400)
+    assert reserved == {"detail": 'The permission code "*" is reserved'}
     codes = [row["code"] for row in admin.call("GET", "/v1/admin/permissions")]
     assert codes == [
         "audits.admin",

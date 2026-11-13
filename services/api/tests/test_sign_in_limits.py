@@ -9,12 +9,14 @@ directory-backed accounts cost the same password verification as a real
 local account.
 """
 
+import json
 from urllib.parse import parse_qs
 
 import pytest
+import sqlalchemy
 from app.api.routes import auth as auth_routes
 from app.core.config import settings
-from app.db.models import AuditLog
+from app.db.models import AuditLog, User
 from app.security import auth
 from app.security import sign_in_throttle as throttle
 from app.security.auth import cookie_name as session_cookie_name
@@ -26,6 +28,7 @@ from tests.test_assembled_authority_regressions import (  # noqa: F401
     BASE,
     PASSWORD,
     keen,
+    unsafe,
 )
 from tests.test_ldap_roles_export import directory  # noqa: F401
 
@@ -752,3 +755,250 @@ def test_sign_in_attempts_are_audited_without_unmatched_usernames(signin):
         assert typed not in " ".join(
             str(value or "") for value in (row.username, row.path, row.query_string)
         )
+
+
+# --- A deactivation during sign-in issues no session ----------------------------
+
+
+def _deactivate_after_the_password_is_checked(monkeypatch, change):
+    """Run ``change(db, account)`` once the password is proven and before the
+    session is issued, as an administrator's request arriving then would."""
+    from app.api.routes import auth as auth_routes
+
+    check = auth_routes.login_service.authenticate_password
+
+    def changed_meanwhile(db, context, **attempt):
+        account = check(db, context, **attempt)
+        change(db, account)
+        return account
+
+    monkeypatch.setattr(
+        auth_routes.login_service, "authenticate_password", changed_meanwhile
+    )
+
+
+def _deactivate(db, account):
+    db.query(User).filter(User.id == account.id).update(
+        {User.is_active: False, User.session_version: User.session_version + 1},
+        synchronize_session=False,
+    )
+    db.commit()
+
+
+def _refused_without_a_session(signin, response):
+    assert (response.status_code, response.json()) == (
+        401,
+        {"detail": "Invalid username or password"},
+    )
+    assert not signin.session_set(response)
+
+
+def test_a_deactivation_during_directory_sign_in_issues_no_session(
+    signin,
+    directory,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    # A directory sign-in commits the identity's details after checking that
+    # the account is active, so the account is read again before its session
+    # is issued. A deactivation committed in between must refuse the sign-in:
+    # a session carrying the version the deactivation set would work again
+    # once the account was reactivated.
+    monkeypatch.setattr(settings, "ldap_enabled", True)
+    owner = signin.client()
+    assert (
+        signin.attempt("alice", "password", method="ldap", client=owner).status_code
+        == 200
+    )
+    owner.cookies.delete(session_cookie_name())
+    _deactivate_after_the_password_is_checked(monkeypatch, _deactivate)
+
+    refused = signin.attempt("alice", "password", method="ldap", client=owner)
+
+    _refused_without_a_session(signin, refused)
+    signin.db.expire_all()
+    account = signin.db.query(User).filter_by(username="ldap:alice").one()
+    assert account.is_active is False
+    # Reactivating the account brings no session back with it.
+    account.is_active = True
+    signin.db.commit()
+    assert owner.get("/v1/me").status_code == 401
+    # The refusal is audited against the account, by its sign-in method.
+    last = (
+        signin.db.query(AuditLog)
+        .filter_by(path="/action/sign-in")
+        .order_by(AuditLog.ts.desc())
+        .first()
+    )
+    assert (last.username, parse_qs(last.query_string)) == (
+        "ldap:alice",
+        {"method": ["ldap"], "outcome": ["failed"]},
+    )
+
+
+@pytest.mark.parametrize("stored", ["current", "older"], ids=["hash", "rehash"])
+def test_a_deactivation_during_local_sign_in_issues_no_session(
+    signin, monkeypatch, stored
+):
+    # The older hash is replaced, and committed, at the account's correct
+    # password; either way the account is read under its row lock afterwards.
+    from tests.test_password_rules import legacy_hash
+
+    user = signin.user()
+    if stored == "older":
+        signin.db.get(User, user.id).password_hash = legacy_hash(PASSWORD)
+        signin.db.commit()
+    browser = signin.client()
+    _deactivate_after_the_password_is_checked(monkeypatch, _deactivate)
+
+    refused = signin.attempt(user.username, client=browser)
+
+    _refused_without_a_session(signin, refused)
+    signin.db.expire_all()
+    account = signin.db.get(User, user.id)
+    assert account.is_active is False and account.last_login_at is None
+    account.is_active = True
+    signin.db.commit()
+    assert browser.get("/v1/me").status_code == 401
+
+
+def test_an_account_removed_during_sign_in_gets_no_session(signin, monkeypatch):
+    user = signin.user()
+
+    def remove(db, account):
+        # The row is gone for this request without the loaded account expiring.
+        db.execute(sqlalchemy.delete(User.__table__).where(User.id == account.id))
+
+    _deactivate_after_the_password_is_checked(monkeypatch, remove)
+
+    refused = signin.attempt(user.username)
+
+    _refused_without_a_session(signin, refused)
+
+
+def test_a_sign_in_issues_the_version_read_under_the_accounts_lock(signin):
+    # The session carries the account's current version, the last sign-in time
+    # is stored with it, and the lock is taken on the account's own row.
+    user = signin.user()
+    signin.db.get(User, user.id).session_version = 7
+    signin.db.commit()
+    statements = []
+    bind = signin.db.get_bind()
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    sqlalchemy.event.listen(bind, "before_cursor_execute", record)
+    try:
+        browser = signin.client()
+        assert signin.attempt(user.username, client=browser).status_code == 200
+    finally:
+        sqlalchemy.event.remove(bind, "before_cursor_execute", record)
+
+    assert any(
+        "FROM users" in statement and statement.rstrip().endswith("FOR UPDATE")
+        for statement in statements
+    )
+    signin.db.expire_all()
+    assert signin.db.get(User, user.id).last_login_at is not None
+    (session,) = [
+        json.loads(signin.store.get(key)) for key in signin.store.keys("keen:session:*")
+    ]
+    assert session["session_version"] == 7
+    assert browser.get("/v1/me").status_code == 200
+
+
+# --- Recognition and limits belong to one account -------------------------------
+
+
+def _failures(signin, name, method="local"):
+    key = throttle.name_key(name, method)
+    return int(signin.store.get(f"keen:login:failures:{key}") or 0)
+
+
+def test_a_browser_recognised_for_a_directory_account_is_not_for_its_local_namesake(
+    signin,
+    directory,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    # A local account and a directory account can have one compared name and
+    # belong to different people. A browser that proved the directory
+    # account's password is recognised for that account only: its guesses at
+    # the local account's password draw on the local account's limits like any
+    # unrecognised browser's, and its own sign-in leaves that count in place.
+    monkeypatch.setattr(settings, "ldap_enabled", True)
+    monkeypatch.setattr(settings, "local_auth_enabled", True)
+    local = User(
+        username="alice",
+        password_hash=auth.hash_password(PASSWORD),
+        role="admin",
+        is_active=True,
+    )
+    signin.db.add(local)
+    signin.db.commit()
+    namesake = signin.client()
+    assert (
+        signin.attempt("alice", "password", method="ldap", client=namesake).status_code
+        == 200
+    )
+    assert throttle.name_key("alice", "ldap") != throttle.name_key("alice", "local")
+    assert throttle.name_key("alice") == throttle.name_key(" ALICE ", "local")
+
+    for n in range(3):
+        refused = signin.attempt("alice", f"wrong-{n}", client=namesake)
+        assert refused.status_code == 401
+
+    assert _failures(signin, "alice") == 3
+    # Its own correct directory password ends the directory account's count,
+    # and no one else's.
+    assert (
+        signin.attempt("alice", "password", method="ldap", client=namesake).status_code
+        == 200
+    )
+    assert _failures(signin, "alice") == 3
+    # The reverse holds: the local account's browser is unrecognised for the
+    # directory account, whose count its wrong passwords advance.
+    owner = signin.client()
+    assert signin.attempt("alice", client=owner).status_code == 200
+    assert _failures(signin, "alice") == 0
+    state, _, _ = directory
+    state["bind"] = False  # The directory refuses the password.
+    assert (
+        signin.attempt("alice", "wrong", method="ldap", client=owner).status_code == 401
+    )
+    assert _failures(signin, "alice", "ldap") == 1
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["Carol", "CAROL", "car\u200bol", "\uff43arol"],
+    ids=["case", "upper", "zero-width", "fullwidth"],
+)
+def test_a_username_that_compares_equal_to_an_existing_one_is_refused(signin, spelling):
+    # Limits and recognition are kept by compared name. Two accounts whose
+    # names compare equal would share them, so the second is not created.
+    admin = signin.client(signin.user(role="admin"))
+
+    def create(username):
+        return admin.post(
+            "/v1/users",
+            json={"username": username, "password": PASSWORD, "role": "normal"},
+            headers=unsafe(admin),
+        )
+
+    assert create("carol").status_code == 200
+    refused = create(spelling)
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {
+            "detail": "a username that differs only in case, width, spacing or"
+            " invisible characters already exists"
+        },
+    )
+    again = create("carol")
+    assert (again.status_code, again.json()) == (
+        400,
+        {"detail": "username already exists"},
+    )
+    assert signin.db.query(User).filter(User.username.ilike("%arol%")).count() == 1
+    # A name that only resembles it is a different name.
+    assert create("carol2").status_code == 200

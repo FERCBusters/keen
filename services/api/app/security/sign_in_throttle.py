@@ -21,9 +21,9 @@ the OWASP device-cookie protocol:
 
 Every operation is a single Valkey command or a pipeline of them, so
 concurrent attempts cannot share one opening; callers fail closed when Valkey
-is unavailable. The throttle is keyed by a digest of the compared username
-whether or not an account has it, so its answers reveal nothing about which
-accounts exist.
+is unavailable. The throttle is keyed by a digest of the sign-in method and
+the compared username whether or not an account has it, so its answers reveal
+nothing about which accounts exist.
 """
 
 from __future__ import annotations
@@ -54,11 +54,17 @@ LIMITED = "Too many login attempts. Please try again later."
 _PREFIX = "keen:login"
 
 
-def name_key(username: str) -> str:
-    """A fixed-size digest of the compared name: Valkey never holds a password
-    typed into the username field."""
+def name_key(username: str, method: str = "local") -> str:
+    """A fixed-size digest of the sign-in method and the compared name: Valkey
+    never holds a password typed into the username field.
 
-    return hashlib.sha256(login_name(username).encode()).hexdigest()
+    A local account and a directory account can have one compared name and
+    are different accounts, so each method has its own count, gate and
+    recognised browsers. Within a method, account creation keeps compared
+    names distinct (security.auth.create_user), so a key names one account.
+    """
+
+    return hashlib.sha256(f"{method}\0{login_name(username)}".encode()).hexdigest()
 
 
 def wait_seconds(failures: int) -> int:

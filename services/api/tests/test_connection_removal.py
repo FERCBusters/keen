@@ -314,3 +314,71 @@ def test_individual_removal_demo_guard(database, monkeypatch):
         )
     assert error.value.status_code == 403
     assert db.get(IntegrationCollector, "collector") is not None
+
+
+def test_removal_does_not_wait_while_evidence_is_being_stored(
+    database, postgres_engine, monkeypatch
+):
+    # Storing evidence holds the shared rules lock until its transaction ends,
+    # and every later store queues behind a request that waits for the lock
+    # exclusively. A removal therefore waits only briefly and is then refused
+    # with an answer to retry, so nothing queues behind it.
+    import time
+
+    from app.agents import credentials
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.pool import NullPool
+
+    from tests.timing import measured
+
+    db, _ = database
+    seed_rules(db)
+    monkeypatch.setattr(credentials, "LOCK_WAIT_SECONDS", 1)
+    plan = api.preview_connection_removal("api:connection", db)
+    db.commit()
+    # Other workers, on connections of their own; the lock spans the database.
+    others = create_engine(postgres_engine.url, poolclass=NullPool)
+    with others.connect() as storing:
+        storing.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
+
+        with measured(time.monotonic) as waited:
+            with pytest.raises((HTTPException, DomainError)) as refused:
+                api.remove_evidence_connection(
+                    "api:connection",
+                    api.ConnectionRemovalInput(fingerprint=plan["fingerprint"]),
+                    SimpleNamespace(id=None),
+                    db,
+                )
+        db.rollback()
+
+        assert refused.value.status_code == 409
+        assert refused.value.detail == (
+            "Evidence is being stored at the moment. Try the removal again shortly."
+        )
+        assert refused.value.headers == {"Retry-After": "5"}
+        assert waited.seconds < 4
+        # A delivery that begins now takes the shared lock at once: no
+        # exclusive request is left waiting ahead of it.
+        with others.connect() as delivery:
+            delivery.execute(text("SET lock_timeout = '1s'"))
+            delivery.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
+            delivery.rollback()
+        storing.rollback()
+    others.dispose()
+    assert db.get(IntegrationConnection, "connection") is not None
+
+    # Once nothing is being stored, the same removal goes ahead.
+    from app.services import control_evidence_stats
+
+    monkeypatch.setattr(
+        control_evidence_stats, "rebuild_framework_event_stats", lambda *a, **k: None
+    )
+    monkeypatch.setattr(control_evidence_stats, "clear_stats_caches", lambda: None)
+    result = api.remove_evidence_connection(
+        "api:connection",
+        api.ConnectionRemovalInput(fingerprint=plan["fingerprint"]),
+        SimpleNamespace(id=None),
+        db,
+    )
+    assert result["deleted_definitions"] == 1
+    assert db.get(IntegrationConnection, "connection") is None

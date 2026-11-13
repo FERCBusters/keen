@@ -1,8 +1,8 @@
 """Parsing collected documents stays inside the HTTP worker's memory limit.
 
 A parsed document costs many times its size, and how many depends on its shape:
-short attributes on one element cost the most for XML, and empty objects or
-arrays for JSON. These tests build the costliest shapes at the largest size each
+short attributes on one element, and short names in the longest namespace name
+the parser accepts, cost the most for XML, and empty objects or arrays for JSON. These tests build the costliest shapes at the largest size each
 parser accepts, parse them in a fresh interpreter, and require the growth to
 leave room for the worker's own baseline inside the limit Compose gives it. A
 change to a response limit, a document limit or a parser that breaks the bound
@@ -13,11 +13,16 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 import yaml
 from app.ingest.http import MAX_RESPONSE_BYTES
-from app.security.xml import MAX_DOCUMENT_BYTES
+from app.security.xml import (
+    MAX_DOCUMENT_BYTES,
+    MAX_NAMESPACE_NAME,
+    parse_untrusted_xml,
+)
 
 API = Path(__file__).resolve().parents[1]
 COMPOSE = API.parents[1] / "docker-compose.yml"
@@ -35,7 +40,7 @@ def _limit_mib():
 BUDGET_MIB = _limit_mib() - BASELINE_MIB
 
 _MEASURE = """
-import json, resource, sys
+import json, sys
 sys.path.insert(0, {api!r})
 size, kind, shape = {size}, {kind!r}, {shape!r}
 if kind == "xml":
@@ -48,6 +53,21 @@ if kind == "xml":
                 break
             parts.append(part); used += len(part); i += 1
         body = b"<r" + b"".join(parts) + b"/>"
+    elif shape.startswith("namespace"):
+        # Every distinct qualified name holds the whole namespace name.
+        name = b"u" * {namespace}
+        head, unit, tail = {{
+            "namespace-elements": (b"<r xmlns:p='" + name + b"'>", b"<p:a%x/>", b"</r>"),
+            "namespace-default": (b"<r xmlns='" + name + b"'>", b"<a%x/>", b"</r>"),
+            "namespace-attributes": (b"<r xmlns:p='" + name + b"'", b" p:a%x=''", b"/>"),
+        }}[shape]
+        parts, used, i = [], len(head) + len(tail), 0
+        while True:
+            part = unit % i
+            if used + len(part) > size:
+                break
+            parts.append(part); used += len(part); i += 1
+        body = head + b"".join(parts) + tail
     else:
         unit = {{"elements": b"<a/>", "mixed": b"<a b='' c='' d=''/>"}}[shape]
         body = b"<r>" + unit * ((size - 7) // len(unit)) + b"</r>"
@@ -56,15 +76,23 @@ else:
     unit = {{"objects": b"{{}},", "arrays": b"[],", "numbers": b"1.5,"}}[shape]
     body = b"[" + unit * ((size - 8) // len(unit)) + unit.rstrip(b",") + b"]"
 assert len(body) <= size, len(body)
-before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+def peak():
+    # This process's own peak resident size. getrusage's ru_maxrss starts at
+    # the peak of the process that started this one, so it shows no growth
+    # until this process outgrows the test runner.
+    with open("/proc/self/status") as status:
+        return next(int(line.split()[1]) for line in status if line.startswith("VmHWM:"))
+before = peak()
 tree = parse(body)
-after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+after = peak()
 print(json.dumps({{"bytes": len(body), "growth_mib": (after - before) / 1024}}))
 """
 
 
 def _growth(kind, shape, size):
-    code = _MEASURE.format(api=str(API), size=size, kind=kind, shape=shape)
+    code = _MEASURE.format(
+        api=str(API), size=size, kind=kind, shape=shape, namespace=MAX_NAMESPACE_NAME
+    )
     result = subprocess.run(
         [sys.executable, "-I", "-c", code],
         capture_output=True,
@@ -76,7 +104,17 @@ def _growth(kind, shape, size):
     return json.loads(result.stdout)
 
 
-@pytest.mark.parametrize("shape", ["attributes", "elements", "mixed"])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "attributes",
+        "elements",
+        "mixed",
+        "namespace-elements",
+        "namespace-default",
+        "namespace-attributes",
+    ],
+)
 def test_the_costliest_accepted_xml_parses_within_the_worker_budget(shape):
     measured = _growth("xml", shape, MAX_DOCUMENT_BYTES)
     assert measured["bytes"] > MAX_DOCUMENT_BYTES * 0.99
@@ -88,3 +126,37 @@ def test_the_costliest_collected_json_parses_within_the_worker_budget(shape):
     measured = _growth("json", shape, MAX_RESPONSE_BYTES)
     assert measured["bytes"] > MAX_RESPONSE_BYTES * 0.99
     assert measured["growth_mib"] < BUDGET_MIB, measured
+
+
+def test_the_namespace_bound_is_what_keeps_namespaced_names_within_the_budget():
+    # Without the bound, a document of about 80 KiB that declares one long
+    # namespace name and uses it on many short names costs thousands of times
+    # its size once parsed. The parser Keen uses refuses that document.
+    name = b"u" * (64 * 1024)
+    body = (
+        b"<r xmlns:p='"
+        + name
+        + b"'>"
+        + b"".join(b"<p:a%x/>" % i for i in range(1600))
+        + b"</r>"
+    )
+    code = (
+        "import sys\n"
+        "from xml.etree import ElementTree as ET\n"
+        "def peak():\n"
+        "    with open('/proc/self/status') as status:\n"
+        "        return next(int(l.split()[1]) for l in status if l.startswith('VmHWM:'))\n"
+        "body = sys.stdin.buffer.read()\n"
+        "before = peak()\n"
+        "tree = ET.fromstring(body)\n"
+        "print((peak() - before) * 1024 / len(body))\n"
+    )
+    unbounded = subprocess.run(
+        [sys.executable, "-I", "-c", code], input=body, capture_output=True, timeout=120
+    )
+    assert unbounded.returncode == 0, unbounded.stderr[-2000:]
+    # Far beyond the several dozen bytes per byte the budget allows for.
+    assert float(unbounded.stdout) > 1000
+
+    with pytest.raises(ET.ParseError, match="^XML namespace names over"):
+        parse_untrusted_xml(body)

@@ -6,7 +6,14 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Group, Permission, User, user_groups, user_permissions
+from app.db.models import (
+    AuditAttendee,
+    Group,
+    Permission,
+    User,
+    user_groups,
+    user_permissions,
+)
 from app.schemas import (
     AdminSetPasswordPayload,
     UserAccessOut,
@@ -28,6 +35,7 @@ from app.security.roles import (
     lock_admin_changes,
     normalize_role,
 )
+from app.services.audit_schedules import end_attendee_mail
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.text import clean_email
@@ -248,6 +256,7 @@ def delete_user_admin(
 
     db.execute(user_groups.delete().where(user_groups.c.user_id == target.id))
     db.execute(user_permissions.delete().where(user_permissions.c.user_id == target.id))
+    end_attendee_mail(db, AuditAttendee.user_id == target.id)
     db.delete(target)
     db.commit()
     return {"ok": True}

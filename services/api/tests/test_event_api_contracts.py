@@ -340,9 +340,24 @@ def test_clause_filter_works_in_facets_and_export(api):
 
 
 @pytest.mark.parametrize(
-    "payload", ["=1+1", "+1+1", "-1+1", "@SUM(1)", "\t=1", "\r=1", "\n=1", "  =1"]
+    ("payload", "written"),
+    [
+        ("=1+1", "'=1+1"),
+        ("+1+1", "'+1+1"),
+        ("-1+1", "'-1+1"),
+        ("@SUM(1)", "'@SUM(1)"),
+        # A tab also separates columns for some readers, so the formula after
+        # it is guarded as the start of a cell too.
+        ("\t=1", "'\t'=1"),
+        ("\r=1", "'\r=1"),
+        ("\n=1", "'\n=1"),
+        ("  =1", "'  =1"),
+        ("seen;=1", "seen;'=1"),
+    ],
 )
-def test_csv_export_neutralises_source_formulas_without_changing_json(api, payload):
+def test_csv_export_neutralises_source_formulas_without_changing_json(
+    api, payload, written
+):
     import csv
     import io
 
@@ -357,8 +372,8 @@ def test_csv_export_neutralises_source_formulas_without_changing_json(api, paylo
     item = next(
         r for r in csv.DictReader(io.StringIO(response.text)) if r["id"] == str(row.id)
     )
-    assert item["summary"] == "'" + payload
-    assert item["actor"] == "'" + payload
+    assert item["summary"] == written
+    assert item["actor"] == written
     response = api.client.get(
         "/api/v1/events/export", params={"framework": "A", "format": "json"}
     )

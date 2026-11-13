@@ -314,3 +314,109 @@ def test_a_change_call_may_carry_a_file(mcpw):
         "/v1/mcp", content=b"{" + b" " * (7 * 1024 * 1024) + b"}", headers=MCP_HEADERS
     )
     assert call.status_code == 413
+
+
+def _risk_naming(**affected):
+    return {
+        "asset_name": "Payroll database",
+        "category_name": "Data",
+        "subcategory_name": "Databases",
+        "risk_types": ["Confidentiality"],
+        "threat_summary": "Unauthorised export of salary records",
+        "register_likelihood": 3,
+        "register_impact": 4,
+        "register_residual_likelihood": 2,
+        "register_residual_impact": 2,
+        "framework": FW,
+        "affected": [affected],
+    }
+
+
+def test_a_risk_connection_adds_nothing_to_the_people_and_vendor_registers(mcpw):
+    # A risk or a factor can name who it affects, and a person or vendor can
+    # be added by name while saving it. In Keen a risk manager may add them. A
+    # connection granted risk.manage changes risks: adding to the People or
+    # Vendors register, or naming a record from them, needs the ISMS scopes,
+    # whichever route or tool carries the request.
+    from app.db.models import IsmsPerson, IsmsVendor, Risk
+
+    mcp = mcpw
+    manager = mcp.keen.user("risk.manage", "isms.manage")
+    risk_only = mcp.connect(manager, ["risk.manage"]).access_token
+
+    def registers():
+        mcp.db.expire_all()
+        return mcp.db.query(IsmsPerson).count(), mcp.db.query(IsmsVendor).count()
+
+    for named, kind in (
+        ({"new_person": "Planted Person"}, "person"),
+        ({"new_vendor": "Planted Vendor"}, "vendor / 3rd party"),
+    ):
+        refused = inner("/v1/risks", risk_only, "POST", json=_risk_naming(**named))
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {
+                "detail": f"Adding a {kind} needs permission to manage the ISMS registers"
+            },
+        )
+        tool = mcp.tool(
+            risk_only,
+            "create_record",
+            {"kind": "risk", "fields": _risk_naming(**named)},
+        )
+        assert tool["isError"] is True, tool
+        preview = inner(
+            "/v1/risks/import",
+            risk_only,
+            "POST",
+            params={"framework": FW},
+            json={"rows": [_risk_naming(**named)]},
+        )
+        assert [row["ok"] for row in preview.json()["rows"]] == [False], preview.text
+    assert registers() == (0, 0) and mcp.db.query(Risk).count() == 0
+
+    # A risk that names nobody is its own domain's change, and is saved.
+    plain = {k: v for k, v in _risk_naming().items() if k != "affected"}
+    saved = inner("/v1/risks", risk_only, "POST", json=plain)
+    assert saved.status_code == 200, saved.text
+    risk_id = saved.json()["id"]
+    # Naming a record already in the registers needs the scope that reads them.
+    vendor = IsmsVendor(name="Existing Vendor", description="")
+    mcp.db.add(vendor)
+    mcp.db.commit()
+    for body in (
+        {"framework": FW, "affected": [{"new_vendor": "Planted Vendor"}]},
+        {"framework": FW, "affected": [{"vendor_id": str(vendor.id)}]},
+    ):
+        refused = inner(f"/v1/risks/{risk_id}", risk_only, "PATCH", json=body)
+        assert refused.status_code == 403, refused.text
+    assert registers() == (0, 1)
+
+    # With the ISMS change scope as well, the same request adds them.
+    both = mcp.connect(manager, ["risk.manage", "isms.manage"]).access_token
+    saved = inner(
+        f"/v1/risks/{risk_id}",
+        both,
+        "PATCH",
+        json={
+            "framework": FW,
+            "affected": [
+                {"new_person": "Sam"},
+                {"new_vendor": "Acme"},
+                {"vendor_id": str(vendor.id)},
+            ],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert registers() == (1, 2)
+
+    # The account-level rule is unchanged for a person signed in to Keen.
+    risk_manager = mcp.keen.user("risk.manage")
+    mcp.sign_in(risk_manager)
+    added = mcp.client.post(
+        "/v1/risks",
+        json=_risk_naming(new_person="Dana"),
+        headers=mcp.unsafe(),
+    )
+    assert added.status_code == 200, added.text
+    assert registers() == (2, 2)

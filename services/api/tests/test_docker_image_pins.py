@@ -995,6 +995,12 @@ def test_the_pin_workflow_reads_registries_before_any_token_and_never_merges():
     }
     propose = by_name["Propose the new digests"]
     assert propose["env"]["GH_TOKEN"] == "${{ steps.app.outputs.token }}"
+    # The proposal is found by its head branch name, which anyone can compute
+    # and use for a pull request from a fork. Only a pull request from this
+    # repository, opened by the App, counts as the proposal: another could
+    # otherwise suppress it, or be named as superseding earlier proposals.
+    assert "--json number,state,isCrossRepository,author" in propose["run"]
+    assert "select((.isCrossRepository | not) and .author.is_bot)" in propose["run"]
     # A maintainer merges; nothing here approves, merges or enables auto-merge.
     scripts = "\n".join(step.get("run", "") for step in job["steps"]).lower()
     for action in ("pr merge", "pr review", "--auto", "/merge", "automerge"):

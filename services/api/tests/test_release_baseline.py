@@ -144,6 +144,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0048_events_retention_time",
         "0047_affected_links",
         "0046_asset_owner_only",
         "0045_mcp_oauth",
@@ -946,6 +947,15 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
             {"schema": schema},
         )
 
+    def retention_time_index(conn):
+        return conn.scalar(
+            text(
+                "SELECT indexdef FROM pg_indexes WHERE schemaname=:schema "
+                "AND indexname='ix_events_retention_time'"
+            ),
+            {"schema": schema},
+        )
+
     try:
         with engine.connect() as conn:
             conn.execute(text(f"SET search_path TO {schema},public"))
@@ -965,11 +975,16 @@ def test_dashboard_query_migrations_install_and_remove_cleanly():
             automatic, per_statement = retention_upkeep(conn)
             assert "WHERE automatic" in automatic and per_statement is True
             assert theme_default(conn) == "'ink'::character varying"
+            # Retention reads the newest events in the order it counts them.
+            assert 'LEAST("timestamp", created_at), id' in retention_time_index(conn)
+            command.downgrade(config, "0047_affected_links")
+            assert retention_time_index(conn) is None
             command.downgrade(config, "0020_theme_ink")
             assert installed(conn) == (None, set(), set())
             assert retention_upkeep(conn) == (None, False)
             assert theme_default(conn) == "'sand'::character varying"
             command.upgrade(config, "head")
+            assert retention_time_index(conn) is not None
             assert installed(conn)[1:] == (statistics, options)
             assert retention_upkeep(conn)[1] is True
             assert theme_default(conn) == "'ink'::character varying"

@@ -341,97 +341,100 @@ def ingest_loki_once(
             chunk_created_events = 0
             chunk_created_artifacts = 0
             chunk_created_mappings = 0
-            chunk_returned_values = 0
             chunk_max_seen_ts: datetime | None = None
 
-            for stream in results:
-                if not isinstance(stream, dict):
-                    continue
-                labels = stream.get("stream", {}) or {}
-                values = stream.get("values", []) or []
-                chunk_returned_values += len(values)
-                for ts_ns, line in values:
-                    # Loki timestamps are strings; keep for fingerprint
-                    external_id = make_fingerprint(
-                        ts_ns, json.dumps(labels, sort_keys=True), line
-                    )
-                    ts = datetime.fromtimestamp(
-                        int(ts_ns) / 1_000_000_000, tz=timezone.utc
-                    )
-                    parsed = try_parse_json_line(line)
-                    summary = line
-                    actor = None
-                    normalized: dict[str, Any] = {"labels": labels, "line": line}
+            entries = [
+                (stream.get("stream", {}) or {}, ts_ns, line)
+                for stream in results
+                if isinstance(stream, dict)
+                for ts_ns, line in stream.get("values", []) or []
+            ]
+            chunk_returned_values = len(entries)
+            if chunk_returned_values > limit:
+                # A server that returns more lines than the query asked for
+                # has its oldest stored; the cursor stops at the newest of
+                # those, so the next run asks for the rest.
+                entries = sorted(entries, key=lambda entry: int(entry[1]))[:limit]
 
-                    if parsed is not None:
-                        summary, extracted = _summarize_json(parsed, labels, line)
-                        normalized["json"] = parsed
-                        if extracted:
-                            normalized["extracted"] = extracted
-                        # If we managed to extract a user, treat it as the actor.
-                        actor = (
-                            extracted.get("user")
-                            if isinstance(extracted, dict)
-                            else None
-                        )
-                    else:
-                        # Keep plain-text lines readable too
-                        summary = truncate(line, 340)
+            for labels, ts_ns, line in entries:
+                # Loki timestamps are strings; keep for fingerprint
+                external_id = make_fingerprint(
+                    ts_ns, json.dumps(labels, sort_keys=True), line
+                )
+                ts = datetime.fromtimestamp(int(ts_ns) / 1_000_000_000, tz=timezone.utc)
+                parsed = try_parse_json_line(line)
+                summary = line
+                actor = None
+                normalized: dict[str, Any] = {"labels": labels, "line": line}
 
-                    raw_pointer = {
-                        "loki": {
-                            "query_name": query_name,
-                            "logql": logql,
-                            "labels": labels,
-                            "ts_ns": ts_ns,
-                        }
+                if parsed is not None:
+                    summary, extracted = _summarize_json(parsed, labels, line)
+                    normalized["json"] = parsed
+                    if extracted:
+                        normalized["extracted"] = extracted
+                    # If we managed to extract a user, treat it as the actor.
+                    actor = (
+                        extracted.get("user") if isinstance(extracted, dict) else None
+                    )
+                else:
+                    # Keep plain-text lines readable too
+                    summary = truncate(line, 340)
+
+                raw_pointer = {
+                    "loki": {
+                        "query_name": query_name,
+                        "logql": logql,
+                        "labels": labels,
+                        "ts_ns": ts_ns,
                     }
+                }
 
-                    severity = (
-                        int(event_defaults.get("severity", 3))
-                        if event_defaults.get("severity") is not None
-                        else None
-                    )
-                    ext = "json" if parsed is not None else "log"
-                    ctype = (
-                        "application/json"
-                        if parsed is not None
-                        else "text/plain; charset=utf-8"
-                    )
-                    stored = store_event_with_artifact(
-                        db,
-                        timestamp=ts.replace(tzinfo=None),
-                        source="loki",
-                        system=event_defaults.get("system"),
-                        actor=actor,
-                        action=event_defaults.get("action"),
-                        outcome=event_defaults.get("outcome"),
-                        severity=severity,
-                        summary=summary,
-                        raw_pointer=raw_pointer,
-                        normalized_payload=normalized,
-                        external_id=external_id,
-                        artifact_kind="log_line",
-                        artifact_bytes=line.encode("utf-8", errors="replace"),
-                        artifact_content_type=ctype,
-                        artifact_key=(
-                            f"loki/{query_name}/{ts.date().isoformat()}/"
-                            f"{external_id}.{ext}"
-                        ),
-                        captured_by="keen:loki",
-                        # The chunk commits once, together with its cursor.
-                        commit=False,
-                    )
-                    if not stored.get("deduped"):
-                        created_events += 1
-                        chunk_created_events += 1
-                        created_artifacts += 1
-                        chunk_created_artifacts += 1
-                        created_mappings += stored["mappings"]
-                        chunk_created_mappings += stored["mappings"]
+                severity = (
+                    int(event_defaults.get("severity", 3))
+                    if event_defaults.get("severity") is not None
+                    else None
+                )
+                ext = "json" if parsed is not None else "log"
+                ctype = (
+                    "application/json"
+                    if parsed is not None
+                    else "text/plain; charset=utf-8"
+                )
+                stored = store_event_with_artifact(
+                    db,
+                    timestamp=ts.replace(tzinfo=None),
+                    source="loki",
+                    system=event_defaults.get("system"),
+                    actor=actor,
+                    action=event_defaults.get("action"),
+                    outcome=event_defaults.get("outcome"),
+                    severity=severity,
+                    summary=summary,
+                    raw_pointer=raw_pointer,
+                    normalized_payload=normalized,
+                    external_id=external_id,
+                    artifact_kind="log_line",
+                    artifact_bytes=line.encode("utf-8", errors="replace"),
+                    artifact_content_type=ctype,
+                    artifact_key=(
+                        f"loki/{query_name}/{ts.date().isoformat()}/{external_id}.{ext}"
+                    ),
+                    captured_by="keen:loki",
+                    # Each line commits by itself, so the rows and locks a
+                    # mapping takes are held for one line, never for a
+                    # chunk. A chunk that ends early is read again, and
+                    # the lines already stored are recognised.
+                )
+                if not stored.get("deduped"):
+                    created_events += 1
+                    chunk_created_events += 1
+                    created_artifacts += 1
+                    chunk_created_artifacts += 1
+                    created_mappings += stored["mappings"]
+                    chunk_created_mappings += stored["mappings"]
 
-                    if (chunk_max_seen_ts is None) or (ts > chunk_max_seen_ts):
-                        chunk_max_seen_ts = ts
+                if (chunk_max_seen_ts is None) or (ts > chunk_max_seen_ts):
+                    chunk_max_seen_ts = ts
 
             hit_limit = chunk_returned_values >= limit
             advance_to = chunk_max_seen_ts if (hit_limit and chunk_max_seen_ts) else end

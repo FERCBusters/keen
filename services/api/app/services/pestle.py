@@ -24,7 +24,11 @@ from app.db.models import (
     PestleRelevanceLevel,
     User,
 )
-from app.security.permissions import has_any_permission
+from app.security.permissions import (
+    has_any_permission,
+    has_permission,
+    has_shared_permission,
+)
 from app.services.affected import (
     MAX_AFFECTED,
     AffectedRef,
@@ -130,18 +134,14 @@ def _replace_affected(
 def can_read_pestle(db: Session, user: User | None) -> bool:
     # Risk viewers can also read PESTLE(E) assessments.
     return has_any_permission(
-        db,
-        user,
-        PESTLE_MANAGE_PERMISSION,
-        PESTLE_READ_PERMISSION,
-        RISK_MANAGE_PERMISSION,
-        RISK_READ_PERMISSION,
-    )
+        db, user, PESTLE_MANAGE_PERMISSION, PESTLE_READ_PERMISSION
+    ) or has_shared_permission(db, user, RISK_MANAGE_PERMISSION, RISK_READ_PERMISSION)
 
 
 def can_manage_pestle(db: Session, user: User | None) -> bool:
-    return has_any_permission(
-        db, user, PESTLE_MANAGE_PERMISSION, RISK_MANAGE_PERMISSION
+    # Risk managers also manage PESTLE(E) factors.
+    return has_permission(db, user, PESTLE_MANAGE_PERMISSION) or has_shared_permission(
+        db, user, RISK_MANAGE_PERMISSION
     )
 
 

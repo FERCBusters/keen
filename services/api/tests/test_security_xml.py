@@ -13,7 +13,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
-from app.security.xml import parse_untrusted_xml
+from app.security.xml import MAX_NAMESPACE_NAME, parse_untrusted_xml
 
 APP = Path(__file__).resolve().parents[1] / "app"
 REFUSED = "XML documents with an internal DTD subset are refused"
@@ -98,6 +98,47 @@ def test_an_external_dtd_is_never_read(tmp_path):
 def test_internal_subsets_are_refused_before_a_tree_is_built(document):
     with pytest.raises(ET.ParseError, match=REFUSED):
         parse_untrusted_xml(document)
+
+
+LONGEST = "u" * MAX_NAMESPACE_NAME
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        f'<rss xmlns:p="{LONGEST}x"><p:a/></rss>',
+        f'<rss xmlns="{LONGEST}x"><a/></rss>',
+        # A namespace can be declared on any element, however deep.
+        f'<rss><channel><item><a xmlns:p="{LONGEST}x"/></item></channel></rss>',
+        # Character references count as the characters they stand for.
+        '<rss xmlns:p="' + "&#x75;" * (MAX_NAMESPACE_NAME + 1) + '"/>',
+        f'<rss xmlns:p="{LONGEST}x"/>'.encode("utf-16"),
+    ],
+    ids=["prefixed", "default", "nested", "references", "utf-16"],
+)
+def test_a_long_namespace_name_is_refused_before_a_tree_is_built(document):
+    # The tree keeps the namespace name in every distinct qualified name, so
+    # one long name on many short names costs their product in memory.
+    with pytest.raises(ET.ParseError, match="^XML namespace names over 128 characters"):
+        parse_untrusted_xml(document)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        f'<rss xmlns:p="{LONGEST}"><p:a p:b="c"/></rss>',
+        f'<rss xmlns="{LONGEST}"><a/></rss>',
+        # Only a declaration is bounded: other attributes hold any text.
+        f'<rss note="{LONGEST}x" xmlnsish="{LONGEST}x"/>',
+        '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"'
+        ' xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"'
+        ' xmlns="http://purl.org/rss/1.0/"><channel><itunes:author>a'
+        "</itunes:author></channel></rdf:RDF>",
+    ],
+    ids=["longest-prefixed", "longest-default", "other-attributes", "feed-modules"],
+)
+def test_namespace_names_within_the_bound_parse_as_the_standard_parser_does(document):
+    assert _shape(parse_untrusted_xml(document)) == _shape(ET.fromstring(document))
 
 
 @pytest.mark.parametrize(

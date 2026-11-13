@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from sqlalchemy import func
 
 from app.core.config import settings
+from app.core.references import try_uuid
 from app.db.models import Audit
 from app.security.regex import scan_pattern
 from app.security.rich_text import sanitize_rich_text_html
@@ -183,10 +184,3 @@ def date_overlaps(
     return qry.filter(Audit.start_date <= end).filter(
         func.coalesce(Audit.end_date, Audit.start_date) >= start
     )
-
-
-def try_uuid(value):
-    try:
-        return uuid.UUID(str(value))
-    except (ValueError, TypeError, AttributeError):
-        return None

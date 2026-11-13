@@ -109,6 +109,26 @@ def complete_local_login(
     response identifies the account only. ``csrf_token`` is the token the
     adapter sends as the CSRF cookie; the session keeps it.
     """
+    method = user.auth_backend or "local"
+    # Read the active state and session version together under the row lock,
+    # as SSO sign-in does. The password was checked before this, and a
+    # directory sign-in or a password re-hash commits in between: a
+    # deactivation committed since then refuses the sign-in, and one that
+    # waits for this lock advances the version past the one issued here.
+    # Without it, a session carrying the version the deactivation set would
+    # work again once the account was reactivated.
+    account = (
+        db.query(User)
+        .filter(User.id == user.id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if account is None or not account.is_active:
+        # Answered as any sign-in to an inactive account is.
+        record_refused_sign_in(db, context, method=method, account_id=user.id)
+        raise DomainError(401, "Invalid username or password")
+    user = account
     account_session_version = user.session_version
     session_version = user.mfa_version if verified_version is None else verified_version
     # Revoke the session the browser arrived with. This is best effort: a failed
@@ -120,20 +140,15 @@ def complete_local_login(
         except Exception:
             pass
 
-    # Best-effort last-login timestamp
-    try:
-        user.last_login_at = utc_now_naive()
-        db.add(user)
-        db.commit()
-    except Exception:
-        db.rollback()
+    # Committed with the sign-in's audit row, once the session exists, so the
+    # row lock is held until then.
+    user.last_login_at = utc_now_naive()
 
     eff = attach_effective_role(db, user)
     permission_codes = get_effective_permission_codes(db, user, use_cache=False)
     authz_version = user.authz_version
 
     # Always issue a fresh session ID on sign-in to prevent session fixation.
-    method = user.auth_backend or "local"
     sid = create_session(
         get_valkey(),
         user_id=str(user.id),

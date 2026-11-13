@@ -122,11 +122,19 @@ def ref_sort_key(ref: str | None) -> tuple:
     return (bucket, token_keys, s.lower())
 
 
-def try_uuid(v: str) -> Optional[uuid.UUID]:
+def try_uuid(v: object) -> Optional[uuid.UUID]:
+    """The UUID ``v`` names, written as 36 characters or as 32 hexadecimal digits.
+
+    Python also reads braces, a URN prefix and any number of hyphens anywhere.
+    Those spellings are refused, so a record has one identifier in a route's
+    path and no padding can lengthen a path that still reaches it.
+    """
+    text = str(v)
     try:
-        return uuid.UUID(str(v))
-    except Exception:
+        parsed = uuid.UUID(text)
+    except ValueError:
         return None
+    return parsed if text.lower() in (str(parsed), parsed.hex) else None
 
 
 # Control and clause references are stored in columns of this length.

@@ -114,7 +114,9 @@ def test_a_dispatched_run_is_queued_for_the_http_collection_workers(monkeypatch)
 
     runtime.dispatch("9b2f6c1e-run")
 
-    assert queued == [(("9b2f6c1e-run",), {}, {})]
+    # A run that waits ten minutes for the worker is dropped, like a scheduled
+    # built-in collection, so a late delivery collects nothing.
+    assert queued == [(("9b2f6c1e-run",), None, {"expires": 600})]
     assert celery_app.conf.task_routes[tasks.integration_run_task.name] == {
         "queue": "ingest-http"
     }

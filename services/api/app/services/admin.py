@@ -935,6 +935,10 @@ def admin_create_permission(
         raise DomainError(
             status_code=400, detail="Permission code cannot contain whitespace"
         )
+    if code == "*":
+        # A permission snapshot holds "*" for an administrator, so an account
+        # granted a permission of that name would pass every permission check.
+        raise DomainError(status_code=400, detail='The permission code "*" is reserved')
 
     existing = db.query(Permission).filter(Permission.code == code).one_or_none()
     if existing:

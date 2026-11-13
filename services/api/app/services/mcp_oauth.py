@@ -116,12 +116,18 @@ def issuer_url() -> str:
 
 
 def remove_expired(db: Session) -> None:
-    """Delete lapsed consent requests, codes, tokens, grants and unused clients."""
+    """Delete lapsed consent requests, codes, tokens, grants and unused clients.
+
+    A refresh token that was used stays for as long as its grant does: its row
+    is the only record that the token was spent, and presenting a spent token
+    revokes the grant. Removed at its own 30-day expiry, a copied token
+    replayed later in the grant's 90 days would go unnoticed.
+    """
     now = utc_now_naive()
     for model, condition in (
         (McpConsentRequest, McpConsentRequest.expires_at <= now),
         (McpAuthorizationCode, McpAuthorizationCode.expires_at <= now),
-        (McpToken, McpToken.expires_at <= now),
+        (McpToken, (McpToken.expires_at <= now) & McpToken.used_at.is_(None)),
         (
             McpGrant,
             or_(McpGrant.expires_at <= now, McpGrant.revoked_at.is_not(None)),
@@ -534,6 +540,8 @@ def scoped_user(db: Session, token: str) -> tuple[User, TokenRecord] | None:
     )
     user.effective_role = ROLE_NORMAL
     user.effective_permission_codes = set(allowed)
+    # Each scope counts for its own domain only, on every route a tool reaches.
+    user.scope_limited = True
     return user, record
 
 

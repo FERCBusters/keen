@@ -459,6 +459,49 @@ def test_recently_started_job_is_not_stale(database, monkeypatch):
     )
 
 
+def test_a_run_that_only_waited_for_the_worker_is_not_a_collector_failure(
+    database, monkeypatch
+):
+    # Custom API runs share one collection worker with the built-in sources,
+    # and a long built-in collection can hold it for more than ten minutes.
+    # Waiting behind it says nothing about the collector: three such runs in a
+    # row leave it enabled, with its failure budget untouched.
+    db, _ = database
+    api.action_collector("collector", "publish", api.Action(version=1), db)
+    monkeypatch.setattr(runtime, "dispatch", lambda *a: None)
+    collector = db.get(Collector, "collector")
+    collector.next_run = utc_now_naive() + timedelta(days=1)
+    db.commit()
+    waited = []
+    for _ in range(3):
+        db.expire_all()
+        run = runtime.queue_run(db, db.get(Collector, "collector"))
+        run.created_at = utc_now_naive() - timedelta(minutes=11)
+        db.commit()
+        runtime.tick()
+        waited.append(run.id)
+    db.expire_all()
+    for run_id in waited:
+        run = db.get(Run, run_id)
+        assert (run.status, run.message) == ("cancelled", runtime.WAITED_TOO_LONG)
+        assert run.finished_at is not None
+    collector = db.get(Collector, "collector")
+    assert collector.failures == 0 and collector.enabled
+
+    # A run that has waited less than ten minutes is left to start.
+    recent = runtime.queue_run(db, collector)
+    recent.created_at = utc_now_naive() - timedelta(minutes=9)
+    db.commit()
+    runtime.tick()
+    db.expire_all()
+    assert db.get(Run, recent.id).status == "queued"
+    # A late delivery of a run that was ended collects nothing.
+    monkeypatch.setattr(runtime, "collect", lambda *a, **k: pytest.fail("collected"))
+    runtime.run_job(waited[0])
+    db.expire_all()
+    assert db.get(Run, waited[0]).status == "cancelled"
+
+
 def test_scrub_handles_json_escape_characters():
     assert runtime.scrub({"text": "unicode \u2026 abc", "nested": ["u"]}, ["u"]) == {
         "text": "[REDACTED]nicode \u2026 abc",

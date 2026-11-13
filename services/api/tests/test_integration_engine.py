@@ -577,6 +577,32 @@ def test_requests_are_bounded_per_run_including_detail_requests():
         )
 
 
+def test_a_detail_path_value_utf8_cannot_encode_does_not_stop_the_run():
+    # An upstream identifier can decode to a lone surrogate. Its detail request
+    # is made with a replacement in the path; the run and its other records go on.
+    upstream = Upstream(
+        [
+            {"id": "a\ud800b", "created_at": "2026-01-01T12:00:00Z", "title": "odd"},
+            {"id": "plain", "created_at": "2026-01-01T12:01:00Z", "title": "fine"},
+        ]
+    )
+    d = Definition(
+        path="/checks",
+        records_path="",
+        enrichments=[{"name": "detail", "path": "/checks/{/id}/detail"}],
+    )
+
+    rows, _, _, skipped = collect(d, BASE, {}, fetch=upstream)
+
+    assert [row["fields"]["summary"] for row in rows] == ["odd", "fine"]
+    assert skipped["count"] == 0
+    assert [call["url"] for call in upstream.calls] == [
+        BASE + "/checks",
+        BASE + "/checks/a%3Fb/detail",
+        BASE + "/checks/plain/detail",
+    ]
+
+
 @pytest.mark.parametrize("value", ["..", ".", "../tenant-b", "..\\tenant-b"])
 def test_upstream_values_cannot_steer_detail_requests_out_of_the_base_path(value):
     upstream = Upstream([{"id": value, "created_at": "2026-01-01T12:00:00Z"}])

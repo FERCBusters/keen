@@ -459,6 +459,33 @@ def test_a_first_sign_in_links_only_a_mailbox_both_sides_verified(sso):
     )
 
 
+def test_an_address_that_only_lower_cases_to_a_proved_one_is_not_linked(sso):
+    # Addresses are compared without regard to the case of their ASCII
+    # letters. Python's lower() also turns U+212A KELVIN SIGN into "k", so a
+    # provider-verified address written with it would have matched a
+    # different, plain address that someone else proved in Keen.
+    user = sso.account(email="kate@company.example")
+    sso.provider.subject = "new-subject"
+    browser = sso.keen.client()
+    assert "\u212aate".lower() == "kate"
+
+    sso.provider.claims = {
+        "email": "\u212aate@company.example",
+        "email_verified": True,
+    }
+    refused = sso.sign_in(browser)
+
+    assert refused.status_code == 403
+    assert (
+        refused.json()["detail"] == "No active Keen account matches this SSO identity"
+    )
+    assert sso.db.query(UserIdentity).count() == 0
+    # The same mailbox in another ASCII case is still the proved address.
+    sso.provider.claims = {"email": "Kate@Company.Example", "email_verified": True}
+    assert sso.sign_in(browser).status_code == 302
+    assert _signed_in_as(browser) == user.username
+
+
 def test_a_deactivated_account_is_never_linked_by_email(sso):
     sso.account(email="ada@company.example", active=False)
     sso.provider.subject = "new-subject"

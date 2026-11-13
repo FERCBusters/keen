@@ -8,6 +8,7 @@ Each test checks what the client receives and what was stored or dispatched.
 """
 
 import asyncio
+import logging
 import ssl
 
 import anyio
@@ -20,7 +21,7 @@ from app.security import auth as security_auth
 from app.security import request_limits
 from app.security.errors import collection_error
 from app.security.regex import compile_pattern
-from app.security.request_limits import RequestBodyLimitMiddleware
+from app.security.request_limits import RequestBodyLimitMiddleware, screen_cookies
 from app.security.rich_text import sanitize_rich_text_html
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import event
@@ -255,8 +256,35 @@ def test_long_request_details_are_clipped_in_the_audit_trail(keen):  # noqa: F81
     assert row.referer == referer[:512]
 
 
+def test_a_request_with_a_long_path_or_method_still_leaves_its_audit_record(
+    keen,  # noqa: F811
+):
+    # The path column holds 256 characters and the method column 16. A longer
+    # value is cut to fit: a value the column refused would lose the record,
+    # and a signed-in account could then choose which of its requests are
+    # missing from the administrator's trail.
+    user = keen.user()
+    client = keen.client(user)
+    longest = "/v1/users/" + "a" * 246
+    over = "/v1/users/" + "b" * 400
+
+    for path in (longest, over):
+        assert client.get(path).status_code in (403, 404)
+    assert client.request("M" * 40, "/v1/users").status_code in (403, 405)
+
+    keen.db.expire_all()
+    rows = {row.path: row for row in keen.db.query(AuditLog).all()}
+    assert len(longest) == 256 and longest in rows
+    assert over[:256] in rows and len(over[:256]) == 256
+    assert rows[over[:256]].username == user.username
+    assert [row.method for row in rows.values() if row.method.startswith("M")] == [
+        "M" * 16
+    ]
+
+
 def test_an_audit_trail_that_cannot_be_written_leaves_the_response_intact(
     keen,  # noqa: F811
+    caplog,
 ):
     client = keen.client(keen.user())
     recorded = client.get("/v1/users")
@@ -268,9 +296,15 @@ def test_an_audit_trail_that_cannot_be_written_leaves_the_response_intact(
 
     event.listen(bind, "before_cursor_execute", unavailable)
     try:
-        unrecorded = client.get("/v1/users")
+        with caplog.at_level(logging.WARNING, logger="app.main"):
+            unrecorded = client.get("/v1/users", params={"q": "private-search"})
     finally:
         event.remove(bind, "before_cursor_execute", unavailable)
+
+    # The loss is logged, with nothing the request carried.
+    assert [r.getMessage() for r in caplog.records if r.name == "app.main"] == [
+        "A request audit record could not be written (OSError)"
+    ]
 
     assert (
         (unrecorded.status_code, unrecorded.json())
@@ -307,6 +341,98 @@ def _drive(receive, path="/v1/me/preferences"):
     }
     asyncio.run(RequestBodyLimitMiddleware(app)(scope, receive, send))
     return dispatched, sent
+
+
+# -- cookie names -------------------------------------------------------------
+
+
+def _session_of(keen, user):  # noqa: F811
+    client = keen.client(user)
+    name = security_auth.cookie_name()
+    return name.encode(), client.cookies.get(name).encode()
+
+
+@pytest.mark.parametrize(
+    "padding",
+    [b"\xa0", b"\x85", b"\x1f", b"\x0b"],
+    ids=["no-break-space", "next-line", "unit-separator", "vertical-tab"],
+)
+@pytest.mark.parametrize("where", ["before", "after"])
+def test_a_cookie_named_with_padding_is_not_read_as_the_session_cookie(
+    keen,  # noqa: F811
+    padding,
+    where,
+):
+    # A browser applies the __Host- rule to the exact name, so a site on a
+    # sibling subdomain can set a cookie whose name carries one extra byte the
+    # framework strips as white space. Read as the session cookie, it would
+    # sign the visitor in to a session that site chose.
+    mine, planted = keen.user(), keen.user()
+    name, session = _session_of(keen, mine)
+    _, chosen = _session_of(keen, planted)
+    padded = padding + name if where == "before" else name + padding
+    # The framework keeps the last cookie of a name it has seen.
+    header = name + b"=" + session + b"; " + padded + b"=" + chosen
+
+    async def ask():
+        transport = httpx.ASGITransport(app=main.app, client=("203.0.113.9", 0))
+        async with httpx.AsyncClient(transport=transport, base_url=BASE) as client:
+            return await client.get("/v1/auth/check", headers=[(b"cookie", header)])
+
+    answer = asyncio.run(ask())
+
+    assert answer.status_code == 204, answer.text
+    assert answer.headers["x-keen-user"] == mine.username
+    # With the padded cookie alone, nobody is signed in.
+    alone = padded + b"=" + chosen
+
+    async def ask_alone():
+        transport = httpx.ASGITransport(app=main.app, client=("203.0.113.9", 0))
+        async with httpx.AsyncClient(transport=transport, base_url=BASE) as client:
+            return await client.get("/v1/auth/check", headers=[(b"cookie", alone)])
+
+    assert asyncio.run(ask_alone()).status_code == 401
+
+
+def test_cookie_screening_keeps_ordinary_cookies_and_covers_websockets():
+    scope = {
+        "type": "websocket",
+        "headers": [
+            (b"host", b"keen.example"),
+            (b"Cookie", b"a=1;\xa0b=2; c=\xc3\xa9;d;\x85e; f = 6 ;\tg=7"),
+            (b"cookie", b"\xa0only=1"),
+        ],
+    }
+
+    screen_cookies(scope)
+
+    # Names are screened, values are left as sent, and other headers untouched.
+    assert scope["headers"] == [
+        (b"host", b"keen.example"),
+        (b"Cookie", b"a=1; c=\xc3\xa9;d; f = 6 ;\tg=7"),
+        (b"cookie", b""),
+    ]
+    untouched = {"type": "http", "headers": [(b"accept", b"*/*")]}
+    headers = untouched["headers"]
+    screen_cookies(untouched)
+    assert untouched["headers"] is headers
+    # The original defect: the framework reads the padded name as the plain one.
+    from starlette.requests import cookie_parser
+
+    assert cookie_parser(b"\xa0__Host-keen_session=x".decode("latin-1")) == {
+        "__Host-keen_session": "x"
+    }
+
+    dispatched = []
+
+    async def app(scope, receive, send):
+        dispatched.append(dict(scope.get("headers", [])))
+
+    socket = {"type": "websocket", "headers": [(b"cookie", b"\x85s=1; t=2")]}
+    asyncio.run(RequestBodyLimitMiddleware(app)(socket, None, None))
+    lifespan = {"type": "lifespan"}
+    asyncio.run(RequestBodyLimitMiddleware(app)(lifespan, None, None))
+    assert dispatched == [{b"cookie": b" t=2"}, {}]
 
 
 def test_a_client_that_disconnects_mid_body_reaches_no_handler():

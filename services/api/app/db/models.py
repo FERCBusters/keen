@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from datetime import time as dtime
 
 from sqlalchemy import (
@@ -23,8 +23,9 @@ from sqlalchemy import (
 )
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
+from app.core.datetime_utils import to_utc_naive
 from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.session import Base
 
@@ -466,6 +467,13 @@ class Event(Base):
         # Source pages, source-filtered event lists and per-source insights all
         # read one source over a time range.
         Index("ix_events_source_timestamp", "source", "timestamp"),
+        # Retention ranks and ages an event by its own date, bounded by the
+        # moment Keen collected it (services.evidence_retention._counted).
+        Index(
+            "ix_events_retention_time",
+            sql_text('LEAST("timestamp", created_at)'),
+            "id",
+        ),
     )
 
 
@@ -613,6 +621,24 @@ class IngestionCursor(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False
     )
+
+    @validates("last_ts")
+    def _not_after_the_present(self, _key: str, value: datetime | None):
+        """Keep the cursor at or behind the present.
+
+        A collector moves its cursor to the newest date it stored and then
+        reads only what its source dates after that. The date is the source's
+        own, so one record dated ahead of the present would carry the cursor
+        past everything published until that date arrives, while runs go on
+        reporting success. Such a record is stored like any other; the cursor
+        stops at the present, whichever collector sets it.
+        """
+        if value is None:
+            return None
+        now = utcnow()
+        if to_utc_naive(value) <= now:
+            return value
+        return now if value.tzinfo is None else now.replace(tzinfo=timezone.utc)
 
 
 class AuditLog(Base):
@@ -908,6 +934,10 @@ class User(Base):
     # the effective role. Never persisted.
     effective_role: str | None = None
     effective_permission_codes: set[str] | None = None
+    # An MCP connection acts as its account with the scopes it was granted in
+    # place of the account's permissions; each counts for its own domain only
+    # (security.permissions.has_shared_permission).
+    scope_limited: bool = False
     session_id: str | None = None
     session_authz_version: int | None = None
     # The CSRF token issued with the session, when it has one (security/csrf.py).

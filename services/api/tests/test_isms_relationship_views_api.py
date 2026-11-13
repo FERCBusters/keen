@@ -107,7 +107,8 @@ def test_a_metric_entry_is_read_with_its_measure_in_its_framework(isms):  # noqa
 
 
 def test_measures_recorded_against_a_source_are_listed_for_it(isms):  # noqa: F811
-    # A metric source must be a source Keen has collected, or "other".
+    # A metric source must be a source Keen has collected, or "other". Naming a
+    # collected source takes evidence read access, as seeing its name does.
     isms.db.add(
         Event(
             source="loki",
@@ -120,12 +121,14 @@ def test_measures_recorded_against_a_source_are_listed_for_it(isms):  # noqa: F8
     from_loki = _measure(isms, "Log coverage")
     from_other = _measure(isms, "Manual review")
     elsewhere = _measure(isms, "Other framework", framework="B")
+    evidence_reader = isms.keen.client(isms.keen.user("isms.manage", "events.read"))
     for measure, source, framework in (
         (from_loki, "loki", "A"),
         (from_other, "other", "A"),
         (elsewhere, "loki", "B"),
     ):
-        isms.manage(
+        _send(
+            evidence_reader,
             "POST",
             f"/v1/isms/effectiveness-measures/{measure['id']}/metrics",
             {"metric_value": 1, "source_type": source},

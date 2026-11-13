@@ -61,14 +61,14 @@ def add_effectiveness_measure(
 ) -> IsmsEffectivenessMeasure:
     """Create a measure and its control links in the caller's transaction."""
     fw = framework_parameter(framework)
-    _validate_effectiveness_measure_payload(db, payload)
+    _validate_effectiveness_measure_payload(db, payload, user)
     row = IsmsEffectivenessMeasure(
         framework_slug=fw,
         created_by_user_id=user.id if user else None,
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
-    _apply_effectiveness_measure_payload(db, row, payload)
+    _apply_effectiveness_measure_payload(db, row, payload, user)
     db.add(row)
     db.flush()
     _apply_effectiveness_links(db, row.id, fw, payload, user)
@@ -90,8 +90,10 @@ def revise_effectiveness_measure(
     fw = row.framework_slug
     before = _effectiveness_measure_out(db, row, fw)
     fields = set(payload.model_fields_set or set())
-    _validate_effectiveness_measure_payload(db, payload, fields=fields, row_id=row.id)
-    _apply_effectiveness_measure_payload(db, row, payload, partial=True)
+    _validate_effectiveness_measure_payload(
+        db, payload, user, fields=fields, row_id=row.id
+    )
+    _apply_effectiveness_measure_payload(db, row, payload, user, partial=True)
     _apply_effectiveness_links(db, row.id, fw, payload, user)
     db.add(row)
     db.flush()
@@ -290,14 +292,14 @@ def add_effectiveness_result(
     db: Session,
 ) -> IsmsEffectivenessMetricEntry:
     """Record a result on a measure in the caller's transaction."""
-    _validate_metric_entry_payload(db, payload)
+    _validate_metric_entry_payload(db, payload, user)
     row = IsmsEffectivenessMetricEntry(
         measure_id=measure.id,
         created_by_user_id=user.id if user else None,
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
-    _apply_metric_entry_payload(row, payload, db)
+    _apply_metric_entry_payload(row, payload, db, user)
     if not row.metric_unit:
         row.metric_unit = measure.target_unit or ""
     if "source_type" not in set(payload.model_fields_set or set()):
@@ -323,8 +325,8 @@ def revise_effectiveness_result(
 ) -> None:
     """Apply the payload's fields to a recorded result in the caller's transaction."""
     before = _metric_entry_out(row)
-    _validate_metric_entry_payload(db, payload, partial=True)
-    _apply_metric_entry_payload(row, payload, db, partial=True)
+    _validate_metric_entry_payload(db, payload, user, partial=True)
+    _apply_metric_entry_payload(row, payload, db, user, partial=True)
     row.measure.updated_at = _utcnow()
     db.add(row)
     db.add(row.measure)

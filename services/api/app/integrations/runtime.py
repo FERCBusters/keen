@@ -31,6 +31,11 @@ from .errors import IntegrationError
 from .schema import Definition
 from .transport import connection_auth
 
+WAITED_TOO_LONG = (
+    "The collection worker was busy for ten minutes, so this run did not start."
+    " The next scheduled run collects from the same point."
+)
+
 
 def scrub(value, secrets):
     """Remove the connection's secrets from a record, wherever they appear.
@@ -333,9 +338,12 @@ def run_job(run_id):
 
 
 def dispatch(run_id):
+    from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY
     from app.worker.tasks import integration_run_task
 
-    integration_run_task.delay(run_id)
+    # Like a scheduled built-in collection, a run still waiting for the shared
+    # collection worker after this long is dropped; tick() ends its record.
+    integration_run_task.apply_async((run_id,), expires=SCHEDULED_COLLECTION_EXPIRY)
 
 
 def tick():
@@ -354,14 +362,22 @@ def tick():
             )
             db.commit()
             return
-        # A lost worker is surfaced, never automatically requeued in a tight loop.
         cutoff = now - timedelta(minutes=10)
+        # A run that never started waited for the collection worker, which
+        # other sources share and a long built-in collection can hold for
+        # longer than this. Waiting is not the collector's failure, so the run
+        # ends without drawing on its failure budget and the next one is
+        # queued as usual.
+        db.execute(
+            update(Run)
+            .where(Run.status == "queued", Run.created_at < cutoff)
+            .values(status="cancelled", message=WAITED_TOO_LONG, finished_at=now)
+        )
+        db.commit()
+        # A lost worker is surfaced, never automatically requeued in a tight loop.
         stale = (
             db.query(Run)
-            .filter(
-                ((Run.status == "queued") & (Run.created_at < cutoff))
-                | ((Run.status == "running") & (Run.started_at < cutoff))
-            )
+            .filter((Run.status == "running") & (Run.started_at < cutoff))
             .all()
         )
         for run in stale:
