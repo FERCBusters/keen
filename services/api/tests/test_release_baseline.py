@@ -144,6 +144,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0049_default_groups",
         "0048_events_retention_time",
         "0047_affected_links",
         "0046_asset_owner_only",
@@ -1446,6 +1447,184 @@ def test_interested_parties_are_removed_and_affected_links_added():
             command.upgrade(config, "0047_affected_links")
             assert not party_tables & tables(conn)
             assert "affected_links" in tables(conn)
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_starting_groups_arrive_and_the_reserved_permission_code_goes():
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "groups_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    def run(conn, sql, **params):
+        return conn.execute(text(sql), params)
+
+    def groups(conn):
+        rows = run(
+            conn,
+            "SELECT g.name, g.role, array_agg(p.code ORDER BY p.code)"
+            " FILTER (WHERE p.code IS NOT NULL)"
+            " FROM groups g LEFT JOIN group_permissions gp ON gp.group_id = g.id"
+            " LEFT JOIN permissions p ON p.id = gp.permission_id"
+            " GROUP BY g.name, g.role",
+        ).all()
+        return {name: (role, codes or []) for name, role, codes in rows}
+
+    codes = (
+        "events.read risk.read risk.manage isms.read isms.manage pestle.read"
+        " pestle.manage audits.read audits.manage audits.admin incident.create"
+        " incident.delete question.create question.delete stories.read"
+        " stories.manage stories.admin quiz.read quiz.manage"
+    ).split()
+    ids = {key: uuid.uuid4() for key in ("star", "direct", "member", "other", "own")}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0048_events_retention_time")
+            run(conn, "DELETE FROM permissions")
+            # quiz.read is left out: a group gets the permissions that exist.
+            for code in [c for c in codes if c != "quiz.read"]:
+                run(
+                    conn,
+                    "INSERT INTO permissions (id, code, created_at)"
+                    " VALUES (:id, :code, now())",
+                    id=uuid.uuid4(),
+                    code=code,
+                )
+            # A permission stored under the reserved code before it was
+            # refused, held directly and through a group.
+            run(
+                conn,
+                "INSERT INTO permissions (id, code, created_at) VALUES (:id, '*', now())",
+                id=ids["star"],
+            )
+            for name in ("direct", "member", "other"):
+                run(
+                    conn,
+                    "INSERT INTO users (id, username, password_hash, created_at,"
+                    " updated_at, pref_auto_apply_filters, pref_source_colors,"
+                    " pref_landing_page, pref_date_format, authz_version)"
+                    " VALUES (:id, :name, 'unused', now(), now(), false, '{}',"
+                    " '/', 'dmy', 3)",
+                    id=ids[name],
+                    name=name,
+                )
+            # The installation's own group already has one of the names.
+            run(
+                conn,
+                "INSERT INTO groups (id, name, created_at) VALUES (:id, 'staff', now())",
+                id=ids["own"],
+            )
+            run(
+                conn,
+                "INSERT INTO group_permissions (group_id, permission_id) VALUES (:g, :p)",
+                g=ids["own"],
+                p=ids["star"],
+            )
+            run(
+                conn,
+                "INSERT INTO user_groups (user_id, group_id) VALUES (:u, :g)",
+                u=ids["member"],
+                g=ids["own"],
+            )
+            run(
+                conn,
+                "INSERT INTO user_permissions (user_id, permission_id) VALUES (:u, :p)",
+                u=ids["direct"],
+                p=ids["star"],
+            )
+            conn.commit()
+
+            command.upgrade(config, "0049_default_groups")
+
+            assert (
+                run(conn, "SELECT count(*) FROM permissions WHERE code = '*'").scalar()
+                == 0
+            )
+            assert run(conn, "SELECT count(*) FROM user_permissions").scalar() == 0
+            assert dict(
+                run(conn, "SELECT username, authz_version FROM users").all()
+            ) == {
+                "direct": 4,
+                "member": 4,
+                "other": 3,
+            }
+            assert groups(conn) == {
+                # The existing group keeps its name, members and (now no) permissions.
+                "staff": (None, []),
+                "Internal auditors": (
+                    None,
+                    [
+                        "audits.admin",
+                        "events.read",
+                        "incident.create",
+                        "incident.delete",
+                        "isms.manage",
+                        "pestle.manage",
+                        "question.create",
+                        "question.delete",
+                        "quiz.manage",
+                        "risk.manage",
+                        "stories.admin",
+                    ],
+                ),
+                "External auditors": (
+                    None,
+                    [
+                        "audits.manage",
+                        "events.read",
+                        "isms.read",
+                        "pestle.read",
+                        "risk.read",
+                    ],
+                ),
+            }
+            assert run(conn, "SELECT count(*) FROM user_groups").scalar() == 1
+            descriptions = dict(run(conn, "SELECT name, description FROM groups").all())
+            assert descriptions["staff"] is None
+            assert descriptions["External auditors"].endswith("Change nothing else.")
+            # No starting group holds a permission that changes anything beyond
+            # what its description says: the external auditors' only write is audits.
+            held = set(groups(conn)["External auditors"][1])
+            assert {c for c in held if c.split(".")[1] not in ("read",)} == {
+                "audits.manage"
+            }
+
+            # A group in use stays on downgrade; one nobody joined goes.
+            run(
+                conn,
+                "INSERT INTO user_groups (user_id, group_id)"
+                " SELECT :u, id FROM groups WHERE name = 'Internal auditors'",
+                u=ids["other"],
+            )
+            conn.commit()
+            command.downgrade(config, "0048_events_retention_time")
+            assert set(groups(conn)) == {"staff", "Internal auditors"}
+            # Upgrading again adds what is missing and repeats nothing.
+            command.upgrade(config, "0049_default_groups")
+            assert set(groups(conn)) == {
+                "staff",
+                "Internal auditors",
+                "External auditors",
+            }
+            assert len(groups(conn)["Internal auditors"][1]) == 11
+            # Without a group of that name, Staff arrives too.
+            command.downgrade(config, "0048_events_retention_time")
+            run(conn, "DELETE FROM groups WHERE name = 'staff'")
+            conn.commit()
+            command.upgrade(config, "0049_default_groups")
+            assert groups(conn)["Staff"] == (None, ["events.read", "isms.read"])
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

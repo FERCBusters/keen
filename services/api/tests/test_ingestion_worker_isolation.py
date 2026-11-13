@@ -214,7 +214,22 @@ def test_compose_refuses_to_start_without_backing_service_passwords():
     }
     assert all(rest.startswith(":?") for _, rest in references), references
     services = yaml.safe_load(compose)["services"]
-    assert "${KEEN_REDIS_PASSWORD:?" in " ".join(services["valkey"]["command"])
+    # Valkey takes its password from its environment and writes it to a
+    # configuration file as it starts: process arguments are visible to every
+    # account on the Docker host, so the password is in none of them.
+    valkey = services["valkey"]
+    assert valkey["environment"] == [
+        "KEEN_REDIS_PASSWORD=${KEEN_REDIS_PASSWORD:?Set KEEN_REDIS_PASSWORD in "
+        ".env to a random value}"
+    ]
+    assert "command" not in valkey
+    start = " ".join(valkey["entrypoint"])
+    assert "${KEEN_REDIS_PASSWORD" not in start and "--requirepass" not in start
+    # Compose leaves $$ as one $, so the shell reads the variable at start-up.
+    assert "requirepass" in start and '"$$KEEN_REDIS_PASSWORD"' in start
+    assert start.rstrip().endswith(
+        "exec docker-entrypoint.sh valkey-server /tmp/valkey.conf"
+    )
     # The example settings send cookies over HTTPS only, and keep SameSite=lax
     # so the session cookie survives the return from SSO sign-in.
     example = dict(

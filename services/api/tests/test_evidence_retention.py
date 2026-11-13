@@ -493,6 +493,41 @@ class RetentionDatabaseTests(unittest.TestCase):
         r.database_batch()
         self.assertEqual(self.left(), {str(diary_event)})
 
+    def test_diary_entries_take_no_place_in_a_count_allowance(self):
+        # Three ordinary events fill an allowance of three. Newer diary entries,
+        # which a risk or ISMS manager's record saves create, displace none.
+        kept = {str(self.event(days)) for days in (5, 4, 3)}
+        diary = {
+            str(
+                self.insert(
+                    models.Event,
+                    timestamp=r.now(),
+                    source="diary",
+                    summary="diary",
+                    external_id=uuid.uuid4().hex,
+                )
+            )
+            for _ in range(3)
+        }
+        elsewhere = [{"scope": "source", "key": "other", "mode": "disabled"}]
+        with self.session() as db:
+            self.assertEqual(r.preview(db, "count", 3)["eligible_events"], 0)
+            # The ranked path, taken when any override exists, agrees.
+            self.assertEqual(
+                r.preview(db, "count", 3, overrides=elsewhere)["eligible_events"], 0
+            )
+            # A fourth ordinary event still pushes the oldest one out.
+        newest = str(self.event(1))
+        with self.session() as db:
+            self.assertEqual(r.preview(db, "count", 3)["eligible_events"], 1)
+            self.assertEqual(
+                r.preview(db, "count", 3, overrides=elsewhere)["eligible_events"], 1
+            )
+        self.job("count", 3)
+        r.database_batch()
+        self.assertEqual(len(self.left() & kept), 2)
+        self.assertTrue(diary | {newest} <= self.left())
+
     def test_job_snapshots_overrides(self):
         event = self.event(90)
         self.override("source", "test", "disabled")

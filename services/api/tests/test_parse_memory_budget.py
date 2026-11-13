@@ -55,12 +55,16 @@ if kind == "xml":
         body = b"<r" + b"".join(parts) + b"/>"
     elif shape.startswith("namespace"):
         # Every distinct qualified name holds the whole namespace name.
-        name = b"u" * {namespace}
+        # A "-wide" shape spends the bound on four-byte characters, the widest
+        # a stored name holds; the bound counts bytes, so both cost the same.
+        wide = shape.endswith("-wide")
+        name = ("\U0001f600" * ({namespace} // 4)).encode() if wide else b"u" * {namespace}
+        assert len(name) == {namespace}
         head, unit, tail = {{
             "namespace-elements": (b"<r xmlns:p='" + name + b"'>", b"<p:a%x/>", b"</r>"),
             "namespace-default": (b"<r xmlns='" + name + b"'>", b"<a%x/>", b"</r>"),
             "namespace-attributes": (b"<r xmlns:p='" + name + b"'", b" p:a%x=''", b"/>"),
-        }}[shape]
+        }}[shape.removesuffix("-wide")]
         parts, used, i = [], len(head) + len(tail), 0
         while True:
             part = unit % i
@@ -68,6 +72,37 @@ if kind == "xml":
                 break
             parts.append(part); used += len(part); i += 1
         body = head + b"".join(parts) + tail
+    elif shape.startswith("many-"):
+        # A tree costs its number of distinct qualified names times what each
+        # is held in. Any element can declare another namespace, so a document
+        # reuses the shortest local names under many namespace names of the
+        # longest accepted size: twice the names one namespace allows.
+        first = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+        later = first + "0123456789.-"
+        short = [a for a in first] + [a + b for a in first for b in later]
+        if shape == "many-wide-text":
+            # One-character names above U+00FF, which widen the stored name.
+            short = [chr(c) for c in range(0x4E00, 0x9FA6)]
+        parts, used, k = ["<r>"], 7, 0
+        while used < size:
+            if shape == "many-astral":
+                tag = chr(0x10400 + k // 40) + chr(0x10400 + k % 40)
+                name = tag + "\U0001f600" * ({namespace} // 4 - 2)
+            else:
+                name = "%05x" % k + "u" * ({namespace} - 5)
+            group = ["<g xmlns='" + name + "'>"]
+            cost = len(group[0].encode()) + 4
+            for local in short:
+                part = "<" + local + "/>"
+                if used + cost + len(part.encode()) > size:
+                    break
+                group.append(part); cost += len(part.encode())
+            parts.append("".join(group) + "</g>"); used += cost; k += 1
+            if len(group) <= len(short):
+                break
+        text = "".join(parts) + "</r>"
+        # Text reaches the parser from the Atom and repository feed callers.
+        body = text if shape.endswith("-text") else text.encode()
     else:
         unit = {{"elements": b"<a/>", "mixed": b"<a b='' c='' d=''/>"}}[shape]
         body = b"<r>" + unit * ((size - 7) // len(unit)) + b"</r>"
@@ -75,7 +110,8 @@ else:
     parse = json.loads
     unit = {{"objects": b"{{}},", "arrays": b"[],", "numbers": b"1.5,"}}[shape]
     body = b"[" + unit * ((size - 8) // len(unit)) + unit.rstrip(b",") + b"]"
-assert len(body) <= size, len(body)
+octets = len(body.encode()) if isinstance(body, str) else len(body)
+assert octets <= size, octets
 def peak():
     # This process's own peak resident size. getrusage's ru_maxrss starts at
     # the peak of the process that started this one, so it shows no growth
@@ -85,7 +121,7 @@ def peak():
 before = peak()
 tree = parse(body)
 after = peak()
-print(json.dumps({{"bytes": len(body), "growth_mib": (after - before) / 1024}}))
+print(json.dumps({{"bytes": octets, "growth_mib": (after - before) / 1024}}))
 """
 
 
@@ -113,6 +149,13 @@ def _growth(kind, shape, size):
         "namespace-elements",
         "namespace-default",
         "namespace-attributes",
+        "namespace-elements-wide",
+        "namespace-default-wide",
+        "namespace-attributes-wide",
+        "many-ascii",
+        "many-ascii-text",
+        "many-astral",
+        "many-wide-text",
     ],
 )
 def test_the_costliest_accepted_xml_parses_within_the_worker_budget(shape):

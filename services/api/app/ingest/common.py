@@ -155,6 +155,11 @@ class NormalisedFields(NamedTuple):
     redaction_status: str
 
 
+# The longest summary an event row keeps. Collectors build summaries from
+# upstream text of any length; see normalise_ingested_fields.
+MAX_SUMMARY_CHARS = 32_768
+
+
 def normalise_ingested_fields(
     *,
     system: Optional[str],
@@ -233,6 +238,11 @@ def normalise_ingested_fields(
             (outcome, columns.outcome),
         )
     )
+    # The summary is in the events table's full-text index, and PostgreSQL
+    # refuses a row whose text vector passes about a megabyte, which a summary
+    # of many distinct words reaches at a few hundred kilobytes. The whole
+    # text stays in the payload and artifact.
+    summary = summary[:MAX_SUMMARY_CHARS]
     return NormalisedFields(
         system,
         actor,

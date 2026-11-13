@@ -6,7 +6,7 @@ import secrets
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Literal, NoReturn
 
 from pydantic import Field, field_validator
 from sqlalchemy import func, or_, text
@@ -192,31 +192,54 @@ def new_key(db, profile):
     return value
 
 
-def rate(context: ChangeContext, suffix="ip", ident=None, limit=60):
-    """Limit enrolment work by credential or agent, or else by client address."""
-    if ident:
-        allowed, retry = fixed_window_allow(
-            get_valkey(),
-            f"keen:enrollment:{suffix}:{ident}",
-            limit,
-            60,
-            fail_closed=True,
-        )
-    else:
-        allowed, retry = address_window_allow(
-            get_valkey(),
-            f"enrollment:{suffix}",
-            context.client_ip,
-            limit,
-            60,
-            fail_closed=True,
-        )
+def rate(suffix: str, ident: str, limit: int) -> None:
+    """Limit enrolment work by the credential or agent it is done for.
+
+    Requests that show no credential are counted by address in ``refused``.
+    """
+    allowed, retry = fixed_window_allow(
+        get_valkey(),
+        f"keen:enrollment:{suffix}:{ident}",
+        limit,
+        60,
+        fail_closed=True,
+    )
     if not allowed:
         raise DomainError(
             429,
             "Enrollment temporarily limited; retry later",
             headers={"Retry-After": str(retry)},
         )
+
+
+# Refused enrolment requests an address may send a minute.
+REFUSED_PER_MINUTE = 120
+
+
+def refused(context: ChangeContext, refusal: Exception) -> NoReturn:
+    """Refuse a request that showed no enrolment credential, counting it
+    against its address.
+
+    Enrolling fleets share addresses with other senders. Refusals have their
+    own allowance, as they do for agent and webhook requests, so a sender
+    without a credential cannot spend what genuine enrolments from the same
+    address need; those are bounded by their code's or profile's allowance.
+    """
+    allowed, retry = address_window_allow(
+        get_valkey(),
+        "enrollment:refused",
+        context.client_ip,
+        REFUSED_PER_MINUTE,
+        60,
+        fail_closed=True,
+    )
+    if not allowed:
+        raise DomainError(
+            429,
+            "Enrollment temporarily limited; retry later",
+            headers={"Retry-After": str(retry)},
+        ) from None
+    raise refusal
 
 
 def locked_profile(db, ident):
@@ -295,11 +318,17 @@ def manage(*, ident: str, action: str, context: ChangeContext, db: Session):
     return result
 
 
-def server_key_document(*, context: ChangeContext, db: Session):
+def server_key_document(*, db: Session):
     """KEEN's identity and its current signed encryption key, rotating the
     encryption key when due. Nothing exists until KEEN issues its first agent
-    credential, so an anonymous request never creates KEEN's keys."""
-    rate(context, "server-key-ip", limit=120)
+    credential, so an anonymous request never creates KEEN's keys.
+
+    The document is public, the same for everyone and a few indexed reads to
+    build, like the status and sign-in method documents. It has no per-address
+    allowance: there is no credential to tell a fleet's reads from anyone
+    else's at the same address, so an allowance here could only be spent on
+    the fleet's behalf by a sender repeating the request.
+    """
     if server_keys.current_fingerprint(db) is None:
         raise DomainError(404, "This KEEN has issued no agent credentials yet")
     document = server_keys.document(db)
@@ -412,30 +441,39 @@ def require_pinned_identity(db, pinned):
 
 def enroll(*, body: Enrollment, context: ChangeContext, db: Session):
     live_only()
-    rate(context)
-    match = scan_pattern(CREDENTIAL).fullmatch(body.credential)
-    if not match:
-        raise DomainError(401, "Invalid enrollment credential")
-    credential = body.credential
-    kind, ident, pinned = match.groups()
-    require_pinned_identity(db, pinned)
-    if abs(time.time() - body.created) > PROOF_SECONDS:
-        raise DomainError(
-            400, "Key proof is not current; check the machine's clock and retry"
-        )
-    statement = {
-        "context": "keen-agent-enroll-v2",
-        "created": body.created,
-        "credential_sha256": digest(credential),
-        "proof_nonce": body.proof_nonce,
-        "public_key": body.public_key,
-    }
-    prove(body, statement)
+    try:
+        match = scan_pattern(CREDENTIAL).fullmatch(body.credential)
+        if not match:
+            raise DomainError(401, "Invalid enrollment credential")
+        credential = body.credential
+        kind, ident, pinned = match.groups()
+        require_pinned_identity(db, pinned)
+        if abs(time.time() - body.created) > PROOF_SECONDS:
+            raise DomainError(
+                400, "Key proof is not current; check the machine's clock and retry"
+            )
+        statement = {
+            "context": "keen-agent-enroll-v2",
+            "created": body.created,
+            "credential_sha256": digest(credential),
+            "proof_nonce": body.proof_nonce,
+            "public_key": body.public_key,
+        }
+        prove(body, statement)
+    except DomainError as refusal:
+        # Nothing so far showed a credential KEEN issued.
+        refused(context, refusal)
     remember_proof(body.public_key, body.proof_nonce)
-    if kind == "kc":
-        agent, key = enroll_with_code(db, context, credential, ident, body)
-    else:
-        agent, key = enroll_with_profile(db, context, credential, ident, body)
+    try:
+        if kind == "kc":
+            agent, key = enroll_with_code(db, context, credential, ident, body)
+        else:
+            agent, key = enroll_with_profile(db, context, credential, ident, body)
+    except DomainError as refusal:
+        if refusal.status_code == 401:
+            # The credential is not one this agent or profile holds.
+            refused(context, refusal)
+        raise
     # Both paths now hold the lock an identity reset takes first, so the
     # identity stays as read here until this commits. A reset that committed
     # while they waited for it strands the credential, and nothing binds.
@@ -490,7 +528,7 @@ def enroll_with_code(db, context, code, ident, body):
         # The agent's own allowance is spent only by holders of its code, as
         # a profile's is by holders of its key, so wrong codes from anyone
         # who knows the agent's identifier cannot hold up its enrolment.
-        rate(context, "code", ident, 10)
+        rate("code", ident, 10)
         return agent, key
     if (
         not agent.enrollment_code_hash
@@ -502,7 +540,7 @@ def enroll_with_code(db, context, code, ident, body):
     if agent.enrollment_profile_id is not None:
         # Codes are issued to individually registered agents only.
         raise DomainError(401, "Invalid enrollment credential")
-    rate(context, "code", ident, 10)
+    rate("code", ident, 10)
     agent.enrollment_code_hash = None
     agent.enrollment_code_expires_at = None
     agent.enrollment_ip = context.client_ip
@@ -533,7 +571,7 @@ def enroll_with_profile(db, context, bootstrap, ident, body):
         or not hmac.compare_digest(profile.key_hash, digest(bootstrap))
     ):
         raise DomainError(401, "Invalid enrollment credential")
-    rate(context, "profile", ident, 120)
+    rate("profile", ident, 120)
     if profile.state != "active" or (
         profile.expires_at and profile.expires_at <= utc_now_naive()
     ):
@@ -611,9 +649,12 @@ def renew(*, body: Renewal, context: ChangeContext, db: Session, auth):
     the body proves possession of the new one. A retry signed by the key the
     renewal retired returns the same result for 24 hours."""
     live_only()
-    rate(context, "renew-ip")
+    # The request is signed by an enrolled key, and a failed signature is
+    # counted against its address when it is checked. The agent's own
+    # allowance bounds renewals, so one key cannot spend what other agents
+    # at its address need.
     agent, current = reauthenticate(db, auth, allow_retired=True)
-    rate(context, "renew-agent", agent.id, 6)
+    rate("renew-agent", agent.id, 6)
     nonce_hash = digest(body.nonce)
     statement = {
         "context": "keen-agent-renew-v1",

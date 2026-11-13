@@ -12,7 +12,9 @@ import uuid
 import pytest
 from app import main
 from app.core.config import settings
+from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
+    Event,
     IsmsDocument,
     IsmsDocumentFolder,
     IsmsObjective,
@@ -23,7 +25,7 @@ from app.db.models import (
 from app.security import mcp_tokens
 from app.services import mcp_oauth
 
-from tests.test_mcp_access import FW, MCP_HEADERS, inner
+from tests.test_mcp_access import FW, MCP_HEADERS, _link_entry, inner
 from tests.test_mcp_access import keen as keen  # noqa: F401 - fixture
 from tests.test_mcp_access import mcp as mcp  # noqa: F401 - fixture
 
@@ -280,6 +282,66 @@ def test_mapping_rules_act_as_an_administrator_on_their_routes_only(mcpw):
     mcp.db.commit()
     refused = inner("/v1/admin/mapping-rules", token)
     assert refused.json()["detail"] == "This connection was not granted rules.write"
+
+
+def test_a_mapping_rules_connection_reads_only_the_link_entries_its_scopes_name(mcpw):
+    # The sample and preview routes act as an administrator for a rules.write
+    # connection. The role is lent for the routes, not for what the diary
+    # holds: entries about risks follow the risk scope and entries about other
+    # ISMS records the ISMS scope, as they do on every other route.
+    mcp = mcpw
+    risk, objective, note = (
+        "diary: Risk linked to framework controls",
+        "diary: Objective linked to framework controls",
+        "A note an administrator wrote",
+    )
+    _link_entry(mcp.db, "risk", risk)
+    _link_entry(mcp.db, "objective", objective)
+    mcp.db.add(
+        Event(
+            timestamp=utc_now_naive(),
+            source="diary",
+            summary=note,
+            external_id="diary:note",
+        )
+    )
+    mcp.db.commit()
+    admin = mcp.keen.user(role="admin")
+    rule = {
+        "id": "diary-probe",
+        "description": "Never matches",
+        "when": {"source": "diary", "action": "no-such-action"},
+        "map_to": [{"framework": FW, "ref": "A.5.1"}],
+    }
+
+    def read(*scopes):
+        token = mcp.connect(admin, list(scopes)).access_token
+        sampled = mcp.tool(token, "list_evidence_fields", {"source": "diary"})
+        previewed = mcp.tool(token, "preview_mapping_rule", {"rule": rule})
+        items = sampled["structuredContent"]["items"]
+        preview = previewed["structuredContent"]
+        assert preview["examined"] == len(items) and preview["matched"] == 0
+        seen = sorted(item["untrusted"]["summary"] for item in items)
+        assert seen == sorted(
+            row["untrusted"]["summary"] for row in preview["nonmatches"]
+        )
+        return seen
+
+    assert read("rules.write") == [note]
+    assert read("rules.write", "risk.read") == sorted([note, risk])
+    assert read("rules.write", "isms.read") == sorted([note, objective])
+    # A source pattern takes the same path.
+    token = mcp.connect(admin, ["rules.write"]).access_token
+    by_pattern = inner(
+        "/v1/admin/evidence-event-samples?source_regex=%5Ediary%24", token
+    ).json()["items"]
+    assert [item["summary"] for item in by_pattern] == [note]
+    # The administrator, signed in to Keen, still samples every entry.
+    mcp.sign_in(admin)
+    own = mcp.client.get(
+        "/v1/admin/evidence-event-samples", params={"source": "diary"}
+    ).json()["items"]
+    assert sorted(item["summary"] for item in own) == sorted([note, objective, risk])
 
 
 def test_a_non_administrator_cannot_be_granted_mapping_rules(mcpw):

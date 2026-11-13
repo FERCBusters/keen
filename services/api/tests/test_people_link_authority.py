@@ -40,6 +40,9 @@ REVIEWED_READERS = {
     ("services/people.py", "person_for_user"): "lookup",
     ("services/people.py", "ensure_person_for_user"): "lookup",
     ("services/assurance.py", "_save_person"): "the guarded link change",
+    # Deleting an account ends the audit mail of attendee rows that name it
+    # through its People record; it grants nothing through the link.
+    ("services/users.py", "delete_user_admin"): "lookup",
     # Audits: moving the link needs audits.admin.
     ("services/audits/access.py", "attends"): "attends audits",
     # Quizzes: moving the link needs quiz.manage.

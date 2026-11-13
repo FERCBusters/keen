@@ -17,6 +17,7 @@ from app.db.session import get_db
 from app.security.auth import require_admin
 from app.services import agent_enrollment as service
 from app.services.agent_enrollment import Enrollment, ProfileInput, Renewal
+from app.services.errors import DomainError
 
 # Enrolment and renewal bodies are small; sealing adds a fixed overhead.
 ENROLL_BODY = 4096 + server_keys.SEALED_OVERHEAD
@@ -60,13 +61,16 @@ def manage(
 
 
 def _open_enrollment(request, body, db):
-    # Bound the decryption work an address can ask for before doing any.
-    service.rate(change_context(request), "enroll-open-ip", limit=120)
-    opened = server_keys.open_request(db, request.headers, body, "enroll")
+    # A body that cannot be opened or read showed no credential: it is refused
+    # from the allowance for refusals, not from one that enrolments share.
     try:
-        enrollment = Enrollment.model_validate_json(opened.body)
-    except ValidationError:
-        raise HTTPException(400, "Invalid enrollment request")
+        opened = server_keys.open_request(db, request.headers, body, "enroll")
+        try:
+            enrollment = Enrollment.model_validate_json(opened.body)
+        except ValidationError:
+            raise DomainError(400, "Invalid enrollment request") from None
+    except DomainError as refusal:
+        service.refused(change_context(request), refusal)
     return opened, enrollment
 
 
@@ -89,14 +93,14 @@ async def enroll(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/v1/agents/server-key")
-def server_key(request: Request, response: Response, db: Session = Depends(get_db)):
+def server_key(response: Response, db: Session = Depends(get_db)):
     """KEEN's identity key and its signed current encryption key. Agents check
     the identity against the fingerprint in their credential before use."""
     from app.agents.credentials import live_only
 
     live_only()
     response.headers["Cache-Control"] = "no-store"
-    return service.server_key_document(context=change_context(request), db=db)
+    return service.server_key_document(db=db)
 
 
 @router.post("/v1/agents/renew")

@@ -323,6 +323,17 @@ UNUSABLE = [
         "Source link must be HTTP or HTTPS",
     ),
     (
+        "long-link",
+        LINKED,
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "x",
+            "link": "https://reports.example/" + "a" * 2025,
+        },
+        "Source link is too long",
+    ),
+    (
         "severity-range",
         RATED,
         {
@@ -509,7 +520,10 @@ def test_every_record_refusal_is_a_skip_with_a_case():
     assert _uncovered(UNUSABLE) == set()
     # The check notices a refusal no case reaches.
     without_links = [case for case in UNUSABLE if not case[0].endswith("link")]
-    assert _uncovered(without_links) == {re.escape("Source link must be HTTP or HTTPS")}
+    assert _uncovered(without_links) == {
+        re.escape("Source link must be HTTP or HTTPS"),
+        re.escape("Source link is too long"),
+    }
 
 
 def test_budget_and_size_limits_still_end_the_run():

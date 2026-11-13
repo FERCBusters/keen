@@ -637,9 +637,10 @@ def change_my_password(
     return {"ok": True}
 
 
-def end_password_recognition(user_id: str, *, username: str | None = None) -> None:
+def end_password_recognition(user_id: str, *, key: str | None = None) -> None:
     """A changed or reset password ends every browser's recognition for the
-    account; a reset also clears the sign-in throttle of its name.
+    account; a reset also clears the sign-in throttle kept under ``key``,
+    the account's services.login.sign_in_key.
 
     Each browser is recognised again after its next correct password. A store
     outage leaves recognition to expire on its own, which grants no access.
@@ -649,7 +650,7 @@ def end_password_recognition(user_id: str, *, username: str | None = None) -> No
     try:
         r = get_valkey()
         throttle.revoke_account_devices(r, user_id)
-        if username is not None:
-            throttle.clear_throttle(r, throttle.name_key(username))
+        if key is not None:
+            throttle.clear_throttle(r, key)
     except Exception:
         pass

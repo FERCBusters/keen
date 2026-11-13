@@ -19,6 +19,7 @@ from app.db.models import Event, SourceIngestionState
 from app.db.models import IntegrationCollector as Collector
 from app.db.models import IntegrationRun as Run
 from app.db.models import IsmsEffectivenessMeasure as Measure
+from app.db.models import IsmsEffectivenessMetricEntry as Metric
 from app.integrations import engine, runtime
 from app.integrations.engine import skipped_summary
 from app.integrations.errors import IntegrationError
@@ -332,6 +333,149 @@ def test_records_the_database_cannot_hold_as_written_are_stored(
     collector = db.get(Collector, "collector")
     assert collector.cursor == "2026-01-01T12:10:00+00:00"
     assert collector.failures == 0 and collector.enabled
+
+
+@pytest.mark.parametrize("preview", [False, True], ids=["stored", "preview"])
+def test_a_measurement_record_the_database_cannot_hold_as_written_is_kept_or_counted(
+    database,  # noqa: F811 - fixture imported above
+    monkeypatch,
+    preview,
+):
+    # A measurement keeps the upstream record and its link beside the event,
+    # and a preview keeps samples, neither through event storage. A NUL, a lone
+    # surrogate or a non-finite number in a field nothing maps is made
+    # storable there too, and a link longer than its column leaves that one
+    # record out: the run succeeds, the cursor moves and nothing counts
+    # towards pausing the collector.
+    db, _ = database
+    measure = Measure(framework_slug="test", summary="Uptime", target_unit="%")
+    db.add(measure)
+    db.commit()
+    fields = Definition().model_dump()["fields"]
+    db.get(Collector, "collector").draft = Definition(
+        output="measurement",
+        measure_id=str(measure.id),
+        unit="%",
+        fields={
+            **fields,
+            "url": {"path": "/link"},
+            "value": {"value": 99.9},
+            "period_start": {"value": "2026-01-01"},
+            "period_end": {"value": "2026-01-31"},
+        },
+    ).model_dump()
+    db.commit()
+    api.action_collector("collector", "publish", api.Action(version=1), db)
+    run_id = runtime.queue_run(db, db.get(Collector, "collector"), preview=preview).id
+    db.commit()
+    widest = "https://reports.example/" + "a" * (engine.MAX_LINK_CHARS - 24)
+    page = [
+        {
+            "id": 1,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "Odd values",
+            "link": widest,
+            "extra": {"nul": "x\x00y", "lone": "\ud800", "load": float("inf")},
+        },
+        {
+            "id": 2,
+            "created_at": "2026-01-01T12:05:00Z",
+            "title": "Long link",
+            "link": widest + "a",
+        },
+        {"id": 3, "created_at": "2026-01-01T12:10:00Z", "title": "Ordinary"},
+    ]
+    monkeypatch.setattr(
+        runtime, "collect", partial(engine.collect, fetch=lambda *a, **k: (page, {}))
+    )
+    import app.ingest.common as common
+
+    monkeypatch.setattr(
+        common,
+        "put_bytes",
+        lambda **k: SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=50
+        ),
+    )
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
+    collector = db.get(Collector, "collector")
+    collector.cursor = "2025-12-31T00:00:00+00:00"
+    collector.failures = 2
+    db.commit()
+
+    runtime.run_job(run_id)
+
+    status, message = outcome(db, run_id)
+    skipped = " 1 record skipped: Source link is too long (1)."
+    stored = {"nul": "x\ufffdy", "lone": "\ufffd", "load": "inf"}
+    if preview:
+        assert (status, message) == (
+            "succeeded",
+            "Preview only: no evidence stored." + skipped,
+        )
+        samples = db.get(Run, run_id).result["samples"]
+        assert [s["evidence"]["summary"] for s in samples] == ["Odd values", "Ordinary"]
+        assert samples[0]["evidence"]["normalized_payload"]["extra"] == stored
+        assert db.query(Metric).count() == 0
+        return
+    assert (status, message) == ("succeeded", "2 new records; 0 duplicates." + skipped)
+    entries = {
+        e.raw_payload["title"]: e for e in db.query(Metric).order_by(Metric.recorded_at)
+    }
+    assert list(entries) == ["Odd values", "Ordinary"]
+    assert entries["Odd values"].raw_payload["extra"] == stored
+    assert entries["Odd values"].source_url == widest
+    assert entries["Ordinary"].source_url is None
+    collector = db.get(Collector, "collector")
+    assert collector.cursor == "2026-01-01T12:10:00+00:00"
+    assert collector.failures == 0 and collector.enabled
+
+
+def test_a_summary_too_long_for_the_search_index_is_stored_shortened(
+    database,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    # The events table indexes the summary for search, and PostgreSQL refuses
+    # a row whose text vector passes about a megabyte: 140,000 distinct short
+    # words do. The row keeps the start of the summary and the payload keeps
+    # all of it, so the record is stored and the run goes on.
+    import itertools
+    import string
+
+    import app.ingest.common as common
+
+    db, _ = database
+    run_id = published(db)
+    words = itertools.islice(
+        itertools.product(string.ascii_lowercase, repeat=4), 140_000
+    )
+    long_title = " ".join("".join(word) for word in words)
+    page = [
+        {"id": 1, "created_at": "2026-01-01T12:00:00Z", "title": "Before"},
+        {"id": 2, "created_at": "2026-01-01T12:05:00Z", "title": long_title},
+        {"id": 3, "created_at": "2026-01-01T12:10:00Z", "title": "After"},
+    ]
+    monkeypatch.setattr(
+        runtime, "collect", partial(engine.collect, fetch=lambda *a, **k: (page, {}))
+    )
+    monkeypatch.setattr(
+        common,
+        "put_bytes",
+        lambda **k: SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=50
+        ),
+    )
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
+
+    runtime.run_job(run_id)
+
+    assert outcome(db, run_id) == ("succeeded", "3 new records; 0 duplicates.")
+    by_length = sorted(db.query(Event).all(), key=lambda e: len(e.summary))
+    assert [e.summary for e in by_length[:2]] == ["After", "Before"]
+    shortened = by_length[2]
+    assert shortened.summary == long_title[: common.MAX_SUMMARY_CHARS]
+    assert len(shortened.summary) == common.MAX_SUMMARY_CHARS == 32_768
+    assert shortened.normalized_payload["title"] == long_title
 
 
 def test_an_unusable_record_is_left_out_of_a_stored_run(

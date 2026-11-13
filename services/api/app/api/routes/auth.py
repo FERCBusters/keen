@@ -84,7 +84,7 @@ def login(
     # whatever an attacker does elsewhere; every other browser draws on the
     # per-address allowance and the account's growing waits. Fails closed
     # while Valkey is unavailable.
-    key = throttle.name_key(payload.username, payload.method)
+    key = login_service.sign_in_key(db, payload.username, payload.method)
     try:
         r = get_valkey()
         device = throttle.recognised_device(

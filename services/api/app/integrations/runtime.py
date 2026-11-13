@@ -21,12 +21,12 @@ from app.ingest.connections import Connection as SourceOrigin
 from app.ingest.connections import connection_scope
 from app.mapping.rules import evaluate_by_framework, load_rules
 from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
-from app.security.redaction import redact_obj, redact_url
+from app.security.redaction import redact_obj, redact_url, storable
 from app.services.ingestion_pause import is_paused
 from cryptography.fernet import InvalidToken
 from sqlalchemy import CursorResult, select, update
 
-from .engine import collect, external_id, timestamp
+from .engine import MAX_LINK_CHARS, collect, external_id, timestamp
 from .errors import IntegrationError
 from .schema import Definition
 from .transport import connection_auth
@@ -208,18 +208,23 @@ def run_job(run_id):
             event.update(
                 source=source,
                 raw_pointer=pointer,
-                normalized_payload=redact_obj(item["record"]),
+                # Made storable here as well as when the event is stored:
+                # the preview keeps samples and a measurement keeps the record
+                # without passing through event storage.
+                normalized_payload=storable(redact_obj(item["record"])),
             )
             if run.preview:
                 samples.append(
                     {
-                        "evidence": redact_obj(
-                            {
-                                **event,
-                                "timestamp": f["timestamp"],
-                                "connection_id": "api:" + str(conn.id),
-                                "connection_name": conn.name,
-                            }
+                        "evidence": storable(
+                            redact_obj(
+                                {
+                                    **event,
+                                    "timestamp": f["timestamp"],
+                                    "connection_id": "api:" + str(conn.id),
+                                    "connection_name": conn.name,
+                                }
+                            )
                         ),
                         "matches": evaluate_by_framework(
                             {**event, "connection_id": "api:" + str(conn.id)},
@@ -270,8 +275,10 @@ def run_job(run_id):
                             source_type="event",
                             source_reference=ref,
                             source_event_id=uuid.UUID(result["event_id"]),
-                            source_url=redact_url(f["url"]) if f.get("url") else None,
-                            raw_payload=redact_obj(item["record"]),
+                            source_url=storable(redact_url(f["url"]))[:MAX_LINK_CHARS]
+                            if f.get("url")
+                            else None,
+                            raw_payload=event["normalized_payload"],
                             notes=f"Collected by {c.name}; revision {run.revision}; run {run.id}",
                         )
                     )

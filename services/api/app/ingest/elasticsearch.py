@@ -162,6 +162,10 @@ def _text(value, limit):
     return str(value)[:limit] if isinstance(value, (str, int, float, bool)) else None
 
 
+class _UnusableDocument(Exception):
+    """One document cannot be stored; the documents around it still are."""
+
+
 def _timestamp(value):
     # Elasticsearch date docvalues are requested in strict ISO format.
     if not isinstance(value, str) or len(value) > 64:
@@ -200,12 +204,17 @@ def _store_hit(db, hit, entry):
         raise ElasticsearchInputError(
             "Elasticsearch must return document IDs, index names and enabled _source data"
         )
+    # Any field of a document can hold an array, a missing value or other
+    # text, and whoever writes into a collected index chooses it. Such a
+    # document is left out and counted; refusing the window for it would stop
+    # the input at that document on every run.
     dates = (hit.get("fields") or {}).get(entry["timestamp_field"])
     if not isinstance(dates, list) or len(dates) != 1:
-        raise ElasticsearchInputError(
-            "The timestamp field must contain a single valid date"
-        )
-    ts = _timestamp(dates[0])
+        raise _UnusableDocument
+    try:
+        ts = _timestamp(dates[0])
+    except ElasticsearchInputError:
+        raise _UnusableDocument from None
     external_id = hashlib.sha256(
         json.dumps([index, doc_id], separators=(",", ":")).encode()
     ).hexdigest()
@@ -234,14 +243,13 @@ def _store_hit(db, hit, entry):
         artifact_content_type="application/json",
         artifact_key=f"elasticsearch/{external_id}.json",
         captured_by="keen:elasticsearch",
-        commit=False,
     )
 
 
 def _window(db, client, entry, start, end, deadline):
     """Read a complete snapshot; never retain PIT-local sort values as a cursor."""
     pit = None
-    created = 0
+    created = skipped = 0
     try:
         response = client.post(
             quote(entry["index_pattern"], safe="*,-._") + "/_pit",
@@ -324,12 +332,17 @@ def _window(db, client, entry, start, end, deadline):
                     raise ElasticsearchInputError(
                         "Collection reached its time budget; reduce the input window or narrow the query"
                     )
-                result = _store_hit(db, hit, entry)
+                # Each hit commits by itself, so a control's evidence-count
+                # row is held for one event and a retried window finds the
+                # hits already stored by their external IDs.
+                try:
+                    result = _store_hit(db, hit, entry)
+                except _UnusableDocument:
+                    skipped += 1
+                    continue
                 created += not result.get("deduped", False)
-            # Commit each page for bounded transactions and inexpensive retry deduplication.
-            db.commit()
             if len(hits) < entry["page_size"]:
-                return created
+                return created, skipped
             next_after = hits[-1].get("sort")
             if (
                 not isinstance(next_after, list)
@@ -388,12 +401,14 @@ def ingest_elasticsearch_once(db, client, entry, deadline):
         if previous
         else _timestamp(meta["initial_start"])
     )
-    created = windows = 0
+    created = skipped = windows = 0
     for _ in range(entry["windows_per_run"]):
         if start >= now or time.monotonic() >= deadline:
             break
         end = min(now, start + timedelta(minutes=entry["window_minutes"]))
-        created += _window(db, client, entry, start, end, deadline)
+        stored, unusable = _window(db, client, entry, start, end, deadline)
+        created += stored
+        skipped += unusable
         cursor.last_ts = end.replace(tzinfo=None)
         cursor.updated_at = utc_now_naive()
         db.commit()
@@ -402,6 +417,8 @@ def ingest_elasticsearch_once(db, client, entry, deadline):
     return {
         "query_name": entry["name"],
         "created_events": created,
+        # Documents whose timestamp field held no single valid date.
+        "skipped_documents": skipped,
         "windows_completed": windows,
         "caught_up": start >= now,
         "cursor_last_ts": cursor.last_ts.isoformat() if cursor.last_ts else None,

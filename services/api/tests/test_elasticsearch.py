@@ -351,14 +351,9 @@ def test_connection_api_validation_and_type_metadata(contract_db, monkeypatch):
     assert entry["credential_fields"] == ["password", "api_key"]
 
 
-TIMESTAMP_REFUSAL = "The timestamp field must contain a single valid date"
-
-
 @pytest.mark.parametrize(
     "bad_hit,message",
     [
-        (hit(fields={}), TIMESTAMP_REFUSAL),
-        (hit(fields={"@timestamp": ["not-a-date"]}), TIMESTAMP_REFUSAL),
         (
             hit(_source=None),
             "Elasticsearch must return document IDs, index names and enabled "
@@ -395,6 +390,77 @@ def test_document_validation_and_database_field_bounds(
                 )
             assert contract_db.query(IngestionCursor).one().last_ts is None
     assert calls[-1][0] == "DELETE"
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {},
+        {"@timestamp": []},
+        {"@timestamp": ["not-a-date"]},
+        {"@timestamp": ["2026-10-11T00:00:00"]},
+        # Any Elasticsearch field can hold an array: two dates on one document.
+        {"@timestamp": ["2026-10-11T00:00:00Z", "2026-10-11T00:00:01Z"]},
+        {"@timestamp": "2026-10-11T00:00:00Z"},
+    ],
+    ids=["missing", "empty", "malformed", "no zone", "two dates", "not a list"],
+)
+def test_a_document_without_one_valid_date_is_left_out_and_the_rest_stored(
+    contract_db, storage, fields
+):
+    # Whoever can write into a collected index chooses a document's fields. A
+    # document Keen cannot date costs that document only: the ones around it
+    # are stored, it is counted, and the cursor moves on, so the next run does
+    # not meet it again and stop there.
+    hits = [
+        hit(_id="before", _source={"message": "Before"}),
+        hit(_id="odd", _source={"message": "Odd"}, fields=fields),
+        hit(_id="after", _source={"message": "After"}),
+    ]
+    with scoped(), mock_client([page(hits)], []) as client:
+        result = es.ingest_elasticsearch_once(
+            contract_db,
+            client,
+            input_config(initial_lookback_minutes=1),
+            time.monotonic() + 120,
+        )
+    assert (result["created_events"], result["skipped_documents"]) == (2, 1)
+    assert result["windows_completed"] == 1
+    assert sorted(e.summary for e in contract_db.query(Event)) == ["After", "Before"]
+    assert contract_db.query(IngestionCursor).one().last_ts is not None
+
+
+def test_each_document_is_committed_before_the_next_is_stored(
+    contract_db, storage, monkeypatch
+):
+    # A control's evidence-count row stays locked until the storing transaction
+    # ends. Committing each document holds it for one event, so a delivery
+    # from another source for the same control never waits for a whole page.
+    commits, seen = [], []
+    real_store, real_commit = es.store_event_with_artifact, contract_db.commit
+
+    def commit():
+        commits.append(1)
+        real_commit()
+
+    def recording(db, **values):
+        # How many commits had happened as each document arrived to be stored.
+        seen.append(len(commits))
+        return real_store(db, **values)
+
+    monkeypatch.setattr(contract_db, "commit", commit)
+    monkeypatch.setattr(es, "store_event_with_artifact", recording)
+    hits = [hit(_id=f"doc-{n}", _source={"message": f"Doc {n}"}) for n in range(3)]
+    with scoped(), mock_client([page(hits)], []) as client:
+        result = es.ingest_elasticsearch_once(
+            contract_db,
+            client,
+            input_config(initial_lookback_minutes=1),
+            time.monotonic() + 120,
+        )
+    assert result["created_events"] == 3
+    # At least one commit separates each document from the one before it.
+    assert seen[0] < seen[1] < seen[2]
 
 
 def test_connection_rejects_http_and_secret_field_in_inputs():

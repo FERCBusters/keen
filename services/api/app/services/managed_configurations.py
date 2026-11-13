@@ -25,6 +25,7 @@ from app.db.models import (
     ManagedConfiguration,
     ManagedConfigurationRevision,
     SourceConnection,
+    User,
 )
 from app.ingest.bookstack import book_scope
 from app.ingest.connections import FIELDS as CONNECTION_FIELDS
@@ -41,6 +42,7 @@ from app.mapping.rules import (
     rule_problem,
 )
 from app.mapping.targets import resolve_targets
+from app.security.diary_visibility import diary_filter_condition
 from app.security.redaction import redact_url
 from app.security.regex import scan_pattern
 from app.services.errors import DomainError
@@ -1523,7 +1525,7 @@ def _plain_mismatch_reasons(event, when):
     ]
 
 
-def preview_rule(*, payload: RuleInput, db: Session):
+def preview_rule(*, payload: RuleInput, user: User, db: Session):
     _validate_rule(payload.rule, db)
     if payload.rule.get("enabled") is False:
         return {
@@ -1547,6 +1549,10 @@ def preview_rule(*, payload: RuleInput, db: Session):
                 collector_pointer_filter(payload.rule["when"]["collector"])
             )
         )
+    # A diary link entry is read by whoever may open it. In Keen only an
+    # administrator reaches this route and opens them all; an MCP connection
+    # that was lent the role here opens the ones its own scopes name.
+    query = query.filter(diary_filter_condition(db, user))
     events = query.order_by(Event.timestamp.desc()).limit(200).all()
     examples: list[dict[str, Any]] = []
     nonmatches: list[dict[str, Any]] = []
@@ -1604,6 +1610,7 @@ def evidence_event_samples(
     collector: str | None = None,
     connection_id: str | None = None,
     source_regex: str | None = None,
+    user: User,
     db: Session,
 ):
     """Expose the event fields used by exact-match rule conditions.
@@ -1638,6 +1645,8 @@ def evidence_event_samples(
                 )
             except (ValueError, TypeError, KeyError, IndexError) as exc:
                 raise DomainError(400, "Invalid collection item") from exc
+    # As in preview_rule: link entries follow the caller's own authority.
+    query = query.filter(diary_filter_condition(db, user))
     rows = query.order_by(Event.timestamp.desc()).limit(20).all()
     return {
         "items": [

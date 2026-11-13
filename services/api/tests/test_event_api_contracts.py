@@ -349,8 +349,8 @@ def test_clause_filter_works_in_facets_and_export(api):
         # A tab also separates columns for some readers, so the formula after
         # it is guarded as the start of a cell too.
         ("\t=1", "'\t'=1"),
-        ("\r=1", "'\r=1"),
-        ("\n=1", "'\n=1"),
+        ("\r=1", "'\r'=1"),
+        ("\n=1", "'\n'=1"),
         ("  =1", "'  =1"),
         ("seen;=1", "seen;'=1"),
     ],

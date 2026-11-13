@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     AuditAttendee,
     Group,
+    IsmsPerson,
     Permission,
     User,
     user_groups,
@@ -256,7 +258,18 @@ def delete_user_admin(
 
     db.execute(user_groups.delete().where(user_groups.c.user_id == target.id))
     db.execute(user_permissions.delete().where(user_permissions.c.user_id == target.id))
-    end_attendee_mail(db, AuditAttendee.user_id == target.id)
+    # An attendee names the account directly or through its People record.
+    # The record outlives the account, so a row naming it would otherwise be
+    # read as a person with no account and mailed at its copied address.
+    end_attendee_mail(
+        db,
+        or_(
+            AuditAttendee.user_id == target.id,
+            AuditAttendee.person_id.in_(
+                select(IsmsPerson.id).where(IsmsPerson.user_id == target.id)
+            ),
+        ),
+    )
     db.delete(target)
     db.commit()
     return {"ok": True}
@@ -402,7 +415,8 @@ def set_user_password_admin(
     db.add(target)
     bump_authz_versions(db, [target.id])
     db.commit()
+    from app.services.login import sign_in_key
     from app.services.me import end_password_recognition
 
-    end_password_recognition(str(target.id), username=target.username)
+    end_password_recognition(str(target.id), key=sign_in_key(db, target.username))
     return {"ok": True}

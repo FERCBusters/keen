@@ -303,7 +303,7 @@ def add_effectiveness_result(
     if not row.metric_unit:
         row.metric_unit = measure.target_unit or ""
     if "source_type" not in set(payload.model_fields_set or set()):
-        row.source_type = inherited_metric_source_type(db, measure)
+        row.source_type = inherited_metric_source_type(db, measure, user)
     db.add(row)
     measure.updated_at = _utcnow()
     db.add(measure)

@@ -42,6 +42,9 @@ AND NOT EXISTS (
 """
 # Diary entries are persistent records of ISMS and risk associations and
 # manual observations, so no retention mode removes them.
+# Like audit-held events they take no place
+# among the newest events a count policy keeps: an allowance counts only the
+# evidence retention may delete, so saving records cannot push evidence out.
 UNPROTECTED = "\ne.source <> 'diary'\nAND " + UNREFERENCED.lstrip("\n")
 
 
@@ -107,7 +110,7 @@ def candidates(mode, value, cutoff, overrides=None):
             predicate  # noqa: S608
             + f""" AND e.id NOT IN (
             SELECT newest.id FROM events newest
-            WHERE newest.created_at<=:cutoff AND NOT EXISTS (
+            WHERE newest.created_at<=:cutoff AND newest.source <> 'diary' AND NOT EXISTS (
                 SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=newest.id)
             ORDER BY {_counted("newest")} DESC,newest.id DESC LIMIT :keep)""",  # noqa: S608 - constant fragments, as above
             {"cutoff": cutoff, "keep": value},
@@ -142,7 +145,7 @@ def candidates(mode, value, cutoff, overrides=None):
             SELECT a.*, {_counted("ev")} AS counted,
                    row_number() OVER (PARTITION BY a.scope,a.key ORDER BY {_counted("ev")} DESC,ev.id DESC) AS position
             FROM assignments a JOIN events ev ON ev.id=a.event_id
-            WHERE ev.created_at<=:cutoff AND NOT EXISTS (
+            WHERE ev.created_at<=:cutoff AND ev.source <> 'diary' AND NOT EXISTS (
                 SELECT 1 FROM audit_event_retention_holds h WHERE h.event_id=ev.id)
         )
         SELECT event_id FROM ranked GROUP BY event_id HAVING bool_and(

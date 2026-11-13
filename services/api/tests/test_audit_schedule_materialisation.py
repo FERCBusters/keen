@@ -490,10 +490,18 @@ def test_deleting_an_account_or_a_person_ends_their_audit_mail(contract_db, remi
     db.add_all([admin, leaver])
     db.flush()
     contractor = IsmsPerson(name="Contractor", email="contractor@example.test")
-    db.add(contractor)
+    # The leaver's own People record, which stays when the account goes.
+    record = IsmsPerson(name="Leaver", email="leaver@example.test", user_id=leaver.id)
+    db.add_all([contractor, record])
     db.flush()
     db.add_all(
         [
+            AuditAttendee(
+                audit_id=audit.id,
+                name="Leaver (person)",
+                email="leaver@example.test",
+                person_id=record.id,
+            ),
             AuditAttendee(
                 audit_id=audit.id,
                 name="Leaver (account)",
@@ -526,9 +534,13 @@ def test_deleting_an_account_or_a_person_ends_their_audit_mail(contract_db, remi
         name: (row.user_id, row.person_id, row.email) for name, row in rows.items()
     } == {
         "Leaver (account)": (None, None, None),
+        # Named through the People record: the record and the link stay, the
+        # copied address goes, and the record names no account to mail.
+        "Leaver (person)": (None, record.id, None),
         "Contractor": (None, None, None),
         "Guest": (None, None, "guest@example.test"),
     }
+    assert db.get(IsmsPerson, record.id).user_id is None
     assert schedules.send_audit_reminders(db, today=TODAY)["sent"] == 1
     assert [m["to_email"] for m in reminders] == ["guest@example.test"]
 

@@ -773,9 +773,9 @@ def test_group_lifecycle_updates_members_permissions_and_authorisation_versions(
     updated = admin.call(
         "PATCH",
         f"/v1/admin/groups/{gid}",
-        {"name": "Internal auditors", "description": "", "role": ""},
+        {"name": "Site auditors", "description": "", "role": ""},
     )
-    assert updated["name"] == "Internal auditors"
+    assert updated["name"] == "Site auditors"
     assert updated["role"] is None
     admin.call("PATCH", f"/v1/admin/groups/{gid}", {"name": HOSTILE}, status=400)
     admin.call("PATCH", f"/v1/admin/groups/{gid}", {"name": " "}, status=400)

@@ -37,7 +37,7 @@ from app.services.errors import DomainError
 from app.services.ingestion_pause import require_receiving
 from app.services.isms.metric_values import (
     inherited_metric_source_type,
-    resolve_metric_source_type,
+    submitted_metric_source_type,
 )
 
 # Each client address may make this many requests a minute against each of the
@@ -122,7 +122,7 @@ def _webhook_metric_value(value: Any) -> float | None:
 
 def _webhook_coerce_metric_source_type(db: Session, raw: Any) -> str:
     source_type = _webhook_clean_text(raw or "other", 64)
-    resolved = resolve_metric_source_type(db, source_type)
+    resolved = submitted_metric_source_type(db, source_type)
     if resolved is None:
         raise DomainError(
             status_code=400,
@@ -268,7 +268,7 @@ def record_metric(
     source_type = (
         _webhook_coerce_metric_source_type(db, payload["source_type"])
         if payload.get("source_type")
-        else inherited_metric_source_type(db, measure)
+        else inherited_metric_source_type(db, measure, None)
     )
     source_event_id = _webhook_parse_uuid(
         payload.get("source_event_id") or payload.get("event_id")

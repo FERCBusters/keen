@@ -254,12 +254,13 @@ def test_expiry_network_limits_and_limiter_failure(fleet, monkeypatch):
     monkeypatch.setattr(
         agent_enrollment_operations, "address_window_allow", lambda *a, **k: (False, 60)
     )
-    assert enroll(c, p, agent=ready).status_code == 429
-    refused = c.get("/v1/agents/server-key")
-    assert (refused.status_code, refused.json()) == (
+    limited = enroll(c, p, agent=ready)
+    assert (limited.status_code, limited.json()) == (
         429,
         {"detail": "Enrollment temporarily limited; retry later"},
     )
+    # The server-key document is public and has no allowance to spend.
+    assert c.get("/v1/agents/server-key").status_code == 200
 
 
 def test_admin_required_and_demo_block(fleet, monkeypatch):

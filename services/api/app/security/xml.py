@@ -27,9 +27,13 @@ from xml.parsers import expat
 # this size is refused before any parsing, and the largest tree an accepted
 # document builds stays within the collection worker's memory.
 # tests/test_parse_memory_budget.py measures the costliest shapes.
-MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
-# The namespace names feeds declare run to about 80 characters.
-MAX_NAMESPACE_NAME = 128
+MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
+# The namespace names feeds declare run to about 80 characters. The bound is
+# in bytes: the larger of the size a name is stored at and its UTF-8 length.
+# A tree costs its number of distinct qualified names times what each is held
+# in, and any element can declare another namespace, so this bound and the
+# document bound together are what keep that product within the budget.
+MAX_NAMESPACE_NAME = 96
 
 
 def _refuse_internal_subset(
@@ -42,17 +46,30 @@ def _refuse_internal_subset(
 def _refuse_long_namespace_names(name: str, attributes: dict[str, str]) -> None:
     # Any element can declare a namespace, so every start tag is read.
     for attribute, value in attributes.items():
-        if (attribute == "xmlns" or attribute.startswith("xmlns:")) and len(
-            value
-        ) > MAX_NAMESPACE_NAME:
-            raise ET.ParseError(
-                f"XML namespace names over {MAX_NAMESPACE_NAME} characters are refused"
-            )
+        if attribute == "xmlns" or attribute.startswith("xmlns:"):
+            # Python stores every character of a string at the width of its
+            # widest one: four bytes beyond the Basic Multilingual Plane, two
+            # beyond U+00FF. One wide character in an otherwise ASCII name
+            # widens all of it, which its UTF-8 length does not show, so both
+            # sizes are bounded. Expat hands over decoded text, so a lone
+            # surrogate cannot arrive; "surrogatepass" keeps the measure total.
+            widest = max(value, default="")
+            width = 4 if widest > "\uffff" else 2 if widest > "\xff" else 1
+            encoded = len(value.encode("utf-8", "surrogatepass"))
+            if max(len(value) * width, encoded) > MAX_NAMESPACE_NAME:
+                raise ET.ParseError(
+                    f"XML namespace names over {MAX_NAMESPACE_NAME} bytes are refused"
+                )
 
 
 def parse_untrusted_xml(data: str | bytes) -> ET.Element:
-    # Characters or bytes: a tree's object count follows either.
-    if len(data) > MAX_DOCUMENT_BYTES:
+    # The bound is on bytes. Text is measured as the UTF-8 the parser reads:
+    # one character of text can be a whole element name, so a count of
+    # characters admits more distinct names than the same count of bytes.
+    if len(data) > MAX_DOCUMENT_BYTES or (
+        isinstance(data, str)
+        and len(data.encode("utf-8", "surrogatepass")) > MAX_DOCUMENT_BYTES
+    ):
         raise ET.ParseError(
             f"XML documents over {MAX_DOCUMENT_BYTES // (1024 * 1024)} MiB are refused"
         )

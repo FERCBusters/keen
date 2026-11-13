@@ -190,15 +190,12 @@ def _effectiveness_metric_sources_out(
     return items
 
 
-def resolve_metric_source_type(
-    db: Session, raw: str | None, *, among: list[str] | None = None
-) -> str | None:
-    """Return the collected Keen source named by ``raw``, "other", or None.
+def resolve_metric_source_type(raw: str | None, *, among: list[str]) -> str | None:
+    """Return the source named by ``raw`` among those offered, "other", or None.
 
     Blank input means "other". Spelling variants (case, hyphen/underscore) name
-    the same collected source. None means no collected source has that name.
-    ``among`` narrows the sources to those a person's form offers; without it,
-    for values Keen supplies itself, every collected source counts.
+    the same source. ``among`` holds the sources the saver's form offers; None
+    means none of them has that name.
     """
 
     source_type = clean_text(raw, max_len=64).strip()
@@ -206,12 +203,11 @@ def resolve_metric_source_type(
         return EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
     if source_type.lower() == EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE:
         return EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
-    sources = _actual_effectiveness_metric_source_names(db) if among is None else among
-    for source in sources:
+    for source in among:
         if source_type == source:
             return source
     source_key = source_type.lower().replace("-", "_")
-    for source in sources:
+    for source in among:
         if source.lower().replace("-", "_") == source_key:
             return source
     return None
@@ -220,7 +216,7 @@ def resolve_metric_source_type(
 def _coerce_metric_source_type(db: Session, raw: str | None, user: User | None) -> str:
     """The source a person's save names, from those their form offers."""
     resolved = resolve_metric_source_type(
-        db, raw, among=_listed_metric_source_names(db, user)
+        raw, among=_listed_metric_source_names(db, user)
     )
     if resolved is None:
         raise DomainError(
@@ -230,14 +226,37 @@ def _coerce_metric_source_type(db: Session, raw: str | None, user: User | None) 
     return resolved
 
 
-def inherited_metric_source_type(db: Session, measure: IsmsEffectivenessMeasure) -> str:
-    """The source a new entry starts with: the measure's expected source while
-    it still collects evidence, otherwise "other"."""
+def inherited_metric_source_type(
+    db: Session, measure: IsmsEffectivenessMeasure, user: User | None
+) -> str:
+    """The source a new entry starts with: the measure's expected source.
 
+    For an event reader that is the expected source while it still collects
+    evidence, otherwise "other". For anyone else, a signed submission
+    included, it is the source as the measure stores it: whether events still
+    carry it is not theirs to learn from the entry they save.
+    """
+
+    if not can_read_events(db, user):
+        return measure.source_type
     return (
-        resolve_metric_source_type(db, measure.source_type)
+        resolve_metric_source_type(
+            measure.source_type, among=_listed_metric_source_names(db, user)
+        )
         or EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
     )
+
+
+def submitted_metric_source_type(db: Session, raw: str | None) -> str | None:
+    """The source a signed submission names, or None when it may not name it.
+
+    A submission secret carries no permission to read events, so its holder is
+    offered what a measure form offers someone who cannot read them: the
+    sources measures already name, and "other". A collected source outside
+    that list is answered exactly as a source that does not exist.
+    """
+
+    return resolve_metric_source_type(raw, among=_listed_metric_source_names(db, None))
 
 
 _THRESHOLD_OPERATIONS = {

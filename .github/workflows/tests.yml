@@ -17,7 +17,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The backend suite runs serially against PostgreSQL with coverage and
+    # takes most of half an hour by itself; installs and the frontend suite
+    # come on top. A run that stalls still ends well before GitHub's six hours.
+    timeout-minutes: 75
     # Images are pinned by digest; tools/docker_image_pins.py keeps them current.
     container:
       image: docker.io/library/debian:13@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6

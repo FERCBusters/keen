@@ -36,6 +36,10 @@ def timestamp(value):
     return result.astimezone(timezone.utc)
 
 
+# The width of the column a measurement's source link is stored in.
+MAX_LINK_CHARS = 2048
+
+
 def normalize(record, definition):
     if not isinstance(record, dict):
         raise IntegrationError("Each record must be a JSON object")
@@ -94,6 +98,10 @@ def normalize(record, definition):
             raise IntegrationError("Measurement period ends before it starts")
     if fields.get("url") and urlsplit(fields["url"]).scheme not in ("http", "https"):
         raise IntegrationError("Source link must be HTTP or HTTPS")
+    if len(fields.get("url") or "") > MAX_LINK_CHARS:
+        # A measurement stores its link in a column of this width; a longer
+        # one would be refused by the database and fail the whole run.
+        raise IntegrationError("Source link is too long")
     return fields
 
 

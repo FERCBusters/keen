@@ -113,13 +113,37 @@ LONGEST = "u" * MAX_NAMESPACE_NAME
         # Character references count as the characters they stand for.
         '<rss xmlns:p="' + "&#x75;" * (MAX_NAMESPACE_NAME + 1) + '"/>',
         f'<rss xmlns:p="{LONGEST}x"/>'.encode("utf-16"),
+        # The bound is the stored width, not the count of characters: one more
+        # four-byte or three-byte character than fits is refused.
+        '<rss xmlns:p="' + "\U0001f600" * (MAX_NAMESPACE_NAME // 4 + 1) + '"/>',
+        '<rss xmlns="' + "\u4e00" * (MAX_NAMESPACE_NAME // 3 + 1) + '"><a/></rss>',
+        '<rss xmlns:p="' + "&#x1F600;" * (MAX_NAMESPACE_NAME // 4 + 1) + '"/>',
+        # One wide character widens every character of the stored name: ASCII
+        # letters and one four-byte character within the bound as UTF-8 are
+        # four times the bound in the tree. Latin-1 letters are two bytes each
+        # as UTF-8.
+        '<rss xmlns:p="' + "u" * (MAX_NAMESPACE_NAME - 4) + "\U0001f600" + '"/>',
+        '<rss xmlns:p="' + "u" * (MAX_NAMESPACE_NAME - 3) + "\u4e00" + '"/>',
+        '<rss xmlns:p="' + "\xff" * (MAX_NAMESPACE_NAME // 2 + 1) + '"/>',
     ],
-    ids=["prefixed", "default", "nested", "references", "utf-16"],
+    ids=[
+        "prefixed",
+        "default",
+        "nested",
+        "references",
+        "utf-16",
+        "four-byte",
+        "three-byte",
+        "four-byte references",
+        "ascii with one four-byte",
+        "ascii with one two-byte-wide",
+        "latin-1",
+    ],
 )
 def test_a_long_namespace_name_is_refused_before_a_tree_is_built(document):
     # The tree keeps the namespace name in every distinct qualified name, so
     # one long name on many short names costs their product in memory.
-    with pytest.raises(ET.ParseError, match="^XML namespace names over 128 characters"):
+    with pytest.raises(ET.ParseError, match="^XML namespace names over 96 bytes"):
         parse_untrusted_xml(document)
 
 
@@ -253,6 +277,10 @@ def test_a_document_over_the_size_bound_is_refused_before_parsing(monkeypatch):
     assert parse_untrusted_xml(within).text == "x" * (limit - 11)
     monkeypatch.setattr(xml.ET, "fromstring", unreachable)
     monkeypatch.setattr(xml.expat, "ParserCreate", unreachable)
-    for document in (within + b" ", (within + b" ").decode()):
-        with pytest.raises(ET.ParseError, match="over 4 MiB are refused"):
+    # Text is held to the bound in the UTF-8 bytes the parser reads, so text
+    # within it in characters and over it in bytes is refused too.
+    wide = "<rss>" + "\u4e00" * (limit // 3) + "</rss>"
+    assert len(wide) < limit < len(wide.encode())
+    for document in (within + b" ", (within + b" ").decode(), wide):
+        with pytest.raises(ET.ParseError, match="over 2 MiB are refused"):
             parse_untrusted_xml(document)

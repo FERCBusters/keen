@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from sqlalchemy import func
 
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
 from app.db.models import User, UserIdentity
+from app.security import sign_in_throttle as throttle
 from app.security.auth import authenticate_user
 from app.security.ldap import authenticate_ldap
 from app.security.permissions import get_effective_permission_codes
+from app.security.rate_limit import login_name
 from app.security.roles import attach_effective_role
 from app.security.sessions import create_session, delete_session
 from app.services import security_notifications
@@ -41,6 +45,38 @@ def record_refused_sign_in(
     account = db.get(User, account_id) if account_id is not None else None
     record_sign_in(db, context, method=method, outcome=outcome, account=account)
     db.commit()
+
+
+def sign_in_key(db, username: str, method: str = "local") -> str:
+    """The key an attempt's sign-in limits and browser recognition are kept
+    under: one key for one account.
+
+    Limits are kept by compared name (security.sign_in_throttle.name_key), so
+    every spelling of a name draws on one allowance. Account creation refuses
+    a username whose compared name an account already has, but an installation
+    may hold such accounts from before it did. Those would share one key: the
+    holder of one would be recognised, and exempt from the limits, for the
+    other, and each correct sign-in would clear the other's count. A local
+    username that is typed exactly and has such a namesake is therefore keyed
+    with its account as well. The other spellings of the name keep the
+    compared name's key, and can sign in to neither account.
+    """
+    key = throttle.name_key(username, method)
+    if method != "local":
+        return key
+    name = username.strip()
+    account_id = db.query(User.id).filter(User.username == name).scalar()
+    if account_id is None:
+        return key
+    compared = login_name(name)
+    # Usernames are few (one organisation's accounts) and this read runs only
+    # for a name that is an account's own.
+    namesakes = sum(
+        login_name(other) == compared for (other,) in db.query(User.username)
+    )
+    if namesakes < 2:
+        return key
+    return hashlib.sha256(f"{key}\0{account_id}".encode()).hexdigest()
 
 
 def _attempted_account(db, username: str, method: str) -> User | None:

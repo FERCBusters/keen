@@ -114,6 +114,9 @@ def metrics(keen, monkeypatch):  # noqa: F811 - fixture imported above
 
 
 def test_a_metric_is_recorded_against_its_measure(metrics):
+    # A submission may name a source a measure already names.
+    metrics.elsewhere.source_type = "cloud-logs"
+    metrics.db.commit()
     response = metrics.post(
         "cpu-usage",
         {
@@ -135,8 +138,8 @@ def test_a_metric_is_recorded_against_its_measure(metrics):
     (row,) = metrics.entries()
     assert out["id"] == str(row.id) and out["measure_id"] == str(metrics.measure.id)
     assert (row.metric_value, row.metric_unit) == (42.5, "percent")
-    # The source name is matched to the collected source regardless of case
-    # or separator.
+    # The source name is matched to the named source regardless of case or
+    # separator.
     assert row.source_type == "cloud-logs"
     assert (row.period_start.isoformat(), row.period_end.isoformat()) == (
         "2026-05-01",
@@ -534,11 +537,38 @@ def test_a_submission_without_a_source_inherits_the_measure_expected_source(metr
     assert metrics.entries()[-1].source_type == "other"
     assert metrics.post("cpu-usage", {"value": 5, "source_type": ""}).status_code == 200
     assert metrics.entries()[-1].source_type == "cloud-logs"
-    # An expected source that no longer collects evidence falls back to other.
+    # The expected source is taken as the measure stores it, whether or not
+    # events still carry it, so the answer says nothing about what is collected.
     metrics.db.delete(metrics.evidence)
     metrics.db.commit()
     assert metrics.post("cpu-usage", {"value": 6}).status_code == 200
-    assert metrics.entries()[-1].source_type == "other"
+    assert metrics.entries()[-1].source_type == "cloud-logs"
+
+
+def test_a_submission_does_not_say_whether_a_guessed_source_is_collected(metrics):
+    # The secret's holder may be someone who manages measures without reading
+    # events. A collected source no measure names is answered exactly as one
+    # that does not exist, alone and beside a second problem in the request,
+    # and nothing is stored.
+    assert metrics.evidence.source == "cloud-logs"
+    refusal = "Invalid source_type; choose an existing Keen source or other"
+    for guess in ("cloud-logs", "Cloud_Logs", "no-such-source"):
+        for extra in ({}, {"event_id": str(uuid.uuid4())}):
+            answer = metrics.post(
+                "cpu-usage", {"value": 1, "source_type": guess} | extra
+            )
+            assert (answer.status_code, answer.json()["detail"]) == (400, refusal), (
+                guess
+            )
+    assert metrics.entries() == []
+    # Once a measure names the source, a submission may name it too.
+    metrics.elsewhere.source_type = "cloud-logs"
+    metrics.db.commit()
+    assert (
+        metrics.post("cpu-usage", {"value": 1, "source_type": "cloud-logs"}).status_code
+        == 200
+    )
+    assert metrics.entries()[-1].source_type == "cloud-logs"
 
 
 # --- Submission secrets ---------------------------------------------------------

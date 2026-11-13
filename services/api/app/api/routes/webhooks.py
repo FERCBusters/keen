@@ -59,8 +59,9 @@ async def isms_effectiveness_metric_webhook(
 
     The job signs ``<timestamp>.<body>`` with HMAC-SHA256 under the measure's
     submission secret and sends ``X-Keen-Timestamp`` and
-    ``X-Keen-Signature: v1=<hex>``. ``source_type`` must be an existing Keen
-    evidence source, or ``other``. A typical payload is:
+    ``X-Keen-Signature: v1=<hex>``. ``source_type`` must be a source that a measure
+    already names as its expected source, or ``other``; left out, the entry
+    takes this measure's expected source. A typical payload is:
     {
       "value": 42,
       "unit": "requests",

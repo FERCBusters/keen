@@ -350,7 +350,7 @@ def test_password_changes_and_resets_end_recognition(signin, monkeypatch):
     owner = signin.client()
     assert signin.attempt(user.username, client=owner).status_code == 200
     _attack(signin, user.username)
-    end_password_recognition(str(user.id), username=user.username)
+    end_password_recognition(str(user.id), key=throttle.name_key(user.username))
     assert signin.store.keys("keen:login:device:*") == []
     # A reset also clears the name's throttle.
     assert signin.attempt(user.username).status_code == 200
@@ -1002,3 +1002,46 @@ def test_a_username_that_compares_equal_to_an_existing_one_is_refused(signin, sp
     assert signin.db.query(User).filter(User.username.ilike("%arol%")).count() == 1
     # A name that only resembles it is a different name.
     assert create("carol2").status_code == 200
+
+
+def test_accounts_that_already_share_a_compared_name_keep_separate_limits(signin):
+    # Account creation refuses a username whose compared name an account
+    # already has, but an installation may hold such a pair from before it
+    # did. Each is still one account: the holder of one is not recognised for
+    # the other, wrong passwords count against the account they name, and a
+    # correct sign-in to one leaves the other's count alone.
+    from app.services.login import sign_in_key
+
+    dana, other = signin.user(), signin.user()
+    dana.username, other.username = "legacy-Dana", "legacy-dana"
+    signin.db.commit()
+    assert login_name(dana.username) == login_name(other.username)
+    keys = {sign_in_key(signin.db, name) for name in (dana.username, other.username)}
+    shared = throttle.name_key(dana.username)
+    assert len(keys) == 2 and shared not in keys
+    # Other spellings name neither account and keep the compared name's key.
+    assert sign_in_key(signin.db, "LEGACY-DANA") == shared
+
+    def failures(name):
+        key = sign_in_key(signin.db, name)
+        return int(signin.store.get(f"keen:login:failures:{key}") or 0)
+
+    browser = signin.client()
+    assert signin.attempt(other.username, client=browser).status_code == 200
+    # The recognised browser guesses at the namesake: heard as any other
+    # browser, so each guess counts and the account's waits begin as they
+    # would for anyone.
+    counted = throttle.FREE_FAILURES + 1
+    for n in range(counted):
+        refused = signin.attempt(dana.username, f"wrong-{n}", client=browser)
+        assert refused.status_code == 401
+    assert failures(dana.username) == counted
+    assert signin.attempt(dana.username, "wrong", client=browser).status_code == 429
+    # Its own sign-in is still heard, and clears only its own count.
+    assert signin.attempt(other.username, client=browser).status_code == 200
+    assert failures(dana.username) == counted
+    assert failures(other.username) == 0
+    # An account without a namesake keeps the compared name's key.
+    single = signin.user()
+    assert sign_in_key(signin.db, single.username) == throttle.name_key(single.username)
+    assert sign_in_key(signin.db, "alice", "ldap") == throttle.name_key("alice", "ldap")

@@ -36,7 +36,18 @@ def test_download_header_is_ascii_and_cannot_inject_headers(filename):
 
 @pytest.mark.parametrize(
     "value",
-    [None, 0, -2, "plain", "a,b", "hello\nworld", "a; b", "x;y=1", "tab\tseparated"],
+    [
+        None,
+        0,
+        -2,
+        "plain",
+        "a,b",
+        "hello\nworld",
+        "a; b",
+        "x;y=1",
+        "tab\tseparated",
+        "line\n1 = one",
+    ],
 )
 def test_csv_preserves_nonformula_values(value):
     assert spreadsheet_cell(value) == value
@@ -53,6 +64,11 @@ def test_csv_preserves_nonformula_values(value):
         ("a\t@SUM(1)", "a\t'@SUM(1)"),
         ("a;+1;-1", "a;'+1;'-1"),
         ("=1;=2", "'=1;'=2"),
+        # A line break inside a value can end such a reader's row.
+        ("x\n=1+1;y", "x\n'=1+1;y"),
+        ("x\r\n =1", "x\r\n '=1"),
+        ("note\n-2+3\n@SUM(1)", "note\n'-2+3\n'@SUM(1)"),
+        ("\n=1", "'\n'=1"),
     ],
 )
 def test_csv_guards_a_formula_wherever_a_reader_could_start_a_cell(value, guarded):

@@ -697,6 +697,15 @@ def test_saving_a_measure_does_not_say_whether_a_guessed_source_is_collected(
 
     # A source a measure already names is offered to them, and saved.
     assert save("POST", metrics, metric_value=1, source_type="CI")[0] == 200
+    # A result that names no source takes the measure's as stored, though no
+    # event carries "ci": the entry does not say what is collected either.
+    inherited = manager.post(
+        metrics,
+        params={"framework": "keen"},
+        json={"metric_value": 2},
+        headers=unsafe(manager),
+    )
+    assert (inherited.status_code, inherited.json()["source_type"]) == (200, "ci")
     assert save("PATCH", f"{measures}/{named.id}", source_type="other")[0] == 200
 
     # An event reader's form lists the collected source, and their save takes it.

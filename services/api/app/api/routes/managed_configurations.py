@@ -203,9 +203,11 @@ def delete_rule(
 
 
 @router.post("/v1/admin/mapping-rules/preview")
-def preview_rule(payload: RuleInput, db: Session = Depends(get_db)):
+def preview_rule(
+    payload: RuleInput, user=Depends(require_admin), db: Session = Depends(get_db)
+):
     # Validation also prevents a typo from creating placeholder controls.
-    return service.preview_rule(payload=payload, db=db)
+    return service.preview_rule(payload=payload, user=user, db=db)
 
 
 @router.get("/v1/admin/evidence-event-samples")
@@ -214,6 +216,7 @@ def evidence_event_samples(
     collector: str | None = None,
     connection_id: str | None = None,
     source_regex: str | None = None,
+    user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     "Expose the event fields used by exact-match rule conditions."
@@ -222,6 +225,7 @@ def evidence_event_samples(
         collector=collector,
         connection_id=connection_id,
         source_regex=source_regex,
+        user=user,
         db=db,
     )
 

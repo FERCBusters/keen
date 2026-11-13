@@ -242,3 +242,46 @@ def test_enrolment_proofs_are_refused_while_valkey_is_unreachable(monkeypatch):
     assert refused.value.status_code == 503
     assert refused.value.detail == "Enrollment unavailable; retry later"
     assert refused.value.headers == {"Retry-After": "30"}
+
+
+# --- Allowances shared by an address ---------------------------------------------
+
+
+def test_requests_without_a_credential_do_not_spend_a_fleets_allowances(
+    fleet, monkeypatch
+):
+    # Enrolling devices share an address with other senders (one egress, or a
+    # proxy Keen does not trust). With the real limiter: refused requests are
+    # counted in their own allowance, so however many arrive from the address,
+    # a device holding the profile's key still enrols and still reads the
+    # server-key document.
+    from app.security import rate_limit
+
+    c, f, p, _ = fleet
+    store = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(agent_enrollment, "get_valkey", lambda: store)
+    for name in ("fixed_window_allow", "address_window_allow"):
+        monkeypatch.setattr(agent_enrollment, name, getattr(rate_limit, name))
+
+    first = enroll(c, p, name="web-01")
+    assert first.status_code == 201, first.text
+    kind, _, pinned = p["bootstrap_key"].split(".")
+    made_up = f"{kind}.{'A' * 43}.{pinned}"
+    guesses = [enroll(c, {"bootstrap_key": made_up}).status_code for _ in range(60)]
+    assert guesses == [401] * 60
+    junk = [c.post("/v1/agents/enroll", content=b"x").status_code for _ in range(65)]
+    # The 120 refusals a minute an address may send, then 429 for more of them.
+    assert junk == [415] * 60 + [429] * 5
+    assert enroll(c, {"bootstrap_key": made_up}).status_code == 429
+
+    # The fleet's own requests are not refusals and are still served.
+    second = enroll(c, p, name="web-02")
+    assert second.status_code == 201, second.text
+    reads = {c.get("/v1/agents/server-key").status_code for _ in range(130)}
+    assert reads == {200}
+    assert store.keys("keen:rl:enrollment:server-key-ip:*") == []
+    # A renewal is bounded by its agent, with no allowance shared by address.
+    renewed = second.sim.renew()[0]
+    assert renewed.status_code == 200, renewed.text
+    assert store.keys("keen:rl:enrollment:renew-ip:*") == []
+    assert len(store.keys("keen:enrollment:renew-agent:*")) == 1
