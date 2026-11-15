@@ -204,6 +204,7 @@ async function admin(t, options = {}) {
             items: [
               {
                 adapter: 'github',
+                label: 'GitHub',
                 enabled: true,
                 paused: false,
                 can_pause: true,
@@ -214,6 +215,7 @@ async function admin(t, options = {}) {
               },
               {
                 adapter: HOSTILE + 'loki',
+                label: HOSTILE + 'Loki',
                 enabled: true,
                 paused: true,
                 can_pause: true,
@@ -223,6 +225,7 @@ async function admin(t, options = {}) {
               },
               {
                 adapter: 'taiga',
+                label: 'Taiga',
                 enabled: false,
                 paused: false,
                 can_pause: true,
@@ -232,6 +235,7 @@ async function admin(t, options = {}) {
               },
               {
                 adapter: 'manual',
+                label: 'manual',
                 enabled: true,
                 paused: false,
                 can_pause: false,
@@ -295,6 +299,18 @@ test('the source catalogue shows ingestion state and pauses or resumes collectio
     cards.map((c) => c.querySelector('.badge').textContent),
     ['Enabled', 'Paused', 'Disabled', 'Enabled'],
   );
+  // Each card is headed by the name people know the source by, with the ID
+  // that settings and mapping rules use beneath it where the two differ.
+  assert.deepEqual(
+    cards.map((c) => [c.querySelector('strong').textContent, c.querySelector('code')?.textContent]),
+    [
+      ['GitHub', 'github'],
+      [HOSTILE + 'Loki', HOSTILE + 'loki'],
+      ['Taiga', 'taiga'],
+      ['manual', undefined],
+    ],
+  );
+  assert.match(cards[0].textContent, /Source ID github/);
   assert.match(
     cards[0].textContent,
     /2 collection items · 3 definitions[\s\S]*40 events · last seen 2026-10-01/,

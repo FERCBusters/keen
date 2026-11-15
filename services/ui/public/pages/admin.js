@@ -36,7 +36,8 @@ async function loadSourceCatalogue() {
       .map(
         (item) => `
       <div class="col-md-6 col-xl-4"><div class="border rounded p-3 h-100">
-        <strong>${esc(item.adapter)}</strong> <span class="badge ${item.paused ? 'text-bg-warning' : item.enabled ? 'text-bg-success' : 'text-bg-secondary'}">${item.paused ? 'Paused' : item.enabled ? 'Enabled' : 'Disabled'}</span>
+        <strong>${esc(item.label)}</strong> <span class="badge ${item.paused ? 'text-bg-warning' : item.enabled ? 'text-bg-success' : 'text-bg-secondary'}">${item.paused ? 'Paused' : item.enabled ? 'Enabled' : 'Disabled'}</span>
+        ${item.label === item.adapter ? '' : `<div class="small-muted">Source ID <code>${esc(item.adapter)}</code></div>`}
         <div class="small-muted">${item.collection_items} collection items · ${item.definitions} definitions</div>
         <div class="small-muted">${item.observed_events} events · last seen ${esc(item.last_seen || 'never')}</div>
         ${item.paused ? '<p class="small mt-2 mb-1">Collection is paused across all connections of this type. Existing evidence is retained.</p>' : ''}

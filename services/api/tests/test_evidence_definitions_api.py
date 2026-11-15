@@ -1604,6 +1604,31 @@ def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
         for name in ("redmine", "riskledger", "op_events", "bitwarden", "imap")
     ] == [False] * 5
     assert (enabled["keen-agent"], enabled["api-ingesters"]) == (False, False)
+    # Every source is listed under the name people know it by, never its ID
+    # alone where it has one.
+    labels = {item["adapter"]: item["label"] for item in catalogue.json()["items"]}
+    assert set(labels) == set(enabled)
+    assert {
+        name: labels[name]
+        for name in (
+            "op_events",
+            "google_workspace",
+            "cloudwatch_logs",
+            "riskledger",
+            "imap",
+            "keen-agent",
+            "api-ingesters",
+        )
+    } == {
+        "op_events": "1Password",
+        "google_workspace": "Google Workspace",
+        "cloudwatch_logs": "AWS CloudWatch Logs",
+        "riskledger": "Risk Ledger",
+        "imap": "IMAP mail",
+        "keen-agent": "Keen Agent",
+        "api-ingesters": "Custom API ingesters",
+    }
+    assert all(label.strip() for label in labels.values())
 
 
 # --- Restoring collection revisions -----------------------------------------------

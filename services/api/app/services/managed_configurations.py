@@ -19,6 +19,7 @@ from app.agents.credentials import LOCK_WAIT_SECONDS, bounded_lock_wait
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.managed_configuration import load_document
+from app.core.source_meta import get_source_meta
 from app.db.models import (
     ControlItem,
     Event,
@@ -950,6 +951,7 @@ def source_catalogue(*, db: Session):
     items.append(
         {
             "adapter": "api-ingesters",
+            "label": "Custom API ingesters",
             "enabled": not settings.demo_mode,
             "mapping_source": False,
             "collection_items": custom_count,
@@ -964,6 +966,8 @@ def source_catalogue(*, db: Session):
     )
     states = {row.source: row for row in db.query(SourceIngestionState).all()}
     for item in items:
+        # The name people know a source by: its ui_name where one is set.
+        item.setdefault("label", get_source_meta(item["adapter"]).label)
         state = states.get(item["adapter"])
         item["paused"] = bool(state and state.paused)
         item["can_pause"] = item["adapter"] in PAUSABLE_SOURCES
