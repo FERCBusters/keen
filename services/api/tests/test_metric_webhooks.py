@@ -225,9 +225,17 @@ def _now():
         "other-timestamp",
     ],
 )
-def test_unsigned_or_mis_signed_submissions_record_nothing(metrics, headers, detail):
+def test_unsigned_or_mis_signed_submissions_record_nothing(
+    metrics, monkeypatch, headers, detail
+):
     body = json.dumps({"value": 42}).encode()
     now = _now()
+    # Keen's clock is held still: a timestamp in whole seconds, one second past
+    # the window, would otherwise fall inside it whenever a second boundary
+    # passed between writing it and checking it.
+    monkeypatch.setattr(
+        signed_webhooks, "time", SimpleNamespace(time=lambda: float(now))
+    )
     stamp = {"TS": str(now), "STALE": str(now - 301), "FUTURE": str(now + 301)}
     signatures = {
         "SIG": signed_webhooks.sign(SECRET, str(now), body),

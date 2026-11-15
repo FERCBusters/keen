@@ -320,7 +320,13 @@ def test_recorded_enrolment_requests_cannot_be_replayed(keen, monkeypatch):
     again = agent.enroll(code)
     assert again.status_code == 201 and again.json()["key_id"] == agent.key_id
     # Proofs outside the five-minute window are refused before anything else.
+    # KEEN's clock is held still: a proof dated in whole seconds, one second
+    # past the window, would otherwise fall inside it whenever a second
+    # boundary passed between dating it and checking it.
     now = int(time.time())
+    monkeypatch.setattr(
+        enrollment_operations, "time", SimpleNamespace(time=lambda: float(now))
+    )
     for created in (now - 301, now + 301):
         stale = agent.enrollment(code, created=created)
         refused = agent.post_enrollment(code, stale)
@@ -328,12 +334,14 @@ def test_recorded_enrolment_requests_cannot_be_replayed(keen, monkeypatch):
             400,
             {"detail": "Key proof is not current; check the machine's clock and retry"},
         )
-    assert (
-        agent.post_enrollment(
-            code, agent.enrollment(code, created=now - 290)
-        ).status_code
-        == 201
-    )
+    # The window's own edges, behind and ahead, are inside it.
+    for created in (now - 300, now + 300):
+        assert (
+            agent.post_enrollment(
+                code, agent.enrollment(code, created=created)
+            ).status_code
+            == 201
+        )
 
     class Down:
         def set(self, *a, **k):
