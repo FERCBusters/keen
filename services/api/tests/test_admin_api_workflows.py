@@ -708,6 +708,8 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
         "gitlab",
         "redmine",
         "riskledger",
+        "op_events",
+        "bitwarden",
     ]
     for source in sources:
         monkeypatch.setattr(tasks, f"ingest_{source}_all_task", Task(source))
@@ -735,10 +737,11 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
         settings, "demo_expires_at", datetime(2999, 1, 1, tzinfo=timezone.utc)
     )
     monkeypatch.setattr(settings, "demo_mode", True)
-    assert (
-        admin.call("POST", "/v1/admin/ingest/redmine/run", status=409)["detail"]
-        == "Source type is unavailable in demo mode"
-    )
+    for source in ("redmine", "op_events", "bitwarden"):
+        assert (
+            admin.call("POST", f"/v1/admin/ingest/{source}/run", status=409)["detail"]
+            == "Source type is unavailable in demo mode"
+        )
     assert (
         admin.call("POST", "/v1/admin/ingest/imap/run", status=409)["detail"]
         == "IMAP collection is disabled"
@@ -747,9 +750,11 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
     assert (
         status["redmine"],
         status["riskledger"],
+        status["op_events"],
+        status["bitwarden"],
         status["imap"],
         status["github"],
-    ) == (False, False, False, False)
+    ) == (False, False, False, False, False, False)
     monkeypatch.setattr(settings, "demo_mode", False)
 
     monkeypatch.setattr(

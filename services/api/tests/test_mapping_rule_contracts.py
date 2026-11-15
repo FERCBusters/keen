@@ -423,6 +423,8 @@ def test_confidence_defaults_and_whole_numbers_are_read_as_fractions():
         ("gitlab", "projects", "p", {"section": "projects", "key": "p"}),
         ("taiga", "projects", 42, {"project_id": 42}),
         ("google_workspace", "streams", "login", {"stream": "login"}),
+        ("op_events", "streams", "signinattempts", {"stream": "signinattempts"}),
+        ("bitwarden", "streams", "events", {"stream": "events"}),
         ("bookstack", "selected_pages", 12, {"page_id": 12}),
         (
             "github",

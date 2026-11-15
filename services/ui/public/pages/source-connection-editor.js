@@ -1,5 +1,9 @@
 import { apiPost, apiPut, errorText } from '/app.js';
-import { sourceFieldGroups, sourceFieldLabel } from './source-connection-fields.js';
+import {
+  sourceFieldDefault,
+  sourceFieldGroups,
+  sourceFieldLabel,
+} from './source-connection-fields.js';
 import { sourceSetupProfile } from './source-setup-profile.js';
 
 // The editor owns credentials; the hub owns navigation and input management.
@@ -82,7 +86,7 @@ export function editSourceConnection({ types, connection = null, onSaved }) {
           parent,
           sourceFieldLabel(key) + (secret && connection ? ' (blank keeps saved value)' : ''),
           ['auth_mode', 'fetch_body'].includes(key) ? 'select' : secret ? 'password' : 'text',
-          secret ? '' : connection?.configuration[key] || '',
+          secret ? '' : connection?.configuration[key] || sourceFieldDefault(source.value, key),
         );
         if (source.value === 'imap') {
           if (key === 'fetch_body') {

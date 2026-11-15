@@ -92,9 +92,20 @@ test('each kind of collection input is named by its own field before Next', asyn
     ['forgejo', 'organizations', 'keen', { org: 'keen', label: 'Keen' }, 'org'],
     ['riskledger', 'organizations', '*', { org: '*', label: 'Suppliers' }, 'org'],
     ['redmine', 'projects', 'ops', { project: 'ops', label: 'Operations' }, 'project'],
+    ['op_events', 'streams', 'auditevents', { stream: 'auditevents', label: 'Vault' }, 'stream'],
+    ['bitwarden', 'streams', 'events', { stream: 'events', label: 'Vault' }, 'stream'],
   ];
   const ui = await editor(t, {
-    sources: ['gitlab', 'forgejo', 'riskledger', 'redmine', 'github', 'keen-agent'],
+    sources: [
+      'gitlab',
+      'forgejo',
+      'riskledger',
+      'redmine',
+      'op_events',
+      'bitwarden',
+      'github',
+      'keen-agent',
+    ],
     collectors: [
       ...inputs.map(([adapter, section, key, entry]) => collection(adapter, section, key, entry)),
       collection('github', 'repos', 'octo/keen', { owner: 'octo', repo: 'keen' }),
@@ -122,12 +133,14 @@ test('each kind of collection input is named by its own field before Next', asyn
   assert.equal(ui.$('status').textContent, 'Give the collection item a name, URL or ID.');
 });
 
-test('Risk Ledger, Redmine and Jenkins inputs explain their identifying fields', async (t) => {
+test('Risk Ledger, Redmine, password manager and Jenkins inputs explain their identifying fields', async (t) => {
   const ui = await editor(t, {
-    sources: ['riskledger', 'redmine', 'jenkins', 'keen-agent'],
+    sources: ['riskledger', 'redmine', 'op_events', 'bitwarden', 'jenkins', 'keen-agent'],
     collectors: [
       collection('riskledger', 'organizations', '*', { org: '*' }),
       collection('redmine', 'projects', 'ops', { project: 'ops' }),
+      collection('op_events', 'streams', 'itemusages', { stream: 'itemusages' }),
+      collection('bitwarden', 'streams', 'events', { stream: 'events' }),
       collection('jenkins', 'jobs', 'deploy', { name: 'deploy', label: 'web', kind: 'deploy' }),
     ],
   });
@@ -148,6 +161,23 @@ test('Risk Ledger, Redmine and Jenkins inputs explain their identifying fields',
     collectorId('redmine', 'projects', 'ops'),
   );
   assert.match(help('project'), /^Project ID or identifier\. Use \* as the sole collection/);
+  await ui.click('close-editor');
+  await ui.openInput(
+    'op_events',
+    'env:op_events',
+    'streams',
+    collectorId('op_events', 'streams', 'itemusages'),
+  );
+  assert.match(help('stream'), /^One of auditevents, itemusages or signinattempts\./);
+  assert.equal(help('label'), undefined);
+  await ui.click('close-editor');
+  await ui.openInput(
+    'bitwarden',
+    'env:bitwarden',
+    'streams',
+    collectorId('bitwarden', 'streams', 'events'),
+  );
+  assert.match(help('stream'), /^Enter events: the organisation event log is the one stream/);
   await ui.click('close-editor');
   await ui.openInput('jenkins', 'env:jenkins', 'jobs', collectorId('jenkins', 'jobs', 'deploy'));
   assert.match(help('kind'), /^Action assigned to Jenkins events from this job/);

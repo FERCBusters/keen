@@ -272,6 +272,8 @@ const sourceGuides = {
   redmine: ['Redmine', 'redmine'],
   bookstack: ['BookStack', 'bookstack'],
   riskledger: ['Risk Ledger', 'riskledger'],
+  op_events: ['1Password', '1password'],
+  bitwarden: ['Bitwarden', 'bitwarden'],
   google_workspace: ['Google Workspace', 'google-workspace'],
   cloudwatch_logs: ['Amazon CloudWatch Logs', 'cloudwatch'],
   aws: ['AWS', 'aws'],

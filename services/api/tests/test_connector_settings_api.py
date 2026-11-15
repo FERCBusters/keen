@@ -146,6 +146,16 @@ REFUSED = [
         "Risk Ledger requires a valid UUID identifier",
     ),
     (
+        "op_events",
+        {"streams": [{"stream": "vaults"}]},
+        "Choose a 1Password stream: auditevents, itemusages or signinattempts",
+    ),
+    (
+        "bitwarden",
+        {"streams": [{"stream": "members"}]},
+        "Bitwarden collects one stream: events",
+    ),
+    (
         "elasticsearch",
         {"queries": [{"name": "audit"}]},
         "Enter an index, alias or data stream pattern",
@@ -191,6 +201,8 @@ def test_settings_that_cannot_run_are_refused(defs, name, document, detail):  # 
             {"organizations": [{"org": RISKLEDGER_ORG, "label": "Customer"}]},
         ),
         ("redmine", {"projects": [{"project": "infra"}]}),
+        ("op_events", {"streams": [{"stream": "signinattempts", "label": "Vault"}]}),
+        ("bitwarden", {"streams": [{"stream": "events"}]}),
         ("taiga", {"projects": [{"id": 12}]}),
         ("bookstack", {"selected_pages": [{"id": 4, "book_id": 2}]}),
         (

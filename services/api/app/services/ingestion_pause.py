@@ -19,6 +19,8 @@ POLLING_SOURCES = frozenset(
         "gitlab",
         "redmine",
         "riskledger",
+        "op_events",
+        "bitwarden",
         "jenkins",
         "taiga",
         "bookstack",

@@ -211,6 +211,7 @@ test('related credentials stay together across source types without changing sec
     [['base_url', 'username'], ['api_token'], ['username', 'api_token']],
     [['provider', 'secret_header'], ['secret'], ['secret_header', 'secret']],
     [['base_url'], ['token_id', 'token_secret'], ['token_id', 'token_secret']],
+    [['base_url', 'identity_url', 'client_id'], ['client_secret'], ['client_id', 'client_secret']],
     [
       ['region'],
       ['aws_access_key_id', 'aws_secret_access_key', 'aws_session_token'],
@@ -230,6 +231,68 @@ test('related credentials stay together across source types without changing sec
   assert.equal(sourceFieldLabel('api_token'), 'API token');
   assert.equal(sourceFieldLabel('sa_json'), 'Service account JSON');
   assert.equal(sourceFieldLabel('future_field'), 'Future field');
+  assert.equal(sourceFieldLabel('identity_url'), 'Identity URL');
+});
+
+test("a new password manager source starts from the vendor's own endpoints", async (t) => {
+  const ui = await loadUi('pages/source-connection-editor.js', {
+    setup(w) {
+      w.HTMLDialogElement.prototype.showModal = function () {};
+    },
+  });
+  t.after(ui.close);
+  const types = [
+    {
+      source: 'bitwarden',
+      label: 'Bitwarden',
+      enabled: true,
+      fields: ['base_url', 'identity_url', 'client_id'],
+      credential_fields: ['client_secret'],
+    },
+    {
+      source: 'op_events',
+      label: '1Password',
+      enabled: true,
+      fields: ['base_url'],
+      credential_fields: ['token'],
+    },
+  ];
+  const value = (dialog, key) => dialog.querySelector(`[data-key="${key}"]`).value;
+  const created = ui.api.editSourceConnection({ types, onSaved: async () => {} });
+  assert.equal(value(created, 'base_url'), 'https://api.bitwarden.com');
+  assert.equal(value(created, 'identity_url'), 'https://identity.bitwarden.com');
+  // Neither the client ID nor a secret is ever filled in.
+  assert.equal(value(created, 'client_id'), '');
+  assert.equal(value(created, 'client_secret'), '');
+  assert.equal(
+    created.querySelector('[data-key="client_secret"]').closest('fieldset').querySelector('legend')
+      .textContent,
+    'Organisation API key',
+  );
+  const source = created.querySelector('select');
+  source.value = 'op_events';
+  source.dispatchEvent(new ui.window.Event('change'));
+  assert.equal(value(created, 'base_url'), 'https://events.1password.com');
+  assert.equal(value(created, 'token'), '');
+  // A saved source shows the endpoints it was saved with.
+  const saved = ui.api.editSourceConnection({
+    types,
+    connection: {
+      id: 'bw',
+      source: 'bitwarden',
+      name: 'Self-hosted',
+      configuration: {
+        base_url: 'https://vault.example/api',
+        identity_url: 'https://vault.example/identity',
+        client_id: 'organization.1',
+      },
+      inputs: {},
+      version: 1,
+    },
+    onSaved: async () => {},
+  });
+  assert.equal(value(saved, 'base_url'), 'https://vault.example/api');
+  assert.equal(value(saved, 'identity_url'), 'https://vault.example/identity');
 });
 
 test('IMAP defaults to headers only and reveals a 4000 character body limit on request', async (t) => {

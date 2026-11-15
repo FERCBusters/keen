@@ -20,6 +20,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import SessionLocal
+from app.ingest.bitwarden import ingest_bitwarden_all
 from app.ingest.bookstack import ingest_bookstack_all
 from app.ingest.cloudwatch_logs import ingest_cloudwatch_logs_all
 from app.ingest.elasticsearch import ingest_elasticsearch_all
@@ -30,6 +31,7 @@ from app.ingest.gitlab import ingest_gitlab_all
 from app.ingest.google_workspace import ingest_google_workspace_all
 from app.ingest.jenkins import ingest_jenkins_all
 from app.ingest.loki import ingest_loki_all
+from app.ingest.op_events import ingest_op_events_all
 from app.ingest.redmine import ingest_redmine_all
 from app.ingest.riskledger import ingest_riskledger_all
 from app.ingest.rss import ingest_rss_all
@@ -669,6 +671,18 @@ def ingest_gitlab_all_task():
 def ingest_redmine_all_task():
     with SessionLocal() as db:
         return ingest_redmine_all(db)
+
+
+@celery_app.task(name="app.worker.tasks.ingest_op_events_all_task")
+def ingest_op_events_all_task():
+    with SessionLocal() as db:
+        return ingest_op_events_all(db)
+
+
+@celery_app.task(name="app.worker.tasks.ingest_bitwarden_all_task")
+def ingest_bitwarden_all_task():
+    with SessionLocal() as db:
+        return ingest_bitwarden_all(db)
 
 
 @celery_app.task(name="app.worker.tasks.evidence_retention_task")

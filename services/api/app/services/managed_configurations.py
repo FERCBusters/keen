@@ -57,6 +57,8 @@ CONNECTORS = {
     "gitea": ("gitea_config_path", "feeds", "url"),
     "redmine": ("redmine_config_path", "projects", "project"),
     "riskledger": ("riskledger_config_path", "organizations", "org"),
+    "op_events": ("op_events_config_path", "streams", "stream"),
+    "bitwarden": ("bitwarden_config_path", "streams", "stream"),
     "gitlab": ("gitlab_config_path", "groups", "group"),
     "cloudwatch_logs": ("cloudwatch_logs_config_path", "queries", "name"),
     "taiga": ("taiga_config_path", "projects", "id"),
@@ -335,6 +337,20 @@ def _validate_connector(name: str, document: dict):
             validate_config(document)
         except RedmineError as exc:
             raise DomainError(400, str(exc)) from None
+    if name == "op_events":
+        from app.ingest.op_events import OnePasswordError, validate_config
+
+        try:
+            validate_config(document)
+        except OnePasswordError as exc:
+            raise DomainError(400, str(exc)) from None
+    if name == "bitwarden":
+        from app.ingest.bitwarden import BitwardenError, validate_config
+
+        try:
+            validate_config(document)
+        except BitwardenError as exc:
+            raise DomainError(400, str(exc)) from None
     key = CONNECTORS[name][1]
     rows = document.get(key, {} if name == "webhooks" else [])
     if name == "webhooks":
@@ -564,6 +580,8 @@ def _collector_key(
     field = {
         "riskledger": "org",
         "redmine": "project",
+        "op_events": "stream",
+        "bitwarden": "stream",
         "jenkins": "name",
         "elasticsearch": "name",
         "loki": "name",
@@ -593,6 +611,8 @@ def _editable_collector(adapter: str, section: str) -> bool:
         "gitlab": {"groups", "users"},
         "riskledger": {"organizations"},
         "redmine": {"projects"},
+        "op_events": {"streams"},
+        "bitwarden": {"streams"},
         "cloudwatch_logs": {"queries"},
         "taiga": {"projects"},
         "google_workspace": {"streams"},
@@ -732,6 +752,8 @@ def get_evidence_definitions(*, db: Session):
         "gitlab": ["groups", "users"],
         "riskledger": ["organizations"],
         "redmine": ["projects"],
+        "op_events": ["streams"],
+        "bitwarden": ["streams"],
         "cloudwatch_logs": ["queries"],
         "taiga": ["projects"],
         "google_workspace": ["streams"],
@@ -839,7 +861,10 @@ def source_catalogue(*, db: Session):
     items: list[dict[str, Any]] = []
     for name in [*CONNECTORS, "imap"]:
         enabled = bool(getattr(settings, f"{name}_enabled", False))
-        if name in ("redmine", "riskledger", "imap") and settings.demo_mode:
+        if (
+            name in ("redmine", "riskledger", "op_events", "bitwarden", "imap")
+            and settings.demo_mode
+        ):
             enabled = False
         count = sum(1 for item in collectors if item["adapter"] == name)
         matching_rules = sum(1 for rule in rules if _reads_type(rule, name))

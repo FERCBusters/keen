@@ -126,6 +126,8 @@ test('every supported source help link resolves to a published guide', async (t)
     'redmine',
     'bookstack',
     'riskledger',
+    'op_events',
+    'bitwarden',
     'google_workspace',
     'cloudwatch_logs',
     'aws',

@@ -599,7 +599,10 @@ def _queue_http_ingest(source, db):
 
     if not getattr(settings, source + "_enabled", False):
         raise DomainError(409, "Source type is disabled")
-    if source in ("redmine", "riskledger") and settings.demo_mode:
+    if (
+        source in ("redmine", "riskledger", "op_events", "bitwarden")
+        and settings.demo_mode
+    ):
         raise DomainError(409, "Source type is unavailable in demo mode")
     if is_paused(db, source):
         raise DomainError(409, "Ingestion is paused")
@@ -748,6 +751,8 @@ def admin_ingest_status(*, user):
             "forgejo": settings.forgejo_enabled,
             "redmine": settings.redmine_enabled and not settings.demo_mode,
             "riskledger": settings.riskledger_enabled and not settings.demo_mode,
+            "op_events": settings.op_events_enabled and not settings.demo_mode,
+            "bitwarden": settings.bitwarden_enabled and not settings.demo_mode,
             "gitlab": settings.gitlab_enabled,
             "gitea": settings.gitea_enabled,
             "jenkins": settings.jenkins_enabled,
@@ -1313,6 +1318,14 @@ def admin_run_redmine_ingest(*, user, db: Session):
 
 def admin_run_riskledger_ingest(*, user, db: Session):
     return _queue_http_ingest("riskledger", db)
+
+
+def admin_run_op_events_ingest(*, user, db: Session):
+    return _queue_http_ingest("op_events", db)
+
+
+def admin_run_bitwarden_ingest(*, user, db: Session):
+    return _queue_http_ingest("bitwarden", db)
 
 
 def _diary_controls(

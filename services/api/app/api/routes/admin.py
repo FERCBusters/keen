@@ -555,3 +555,17 @@ def admin_run_riskledger_ingest(
     user=Depends(require_admin), db: Session = Depends(get_db)
 ):
     return service.admin_run_riskledger_ingest(user=user, db=db)
+
+
+@router.post("/v1/admin/ingest/op_events/run", status_code=202)
+def admin_run_op_events_ingest(
+    user=Depends(require_admin), db: Session = Depends(get_db)
+):
+    return service.admin_run_op_events_ingest(user=user, db=db)
+
+
+@router.post("/v1/admin/ingest/bitwarden/run", status_code=202)
+def admin_run_bitwarden_ingest(
+    user=Depends(require_admin), db: Session = Depends(get_db)
+):
+    return service.admin_run_bitwarden_ingest(user=user, db=db)

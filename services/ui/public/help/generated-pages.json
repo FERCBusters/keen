@@ -1,9 +1,11 @@
 [
+  "administrator-1password.html",
   "administrator-agents.html",
   "administrator-api-ingesters.html",
   "administrator-audit-trail.html",
   "administrator-aws.html",
   "administrator-azure.html",
+  "administrator-bitwarden.html",
   "administrator-bookstack.html",
   "administrator-cloud-posture.html",
   "administrator-cloudwatch.html",

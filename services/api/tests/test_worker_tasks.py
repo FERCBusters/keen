@@ -27,6 +27,8 @@ INGEST_TASKS = [
     ("ingest_gitlab_all_task", "ingest_gitlab_all"),
     ("ingest_redmine_all_task", "ingest_redmine_all"),
     ("ingest_riskledger_all_task", "ingest_riskledger_all"),
+    ("ingest_op_events_all_task", "ingest_op_events_all"),
+    ("ingest_bitwarden_all_task", "ingest_bitwarden_all"),
 ]
 
 MATERIALISE_TASKS = [
@@ -181,6 +183,8 @@ WITH_BLOCK_TASKS = {
     "ingest_gitlab_all_task",
     "ingest_redmine_all_task",
     "ingest_riskledger_all_task",
+    "ingest_op_events_all_task",
+    "ingest_bitwarden_all_task",
 }
 
 

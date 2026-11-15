@@ -32,6 +32,8 @@ HTTP_INGEST_SOURCES = (
     "gitlab",
     "redmine",
     "riskledger",
+    "op_events",
+    "bitwarden",
     "jenkins",
     "taiga",
     "bookstack",
@@ -74,6 +76,8 @@ SOURCE_RUN_SECONDS = {
     "gitlab": settings.gitlab_run_seconds,
     "redmine": settings.redmine_run_seconds,
     "riskledger": settings.riskledger_run_seconds,
+    "op_events": settings.op_events_run_seconds,
+    "bitwarden": settings.bitwarden_run_seconds,
     "jenkins": settings.jenkins_run_seconds,
     "taiga": settings.taiga_run_seconds,
     "bookstack": settings.bookstack_run_seconds,
@@ -117,6 +121,14 @@ celery_app.conf.beat_schedule = {
     "ingest-redmine": {
         "task": "app.worker.tasks.ingest_redmine_all_task",
         "schedule": float(settings.redmine_poll_seconds),
+    },
+    "ingest-op-events": {
+        "task": "app.worker.tasks.ingest_op_events_all_task",
+        "schedule": float(settings.op_events_poll_seconds),
+    },
+    "ingest-bitwarden": {
+        "task": "app.worker.tasks.ingest_bitwarden_all_task",
+        "schedule": float(settings.bitwarden_poll_seconds),
     },
     "ingest-gitlab": {
         "task": "app.worker.tasks.ingest_gitlab_all_task",

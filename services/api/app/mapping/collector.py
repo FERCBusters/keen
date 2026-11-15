@@ -44,7 +44,7 @@ def event_collector(event: dict) -> str | None:
         section, key = info.get("section"), info.get("key")
     elif source == "taiga":
         section, key = "projects", info.get("project_id")
-    elif source == "google_workspace":
+    elif source in ("google_workspace", "op_events", "bitwarden"):
         section, key = "streams", info.get("stream")
     elif source == "bookstack":
         section, key = "selected_pages", info.get("page_id")
@@ -89,6 +89,8 @@ def collector_pointer_filter(identity: str) -> dict:
         "gitea": "feed",
         "taiga": "project_id",
         "google_workspace": "stream",
+        "op_events": "stream",
+        "bitwarden": "stream",
         "bookstack": "page_id",
     }[adapter]
     return {adapter: {field: int(key) if adapter in ("taiga", "bookstack") else key}}

@@ -1,0 +1,13 @@
+# Add the events stream in Admin → Sources & Evidence Mapping → By source.
+# An empty list collects nothing.
+ui_name: Bitwarden
+badge_color: "#175DDC"
+streams: []
+# How far back the first run reads (Bitwarden itself returns 30 days by default).
+initial_lookback_days: 30
+# The event log is read in windows of this many hours, oldest first.
+window_hours: 24
+# Each window reaches back this far, for events clients report late.
+overlap_minutes: 60
+# Pages in one run; a run that reaches the limit keeps its place in the window.
+max_pages: 100

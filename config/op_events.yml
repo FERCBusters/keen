@@ -1,0 +1,11 @@
+# Add streams in Admin → Sources & Evidence Mapping → By source.
+# An empty list collects nothing. Streams: auditevents, itemusages, signinattempts.
+ui_name: 1Password
+badge_color: "#0A6ADB"
+streams: []
+# How far back the first run of a stream reads.
+initial_lookback_days: 7
+# Events per page (1-1000) and pages per stream in one run; a run that reaches
+# the page limit keeps its position and the next run continues.
+page_size: 100
+max_pages: 100

@@ -1578,10 +1578,17 @@ def test_source_wide_definitions_for_file_managed_connections_carry_no_collector
 
 
 def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
-    """Demo mode reports Redmine, Risk Ledger and IMAP as disabled whatever Docker says."""
+    """Demo mode reports the sources that sign in to a supplier, and IMAP, as
+    disabled whatever Docker says."""
     from datetime import datetime, timezone
 
-    for name in ("redmine_enabled", "riskledger_enabled", "imap_enabled"):
+    for name in (
+        "redmine_enabled",
+        "riskledger_enabled",
+        "op_events_enabled",
+        "bitwarden_enabled",
+        "imap_enabled",
+    ):
         monkeypatch.setattr(settings, name, True)
     monkeypatch.setattr(settings, "demo_mode", True)
     monkeypatch.setattr(
@@ -1592,11 +1599,10 @@ def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
 
     assert catalogue.status_code == 200, catalogue.text
     enabled = {item["adapter"]: item["enabled"] for item in catalogue.json()["items"]}
-    assert (enabled["redmine"], enabled["riskledger"], enabled["imap"]) == (
-        False,
-        False,
-        False,
-    )
+    assert [
+        enabled[name]
+        for name in ("redmine", "riskledger", "op_events", "bitwarden", "imap")
+    ] == [False] * 5
     assert (enabled["keen-agent"], enabled["api-ingesters"]) == (False, False)
 
 

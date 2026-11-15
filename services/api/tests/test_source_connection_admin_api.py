@@ -50,7 +50,26 @@ def _connection(source="loki", **changes):
     }
 
 
+def _bitwarden(credentials=None, **configuration):
+    return {
+        "source": "bitwarden",
+        "name": "Company vault",
+        "configuration": {
+            "base_url": "https://vault.example/api",
+            "identity_url": "https://vault.example/identity",
+            "client_id": "organization.3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+            **configuration,
+        },
+        "credentials": credentials or {"client_secret": "synthetic-secret"},
+    }
+
+
 ENDPOINT = "Use an endpoint URL without embedded credentials, query or fragment"
+ONE_PASSWORD_SERVERS = (
+    "Choose a 1Password Events API server: https://events.1password.com, "
+    "https://events.ent.1password.com, https://events.1password.ca, "
+    "https://events.1password.eu"
+)
 REFUSED = [
     ("unknown-type", _connection(source="ftp"), "Unknown source type"),
     (
@@ -140,6 +159,67 @@ REFUSED = [
         "Enter a webhook provider name using letters, numbers, hyphens or underscores",
     ),
     ("blank-name", _connection(name="   "), "A connection name is required"),
+    (
+        "unbalanced-bracket",
+        _connection(configuration={"base_url": "https://[logs.example"}),
+        ENDPOINT,
+    ),
+    (
+        "identity-embedded-user",
+        _bitwarden(identity_url="https://reader@identity.example"),
+        ENDPOINT,
+    ),
+    (
+        "identity-query",
+        _bitwarden(identity_url="https://identity.example/?next=1"),
+        ENDPOINT,
+    ),
+    (
+        "identity-unbalanced-bracket",
+        _bitwarden(identity_url="https://[identity.example"),
+        ENDPOINT,
+    ),
+    (
+        "bitwarden-http-api",
+        _bitwarden(base_url="http://vault.example/api"),
+        "Bitwarden requires HTTPS API and identity URLs",
+    ),
+    (
+        "bitwarden-http-identity",
+        _bitwarden(identity_url="http://vault.example/identity"),
+        "Bitwarden requires HTTPS API and identity URLs",
+    ),
+    (
+        "bitwarden-no-identity",
+        _bitwarden(identity_url=""),
+        "Bitwarden requires HTTPS API and identity URLs",
+    ),
+    (
+        "bitwarden-foreign-credential",
+        _bitwarden(credentials={"token": "t"}),
+        "Unsupported connection field",
+    ),
+    (
+        "1password-other-host",
+        _connection(
+            source="op_events",
+            configuration={"base_url": "https://events.1password.com.attacker.example"},
+        ),
+        ONE_PASSWORD_SERVERS,
+    ),
+    (
+        "1password-http",
+        _connection(
+            source="op_events",
+            configuration={"base_url": "http://events.1password.com"},
+        ),
+        ONE_PASSWORD_SERVERS,
+    ),
+    (
+        "1password-no-server",
+        _connection(source="op_events", configuration={}),
+        ONE_PASSWORD_SERVERS,
+    ),
     (
         "imap-password",
         _connection(
@@ -303,3 +383,107 @@ def test_a_demo_lists_connections_but_cannot_change_or_run_them(admin, monkeypat
     deleted = admin.send("DELETE", f"{ROOT}/{row['id']}", version=row["version"])
     assert (deleted.status_code, deleted.json()["detail"]) == (403, message)
     assert [c["name"] for c in admin.saved()] == ["Production logs"]
+
+
+# --- Password manager event logs ---------------------------------------------
+
+
+def test_password_manager_connections_save_with_their_streams(admin):
+    for body in (
+        {
+            **_bitwarden(),
+            "inputs": {"streams": [{"stream": "events", "label": "Vault"}]},
+        },
+        _connection(
+            source="op_events",
+            configuration={"base_url": "https://events.1password.eu/"},
+            credentials={"token": "synthetic-token"},
+            inputs={"streams": [{"stream": "signinattempts"}]},
+        ),
+    ):
+        created = admin.send("POST", ROOT, body)
+        assert created.status_code == 200, created.text
+        row = created.json()
+        assert row["has_credentials"] is True
+        assert "synthetic" not in created.text
+        assert row["inputs"] == body["inputs"]
+    assert [c["source"] for c in admin.saved()] == ["bitwarden", "op_events"]
+
+
+@pytest.mark.parametrize(
+    "body,detail",
+    [
+        (
+            {**_bitwarden(), "inputs": {"streams": [{"stream": "members"}]}},
+            "Bitwarden collects one stream: events",
+        ),
+        (
+            _connection(
+                source="op_events",
+                configuration={"base_url": "https://events.1password.com"},
+                inputs={"streams": [{"stream": ["auditevents"]}]},
+            ),
+            "Choose a 1Password stream: auditevents, itemusages or signinattempts",
+        ),
+    ],
+    ids=["bitwarden", "1password"],
+)
+def test_streams_a_password_manager_does_not_offer_are_refused(admin, body, detail):
+    refused = admin.send("POST", ROOT, body)
+
+    assert (refused.status_code, refused.json()["detail"]) == (400, detail)
+    assert admin.saved() == []
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"identity_url": "https://identity.attacker.example"},
+        {"base_url": "https://api.attacker.example"},
+    ],
+    ids=["identity", "api"],
+)
+def test_a_saved_bitwarden_secret_never_follows_a_changed_endpoint(admin, change):
+    row = admin.send("POST", ROOT, _bitwarden()).json()
+    path = f"{ROOT}/{row['id']}"
+    moved = _bitwarden(**change)
+
+    # The saved secret is write-only: it is not sent to an endpoint entered
+    # after it, whichever of the two endpoints changes.
+    kept = admin.send("PUT", path, {**moved, "credentials": {}, "version": 1})
+    assert (kept.status_code, kept.json()["detail"]) == (
+        422,
+        "Re-enter or clear the saved credentials when changing the endpoint, "
+        "authentication mode or credential header",
+    )
+    (saved,) = admin.saved()
+    assert saved["configuration"] == _bitwarden()["configuration"]
+
+    # Entering the secret again, or changing only the client ID, is accepted.
+    renamed = _bitwarden(client_id="organization.00000000-0000-4000-8000-000000000000")
+    assert (
+        admin.send(
+            "PUT", path, {**renamed, "credentials": {}, "version": 1}
+        ).status_code
+        == 200
+    )
+    reentered = admin.send("PUT", path, {**moved, "version": 2})
+    assert reentered.status_code == 200, reentered.text
+    assert admin.saved()[0]["configuration"] == moved["configuration"]
+
+
+def test_no_source_type_is_a_key_that_redaction_takes_for_a_secret():
+    # A source's name is a key of its event provenance and of its run results.
+    # One that reads as a secret's name would be replaced there, and with it
+    # the collection item a mapping rule selects.
+    from app.ingest.connections import FIELDS
+    from app.security.redaction import redact_obj
+    from app.services.ingestion_pause import PAUSABLE_SOURCES
+
+    for source in sorted(set(FIELDS) | set(PAUSABLE_SOURCES)):
+        pointer = {source: {"section": "streams", "stream": "events"}}
+        assert redact_obj(pointer) == pointer, source
+    # The property the name "onepassword" would have broken.
+    assert redact_obj({"onepassword": {"stream": "events"}}) == {
+        "onepassword": "REDACTED"
+    }

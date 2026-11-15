@@ -189,13 +189,20 @@ test('a feed source is ready once it has its feed', async (t) => {
   assert.match(empty.textContent, /Add an input to choose what this source collects/);
 });
 
-test('Risk Ledger and Redmine inputs explain their wildcard identifiers', async (t) => {
+test('Risk Ledger, Redmine and password manager inputs explain their identifiers', async (t) => {
   const ui = await hub(t, {
     named: {
-      types: [type('riskledger', 'Risk Ledger'), type('redmine', 'Redmine')],
+      types: [
+        type('riskledger', 'Risk Ledger'),
+        type('redmine', 'Redmine'),
+        type('op_events', '1Password'),
+        type('bitwarden', 'Bitwarden'),
+      ],
       connections: [
         connection({ id: 'rl', source: 'riskledger', name: 'Vendors', inputs: {} }),
         connection({ id: 'rm', source: 'redmine', name: 'Tracker', inputs: {} }),
+        connection({ id: 'op', source: 'op_events', name: 'Company vault', inputs: {} }),
+        connection({ id: 'bw', source: 'bitwarden', name: 'Team vault', inputs: {} }),
       ],
     },
   });
@@ -208,6 +215,10 @@ test('Risk Ledger and Redmine inputs explain their wildcard identifiers', async 
     'Project ID / identifier (or * for all accessible projects)',
     'Label',
   ]);
+  await ui.button(ui.card('Company vault'), 'Add input').onclick();
+  assert.deepEqual(labels(), ['Stream: auditevents, itemusages or signinattempts', 'Label']);
+  await ui.button(ui.card('Team vault'), 'Add input').onclick();
+  assert.deepEqual(labels(), ['Stream: events', 'Label']);
 });
 
 test('clearing the additional settings saves just the entered fields', async (t) => {

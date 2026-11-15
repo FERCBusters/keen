@@ -519,6 +519,8 @@ class Settings(BaseSettings):
     taiga_run_seconds: int = Field(default=900, ge=300, le=86400)
     bookstack_run_seconds: int = Field(default=1800, ge=300, le=86400)
     redmine_run_seconds: int = Field(default=480, ge=300, le=86400)
+    op_events_run_seconds: int = Field(default=600, ge=300, le=86400)
+    bitwarden_run_seconds: int = Field(default=600, ge=300, le=86400)
     riskledger_run_seconds: int = Field(default=2100, ge=1980, le=86400)
     rss_run_seconds: int = Field(default=600, ge=300, le=86400)
 
@@ -630,6 +632,22 @@ class Settings(BaseSettings):
     redmine_api_key: str = ""
     redmine_config_path: str = "/app/config/redmine.yml"
     redmine_poll_seconds: int = Field(default=600, ge=60, le=86400)
+
+    # 1Password Events API (one of 1Password's own servers; bearer token).
+    op_events_enabled: bool = False
+    op_events_base_url: str = "https://events.1password.com"
+    op_events_token: str = ""
+    op_events_config_path: str = "/app/config/op_events.yml"
+    op_events_poll_seconds: int = Field(default=900, ge=60, le=86400)
+
+    # Bitwarden Public API (organisation API key; cloud or self-hosted).
+    bitwarden_enabled: bool = False
+    bitwarden_base_url: str = "https://api.bitwarden.com"
+    bitwarden_identity_url: str = "https://identity.bitwarden.com"
+    bitwarden_client_id: str = ""
+    bitwarden_client_secret: str = ""
+    bitwarden_config_path: str = "/app/config/bitwarden.yml"
+    bitwarden_poll_seconds: int = Field(default=900, ge=60, le=86400)
 
     gitlab_enabled: bool = False
     gitlab_base_url: str = "https://gitlab.com"

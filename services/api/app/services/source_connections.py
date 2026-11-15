@@ -105,16 +105,23 @@ def validate(payload):
         _validate_connector(payload.source, payload.inputs)
     _safe_document(payload.inputs)
     url = payload.configuration.get("base_url")
-    if url:
-        parsed = urlsplit(url)
-        if (
-            parsed.scheme not in ("http", "https")
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-            or parsed.query
-            or parsed.fragment
-        ):
+    for endpoint in (url, payload.configuration.get("identity_url")):
+        if not endpoint:
+            continue
+        try:
+            parsed = urlsplit(endpoint)
+            valid = (
+                parsed.scheme in ("http", "https")
+                and parsed.hostname
+                and not parsed.username
+                and not parsed.password
+                and not parsed.query
+                and not parsed.fragment
+            )
+        except ValueError:
+            # Unbalanced brackets, for one, are refused by the URL parser.
+            valid = False
+        if not valid:
             raise DomainError(
                 422,
                 "Use an endpoint URL without embedded credentials, query or fragment",
@@ -123,6 +130,19 @@ def validate(payload):
         not url or urlsplit(url).scheme != "https"
     ):
         raise DomainError(422, "Elasticsearch requires an HTTPS endpoint")
+    if payload.source == "op_events":
+        from app.ingest.op_events import SERVERS
+
+        # The token is sent to 1Password's own Events API servers alone.
+        if (url or "").strip().rstrip("/") not in SERVERS:
+            raise DomainError(
+                422, "Choose a 1Password Events API server: " + ", ".join(SERVERS)
+            )
+    if payload.source == "bitwarden" and any(
+        urlsplit(payload.configuration.get(name) or "").scheme != "https"
+        for name in ("base_url", "identity_url")
+    ):
+        raise DomainError(422, "Bitwarden requires HTTPS API and identity URLs")
     if payload.configuration.get("auth_mode", "token") not in (
         "",
         "token",
@@ -192,7 +212,7 @@ def create(*, payload: ConnectionInput, db):
 
 
 # Fields that decide where, or how, stored credentials are presented upstream.
-DESTINATION_FIELDS = ("base_url", "auth_mode", "header_name")
+DESTINATION_FIELDS = ("base_url", "identity_url", "auth_mode", "header_name")
 
 
 def _destination(configuration, source=None):

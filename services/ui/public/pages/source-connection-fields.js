@@ -8,6 +8,9 @@ const labels = {
   poll_interval_minutes: 'Collection interval (minutes, 5-1,440 in steps of 5)',
   body_max_chars: 'Maximum body characters (1-65,536)',
   base_url: 'Base URL',
+  identity_url: 'Identity URL',
+  client_id: 'Client ID',
+  client_secret: 'Client secret',
   username: 'Username',
   password: 'Password',
   header_name: 'Header name',
@@ -35,12 +38,26 @@ const groups = [
   { label: 'Account credentials', keys: ['username', 'password', 'api_token'] },
   { label: 'HTTP header', keys: ['header_name', 'header_value'] },
   { label: 'API credentials', keys: ['token_id', 'token_secret'] },
+  { label: 'Organisation API key', keys: ['client_id', 'client_secret'] },
   { label: 'Webhook authentication', keys: ['secret_header', 'secret'] },
   {
     label: 'AWS credentials',
     keys: ['aws_access_key_id', 'aws_secret_access_key', 'aws_session_token'],
   },
 ];
+
+// The vendor's own endpoints, offered when a new source is set up.
+const defaults = {
+  op_events: { base_url: 'https://events.1password.com' },
+  bitwarden: {
+    base_url: 'https://api.bitwarden.com',
+    identity_url: 'https://identity.bitwarden.com',
+  },
+};
+
+export function sourceFieldDefault(source, key) {
+  return defaults[source]?.[key] || '';
+}
 
 export function sourceFieldLabel(key) {
   return labels[key] || key.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase());
