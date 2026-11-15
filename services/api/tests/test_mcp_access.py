@@ -15,7 +15,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.api.mcp import provider, runtime, server
 from app.api.routes import mcp as mcp_routes
@@ -39,7 +39,9 @@ from app.services.errors import DomainError
 from fastapi.testclient import TestClient
 
 from tests.test_assembled_authority_regressions import BASE, PASSWORD
-from tests.test_assembled_authority_regressions import keen as keen  # noqa: F401 - fixture
+from tests.test_assembled_authority_regressions import (
+    keen as keen,  # noqa: F401 - fixture
+)
 
 REDIRECT = "http://127.0.0.1:33418/callback"
 FW = settings.default_framework_slug

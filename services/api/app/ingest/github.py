@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
+import httpx2 as httpx
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import to_utc_naive, utc_now_naive

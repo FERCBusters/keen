@@ -1,5 +1,8 @@
 # Catalogue provenance and licences
 
+These catalogues ship inside `release_seeds.json.gz`. The source files named
+below are kept with the test fixtures in `tests/fixtures/catalogues/`.
+
 ## SOC 2 Trust Services Criteria — Open Security Architecture
 
 `soc2-tsc-2017.json` is adapted from Open Security Architecture:

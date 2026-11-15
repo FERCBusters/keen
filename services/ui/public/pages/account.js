@@ -55,7 +55,6 @@ const prefNotificationDelivery = document.getElementById('prefNotificationDelive
 const prefNotificationHelp = document.getElementById('prefNotificationHelp');
 
 // Inline feedback next to the "Save preferences" button (useful when the page is scrolled).
-const prefsSaveBtn = document.getElementById('prefsSaveBtn');
 const prefsSaveToast = document.getElementById('prefsSaveToast');
 let prefsSaveToastTimer = null;
 
@@ -303,7 +302,6 @@ await loadDefaultFrameworkOptions(me);
 // ---------------------------------------------------------------------------
 
 let sourceColorsLoaded = false;
-let sourceColorsDirty = false;
 let sourceColorOverrides =
   me?.preferences?.source_colors && typeof me.preferences.source_colors === 'object'
     ? { ...me.preferences.source_colors }
@@ -391,7 +389,6 @@ function bindSourceColorsEvents() {
       // If user picks the default color, treat it as "no override".
       if (def && c === def) delete sourceColorOverrides[src];
       else sourceColorOverrides[src] = c;
-      sourceColorsDirty = true;
       updateSourceColorRow(src);
     }
   });
@@ -412,7 +409,6 @@ function bindSourceColorsEvents() {
       }
       if (def && c === def) delete sourceColorOverrides[src];
       else sourceColorOverrides[src] = c;
-      sourceColorsDirty = true;
       updateSourceColorRow(src);
     }
   });
@@ -422,7 +418,6 @@ function bindSourceColorsEvents() {
     if (!btn) return;
     const src = btn.getAttribute('data-src-reset');
     delete sourceColorOverrides[src];
-    sourceColorsDirty = true;
     updateSourceColorRow(src);
   });
 }
@@ -457,7 +452,6 @@ if (sourceColorsResetAll) {
     )
       return;
     sourceColorOverrides = {};
-    sourceColorsDirty = true;
     loadSourceColors();
   });
 }

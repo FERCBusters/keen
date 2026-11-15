@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import app.services.artifacts as artifacts_operations
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.config import settings
 from app.ingest import bookstack, forgejo, gitea, gitea_compatible, http

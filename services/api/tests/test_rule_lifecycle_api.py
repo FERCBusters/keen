@@ -1,9 +1,9 @@
 """Mapping-rule maintenance through the assembled application.
 
 These operations decide which evidence counts toward a control after rules
-change: previewing a rule, reviewing and pruning stale rule mappings, queueing,
-inspecting and cancelling backfills, deleting rules, restoring configuration
-revisions, exporting rules and sampling event fields. Requests pass through the
+change: previewing a rule, queueing, inspecting and cancelling backfills,
+deleting rules, restoring rule revisions, exporting rules and sampling event
+fields. Requests pass through the
 production middleware, password sign-in, CSRF and the administrator check.
 """
 
@@ -23,7 +23,6 @@ from app.worker import rule_backfill, tasks
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
-    BASE,
     keen,  # noqa: F401
     unsafe,
 )
@@ -219,221 +218,6 @@ def test_a_rule_collection_would_skip_is_refused_when_saved(lab, entry, detail):
     assert (refused.status_code, refused.json()["detail"]) == (400, detail)
     assert lab.version() == before
     assert "typo" not in lab.rule_ids()
-
-
-# --- Stale rule mappings -------------------------------------------------------
-
-
-@pytest.fixture
-def stale(lab):
-    """A supported rule mapping, two stale ones, a manual one and another source."""
-    lab.put(_rule(action="deploy"))
-    deploy = lab.event("deploy")
-    rollback = lab.event("rollback")
-    elsewhere = lab.event("deploy", source="elsewhere")
-    return SimpleNamespace(
-        deploy=deploy,
-        rollback=rollback,
-        supported=lab.mapping(deploy, "A.1"),
-        # The rule targets A.1 only.
-        wrong_control=lab.mapping(deploy, "A.2"),
-        # The rule asks for deploy events.
-        no_longer_matches=lab.mapping(rollback, "A.1"),
-        manual=lab.mapping(rollback, "A.2", method="manual"),
-        # No rule covers this source, but it lies outside a review of "ci".
-        other_source=lab.mapping(elsewhere, "A.2"),
-    )
-
-
-def _review(lab, source="ci", **params):
-    response = lab.admin.get(
-        "/v1/admin/stale-rule-mappings", params={"source": source, **params}
-    )
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
-def _prune(lab, ids, *, version=None, source="ci", client=None, headers=None):
-    client = client or lab.admin
-    return client.post(
-        "/v1/admin/stale-rule-mappings/prune",
-        json={
-            "version": lab.version() if version is None else version,
-            "source": source,
-            "mapping_ids": [str(i) for i in ids],
-        },
-        headers=unsafe(client) if headers is None else headers,
-    )
-
-
-def test_stale_review_lists_only_rule_mappings_no_current_rule_supports(lab, stale):
-    review = _review(lab)
-
-    assert sorted(review["stale"], key=lambda item: item["ref"]) == [
-        {
-            "mapping_id": str(stale.no_longer_matches.id),
-            "event_id": str(stale.rollback.id),
-            "summary": "rollback on ci",
-            "framework": FW,
-            "ref": "A.1",
-        },
-        {
-            "mapping_id": str(stale.wrong_control.id),
-            "event_id": str(stale.deploy.id),
-            "summary": "deploy on ci",
-            "framework": FW,
-            "ref": "A.2",
-        },
-    ]
-    # Manual mappings and other sources are never examined.
-    assert review["examined"] == 3
-    assert review["version"] == lab.version()
-    assert review["next_offset"] is None
-
-
-def test_prune_removes_exactly_the_reviewed_stale_mappings(lab, stale):
-    review = _review(lab)
-    response = _prune(
-        lab, [item["mapping_id"] for item in review["stale"]], version=review["version"]
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json() == {"deleted": 2}
-    assert lab.mapping_ids() == {
-        stale.supported.id,
-        stale.manual.id,
-        stale.other_source.id,
-    }
-    assert _review(lab)["stale"] == []
-
-
-def test_prune_rechecks_every_id_and_removes_nothing_when_one_is_still_supported(
-    lab, stale
-):
-    # A client can submit any IDs; the server re-evaluates all of them first.
-    before = lab.mapping_ids()
-    response = _prune(lab, [stale.no_longer_matches.id, stale.supported.id])
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "At least one mapping is now valid. Preview again."
-    )
-    assert lab.mapping_ids() == before
-
-
-@pytest.mark.parametrize("submitted", ["manual", "other_source", "unknown"])
-def test_prune_never_removes_manual_or_out_of_scope_mappings(lab, stale, submitted):
-    target = uuid.uuid4() if submitted == "unknown" else getattr(stale, submitted).id
-    before = lab.mapping_ids()
-    response = _prune(lab, [stale.no_longer_matches.id, target])
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "Mappings changed since the review. Preview again."
-    )
-    assert lab.mapping_ids() == before
-
-
-def test_prune_refuses_a_review_made_before_the_rules_changed(lab, stale):
-    review = _review(lab)
-    # The edit makes the rollback mapping valid again.
-    lab.put(_rule(action="rollback"))
-    before = lab.mapping_ids()
-
-    response = _prune(
-        lab, [item["mapping_id"] for item in review["stale"]], version=review["version"]
-    )
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Rules changed since the review. Preview again."
-    assert lab.mapping_ids() == before
-
-
-@pytest.mark.parametrize(
-    "submit,source,detail",
-    [
-        (lambda s: [], "ci", "Review 1-500 mapping IDs for a source first"),
-        (
-            lambda s: [uuid.uuid4() for _ in range(501)],
-            "ci",
-            "Review 1-500 mapping IDs for a source first",
-        ),
-        (
-            lambda s: [s.no_longer_matches.id],
-            "   ",
-            "Review 1-500 mapping IDs for a source first",
-        ),
-        (lambda s: ["not-a-uuid"], "ci", "Invalid mapping ID"),
-        (lambda s: [s.no_longer_matches.id] * 2, "ci", "Duplicate mapping IDs"),
-    ],
-    ids=["none", "too-many", "blank-source", "malformed", "duplicate"],
-)
-def test_prune_rejects_malformed_requests_before_deleting(
-    lab, stale, submit, source, detail
-):
-    before = lab.mapping_ids()
-
-    response = _prune(lab, submit(stale), source=source)
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == detail
-    assert lab.mapping_ids() == before
-
-
-@pytest.mark.parametrize(
-    "params",
-    [{"source": ""}, {"source": "x" * 129}, {"offset": -1}, {"offset": 100_001}],
-    ids=["blank-source", "long-source", "negative-offset", "huge-offset"],
-)
-def test_stale_review_rejects_unbounded_requests(lab, params):
-    response = lab.admin.get(
-        "/v1/admin/stale-rule-mappings", params={"source": "ci", **params}
-    )
-    assert response.status_code == 400
-    assert response.json()["detail"] == (
-        "Choose a source and an offset between 0 and 100000"
-    )
-
-
-def test_stale_review_pages_through_every_mapping_without_overlap(lab):
-    lab.put(_rule(action="deploy"))
-    # 501 stale mappings: one more than a page.
-    for _ in range(501):
-        lab.mapping(lab.event("rollback", commit=False), "A.1", commit=False)
-    lab.db.commit()
-
-    first = _review(lab)
-    assert (first["examined"], first["next_offset"]) == (500, 500)
-    second = _review(lab, offset=first["next_offset"])
-    assert (second["examined"], second["next_offset"]) == (1, None)
-
-    seen = [item["mapping_id"] for item in first["stale"] + second["stale"]]
-    assert len(seen) == len(set(seen)) == 501
-    assert set(seen) == {str(i) for i in lab.mapping_ids()}
-
-
-def test_stale_mapping_maintenance_requires_an_administrator(keen, lab, stale):  # noqa: F811 - fixture imported above
-    reader = keen.client(keen.user(*BROAD_PERMISSIONS))
-    review = reader.get("/v1/admin/stale-rule-mappings", params={"source": "ci"})
-    assert (review.status_code, review.json()) == (
-        403,
-        {"detail": "Admin role required"},
-    )
-    before = lab.mapping_ids()
-
-    assert _prune(lab, [stale.no_longer_matches.id], client=reader).status_code == 403
-    # An administrator's session cookie alone cannot prune: the CSRF token and
-    # the request origin are both checked.
-    missing_token = _prune(lab, [stale.no_longer_matches.id], headers={"Origin": BASE})
-    foreign_origin = _prune(
-        lab,
-        [stale.no_longer_matches.id],
-        headers={**unsafe(lab.admin), "Origin": "https://attacker.example"},
-    )
-    for response in (missing_token, foreign_origin):
-        assert response.status_code == 403
-        assert response.json()["detail"] == "CSRF token missing or invalid"
-    assert lab.mapping_ids() == before
 
 
 # --- Backfill jobs -------------------------------------------------------------
@@ -713,51 +497,6 @@ def test_deleting_a_rule_needs_the_current_version_and_stops_future_mapping(lab)
     assert common.apply_rules(lab.db, rollback) == 1
     lab.db.commit()
     assert lab.mapped(deploy) == set() and lab.mapped(rollback) == {"A.2"}
-
-
-def test_restoring_a_rules_revision_replaces_the_document_once_versions_agree(lab):
-    lab.put(_rule("deploys", action="deploy"))
-    first = lab.version()
-    lab.put(_rule("rollbacks", action="rollback"))
-    current = lab.version()
-
-    def revisions():
-        listing = lab.admin.get("/v1/admin/configuration-revisions/rules")
-        return [item["version"] for item in listing.json()["items"]]
-
-    def restore(revision, version, name="rules"):
-        return lab.admin.post(
-            f"/v1/admin/configuration-revisions/{name}/{revision}/restore",
-            json={"version": version},
-            headers=unsafe(lab.admin),
-        )
-
-    assert revisions() == [current, first]
-    refused = restore(first, current - 1)
-    assert (refused.status_code, refused.json()) == (
-        409,
-        {"detail": "Configuration changed in another session. Reload before saving."},
-    )
-    assert lab.rule_ids() == ["deploys", "rollbacks"]
-
-    restored = restore(first, current)
-    assert restored.status_code == 200 and restored.json() == {"version": current + 1}
-    assert lab.rule_ids() == ["deploys"]
-    # The restore is itself a revision, so it can be undone.
-    assert revisions() == [current + 1, current, first]
-
-    missing = restore(99, current + 1)
-    assert missing.status_code == 404
-    assert missing.json()["detail"] == "Revision not found"
-    unknown = restore(1, current + 1, name="no-such-configuration")
-    assert unknown.status_code == 404
-    assert unknown.json()["detail"] == "Unknown configuration"
-    listing = lab.admin.get("/v1/admin/configuration-revisions/no-such-configuration")
-    assert (listing.status_code, listing.json()) == (
-        404,
-        {"detail": "Unknown configuration"},
-    )
-    assert lab.version() == current + 1
 
 
 # --- Export and event samples --------------------------------------------------

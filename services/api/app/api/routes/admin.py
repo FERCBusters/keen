@@ -18,7 +18,6 @@ from app.schemas import (
     ClauseControlLinksPayload,
     ClauseEvidenceUrlsPayload,
     ControlClauseLinksPayload,
-    ControlImportPayload,
     ControlJustificationPayload,
     GroupCreatePayload,
     GroupDetailOut,
@@ -41,16 +40,6 @@ from app.services.presentation import normalize_diary_links as _normalize_diary_
 from app.services.presentation import parse_iso_dt as _parse_iso_dt
 
 router = Router()
-
-
-@router.post("/v1/admin/controls/import")
-def admin_import_controls(
-    payload: ControlImportPayload,
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-
-    return service.admin_import_controls(payload=payload, user=user, db=db)
 
 
 @router.patch("/v1/admin/controls/{control_id}/clauses")

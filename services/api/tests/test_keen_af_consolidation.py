@@ -6,7 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "alembic"
 SEEDS = json.loads(gzip.decompress((ROOT / "release_seeds.json.gz").read_bytes()))
-PAIRS = json.loads((ROOT / "catalogues/keen-af-consolidation.json").read_text())
+FIXTURES = Path(__file__).resolve().parent / "fixtures/catalogues"
+PAIRS = json.loads((FIXTURES / "keen-af-consolidation.json").read_text())
 SLUG = "KEEN-AF:1.0"
 
 
@@ -57,9 +58,7 @@ def test_release_attribution_and_risk_references():
 
 
 def test_semantic_consolidation_preserves_requirements_and_provenance():
-    pairs = json.loads(
-        (ROOT / "catalogues/keen-af-semantic-consolidation.json").read_text()
-    )
+    pairs = json.loads((FIXTURES / "keen-af-semantic-consolidation.json").read_text())
     assert {(p["remove"], p["keep"]) for p in pairs} == {
         ("IAC-84", "IAC-7"),
         ("RSK-38", "RSK-36"),

@@ -40,7 +40,6 @@ ACCESS_PREFIX = "kat_"
 REFRESH_PREFIX = "krt_"
 CODE_PREFIX = "kac_"
 CONSENT_PREFIX = "kcr_"
-CLIENT_PREFIX = "kmc_"
 
 _SECRET_BYTES = 32
 _SECRET_LENGTH = 43  # token_urlsafe(32)

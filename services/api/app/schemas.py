@@ -5,7 +5,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.core.config import settings
 from app.security.auth import ROLE_NORMAL
 from app.security.rate_limit import login_name
 from app.services.framework_catalogue import FrameworkListItem as FrameworkListItem
@@ -113,23 +112,6 @@ class UserOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
-
-
-class ControlImportItem(BaseModel):
-    type: str = Field(description="clause|annex_control|custom")
-    ref: str
-    title: str | None = None
-    in_scope: bool = True
-    tags: dict = Field(default_factory=dict)
-    metadata: dict = Field(default_factory=dict)
-
-
-class ControlImportPayload(BaseModel):
-    framework: str = settings.default_framework_slug
-    framework_name: str | None = None
-    framework_version: str | None = None
-    framework_url: str | None = None
-    items: list[ControlImportItem]
 
 
 class OwnersPayload(BaseModel):

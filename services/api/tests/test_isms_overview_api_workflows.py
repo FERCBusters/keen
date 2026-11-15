@@ -96,15 +96,6 @@ def isms(keen):  # noqa: F811 - fixture imported above
         "POST", "/v1/isms/objectives", {"requirement": "Train staff", "goal": "Annual"}
     )
     document = manage("POST", "/v1/isms/documents", {"title": "Security policy"})
-    process = manage(
-        "POST",
-        "/v1/isms/business-processes",
-        {"name": f"  {HOSTILE}  ", "description": "Monthly", "sort_order": 2},
-    )
-    assert process["name"] == HOSTILE
-    manage("POST", "/v1/isms/business-processes", {"name": "  "}, status=400)
-    listed = manage("GET", "/v1/isms/business-processes")["items"]
-    assert [item["name"] for item in listed] == [HOSTILE]
     licence = manage("POST", "/v1/isms/licenses", {"name": "Enterprise seat"})
     asset = manage(
         "POST",
@@ -257,7 +248,6 @@ def test_summary_counts_and_lists_each_register(isms):
         "effectiveness_measures": 1,  # framework A only
         "effectiveness_metric_entries": 1,
         "meetings": 2,
-        "business_processes": 1,
     }
     assert {o["id"] for o in summary["objectives"]} == {
         isms.objective["id"],

@@ -227,7 +227,7 @@ class ArtifactKey(str):
     """An object key that also carries the S3 version its stored URI selects.
 
     As a string it is the object key, so callers hand it straight to the read
-    and presign helpers, which use the version when one is present.
+    helper, which uses the version when one is present.
     """
 
     version_id: str | None
@@ -294,22 +294,6 @@ def iter_stream(body, chunk_size: int = 1024 * 1024) -> Generator[bytes, None, N
             yield chunk
     finally:
         body.close()
-
-
-def presign_get_url(bucket: str, key: str, expires_in: int = 900) -> str:
-    """Optionally generate a presigned GET URL (not required by the UI)."""
-    _guard_bucket(bucket)
-    c = _client()
-    version = getattr(key, "version_id", None)
-    return c.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": bucket,
-            "Key": str(key),
-            **({"VersionId": version} if version else {}),
-        },
-        ExpiresIn=expires_in,
-    )
 
 
 class UnpinnedVersionedObject(ValueError):

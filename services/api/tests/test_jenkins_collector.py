@@ -4,7 +4,7 @@ import contextlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.datetime_utils import to_utc_naive
 from app.ingest import jenkins as jk
@@ -18,8 +18,8 @@ def serving(handler):
     def fake_client(**kwargs):
         captured["kwargs"] = kwargs
         return contextlib.nullcontext(
-            __import__("httpx").Client(
-                transport=__import__("httpx").MockTransport(handler),
+            __import__("httpx2").Client(
+                transport=__import__("httpx2").MockTransport(handler),
                 follow_redirects=False,
                 base_url="https://jenkins.example",
             )
@@ -57,7 +57,7 @@ def test_timestamp_normalisation():
 
 def test_client_configuration_and_monitored_auth():
     with serving(
-        lambda request: __import__("httpx").Response(200, json={})
+        lambda request: __import__("httpx2").Response(200, json={})
     ) as captured:
         with (
             patch.object(jk.settings, "jenkins_base_url", "https://jenkins.example"),
@@ -92,7 +92,7 @@ def test_ingest_job_uses_cursor_and_classifies_outcomes(db):
             {"number": 4, "building": True, "timestamp": 1_760_000_003_000},
         ]
     }
-    with serving(lambda request: __import__("httpx").Response(200, json=job)):
+    with serving(lambda request: __import__("httpx2").Response(200, json=job)):
         stored = []
         cursor = MagicMock(last_ts=None)
         with (
@@ -128,7 +128,7 @@ def test_ingest_job_skips_seen_and_unknown_timestamp_builds(db):
             {"number": 0, "building": False},
         ]
     }
-    with serving(lambda request: __import__("httpx").Response(200, json=job)):
+    with serving(lambda request: __import__("httpx2").Response(200, json=job)):
         stored = []
         cursor = MagicMock(last_ts=None)
         with (
@@ -148,7 +148,7 @@ def test_ingest_job_skips_seen_and_unknown_timestamp_builds(db):
 
 def test_ingest_job_cursor_blocks_old_builds(db):
     job = {"builds": [build(2, "SUCCESS"), build(1, "FAILURE")]}
-    with serving(lambda request: __import__("httpx").Response(200, json=job)):
+    with serving(lambda request: __import__("httpx2").Response(200, json=job)):
         cursor = MagicMock(
             last_ts=datetime(2026, 10, 10, 0, 0, 0),
             isoformat=lambda: "2026-10-10T00:00:00",
@@ -286,7 +286,7 @@ def test_cursor_creation_upserts_then_reads_the_row(db):
 
 def test_deduplicated_builds_count_for_nothing_but_advance_the_cursor(db):
     job = {"builds": [build(2, "SUCCESS", timestamp=1_760_000_005_000), build(1)]}
-    with serving(lambda request: __import__("httpx").Response(200, json=job)):
+    with serving(lambda request: __import__("httpx2").Response(200, json=job)):
         cursor = MagicMock(last_ts=None)
         with (
             patch.object(jk.settings, "jenkins_base_url", "https://jenkins.example"),

@@ -11,11 +11,10 @@ import io
 import json
 import re
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlClauseLink,
     ControlItem,
@@ -169,6 +168,14 @@ def events(keen):  # noqa: F811 - fixture imported above
         ({"control": "A.5.15"}, ["Access reviewed by hand", "Admin login reviewed"]),
         ({"control": "A.9.99"}, []),
         ({"clause": "9.2"}, ["Nightly backup & restore"]),
+        # A time with an offset is compared as the UTC instant it names.
+        (
+            {"system": "okta", "start_ts": "2026-03-01T01:00:00+01:00"},
+            ["Access reviewed elsewhere", "Admin login reviewed"],
+        ),
+        ({"system": "okta", "start_ts": "2026-03-01T00:00:00-01:00"}, []),
+        # A time without an offset is read as UTC.
+        ({"system": "okta", "start_ts": "2026-03-01T00:00:01"}, []),
         (
             {"unmapped": "true"},
             [
@@ -789,26 +796,6 @@ def test_a_stopped_export_is_reported(events, monkeypatch):
         exported["detail"]
         == "Export incomplete: 3 of 8 events were exported before the export reached its time limit; narrow the date range or filters and export again"
     )
-
-
-def test_the_ticker_shows_newer_arrivals_with_bounded_summaries(events):
-    long_summary = "Deploy " + "x" * 300 + " password=hunter2"
-    newest = events.db.query(Event).filter_by(summary="Unmapped heartbeat").one()
-    newest.summary = long_summary
-    newest.created_at = utc_now_naive() + timedelta(seconds=5)
-    events.db.commit()
-
-    response = events.reader.get("/v1/evidence/latest", params={"limit": 2})
-
-    assert response.status_code == 200, response.text
-    first = response.json()["events"][0]
-    assert first["id"] == str(newest.id)
-    assert len(first["summary"]) == 218 and first["summary"].endswith("…")
-    later = events.reader.get(
-        "/v1/evidence/latest",
-        params={"after": (newest.created_at + timedelta(seconds=1)).isoformat()},
-    ).json()
-    assert later["events"] == []
 
 
 def test_incidents_need_their_own_permissions(events):

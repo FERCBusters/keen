@@ -3,7 +3,7 @@
 import socket
 import ssl
 
-import httpx
+import httpx2 as httpx
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 
 

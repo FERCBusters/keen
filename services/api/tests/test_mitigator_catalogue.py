@@ -17,8 +17,8 @@ from app.services.mitigator_catalogue import rank_library
 from app.services.risk_mitigator import analyse_risk_mitigation
 from sqlalchemy.orm import Session
 
-RISKS = json.loads((ROOT / "alembic/seed_assurance_risks.json").read_text())
-FRAMEWORKS = json.loads((ROOT / "alembic/seed_frameworks.json").read_text())
+RISKS = json.loads((ROOT / "tests/fixtures/seed_assurance_risks.json").read_text())
+FRAMEWORKS = json.loads((ROOT / "tests/fixtures/seed_frameworks.json").read_text())
 RULES = yaml.safe_load((ROOT.parents[1] / "config/risk_mitigator.yml").read_text())
 
 

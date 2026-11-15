@@ -6,7 +6,7 @@ import json
 from types import SimpleNamespace
 
 import app.services.managed_configurations as managed_configurations_operations
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.config import settings
 from app.db.models import (

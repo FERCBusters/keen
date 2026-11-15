@@ -80,7 +80,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "ISMS",
-        "description": "ISMS objectives, documents, organisation chart, assets, application configuration matrix, meetings and Statement of Applicability.",
+        "description": "ISMS objectives, documents, organisation chart, assets, meetings and Statement of Applicability.",
     },
     {
         "name": "Assurance",

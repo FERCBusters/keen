@@ -17,7 +17,6 @@ from app.services.managed_configurations import (
     ControlSuggestionInput,
     DocumentInput,
     EvidenceDefinitionInput,
-    PruneInput,
     RestoreInput,
     RuleInput,
     SourcePauseInput,
@@ -246,38 +245,6 @@ def restore_rule_revision(
     return service.restore_rule_revision(
         rule_id=rule_id, revision=revision, payload=payload, user=user, db=db
     )
-
-
-@router.get("/v1/admin/configuration-revisions/{name}")
-def list_revisions(name: str, db: Session = Depends(get_db)):
-    return service.list_revisions(name=name, db=db)
-
-
-@router.post("/v1/admin/configuration-revisions/{name}/{revision}/restore")
-def restore_revision(
-    name: str,
-    revision: int,
-    payload: RestoreInput,
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.restore_revision(
-        name=name, revision=revision, payload=payload, user=user, db=db
-    )
-
-
-@router.get("/v1/admin/stale-rule-mappings")
-def preview_stale_rule_mappings(
-    source: str, offset: int = 0, db: Session = Depends(get_db)
-):
-    "Review one bounded page of a source's rule mappings; manual mappings stay out."
-    return service.preview_stale_rule_mappings(source=source, offset=offset, db=db)
-
-
-@router.post("/v1/admin/stale-rule-mappings/prune")
-def prune_stale_rule_mappings(payload: PruneInput, db: Session = Depends(get_db)):
-    "Recheck reviewed IDs against current rules before removing rule mappings."
-    return service.prune_stale_rule_mappings(payload=payload, db=db)
 
 
 @router.get("/v1/admin/rule-backfills/{job_id}")

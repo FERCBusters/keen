@@ -8,7 +8,7 @@ from copy import deepcopy
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
+import httpx2 as httpx
 import yaml
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
@@ -41,7 +41,6 @@ from app.mapping.rules import (
     parse_rules,
     rule_problem,
 )
-from app.mapping.targets import resolve_targets
 from app.security.diary_visibility import diary_filter_condition
 from app.security.redaction import redact_url
 from app.security.regex import scan_pattern
@@ -1754,172 +1753,6 @@ def restore_rule_revision(
         user=user,
         db=db,
     )
-
-
-def list_revisions(*, name: str, db: Session):
-    if name != "rules" and name not in CONNECTORS:
-        raise DomainError(404, "Unknown configuration")
-    rows = (
-        db.query(ManagedConfigurationRevision)
-        .filter_by(name=name)
-        .order_by(ManagedConfigurationRevision.version.desc())
-        .limit(50)
-        .all()
-    )
-    return {
-        "items": [
-            {"version": row.version, "at": row.updated_at.isoformat()} for row in rows
-        ]
-    }
-
-
-def restore_revision(
-    *, name: str, revision: int, payload: RestoreInput, user, db: Session
-):
-    if name != "rules" and name not in CONNECTORS:
-        raise DomainError(404, "Unknown configuration")
-    row = (
-        db.query(ManagedConfigurationRevision)
-        .filter_by(name=name, version=revision)
-        .one_or_none()
-    )
-    if row is None:
-        raise DomainError(404, "Revision not found")
-    if name == "rules":
-        _safe_document(row.document)
-    else:
-        _validate_connector(name, row.document)
-    if name in CONNECTORS:
-        _check_linked_collectors(name, row.document, db)
-    saved = _save(db, name, deepcopy(row.document), payload.version, user)
-    return {"version": saved["version"]}
-
-
-class PruneInput(BaseModel):
-    version: int
-    source: str
-    mapping_ids: list[str]
-
-
-def _event_for_rules(event: Event) -> dict[str, Any]:
-    return {
-        "source": event.source,
-        "connection_id": event.connection_id,
-        "connection_name": event.connection_name,
-        "system": event.system,
-        "actor": event.actor,
-        "action": event.action,
-        "outcome": event.outcome,
-        "severity": event.severity,
-        "summary": event.summary,
-        "raw_pointer": event.raw_pointer,
-        "normalized_payload": event.normalized_payload,
-    }
-
-
-def _stale(db: Session, event, control, rules, cache: dict) -> bool:
-    """Return True when no current rule attaches this event to this row."""
-    hits = evaluate_by_framework(_event_for_rules(event), rules, details=True)
-    for hit in hits.get(control.framework_slug, []):
-        key = (control.framework_slug, hit["ref"], hit["kind"])
-        if key not in cache:
-            found, _ = resolve_targets(db, key[0], [(key[1], key[2])])
-            row = found.get((key[1], key[2]))
-            cache[key] = row.id if row else None
-        if cache[key] == control.id:
-            return False
-    return True
-
-
-def preview_stale_rule_mappings(*, source: str, offset: int = 0, db: Session):
-    """Review one bounded page of a source's rule mappings; manual mappings stay out."""
-    source = source.strip()
-    if not source or len(source) > 128 or not 0 <= offset <= 100_000:
-        raise DomainError(400, "Choose a source and an offset between 0 and 100000")
-    from app.db.models import Mapping
-    from app.mapping.rules import load_rules
-
-    rules = load_rules(settings.rules_path, db=db)
-    query = (
-        db.query(Mapping, Event, ControlItem)
-        .join(Event, Event.id == Mapping.event_id)
-        .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-        .filter(Mapping.method == "rule", Event.source == source)
-        .order_by(Event.timestamp.desc(), Mapping.id)
-        .offset(offset)
-        .limit(500)
-    )
-    stale = []
-    count = 0
-    targets: dict = {}
-    for mapping, event, control in query:
-        count += 1
-        if _stale(db, event, control, rules, targets):
-            stale.append(
-                {
-                    "mapping_id": str(mapping.id),
-                    "event_id": str(event.id),
-                    "summary": event.summary[:180],
-                    "framework": control.framework_slug,
-                    "ref": control.ref,
-                }
-            )
-    return {
-        "source": source,
-        "version": _version(db, "rules"),
-        "offset": offset,
-        "examined": count,
-        "stale": stale,
-        "next_offset": offset + count if count == 500 else None,
-    }
-
-
-def prune_stale_rule_mappings(*, payload: PruneInput, db: Session):
-    """Recheck reviewed IDs against current rules before removing rule mappings."""
-    if _version(db, "rules") != payload.version:
-        raise DomainError(409, "Rules changed since the review. Preview again.")
-    if not payload.source.strip() or not 1 <= len(payload.mapping_ids) <= 500:
-        raise DomainError(400, "Review 1-500 mapping IDs for a source first")
-    import uuid
-
-    try:
-        ids = [uuid.UUID(value) for value in payload.mapping_ids]
-    except (ValueError, TypeError) as exc:
-        raise DomainError(400, "Invalid mapping ID") from exc
-    if len(set(ids)) != len(ids):
-        raise DomainError(400, "Duplicate mapping IDs")
-    from app.db.models import Mapping
-    from app.mapping.rules import load_rules
-    from app.services.control_evidence_stats import (
-        clear_stats_caches,
-        rebuild_framework_event_stats,
-    )
-
-    rules = load_rules(settings.rules_path, db=db)
-    rows = (
-        db.query(Mapping, Event, ControlItem)
-        .join(Event, Event.id == Mapping.event_id)
-        .join(ControlItem, ControlItem.id == Mapping.control_item_id)
-        .filter(
-            Mapping.id.in_(ids),
-            Mapping.method == "rule",
-            Event.source == payload.source,
-        )
-        .all()
-    )
-    if len(rows) != len(ids):
-        raise DomainError(409, "Mappings changed since the review. Preview again.")
-    targets: dict = {}
-    for mapping, event, control in rows:
-        if not _stale(db, event, control, rules, targets):
-            raise DomainError(409, "At least one mapping is now valid. Preview again.")
-    for mapping, _, _ in rows:
-        db.delete(mapping)
-    db.flush()
-    rebuild_framework_event_stats(db, clear_cache=False)
-    db.commit()
-    clear_stats_caches()
-    return {"deleted": len(rows)}
 
 
 def get_rule_backfill(*, job_id: str, db: Session):

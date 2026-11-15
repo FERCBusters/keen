@@ -26,7 +26,6 @@ from app.db.models import (
 )
 from app.ingest import common
 from app.mapping.rules import evaluate_by_framework, parse_rules
-from app.services import managed_configurations
 from app.worker import rule_backfill
 
 # Imported fixture: the assembled application with an in-memory session store.
@@ -286,53 +285,6 @@ def test_backfill_fails_when_a_target_names_several_controls(backfill, catalogue
 
 
 # --- Stale mapping review ------------------------------------------------------------
-
-
-def test_stale_review_compares_the_row_each_target_names(backfill, monkeypatch):
-    from app.services import control_evidence_stats
-
-    monkeypatch.setattr(control_evidence_stats, "clear_stats_caches", Mock())
-    db = backfill.db
-    rows = {}
-    for name, row in (("clause", backfill.clause), ("control", backfill.control)):
-        rows[name] = Mapping(
-            event_id=backfill.event.id,
-            control_item_id=row.id,
-            method="rule",
-            mapped_by="system",
-            confidence=0.8,
-            rationale="auto by rule kinds (A)",
-        )
-        db.add(rows[name])
-    db.add(
-        ManagedConfiguration(
-            name="rules",
-            version=1,
-            document={"rules": [_rule({"ref": "5.1", "kind": "clause"})]},
-        )
-    )
-    db.commit()
-    review = managed_configurations.preview_stale_rule_mappings(source="test", db=db)
-    assert [item["mapping_id"] for item in review["stale"]] == [str(rows["control"].id)]
-    pruned = managed_configurations.prune_stale_rule_mappings(
-        payload=managed_configurations.PruneInput(
-            version=1, source="test", mapping_ids=[str(rows["control"].id)]
-        ),
-        db=db,
-    )
-    assert pruned == {"deleted": 1}
-    assert _mapped(db, backfill.event) == {backfill.clause.id}
-    with pytest.raises(
-        managed_configurations.DomainError,
-        match=r"^At least one mapping is now valid\. Preview again\.$",
-    ) as refused:
-        managed_configurations.prune_stale_rule_mappings(
-            payload=managed_configurations.PruneInput(
-                version=1, source="test", mapping_ids=[str(rows["clause"].id)]
-            ),
-            db=db,
-        )
-    assert refused.value.status_code == 409
 
 
 # --- Saving rules --------------------------------------------------------------------

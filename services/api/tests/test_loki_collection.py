@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-import httpx
+import httpx2 as httpx
 import pytest
 import sqlalchemy
 import yaml

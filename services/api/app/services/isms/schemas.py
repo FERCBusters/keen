@@ -82,12 +82,6 @@ class LicensePayload(BaseModel):
     description: str | None = Field(default=None, max_length=12000)
 
 
-class BusinessProcessPayload(BaseModel):
-    name: str | None = Field(default=None, max_length=256)
-    description: str | None = Field(default=None, max_length=20000)
-    sort_order: int | None = None
-
-
 class AccessControlMatrixPayload(BaseModel):
     task_action: str | None = Field(default=None, max_length=20000)
     service_asset_id: uuid.UUID | None = None

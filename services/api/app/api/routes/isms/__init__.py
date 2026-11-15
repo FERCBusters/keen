@@ -5,7 +5,6 @@ from app.api.routing import Router
 from . import (
     access_control,
     assets,
-    business_processes,
     documents,
     effectiveness,
     meetings,
@@ -24,7 +23,6 @@ router.include_router(swot.router)
 router.include_router(documents.router)
 router.include_router(organisation.router)
 router.include_router(assets.router)
-router.include_router(business_processes.router)
 router.include_router(access_control.router)
 router.include_router(effectiveness.router)
 router.include_router(meetings.router)

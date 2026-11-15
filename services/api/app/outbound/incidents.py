@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
 
-import httpx
+import httpx2 as httpx
 
 from app.core.config import settings
 from app.ingest.http import client as secure_http_client

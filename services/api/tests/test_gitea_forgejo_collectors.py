@@ -4,7 +4,7 @@ import contextlib
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.ingest import forgejo as fg
 from app.ingest import gitea as gt

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import httpx
+import httpx2 as httpx
 
 from app.core.config import settings
 from app.ingest.cloud.api import JsonApi, items
@@ -133,15 +133,6 @@ CHECKS = {
     "network.databases": "Databases open to the internet",
     "findings": "Defender for Cloud recommendations",
 }
-TENANT_CHECKS = (
-    "identity.mfa",
-    "identity.admin_mfa",
-    "identity.mfa_enforced",
-    "identity.admins",
-    "identity.guests",
-    "identity.inactive",
-    "credentials.key_age",
-)
 SUBSCRIPTION_CHECKS = (
     "identity.admins",
     "logging.audit_trail",

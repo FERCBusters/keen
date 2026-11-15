@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlsplit
 
-import httpx
+import httpx2 as httpx
 
 from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact

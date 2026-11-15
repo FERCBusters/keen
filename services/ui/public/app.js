@@ -1438,7 +1438,7 @@ function _changelogValueHtml(value) {
   }
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') {
-    let text = '';
+    let text;
     try {
       text = JSON.stringify(value, null, 2);
     } catch {

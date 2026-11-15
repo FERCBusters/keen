@@ -24,8 +24,6 @@ from app.db.models import (
     Framework,
     FrameworkClause,
     IsmsAccessControlMatrixEntry,
-    IsmsApplicationConfigurationEntry,
-    IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
@@ -458,7 +456,29 @@ def test_scoping_documents_needs_isms_read_and_refuses_guesses_alike(
     assert scoped.status_code == 200, scoped.text
 
 
-def test_reverse_lookups_list_audits_that_sampled_an_item(audits):
+def _risk(db):
+    category = RiskCategory(name="Data")
+    db.add(category)
+    db.flush()
+    subcategory = RiskAssetSubcategory(category_id=category.id, name="Databases")
+    db.add(subcategory)
+    db.flush()
+    asset = RiskAsset(
+        name="Payroll", category_id=category.id, subcategory_id=subcategory.id
+    )
+    db.add(asset)
+    db.flush()
+    risk = Risk(
+        asset_id=asset.id,
+        risk_types=["Confidentiality"],
+        threat_summary="Unauthorised export " * 20,
+    )
+    db.add(risk)
+    db.flush()
+    return risk
+
+
+def test_event_lookups_list_audits_that_sampled_the_event(audits):
     db = audits.db
     event = Event(
         source="jenkins",
@@ -510,97 +530,10 @@ def test_reverse_lookups_list_audits_that_sampled_an_item(audits):
     no_events = app.client(app.user("audits.read"))
     _get(no_events, f"/v1/audits/by-event/{event.id}", expect=403)
 
-    by_entity = _get(reader, f"/v1/audits/by-entity/risk/{risk.id}")
-    assert by_entity["entity_type"] == "risk"
-    assert [item["evidence"]["title"] for item in by_entity["items"]] == ["Risk sample"]
-    assert _get(reader, f"/v1/audits/by-entity/risk/{uuid.uuid4()}")["items"] == []
-    _get(reader, f"/v1/audits/by-entity/spaceship/{risk.id}", expect=400)
-    _get(reader, "/v1/audits/by-entity/risk/nope", expect=400)
-
     detail = _get(reader, f"/v1/audits/{audits.completed.id}")
     (evidence,) = detail["evidence"]
     assert evidence["event"]["id"] == str(event.id)
     assert [c["ref"] for c in evidence["controls"]] == ["A.5.1"]
-
-
-def test_reverse_lookups_follow_the_sampled_records_feature(audits):
-    db = audits.db
-    risk = _risk(db)
-    db.add(
-        AuditEvidence(
-            audit_id=audits.open_audit.id,
-            entity_type="risk",
-            entity_id=risk.id,
-            title="Risk sample",
-        )
-    )
-    db.commit()
-    app = audits.keen
-    reader = app.client(app.user("audits.read"))
-    path = f"/v1/audits/by-entity/risk/{risk.id}"
-    assert [i["evidence"]["title"] for i in _get(reader, path)["items"]] == [
-        "Risk sample"
-    ]
-
-    admin = app.client(app.user(role="admin"))
-    switched = admin.put(
-        "/v1/admin/features",
-        json={"version": 0, "changes": {"risk_cia": False}},
-        headers=unsafe(admin),
-    )
-    assert switched.status_code == 200, switched.text
-
-    off = _get(reader, path, expect=404)
-    assert off["detail"] == "This feature is disabled by an administrator."
-    assert _get(reader, f"/v1/audits/by-entity/RISK/{risk.id}", expect=404) == off
-    # A former short name is refused rather than looked up past the switch.
-    refused = _get(reader, f"/v1/audits/by-entity/cia_risk/{risk.id}", expect=400)
-    assert refused["detail"] == "Unsupported sampled entity type"
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "cia_risk",
-        "pestle",
-        "org",
-        "access",
-        "app_config",
-        "effectiveness",
-        "metric",
-        "interested-party",
-        "interested_party",
-        "Risk",
-    ],
-)
-def test_reverse_lookups_accept_only_the_stored_entity_names(audits, name):
-    reader = audits.keen.client(audits.keen.user("audits.read"))
-
-    refused = _get(reader, f"/v1/audits/by-entity/{name}/{uuid.uuid4()}", expect=400)
-
-    assert refused["detail"] == "Unsupported sampled entity type"
-
-
-def _risk(db):
-    category = RiskCategory(name="Data")
-    db.add(category)
-    db.flush()
-    subcategory = RiskAssetSubcategory(category_id=category.id, name="Databases")
-    db.add(subcategory)
-    db.flush()
-    asset = RiskAsset(
-        name="Payroll", category_id=category.id, subcategory_id=subcategory.id
-    )
-    db.add(asset)
-    db.flush()
-    risk = Risk(
-        asset_id=asset.id,
-        risk_types=["Confidentiality"],
-        threat_summary="Unauthorised export " * 20,
-    )
-    db.add(risk)
-    db.flush()
-    return risk
 
 
 def test_sampled_records_are_described_with_their_controls(audits):
@@ -643,12 +576,11 @@ def test_sampled_records_are_described_with_their_controls(audits):
         requirement="Protect data", goal="No breaches", metric="Incidents"
     )
     node = IsmsOrgNode(name="Security officer", node_type="role")
-    process = IsmsBusinessProcess(name="Payroll run")
     measure = IsmsEffectivenessMeasure(
         framework_slug=fw, summary="Coverage", description="Count"
     )
     meeting = IsmsMeeting(title="Management review", date=date(2026, 2, 1))
-    db.add_all([swot, objective, node, process, measure, meeting])
+    db.add_all([swot, objective, node, measure, meeting])
     db.flush()
     metric = IsmsEffectivenessMetricEntry(
         measure_id=measure.id,
@@ -658,12 +590,6 @@ def test_sampled_records_are_described_with_their_controls(audits):
     )
     access = IsmsAccessControlMatrixEntry(
         task_action="Deploy to production", service_asset_id=risk.asset_id
-    )
-    app_config = IsmsApplicationConfigurationEntry(
-        source_type="org_node",
-        org_node_id=node.id,
-        business_process_id=process.id,
-        value="High",
     )
     section = BookStackSectionEvidence(
         document_id=audits.document.id,
@@ -675,7 +601,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
         storage_uri="local://snapshots/7",
         sha256="a" * 64,
     )
-    db.add_all([metric, access, app_config, section])
+    db.add_all([metric, access, section])
     for entity_type, row in (
         ("swot", swot),
         ("objective", objective),
@@ -699,7 +625,6 @@ def test_sampled_records_are_described_with_their_controls(audits):
         "isms_org_node": node,
         "isms_asset": asset,
         "isms_access_control_matrix": access,
-        "isms_application_configuration": app_config,
         "isms_effectiveness_measure": measure,
         "isms_effectiveness_metric": metric,
         "isms_meeting": meeting,
@@ -753,11 +678,6 @@ def test_sampled_records_are_described_with_their_controls(audits):
         "isms_access_control_matrix": (
             "Access control matrix: Deploy to production",
             "Payroll",
-            [],
-        ),
-        "isms_application_configuration": (
-            "Application configuration: Security officer",
-            "Payroll run · High",
             [],
         ),
         "isms_effectiveness_measure": (

@@ -1453,7 +1453,7 @@ function renderScopeBipartiteGraph(data) {
 
   const gNodes = svg.append('g').attr('class', 'audit-scope-nodes');
 
-  const clauseNodes = gNodes
+  gNodes
     .selectAll('a.scope-clause')
     .data(orderedClauses)
     .enter()
@@ -1515,7 +1515,7 @@ function renderScopeBipartiteGraph(data) {
         );
     });
 
-  const controlNodes = gNodes
+  gNodes
     .selectAll('a.scope-control')
     .data(orderedControls)
     .enter()

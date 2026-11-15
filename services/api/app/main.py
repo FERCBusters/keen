@@ -475,7 +475,6 @@ async def audit_trail_middleware(request: Request, call_next):
         or path
         in {
             "/v1/admin/questions/summary",  # admin bell badge poll,
-            "/v1/evidence/latest",  # homepage ambient evidence ticker,
             "/v1/webhooks",  # webhook ingesters
         }
         or (request.method == "GET" and path in _UNAUDITED_PUBLIC_READS)

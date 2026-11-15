@@ -4,14 +4,14 @@ import logging
 import subprocess
 import sys
 
-import httpx
+import httpx2 as httpx
 from app.ingest import bookstack, git_activity, google_workspace
 from app.ingest import http as ingestion_http
 
 
 def test_httpx_does_not_log_query_credentials_or_reason_phrase(caplog):
     assert ingestion_http.client
-    with caplog.at_level(logging.DEBUG, logger="httpx"):
+    with caplog.at_level(logging.DEBUG, logger="httpx2"):
         with httpx.Client(
             transport=httpx.MockTransport(
                 lambda request: httpx.Response(
@@ -21,7 +21,7 @@ def test_httpx_does_not_log_query_credentials_or_reason_phrase(caplog):
         ) as client:
             client.get("https://example.test/feed?token=SYNTHETIC_SECRET")
     assert "SYNTHETIC_SECRET" not in caplog.text
-    assert not [r for r in caplog.records if r.name == "httpx"]
+    assert not [r for r in caplog.records if r.name == "httpx2"]
 
 
 def test_google_sdk_does_not_log_invalid_response_body(caplog):

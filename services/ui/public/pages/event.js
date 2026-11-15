@@ -464,7 +464,7 @@ async function openEditDiaryModal() {
           if (!Number.isNaN(dt.getTime())) payload.timestamp = dt.toISOString();
         }
 
-        const res = await apiPatch(`/api/v1/admin/diary/${encodeURIComponent(e.id)}`, payload);
+        await apiPatch(`/api/v1/admin/diary/${encodeURIComponent(e.id)}`, payload);
 
         // Close modal + refresh
         window.bootstrap?.Modal?.getOrCreateInstance(modalEl)?.hide();

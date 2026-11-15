@@ -163,18 +163,6 @@ def export_events(
     )
 
 
-@router.get("/v1/evidence/latest")
-def latest_evidence_event(
-    request: Request,
-    after: Optional[datetime] = None,
-    limit: int = 1,
-    db: Session = Depends(get_db),
-):
-    "Return the newest visible events by ingestion time, newest first.\n\n    The homepage ticker polls this endpoint. Visibility follows the normal event\n    listing rules. `after` is compared with Event.created_at because the ticker\n    shows the most recent arrivals in Keen, whatever their original event time.\n    `limit` accepts 1 to 25 events.\n"
-    user = require_events_read(db, request)
-    return service.latest_evidence_event(user=user, after=after, limit=limit, db=db)
-
-
 @router.post("/v1/events/{event_id}/incident")
 def create_event_incident(
     event_id: str,

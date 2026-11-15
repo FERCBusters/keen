@@ -815,7 +815,6 @@ async function loadScheduledDocuments() {
 
 function resetScheduleForm() {
   scheduleForm?.reset();
-  const fw = getCurrentFramework();
   const schedFramework = document.getElementById('schedFramework');
   const schedInterval = document.getElementById('schedInterval');
   // Audits belong to the framework chosen in the top navigation; the form only shows it.

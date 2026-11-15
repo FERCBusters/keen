@@ -11,7 +11,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
+import httpx2 as httpx
 
 from app.core.datetime_utils import to_utc_naive
 from app.security.xml import parse_untrusted_xml

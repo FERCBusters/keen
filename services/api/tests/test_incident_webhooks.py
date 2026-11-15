@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from types import SimpleNamespace
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.config import settings
 from app.db.models import AuditLog, Event, EventIncident

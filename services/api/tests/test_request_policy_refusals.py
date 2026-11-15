@@ -12,7 +12,7 @@ import logging
 import ssl
 
 import anyio
-import httpx
+import httpx2 as httpx
 import pytest
 from app import main
 from app.core.config import settings

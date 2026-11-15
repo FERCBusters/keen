@@ -126,7 +126,6 @@ def test_pestle_routes_follow_the_read_and_manage_permissions(pestle):
         f"/v1/pestle/items/{item['id']}/clauses",
         f"/v1/pestle/items/{item['id']}/changelog",
         "/v1/pestle/business-processes",
-        f"/v1/pestle/business-processes/{process['id']}/changelog",
         "/v1/pestle/visualisations",
         f"/v1/clauses/{pestle.context.id}/pestle",
     )
@@ -395,12 +394,11 @@ def test_business_processes_are_unique_and_tracked(pestle):
         {"name": "X"},
         status=404,
     ) == {"detail": "Business process not found"}
-    history = pestle.read("GET", f"{path}/changelog")["items"]
-    assert [entry["action"] for entry in history] == ["updated", "created"]
+    history = pestle.db.query(EntityChangelog.action).filter_by(
+        entity_id=uuid.UUID(payroll["id"])
+    )
+    assert sorted(action for (action,) in history) == ["created", "updated"]
     assert pestle.manage("DELETE", path) == {"ok": True}
-    assert pestle.read("GET", f"{path}/changelog", status=404) == {
-        "detail": "Business process not found"
-    }
     assert (
         pestle.db.query(EntityChangelog)
         .filter_by(entity_id=uuid.UUID(payroll["id"]), action="deleted")

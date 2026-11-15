@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.config import settings
 from app.ingest import http as ingest_http

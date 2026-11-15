@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-import httpx
+import httpx2 as httpx
 from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive

@@ -6,7 +6,7 @@ import hmac
 import json
 from unittest.mock import MagicMock, patch
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.outbound import question_webhooks as qw
 from app.outbound.signing import signature_headers

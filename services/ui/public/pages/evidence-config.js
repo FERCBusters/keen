@@ -1,9 +1,4 @@
-import {
-  fieldLabel,
-  draftFields,
-  observedPayloadFields,
-  fieldChoiceGroups,
-} from '/pages/evidence-fields.js';
+import { draftFields, observedPayloadFields, fieldChoiceGroups } from '/pages/evidence-fields.js';
 import {
   apiGet,
   apiPost,

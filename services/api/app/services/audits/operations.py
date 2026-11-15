@@ -21,16 +21,13 @@ from app.services.audits.access import (
     require_audit_admin,
     require_sample_source_access,
 )
-from app.services.audits.references import control_out
 from app.services.audits.samples import (
     audit_sample_entity_reference,
     clean_audit_sample_entity_type,
-    clean_optional_entity_id,
     short_text,
 )
 from app.services.audits.schemas import (
     AuditAttendeePayload,
-    AuditControlsPayload,
     AuditCreatePayload,
     AuditEvidencePayload,
     AuditEvidenceUpdatePayload,
@@ -221,25 +218,6 @@ def replace_audit_scope(
     }
 
 
-def replace_audit_controls(
-    *, audit_id: str, payload: AuditControlsPayload, db: Session, user: User
-):
-    a = editable_audit_or_404(db, user, audit_id)
-    require_mutable_audit(a)
-    controls, _, _ = set_audit_scope(
-        db,
-        a,
-        user=user,
-        control_values=payload.controls,
-        clause_values=None,
-        document_values=None,
-        replace_clauses=False,
-        replace_documents=False,
-    )
-    db.commit()
-    return {"ok": True, "scoped_controls": [control_out(c) for c in controls]}
-
-
 def add_audit_evidence(
     *, audit_id: str, payload: AuditEvidencePayload, db: Session, user: User
 ):
@@ -255,7 +233,7 @@ def add_audit_evidence(
     a = editable_audit_or_404(db, user, audit_id)
     require_mutable_audit(a, action="sampled into")
     evidence_url = clean_url(payload.evidence_url)
-    entity_id = clean_optional_entity_id(payload.entity_id)
+    entity_id = payload.entity_id
     eid = payload.event_id
     if not eid and not (entity_type and entity_id):
         eid = event_id_from_url(evidence_url)

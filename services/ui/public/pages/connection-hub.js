@@ -5,8 +5,7 @@ import { errorText, apiGet, apiPut, apiPost, apiDelete, confirmAction } from '/a
 const root = '/api/v1/admin',
   byId = (id) => document.getElementById('hub-' + id);
 let connectionTypes = [];
-let entries = [],
-  surface = 'source';
+let entries = [];
 const sourceTypeLabel = (source) =>
   connectionTypes.find((t) => t.source === source)?.label || source;
 function button(text, action, danger = false) {
@@ -384,7 +383,6 @@ async function editCollection(adapter, existing = null, connection = null) {
 byId('collection-cancel').onclick = () => byId('collection').close();
 
 function showSurface(view) {
-  surface = view;
   const mapping = document.getElementById('evidence-mapping-view'),
     management = document.getElementById('evidence-management-view');
   mapping.hidden = view !== 'mapping';

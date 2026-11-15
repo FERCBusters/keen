@@ -9,7 +9,7 @@ Runs use the contract database because they hold a PostgreSQL advisory lock.
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.config import settings
 from app.db.models import Event, IngestionCursor

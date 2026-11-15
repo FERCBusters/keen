@@ -15,7 +15,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import anyio
-import httpx
+import httpx2 as httpx
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token, get_http_request
 from pydantic import Field

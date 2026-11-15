@@ -609,7 +609,7 @@ function applyInferredParentClauseApplicability() {
 
     const childValues = kids.map((kid) => inferValue(kid));
     const selected = childValues.filter(Boolean);
-    let inferred = '';
+    let inferred;
     if (selected.length === 0) {
       inferred = '';
     } else if (

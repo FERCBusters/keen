@@ -20,7 +20,6 @@ from app.services.audits.access import (
 )
 from app.services.audits.schemas import (
     AuditAttendeePayload,
-    AuditControlsPayload,
     AuditCreatePayload,
     AuditEvidencePayload,
     AuditEvidenceUpdatePayload,
@@ -129,19 +128,6 @@ def list_audits_for_event(
     return queries.list_audits_for_event(event_id=event_id, db=db, user=user)
 
 
-@router.get("/v1/audits/by-entity/{entity_type}/{entity_id}")
-def list_audits_for_entity(
-    entity_type: str,
-    entity_id: str,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_audit_read),
-):
-    return queries.list_audits_for_entity(
-        entity_type=entity_type, entity_id=entity_id, db=db, user=user
-    )
-
-
 @router.post("/v1/audits")
 def create_audit(
     payload: AuditCreatePayload,
@@ -247,19 +233,6 @@ def replace_audit_scope(
     user: User = Depends(require_audit_manage),
 ):
     return operations.replace_audit_scope(
-        audit_id=audit_id, payload=payload, db=db, user=user
-    )
-
-
-@router.put("/v1/audits/{audit_id}/controls")
-def replace_audit_controls(
-    audit_id: str,
-    payload: AuditControlsPayload,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_audit_manage),
-):
-    return operations.replace_audit_controls(
         audit_id=audit_id, payload=payload, db=db, user=user
     )
 

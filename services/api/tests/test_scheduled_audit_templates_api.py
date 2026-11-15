@@ -247,6 +247,30 @@ def test_editing_a_template_updates_its_details_scope_and_people(audits):  # noq
     )
 
 
+def test_replacing_a_templates_controls_keeps_its_clauses(audits):  # noqa: F811 - fixture imported above
+    row = _created(audits, clauses=[str(audits.leaf.id)])
+
+    edited = _send(
+        audits,
+        "PATCH",
+        f"{ROOT}/{row['id']}",
+        {"controls": [str(audits.other_control.id)]},
+    )
+
+    assert edited.status_code == 200, edited.text
+    audit_id = uuid.UUID(row["id"])
+    db = audits.db
+    db.expire_all()
+    assert [
+        r.clause_id for r in db.query(AuditScopedClause).filter_by(audit_id=audit_id)
+    ] == [audits.leaf.id]
+    # The kept clause still brings its linked control into scope.
+    assert {
+        r.control_item_id
+        for r in db.query(AuditScopedControl).filter_by(audit_id=audit_id)
+    } == {audits.other_control.id, audits.control.id}
+
+
 def test_a_new_start_date_moves_the_next_run(audits):  # noqa: F811 - fixture imported above
     row = _created(audits)
     path = f"{ROOT}/{row['id']}"

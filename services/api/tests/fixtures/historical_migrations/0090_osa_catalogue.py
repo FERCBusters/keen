@@ -1,7 +1,7 @@
 """Replace pre-production framework catalogues with the frozen OSA catalogue.
 
 Offline, intentionally canonical reset. Subsequent startups never re-import it.
-OSA data and KEEN's adaptation: CC BY-SA 4.0; see catalogues/OSA-LICENSE.txt.
+OSA data and KEEN's adaptation: CC BY-SA 4.0; see alembic/catalogues/OSA-LICENSE.txt.
 """
 
 import json
@@ -16,7 +16,7 @@ revision = "0090_osa_catalogue"
 down_revision = "0089_hipaa_soc2"
 branch_labels = None
 depends_on = None
-DATA = Path(__file__).resolve().parents[3] / "alembic/catalogues/osa-2026-10-08.json"
+DATA = Path(__file__).resolve().parents[1] / "catalogues/osa-2026-10-08.json"
 KEEP = ("KEEN-AF:1.0", "UK-DVSTF:1.0", "CYBER-ESSENTIALS:2026")
 
 

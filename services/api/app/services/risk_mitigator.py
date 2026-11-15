@@ -35,7 +35,7 @@ from app.services.control_refs import clause_summary, control_summary
 from app.services.mitigator_catalogue import catalogue_tokens, rank_library
 
 _TOKEN_RE = scan_pattern(r"[a-z0-9][a-z0-9+._/-]*", re.I)
-_RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
+RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
 _PESTLE_TYPES = {
     "Political",
     "Economical",
@@ -185,7 +185,7 @@ def _normalise_risk_types(
     seen: set[str] = set()
     for value in raw or []:
         v = str(value or "").strip()
-        match = next((rt for rt in _RISK_TYPES if rt.lower() == v.lower()), None)
+        match = next((rt for rt in RISK_TYPES if rt.lower() == v.lower()), None)
         if match and match not in seen:
             seen.add(match)
             selected.append(match)
@@ -195,7 +195,7 @@ def _normalise_risk_types(
     # If the UI did not explicitly send a type, infer a conservative default from
     # scenario terms. Creation still uses the final normalized list.
     for rt, cfg in (rules.get("risk_types") or {}).items():
-        if rt not in _RISK_TYPES:
+        if rt not in RISK_TYPES:
             continue
         if any(
             _contains_term(text_blob, term) for term in cfg.get("scenario_terms") or []
@@ -820,7 +820,7 @@ def analyse_risk_mitigation(
         [issue or "", asset_name or "", category or "", subcategory_name or ""]
     )
     selected_types = _normalise_risk_types(risk_types, text_blob, rules)
-    weights = {rt: _clamp_weight((risk_weights or {}).get(rt, 0)) for rt in _RISK_TYPES}
+    weights = {rt: _clamp_weight((risk_weights or {}).get(rt, 0)) for rt in RISK_TYPES}
     # At least one type is always selected, so at least one weight is set.
     for rt in selected_types:
         if weights.get(rt, 0) <= 0:
@@ -874,7 +874,7 @@ def analyse_risk_mitigation(
         cfg = flag_rules.get(flag) or {}
         terms_for_matching.extend(cfg.get("mitigation_words") or [])
         for rt in cfg.get("risk_types") or []:
-            if rt in _RISK_TYPES and rt not in selected_types:
+            if rt in RISK_TYPES and rt not in selected_types:
                 selected_types.append(rt)
                 weights[rt] = max(weights.get(rt, 0), 40)
         signals.append(

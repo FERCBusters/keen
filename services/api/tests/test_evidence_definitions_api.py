@@ -13,11 +13,17 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-import httpx
+import httpx2 as httpx
 import pytest
 import yaml
 from app.core.config import settings
-from app.db.models import ControlItem, Event, Framework, SourceConnection
+from app.db.models import (
+    ControlItem,
+    Event,
+    Framework,
+    ManagedConfigurationRevision,
+    SourceConnection,
+)
 from app.ingest import bookstack
 from app.ingest import connections as source_connections
 from app.ingest.connections import FIELDS as CONNECTION_FIELDS
@@ -126,8 +132,13 @@ def defs(keen, monkeypatch, tmp_path):  # noqa: F811 - fixture imported above
         return {**{item["name"]: item["version"] for item in listed}, "rules": rules}
 
     def revisions(name):
-        response = admin.get(f"/v1/admin/configuration-revisions/{name}")
-        return [item["version"] for item in response.json()["items"]]
+        db.expire_all()
+        rows = (
+            db.query(ManagedConfigurationRevision.version)
+            .filter_by(name=name)
+            .order_by(ManagedConfigurationRevision.version.desc())
+        )
+        return [version for (version,) in rows]
 
     return SimpleNamespace(
         keen=keen,
@@ -179,7 +190,6 @@ ADMIN_ROUTES = [
     ),
     ("GET", "/v1/admin/source-catalogue", None),
     ("GET", "/v1/admin/bookstack/catalog", None),
-    ("GET", "/v1/admin/configuration-revisions/jenkins", None),
 ]
 
 
@@ -1591,48 +1601,6 @@ def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
 
 
 # --- Restoring collection revisions -----------------------------------------------
-
-
-def _restore(defs, name, revision, version):
-    return defs.admin.post(
-        f"/v1/admin/configuration-revisions/{name}/{revision}/restore",
-        json={"version": version},
-        headers=unsafe(defs.admin),
-    )
-
-
-def test_restoring_a_collection_revision_recreates_it_as_a_new_revision(defs):
-    """A restored collection document is validated and saved as its own revision."""
-    first = {"jobs": [{"name": "nightly"}]}
-    assert defs.put_document("jenkins", first, version=0).status_code == 200
-    assert defs.put_document("jenkins", {"jobs": []}, version=1).status_code == 200
-
-    restored = _restore(defs, "jenkins", 1, 2)
-
-    assert restored.status_code == 200, restored.text
-    assert restored.json() == {"version": 3}
-    assert defs.document("jenkins")["document"] == first
-    assert defs.revisions("jenkins") == [3, 2, 1]
-
-
-def test_restoring_a_revision_cannot_orphan_a_published_definition(defs):
-    """Restoring an older collection document keeps items that rules depend on."""
-    assert defs.put_document("jenkins", {"jobs": []}, version=0).status_code == 200
-    assert defs.definition(connector_version=1).status_code == 200
-
-    refused = _restore(defs, "jenkins", 1, 2)
-
-    assert refused.status_code == 409
-    assert refused.json()["detail"] == (
-        "A collection item has framework mappings. Remove those rules before "
-        "deleting or renaming it."
-    )
-    assert defs.document("jenkins") == {
-        "name": "jenkins",
-        "version": 2,
-        "document": {"jobs": [{"name": "deploy"}]},
-        "origin": "database",
-    }
 
 
 # --- Conflicting writes -----------------------------------------------------------

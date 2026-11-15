@@ -62,13 +62,12 @@ from app.services.isms.mutations import (
     org_node_or_400,
 )
 from app.services.record_imports import IMPORT_ROWS, import_rows, row_payload
-from app.services.risk_mitigator import analyse_risk_mitigation
+from app.services.risk_mitigator import RISK_TYPES, analyse_risk_mitigation
 from app.services.text import clean_text, split_filter_values, uuid_filter_values
 
 RISK_READ_PERMISSION = "risk.read"
 RISK_MANAGE_PERMISSION = "risk.manage"
-_RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
-_RISK_TYPE_CANON = {x.lower(): x for x in _RISK_TYPES}
+_RISK_TYPE_CANON = {x.lower(): x for x in RISK_TYPES}
 TREATMENT_STRATEGIES = {"", "mitigate", "accept", "avoid", "transfer"}
 TREATMENT_STATUSES = {"open", "in_progress", "awaiting_review", "closed"}
 

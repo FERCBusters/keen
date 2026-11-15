@@ -20,7 +20,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.ingest import http
 
@@ -384,7 +384,7 @@ def test_bookstack_page_listings_stop_at_the_allowance(upstream):
 _LISTING = """
 import json, resource, socket, sys
 sys.path.insert(0, {api!r})
-import httpx
+import httpx2 as httpx
 from app.ingest import http
 SIZE = http.MAX_RESPONSE_BYTES // 4 - 64
 unit = b"{{}},"

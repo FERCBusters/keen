@@ -29,7 +29,6 @@ from app.services.control_refs import control_summary
 
 _CHANGE_FIELD_LABELS = {
     "agenda_minutes_notes": "Agenda/minutes/notes",
-    "application_configurations": "Application configuration",
     "access_control_matrix": "Access control matrix",
     "account_id": "hosting account ID",
     "aws_accounts": "managed hosting accounts",
@@ -141,8 +140,6 @@ _ENTITY_LABELS = {
     "isms_org_node": "ISMS organisation chart node",
     "isms_asset": "ISMS Asset",
     "isms_license": "ISMS License",
-    "isms_business_process": "ISMS Business Process",
-    "isms_application_configuration": "ISMS Application Configuration",
     "isms_access_control_matrix": "ISMS access control matrix",
     "isms_aws_account": "ISMS Managed Hosting Account",
     "isms_meeting": "ISMS meeting",

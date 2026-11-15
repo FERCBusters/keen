@@ -14,8 +14,6 @@ from app.core.datetime_utils import utc_now_naive
 from app.ingest.cloud import provider as cloud_provider
 from app.ingest.cloud.base import Activity, Check, Identity, ScopeResult
 
-DAY = timedelta(days=1)
-
 
 def _ago(now: datetime, days: int) -> datetime:
     return now - timedelta(days=days)

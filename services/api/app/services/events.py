@@ -7,9 +7,8 @@ import io
 import json
 import time
 import uuid
-from datetime import datetime
 from functools import partial
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session, load_only
@@ -59,7 +58,6 @@ from app.services.event_filters import (
     EventFilters,
     event_predicates,
     event_time_filters,
-    norm_ts,
     run_scan,
     scan_budget,
 )
@@ -136,39 +134,6 @@ def _event_conditions(db: Session, filters: EventFilters, user: User) -> list:
         *event_predicates(filters, db),
     ]
     return [condition for condition in conditions if condition is not True]
-
-
-def _latest_event_payload(event: Event) -> dict[str, Any]:
-    short_summary = (
-        str(_redact_str(event.summary or "") or "")
-        .replace("\r", " ")
-        .replace("\n", " ")
-        .strip()
-    )
-    if len(short_summary) > 220:
-        summary = f"{short_summary[:217].rstrip()}…"
-    else:
-        summary = short_summary
-
-    source = _redact_str(event.source or "Unknown source")
-    system = _redact_str(event.system or "")
-    action = _redact_str(event.action or "")
-    actor = _redact_str(event.actor or "")
-
-    return {
-        "id": str(event.id),
-        "created_at": event.created_at.isoformat() if event.created_at else None,
-        "timestamp": event.timestamp.isoformat() if event.timestamp else None,
-        "source": source,
-        "system": system,
-        "actor": actor,
-        "action": action,
-        "outcome": event.outcome,
-        "severity": event.severity,
-        "summary": summary or "New evidence received",
-        "identifier": _event_identifier(event),
-        "url": f"/event.html?id={event.id}",
-    }
 
 
 def list_events(
@@ -455,45 +420,6 @@ def event_facets(
         }
 
     return cached_json("events:facets", cache_parts, _load)
-
-
-def latest_evidence_event(*, after: Optional[datetime], limit: int, db: Session, user):
-    """Return up to 25 of the newest visible events by ingestion time.
-
-    Visibility follows the normal event listing rules; diary entries require an
-    active authenticated user. `after` is compared with Event.created_at, and
-    `events` lists the batch newest first.
-    """
-
-    limit = max(1, min(int(limit or 1), 25))
-    qry = (
-        db.query(Event)
-        .options(
-            load_only(
-                Event.id,
-                Event.created_at,
-                Event.timestamp,
-                Event.source,
-                Event.system,
-                Event.actor,
-                Event.action,
-                Event.outcome,
-                Event.severity,
-                Event.summary,
-            )
-        )
-        .filter(diary_filter_condition(db, user))
-    )
-
-    if after is not None:
-        qry = qry.filter(Event.created_at > norm_ts(after))
-
-    events = (
-        qry.order_by(desc(Event.created_at), desc(Event.timestamp), desc(Event.id))
-        .limit(limit)
-        .all()
-    )
-    return {"events": [_latest_event_payload(event) for event in events]}
 
 
 SUGGESTION_LIMIT = 8

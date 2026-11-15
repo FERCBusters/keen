@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from unittest.mock import Mock
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.config import settings
 from app.db.models import IngestionCursor

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import app.services.source_connections as source_connections_operations
-import httpx
+import httpx2 as httpx
 import pytest
 from app.db.models import Artifact, Event, IngestionCursor
 from app.ingest import common

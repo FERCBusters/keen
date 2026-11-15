@@ -28,7 +28,6 @@ EVIDENCE_ROUTES = [
     ("GET", "/v1/events"),
     ("GET", "/v1/events/facets"),
     ("GET", "/v1/events/export"),
-    ("GET", "/v1/evidence/latest"),
     ("GET", f"/v1/events/{ID}/control-suggestions"),
     ("GET", f"/v1/events/{ID}"),
     ("POST", f"/v1/events/{ID}/incident"),

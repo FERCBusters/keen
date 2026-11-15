@@ -30,7 +30,7 @@ import {
 } from '/pages/quiz-common.js';
 
 const $ = (id) => document.getElementById(id);
-const me = await initNavbar();
+await initNavbar();
 const framework = getCurrentFramework();
 const status = $('status');
 const quizId = new URLSearchParams(location.search).get('id') || '';

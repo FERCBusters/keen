@@ -5,7 +5,7 @@ import re
 import unittest
 from pathlib import Path
 
-SEED = Path(__file__).resolve().parents[1] / "alembic"
+SEED = Path(__file__).resolve().parent / "fixtures"
 
 
 class RiskLibrarySeedTest(unittest.TestCase):

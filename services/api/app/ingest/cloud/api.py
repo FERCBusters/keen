@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2 as httpx
 
 from app.ingest import http
 from app.ingest.cloud.base import Unavailable

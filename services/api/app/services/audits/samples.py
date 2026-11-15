@@ -6,13 +6,11 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.references import try_uuid
 from app.db.models import (
     BookStackSectionEvidence,
     ControlClauseLink,
     ControlItem,
     IsmsAccessControlMatrixEntry,
-    IsmsApplicationConfigurationEntry,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
@@ -54,14 +52,6 @@ def clean_audit_sample_entity_type(raw: str | None) -> str | None:
     return value
 
 
-def clean_optional_entity_id(raw: uuid.UUID | str | None) -> uuid.UUID | None:
-    if raw is None:
-        return None
-    if isinstance(raw, uuid.UUID):
-        return raw
-    return try_uuid(str(raw))
-
-
 def entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
     eid = str(entity_id)
     fw = framework or settings.default_framework_slug or ""
@@ -91,10 +81,6 @@ def entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
         return f"/isms.html{fwfirst}&tab=assets" if fw else "/isms.html?tab=assets"
     if entity_type == "isms_access_control_matrix":
         return f"/isms.html{fwfirst}&tab=access" if fw else "/isms.html?tab=access"
-    if entity_type == "isms_application_configuration":
-        return (
-            f"/isms.html{fwfirst}&tab=appconfig" if fw else "/isms.html?tab=appconfig"
-        )
     if entity_type == "isms_effectiveness_measure":
         return f"/isms-effectiveness-measure.html?id={eid}{fwq}"
     if entity_type == "isms_effectiveness_metric":
@@ -296,23 +282,6 @@ def audit_sample_entity_reference(
         if row:
             title = f"Access control matrix: {short_text(row.task_action, 180)}"
             subtitle = row.service_asset.name if row.service_asset else ""
-    elif entity_type == "isms_application_configuration":
-        row = (
-            db.query(IsmsApplicationConfigurationEntry)
-            .filter(IsmsApplicationConfigurationEntry.id == entity_id)
-            .one_or_none()
-        )
-        if row:
-            process = getattr(getattr(row, "business_process", None), "name", "")
-            source = (
-                getattr(getattr(row, "document", None), "title", "")
-                or getattr(getattr(row, "user", None), "username", "")
-                or getattr(getattr(row, "asset", None), "name", "")
-                or getattr(getattr(row, "org_node", None), "name", "")
-                or row.source_type
-            )
-            title = f"Application configuration: {source}"
-            subtitle = " · ".join(x for x in [process, row.value] if x)
     elif entity_type == "isms_effectiveness_measure":
         row = (
             db.query(IsmsEffectivenessMeasure)

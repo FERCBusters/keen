@@ -1,6 +1,6 @@
 """What the entity changelog records as a record's state.
 
-An imported clause can carry evidence links in its metadata that were never
+A stored clause can carry evidence links in its metadata that were never
 checked as an administrator's edit would be; the recorded state lists only
 the links that name an address. A PESTLE(E) item's state reads the same from
 its loaded row as from its identifier.
@@ -9,65 +9,42 @@ its loaded row as from its identifier.
 import uuid
 
 from app.db.models import (
-    EntityChangelog,
     FrameworkClause,
     PestleItem,
     PestleRelevanceLevel,
 )
-from app.services.entity_changelog import pestle_item_changelog_state
+from app.services.entity_changelog import (
+    clause_changelog_state,
+    pestle_item_changelog_state,
+)
 
-# Imported fixture: administrator requests through the assembled application.
-from tests.test_admin_api_workflows import admin  # noqa: F401
-from tests.test_assembled_authority_regressions import keen  # noqa: F401
 
-
-def test_imported_clause_links_without_an_address_are_left_out_of_history(admin):  # noqa: F811
-    imported = admin.call(
-        "POST",
-        "/v1/admin/controls/import",
-        {
-            "framework": "A",
-            "items": [
-                {
-                    "type": "clause",
-                    "ref": "9.1",
-                    "title": "Monitoring",
-                    "metadata": {
-                        "evidence_mappings": [
-                            "https://not-an-object.example",
-                            {"title": "No address", "url": "  "},
-                            {"title": "", "url": "https://wiki.example/monitoring"},
-                            {"title": "Runbook", "url": "/events.html?q=monitoring"},
-                        ]
-                    },
-                }
-            ],
+def test_a_clauses_state_lists_only_evidence_links_that_name_an_address(contract_db):
+    clause = FrameworkClause(
+        framework_slug="A",
+        ref="9.1",
+        title="Monitoring",
+        meta={
+            "evidence_mappings": [
+                "https://not-an-object.example",
+                {"title": "No address", "url": "  "},
+                {"title": "", "url": "https://wiki.example/monitoring"},
+                {"title": "Runbook", "url": "/events.html?q=monitoring"},
+            ]
         },
     )
-    assert imported["created"] == 1
-    clause = (
-        admin.db.query(FrameworkClause).filter_by(framework_slug="A", ref="9.1").one()
-    )
+    contract_db.add(clause)
+    contract_db.flush()
 
-    admin.call(
-        "PATCH",
-        f"/v1/admin/clauses/{clause.id}/evidence-urls",
-        {"evidence_mappings": [{"title": "Dashboard", "url": "/dashboard.html"}]},
-    )
+    state = clause_changelog_state(contract_db, clause)
 
-    (entry,) = admin.db.query(EntityChangelog).filter_by(
-        entity_type="clause", entity_id=clause.id
-    )
     # Untitled links take their address as the title, sorted by title.
-    assert entry.before_state["evidence_mappings"] == [
+    assert state["evidence_mappings"] == [
         {"title": "Runbook", "url": "/events.html?q=monitoring"},
         {
             "title": "https://wiki.example/monitoring",
             "url": "https://wiki.example/monitoring",
         },
-    ]
-    assert entry.after_state["evidence_mappings"] == [
-        {"title": "Dashboard", "url": "/dashboard.html"}
     ]
 
 

@@ -5,8 +5,8 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import httpx
 import httpx2
+import httpx2 as httpx
 import pytest
 from app.security import redaction, sso_http
 from app.security.errors import collection_error

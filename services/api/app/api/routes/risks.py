@@ -24,8 +24,6 @@ from app.services.risks import (
 
 router = Router()
 
-_RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
-
 
 def require_risk_read(request: Request, db: Session = Depends(get_db)) -> User:
     user = require_authenticated(request)

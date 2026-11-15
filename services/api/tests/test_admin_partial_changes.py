@@ -18,7 +18,6 @@ from app.db.models import (
     AuditLog,
     ControlClauseLink,
     Event,
-    Framework,
     Mapping,
     Permission,
     User,
@@ -28,7 +27,12 @@ from app.services.uploads import Upload
 from sqlalchemy import event as sql_event
 
 # Imported fixtures: administrator requests through the assembled application.
-from tests.test_admin_api_workflows import _clause, _control, _event, admin  # noqa: F401
+from tests.test_admin_api_workflows import (  # noqa: F401
+    _clause,
+    _control,
+    _event,
+    admin,
+)
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401
 
 BUMP = "authz_version=(users.authz_version + "
@@ -124,28 +128,6 @@ def test_clearing_a_groups_permissions_removes_every_one(admin):  # noqa: F811
 
 
 # --- Catalogue ------------------------------------------------------------------
-
-
-def test_an_import_without_framework_details_keeps_the_existing_ones(admin):  # noqa: F811
-    framework = admin.db.query(Framework).filter_by(slug="A").one()
-    framework.name, framework.version = "Annex A", "2022"
-    framework.upstream_url = "https://standards.example.test/a"
-    admin.db.commit()
-
-    result = admin.call(
-        "POST",
-        "/v1/admin/controls/import",
-        {"framework": "A", "items": [{"type": "annex_control", "ref": "A.9"}]},
-    )
-
-    assert result == {"created": 1, "updated": 0, "errors": []}
-    admin.db.expire_all()
-    kept = admin.db.query(Framework).filter_by(slug="A").one()
-    assert (kept.name, kept.version, kept.upstream_url) == (
-        "Annex A",
-        "2022",
-        "https://standards.example.test/a",
-    )
 
 
 def test_control_and_clause_links_name_an_id_or_a_reference(admin):  # noqa: F811

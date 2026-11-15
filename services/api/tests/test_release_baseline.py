@@ -144,6 +144,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0051_isms_business_processes",
         "0050_external_auditor_questions",
         "0049_default_groups",
         "0048_events_retention_time",
@@ -1754,6 +1755,117 @@ def test_external_auditors_gain_stories_and_questions_while_the_group_is_unchang
             command.downgrade(config, "0049_default_groups")
             assert held(conn) == at_0049
             assert versions(conn) == before
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_isms_business_processes_and_application_configuration_are_removed():
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "processes_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    removed = {"isms_business_processes", "isms_application_configuration_entries"}
+
+    def tables(conn):
+        return set(
+            conn.scalars(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = :schema"
+                ),
+                {"schema": schema},
+            )
+        )
+
+    def samples(conn):
+        return sorted(
+            conn.scalars(text("SELECT entity_type FROM audit_evidence")).all()
+        )
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0050_external_auditor_questions")
+            process, entry, audit = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+            conn.execute(
+                text(
+                    "INSERT INTO isms_business_processes (id, name) VALUES (:id, 'Payroll')"
+                ),
+                {"id": process},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO isms_application_configuration_entries"
+                    " (id, source_type, business_process_id)"
+                    " VALUES (:id, 'asset', :process)"
+                ),
+                {"id": entry, "process": process},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO audits (id, title, framework_slug, created_at,"
+                    " updated_at, schedule_date_rule)"
+                    " VALUES (:id, 'Review', 'A', now(), now(), 'exact')"
+                ),
+                {"id": audit},
+            )
+            for kind, entity in (
+                ("isms_application_configuration", entry),
+                ("isms_asset", uuid.uuid4()),
+            ):
+                conn.execute(
+                    text(
+                        "INSERT INTO audit_evidence"
+                        " (id, audit_id, added_at, entity_type, entity_id)"
+                        " VALUES (:id, :audit, now(), :kind, :entity)"
+                    ),
+                    {
+                        "id": uuid.uuid4(),
+                        "audit": audit,
+                        "kind": kind,
+                        "entity": entity,
+                    },
+                )
+            conn.commit()
+
+            command.upgrade(config, "0051_isms_business_processes")
+            assert not removed & tables(conn)
+            # The sample of the removed row goes with it; other samples stay.
+            assert samples(conn) == ["isms_asset"]
+
+            command.downgrade(config, "0050_external_auditor_questions")
+            assert removed <= tables(conn)
+            # Both tables return empty and take rows as they did before.
+            assert (
+                conn.scalar(text("SELECT count(*) FROM isms_business_processes")) == 0
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO isms_business_processes (id, name) VALUES (:id, 'Payroll')"
+                ),
+                {"id": process},
+            )
+            added = conn.execute(
+                text(
+                    "INSERT INTO isms_application_configuration_entries"
+                    " (id, source_type, business_process_id)"
+                    " VALUES (:id, 'asset', :process) RETURNING value, notes"
+                ),
+                {"id": entry, "process": process},
+            ).one()
+            assert tuple(added) == ("Low", "")
+            assert samples(conn) == ["isms_asset"]
+            conn.rollback()
     finally:
         with engine.begin() as conn:
             conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))

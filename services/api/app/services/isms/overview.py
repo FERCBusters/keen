@@ -12,7 +12,6 @@ from app.db.models import (
     ControlItem,
     FrameworkClause,
     IsmsAccessControlMatrixEntry,
-    IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
@@ -144,7 +143,6 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
         ]
 
     hidden = {
-        "business_processes": "business_processes",
         "objectives": "objectives",
         "documents": "documents",
         "org_nodes": "organisation",
@@ -206,7 +204,6 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
             or 0
         ),
         "meetings": int(db.query(IsmsMeeting.id).count() or 0),
-        "business_processes": int(db.query(IsmsBusinessProcess.id).count() or 0),
     }
     payload: dict[str, Any] = {
         "framework": fw,
@@ -286,7 +283,6 @@ def isms_summary(*, framework: str, section: str | None, user: User, db: Session
         payload["meetings"] = [_meeting_out(db, row, fw) for row in meetings]
 
     hidden = {
-        "business_processes": "business_processes",
         "objectives": "objectives",
         "documents": "documents",
         "org_nodes": "organisation",

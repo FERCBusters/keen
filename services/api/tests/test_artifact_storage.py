@@ -43,10 +43,6 @@ class FakeBucket:
             "Body": io.BytesIO(self.objects[(kwargs["Key"], kwargs.get("VersionId"))])
         }
 
-    def generate_presigned_url(self, operation, Params, ExpiresIn):
-        self.calls.append((operation, Params))
-        return "https://signed.example/object"
-
     def get_bucket_versioning(self, **kwargs):
         return {"Status": "Enabled"}
 
@@ -252,8 +248,6 @@ def test_s3_artifacts_are_pinned_to_the_version_written(bucket):
         "get_object",
         {"Bucket": "evidence", "Key": "events/a b.json", "VersionId": "v/1"},
     )
-    s3.presign_get_url(location, key)
-    assert bucket.calls[-1][1]["VersionId"] == "v/1"
 
 
 def test_s3_receives_a_file_as_a_stream_from_its_start(bucket):
@@ -305,7 +299,6 @@ def test_hosted_storage_reads_only_its_own_bucket(bucket, monkeypatch):
     for operation in (
         lambda: s3.parse_s3_uri("s3://another-tenant/events/a.json?versionId=1"),
         lambda: s3.get_object_stream("another-tenant", "events/a.json"),
-        lambda: s3.presign_get_url("another-tenant", "events/a.json"),
     ):
         with pytest.raises(ValueError, match="outside this workspace"):
             operation()

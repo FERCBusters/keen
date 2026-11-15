@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-import httpx
+import httpx2 as httpx
 import pytest
 from app.core.datetime_utils import to_utc_naive
 from app.ingest import git_activity as collector

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-import httpx
+import httpx2 as httpx
 from sqlalchemy.orm import Session
 
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping

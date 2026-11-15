@@ -56,7 +56,6 @@ from app.db.models import (  # noqa: E402
     EventQuestionThread,
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
-    IsmsBusinessProcess,
     IsmsDocument,
     IsmsDocumentFolder,
     IsmsEffectivenessMeasure,
@@ -208,9 +207,6 @@ class DemoTeardown:
             ),
             "org_nodes": self.labelled_ids(IsmsOrgNode, IsmsOrgNode.name),
             "licences": self.labelled_ids(IsmsLicense, IsmsLicense.name),
-            "isms_processes": self.labelled_ids(
-                IsmsBusinessProcess, IsmsBusinessProcess.name
-            ),
             "pestle_processes": self.labelled_ids(
                 PestleBusinessProcess, PestleBusinessProcess.name
             ),
@@ -501,9 +497,6 @@ class DemoTeardown:
         self.delete_ids(PestleItem, PestleItem.id, found["pestle_items"])
         self.delete_ids(
             PestleBusinessProcess, PestleBusinessProcess.id, found["pestle_processes"]
-        )
-        self.delete_ids(
-            IsmsBusinessProcess, IsmsBusinessProcess.id, found["isms_processes"]
         )
         self.delete_ids(IsmsSwot, IsmsSwot.id, found["swot"])
         self.delete_ids(IsmsPerson, IsmsPerson.id, found["people"])

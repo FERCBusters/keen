@@ -25,15 +25,11 @@ AUDIT_SAMPLE_ENTITY_LABELS = {
     "isms_org_node": "Organisation chart node",
     "isms_asset": "ISMS asset",
     "isms_access_control_matrix": "Access control matrix row",
-    "isms_application_configuration": "Application configuration row",
     "isms_meeting": "ISMS meeting",
     "isms_effectiveness_measure": "ISMS effectiveness measure",
     "isms_effectiveness_metric": "ISMS effectiveness metric",
     "story": "Story",
 }
-
-
-ISO_DATE = scan_pattern(r"^\d{4}-\d{2}-\d{2}$")
 
 
 FINDING_STATUSES = {"open", "closed", "accepted"}

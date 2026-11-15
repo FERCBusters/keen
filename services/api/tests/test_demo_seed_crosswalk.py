@@ -65,7 +65,7 @@ def catalogue_session(engine):
     session.add(
         User(username="demo", password_hash="disabled", role="admin", is_active=True)
     )
-    data = json.loads((ROOT / "alembic/seed_frameworks.json").read_text())
+    data = json.loads((ROOT / "tests/fixtures/seed_frameworks.json").read_text())
     for slug, f in data.items():
         for c in f["controls"]:
             session.add(

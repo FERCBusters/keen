@@ -7,7 +7,7 @@ from pathlib import Path
 from app.mapping.rules import evaluate_by_framework, parse_rules
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = json.loads((ROOT / "alembic/catalogues/iso-9001.json").read_text())
+DATA = json.loads((ROOT / "tests/fixtures/catalogues/iso-9001.json").read_text())
 SEEDS = json.loads(
     gzip.decompress((ROOT / "alembic/release_seeds.json.gz").read_bytes())
 )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 
-import httpx
+import httpx2 as httpx
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 

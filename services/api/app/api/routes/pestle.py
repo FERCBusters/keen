@@ -204,19 +204,6 @@ def pestle_item_changelog(
     )
 
 
-@router.get("/v1/pestle/business-processes/{process_id}/changelog")
-def pestle_business_process_changelog(
-    process_id: str,
-    limit: int = 50,
-    offset: int = 0,
-    user=Depends(require_pestle_read),
-    db: Session = Depends(get_db),
-):
-    return service.pestle_business_process_changelog(
-        process_id=process_id, limit=limit, offset=offset, user=user, db=db
-    )
-
-
 @router.get("/v1/pestle/visualisations")
 def pestle_visualisations(
     framework: str = settings.default_framework_slug,

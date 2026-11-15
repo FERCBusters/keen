@@ -152,9 +152,6 @@ OBJECT_RULES = {
         "audits.manage can change the scope of audits its holder created; scoping "
         "ISMS documents needs ISMS read access."
     ),
-    "PUT /v1/audits/{audit_id}/controls": (
-        "audits.manage can change the controls of audits its holder created."
-    ),
     "PATCH /v1/audits/{audit_id}/evidence/{evidence_id}": (
         "audits.manage can edit samples in audits its holder created."
     ),
@@ -337,10 +334,7 @@ POLICY = {
     "PATCH /v1/admin/clauses/{clause_id}/evidence-urls": ADMIN,
     "PUT /v1/admin/clauses/{clause_id}/owners": ADMIN,
     "PATCH /v1/admin/clauses/{clause_id}/upstream-url": ADMIN,
-    "GET /v1/admin/configuration-revisions/{name}": ADMIN,
-    "POST /v1/admin/configuration-revisions/{name}/{revision}/restore": ADMIN,
     "POST /v1/admin/control-suggestions": ADMIN,
-    "POST /v1/admin/controls/import": ADMIN,
     "PATCH /v1/admin/controls/{control_id}/clauses": ADMIN,
     "PATCH /v1/admin/controls/{control_id}/justification": ADMIN,
     "PUT /v1/admin/controls/{control_id}/owners": ADMIN,
@@ -433,8 +427,6 @@ POLICY = {
     "PUT /v1/admin/source-connections/{key}": ADMIN,
     "POST /v1/admin/source-connections/{key}/run": ADMIN,
     "PUT /v1/admin/sources/{source}/ingestion-state": ADMIN,
-    "GET /v1/admin/stale-rule-mappings": ADMIN,
-    "POST /v1/admin/stale-rule-mappings/prune": ADMIN,
     "GET /v1/users": ADMIN,
     "POST /v1/users": ADMIN,
     "DELETE /v1/users/{user_id}": ADMIN,
@@ -445,7 +437,6 @@ POLICY = {
     # --- Audits --------------------------------------------------------------------
     "GET /v1/audits": AUDITS_READ,
     "POST /v1/audits": AUDITS_MANAGE,
-    "GET /v1/audits/by-entity/{entity_type}/{entity_id}": AUDITS_READ,
     "GET /v1/audits/by-event/{event_id}": either(
         {"audits.read", "events.read"},
         {"audits.manage", "events.read"},
@@ -462,7 +453,6 @@ POLICY = {
     "PATCH /v1/audits/{audit_id}": AUDITS_ADMIN,
     "POST /v1/audits/{audit_id}/attendees": AUDITS_ADMIN,
     "DELETE /v1/audits/{audit_id}/attendees/{attendee_id}": AUDITS_ADMIN,
-    "PUT /v1/audits/{audit_id}/controls": AUDITS_ADMIN,
     "POST /v1/audits/{audit_id}/evidence": all_of("audits.admin", "events.read"),
     "DELETE /v1/audits/{audit_id}/evidence/{evidence_id}": AUDITS_ADMIN,
     "PATCH /v1/audits/{audit_id}/evidence/{evidence_id}": AUDITS_ADMIN,
@@ -510,7 +500,6 @@ POLICY = {
     "GET /v1/controls/{target_id}/cross-framework": SIGNED_IN,
     "POST /v1/controls/{target_id}/cross-framework": ADMIN,
     "DELETE /v1/controls/{target_id}/cross-framework/{link_id}": ADMIN,
-    "GET /v1/evidence/latest": EVENTS_READ,
     "GET /v1/frameworks": SIGNED_IN,
     "POST /v1/frameworks": ADMIN,
     "GET /v1/graph/clause_control": SIGNED_IN,
@@ -518,7 +507,6 @@ POLICY = {
     "GET /v1/graph/control_source": EVENTS_READ,
     "GET /v1/graph/risk_control": RISK_READ,
     "GET /v1/home": SIGNED_IN,
-    "GET /v1/home/controls": SIGNED_IN,
     "GET /v1/sources": EVENTS_READ,
     "GET /v1/sources/meta": EVENTS_READ,
     "GET /v1/sources/{source_name}/effectiveness-measures": ISMS_READ,
@@ -580,8 +568,6 @@ POLICY = {
     "GET /v1/isms/bookstack-sections/{section_id}/snapshot": any_of(
         "isms.read", "isms.manage"
     ),
-    "GET /v1/isms/business-processes": ISMS_READ,
-    "POST /v1/isms/business-processes": ISMS_MANAGE,
     "GET /v1/isms/document-folders": ISMS_READ,
     "POST /v1/isms/document-folders": ISMS_MANAGE,
     "DELETE /v1/isms/document-folders/{folder_id}": ISMS_MANAGE,
@@ -675,7 +661,6 @@ POLICY = {
     "POST /v1/pestle/business-processes": PESTLE_MANAGE,
     "DELETE /v1/pestle/business-processes/{process_id}": PESTLE_MANAGE,
     "PATCH /v1/pestle/business-processes/{process_id}": PESTLE_MANAGE,
-    "GET /v1/pestle/business-processes/{process_id}/changelog": PESTLE_READ,
     "GET /v1/pestle/items": PESTLE_READ,
     "POST /v1/pestle/items": PESTLE_MANAGE,
     "DELETE /v1/pestle/items/{item_id}": PESTLE_MANAGE,

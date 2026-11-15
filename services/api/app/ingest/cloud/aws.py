@@ -80,7 +80,6 @@ REPORT_PAUSE = 2.0
 # Credential reports list every IAM user; KEEN reads at most this many bytes.
 REPORT_LIMIT = 16 * 1024 * 1024
 DETAIL_PAGES = 200
-NEVER = ("N/A", "no_information", "not_supported", "")
 MAX_TRAILS = 50
 MAX_REGIONS = 40
 NETWORK_PAGES = 50

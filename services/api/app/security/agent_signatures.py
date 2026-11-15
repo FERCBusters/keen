@@ -38,7 +38,6 @@ _DIGEST = scan_pattern(r"sha-256=:([A-Za-z0-9+/]{43}=):")
 _ENCRYPTION_KEY = scan_pattern(r"[0-9a-f]{16}")
 _PUBLIC_KEY = scan_pattern(r"[A-Za-z0-9_-]{43}")
 _B64URL_SIGNATURE = scan_pattern(r"[A-Za-z0-9_-]{86}")
-KEY_ID = scan_pattern(r"([0-9a-f-]{36}):([0-9a-f]{16})")
 
 
 class SignatureError(ValueError):

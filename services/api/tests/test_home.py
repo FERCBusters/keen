@@ -67,26 +67,6 @@ class HomeLogicTests(unittest.TestCase):
                 home_operations.outside_threshold(value, target, op, u, tu), False
             )
 
-    def test_hierarchy_and_numeric_sort(self):
-        rows = [
-            SimpleNamespace(id=r, ref=r, title=r, in_scope=True)
-            for r in ["A.10.1", "A.5.2", "A.5.1", "A.50.1", "flat"]
-        ]
-        root = home_operations.control_tree(rows)
-        self.assertEqual(root["groups"], [{"id": "A", "title": "A", "count": 4}])
-        self.assertEqual([r["ref"] for r in root["items"]], ["flat"])
-        self.assertEqual(
-            [r["id"] for r in home_operations.control_tree(rows, "A")["groups"]],
-            ["A.5", "A.10", "A.50"],
-        )
-        self.assertEqual(
-            [r["ref"] for r in home_operations.control_tree(rows, "A.5")["items"]],
-            ["A.5.1", "A.5.2"],
-        )
-        self.assertEqual(
-            home_operations.control_tree(rows, "missing"), {"groups": [], "items": []}
-        )
-
 
 class HomeDatabaseTests(unittest.TestCase):
     @classmethod
@@ -206,9 +186,6 @@ class HomeDatabaseTests(unittest.TestCase):
         self.assertEqual(
             [x["label"] for x in result["attention"] if x["kind"] == "gap"], ["A.2 Two"]
         )
-        tree = home.home_controls(self.fw, "", self.db, self.user)
-        self.assertEqual([x["id"] for x in tree["groups"]], ["A", "B"])
-        self.assertEqual(tree["items"], [])
 
     def test_no_permissions_exposes_structure_only(self):
         self.role.return_value = "normal"

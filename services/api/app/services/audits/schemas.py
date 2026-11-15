@@ -57,10 +57,6 @@ class AuditEvidenceUpdatePayload(BaseModel):
     notes: str | None = Field(default=None, max_length=20000)
 
 
-class AuditControlsPayload(BaseModel):
-    controls: list[str] = Field(default_factory=list)
-
-
 class AuditScopePayload(BaseModel):
     swot_ids: list[uuid.UUID] | None = Field(None, max_length=200)
     controls: list[str] = Field(default_factory=list)

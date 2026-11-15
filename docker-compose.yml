@@ -81,7 +81,6 @@ services:
         condition: service_started
     volumes:
       - ./config:/app/config:ro
-      - ./frameworks:/app/frameworks:ro
       - artifacts:/app/data/artifacts
     ports:
       - "127.0.0.1:8181:8080"
@@ -103,7 +102,6 @@ services:
         condition: service_started
     volumes:
       - ./config:/app/config:ro
-      - ./frameworks:/app/frameworks:ro
       - artifacts:/app/data/artifacts
     networks: [keen]
     restart: unless-stopped
@@ -126,7 +124,6 @@ services:
         condition: service_started
     volumes:
       - ./config:/app/config:ro
-      - ./frameworks:/app/frameworks:ro
       - artifacts:/app/data/artifacts
     networks: [keen]
     restart: unless-stopped
@@ -150,7 +147,6 @@ services:
         condition: service_started
     volumes:
       - ./config:/app/config:ro
-      - ./frameworks:/app/frameworks:ro
       - artifacts:/app/data/artifacts
     networks: [keen]
     restart: unless-stopped
@@ -170,7 +166,6 @@ services:
         condition: service_started
     volumes:
       - ./config:/app/config:ro
-      - ./frameworks:/app/frameworks:ro
       - beatdata:/var/lib/keen
     networks: [keen]
     restart: unless-stopped

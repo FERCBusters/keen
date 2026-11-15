@@ -160,7 +160,7 @@ def test_audit_scope_and_findings_use_the_control_by_reference(catalogue):
     control = catalogue.ids["control"]
     audit = _audit(catalogue, ["5.1"])
     assert _scoped_control_ids(catalogue.db, audit["id"]) == [control]
-    catalogue.call("PUT", f"/v1/audits/{audit['id']}/controls", {"controls": ["5.1"]})
+    catalogue.call("PUT", f"/v1/audits/{audit['id']}/scope", {"controls": ["5.1"]})
     assert _scoped_control_ids(catalogue.db, audit["id"]) == [control]
     finding = catalogue.call(
         "POST",

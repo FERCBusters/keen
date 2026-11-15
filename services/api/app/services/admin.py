@@ -9,7 +9,6 @@ import uuid
 from datetime import date, datetime, time, timezone
 
 from sqlalchemy import desc, distinct, func
-from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_delete_prefix
@@ -23,7 +22,6 @@ from app.db.models import (
     ControlClauseLink,
     ControlItem,
     Event,
-    Framework,
     FrameworkClause,
     Group,
     IngestionCursor,
@@ -45,7 +43,6 @@ from app.schemas import (
     ClauseControlLinksPayload,
     ClauseEvidenceUrlsPayload,
     ControlClauseLinksPayload,
-    ControlImportPayload,
     ControlJustificationPayload,
     GroupCreatePayload,
     GroupDetailOut,
@@ -84,7 +81,6 @@ from app.services.entity_changelog import (
     record_entity_changelog,
 )
 from app.services.errors import DomainError
-from app.services.frameworks import validate_framework_slug
 from app.services.presentation import (
     normalize_diary_details as _normalize_diary_details,
 )
@@ -113,150 +109,6 @@ def _ensure_dt_iso_for_admin(value: datetime | None) -> str | None:
     return value.replace(tzinfo=timezone.utc).isoformat()
 
 
-def admin_import_controls(*, payload: ControlImportPayload, user, db: Session):
-    framework_slug = validate_framework_slug(
-        (payload.framework or "").strip() or settings.default_framework_slug
-    )
-
-    if payload.framework_url:
-        payload.framework_url = _validate_upstream_url(payload.framework_url) or ""
-    fw = db.query(Framework).filter(Framework.slug == framework_slug).one_or_none()
-    if fw:
-        if payload.framework_name:
-            fw.name = payload.framework_name.strip() or fw.name
-        if payload.framework_version:
-            fw.version = payload.framework_version.strip() or fw.version
-        if payload.framework_url:
-            fw.upstream_url = payload.framework_url.strip() or fw.upstream_url
-    else:
-        fw = Framework(
-            slug=framework_slug,
-            name=(payload.framework_name or framework_slug).strip(),
-            version=payload.framework_version or None,
-            upstream_url=payload.framework_url or None,
-        )
-        db.add(fw)
-
-    created = 0
-    updated = 0
-    errors: list[dict] = []
-
-    for item in payload.items:
-        try:
-            # Apply each item in its own flushed savepoint. Later items, such as
-            # child clauses, then find rows added earlier in the same file, and
-            # an item the database refuses is reported without losing the rest.
-            with db.begin_nested():
-                is_new = _import_control_item(db, framework_slug, item)
-            if is_new:
-                created += 1
-            else:
-                updated += 1
-        except (DataError, IntegrityError):
-            # The database refused this item's values. Its message carries SQL
-            # text, so report the item generically.
-            errors.append(
-                {
-                    "ref": getattr(item, "ref", None),
-                    "error": "The item could not be stored",
-                }
-            )
-        except SQLAlchemyError:
-            # Connection, lock or other database failures abandon the import.
-            raise
-        except (ValueError, DomainError) as e:
-            # Validation failures carry a safe public message.
-            errors.append({"ref": getattr(item, "ref", None), "error": str(e)})
-        except Exception:
-            # Unexpected exceptions can name internal values, paths or SQL;
-            # report the item generically instead of echoing their message.
-            errors.append(
-                {
-                    "ref": getattr(item, "ref", None),
-                    "error": "The item could not be processed",
-                }
-            )
-
-    db.commit()
-    return {"created": created, "updated": updated, "errors": errors}
-
-
-def _import_control_item(db: Session, framework_slug: str, item) -> bool:
-    """Create or update one imported item; return True when it was created."""
-    t = (item.type or "").strip()
-    r = (item.ref or "").strip()
-    if not t or not r:
-        raise ValueError("type/ref required")
-
-    existing = (
-        db.query(ControlItem)
-        .filter(
-            ControlItem.framework_slug == framework_slug,
-            ControlItem.type == t,
-            ControlItem.ref == r,
-        )
-        .one_or_none()
-    )
-    if existing:
-        existing.title = item.title
-        existing.in_scope = bool(item.in_scope)
-        existing.tags = item.tags or {}
-        existing.meta = item.metadata or {}
-    else:
-        db.add(
-            ControlItem(
-                framework_slug=framework_slug,
-                type=t,
-                ref=r,
-                title=item.title,
-                in_scope=bool(item.in_scope),
-                tags=item.tags or {},
-                meta=item.metadata or {},
-            )
-        )
-
-    # Imported items of type 'clause' also create or update the clause row.
-    # Clause metadata may include upstream_url and parent_ref for hierarchy.
-    if t == "clause":
-        meta = item.metadata or {}
-        parent_ref = str(meta.get("parent_ref") or meta.get("parent") or "").strip()
-        parent_id = None
-        if parent_ref:
-            parent = (
-                db.query(FrameworkClause)
-                .filter(
-                    FrameworkClause.framework_slug == framework_slug,
-                    FrameworkClause.ref == parent_ref,
-                )
-                .one_or_none()
-            )
-            parent_id = parent.id if parent else None
-        clause = (
-            db.query(FrameworkClause)
-            .filter(
-                FrameworkClause.framework_slug == framework_slug,
-                FrameworkClause.ref == r,
-            )
-            .one_or_none()
-        )
-        if clause:
-            clause.title = item.title or clause.title or r
-            clause.parent_clause_id = parent_id
-            clause.meta = meta
-        else:
-            db.add(
-                FrameworkClause(
-                    framework_slug=framework_slug,
-                    ref=r,
-                    title=item.title or r,
-                    parent_clause_id=parent_id,
-                    sort_order=0,
-                    meta=meta,
-                )
-            )
-    return existing is None
-
-
 def _is_intermediate_clause_parent(db: Session, clause: FrameworkClause) -> bool:
     """Return True for clauses such as 7.5 that sit between a parent and children.
 
@@ -278,8 +130,6 @@ def _validate_upstream_url(raw: str | None) -> str | None:
     value = (raw or "").strip()
     if not value:
         return None
-    if len(value) > 2048:
-        raise DomainError(status_code=400, detail="upstream_url is too long")
     if absolute_http_url(value) is None:
         raise DomainError(
             status_code=400, detail="upstream_url must start with http:// or https://"

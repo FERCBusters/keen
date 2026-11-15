@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2 as httpx
 
 from app.db.models import (
     ControlItem,

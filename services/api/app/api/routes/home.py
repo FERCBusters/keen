@@ -25,13 +25,3 @@ def home_overview(
     return service.home_overview(
         context=change_context(request), framework=framework, db=db, user=user
     )
-
-
-@router.get("/v1/home/controls")
-def home_controls(
-    framework: str = settings.default_framework_slug,
-    prefix: str = "",
-    db: Session = Depends(get_db),
-    user=Depends(require_authenticated),
-):
-    return service.home_controls(framework=framework, prefix=prefix, db=db, user=user)

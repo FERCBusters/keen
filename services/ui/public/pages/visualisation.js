@@ -137,7 +137,6 @@ const vizCaption = document.getElementById('vizCaption');
 const sunburstOtherPanel = document.getElementById('sunburstOtherPanel');
 
 // Control panels
-const controlsDateRange = document.getElementById('controlsDateRange');
 const dateFrom = document.getElementById('dateFrom');
 const dateTo = document.getElementById('dateTo');
 const dateFromDmy = document.getElementById('dateFromDmy');

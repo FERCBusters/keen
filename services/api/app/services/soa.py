@@ -14,7 +14,6 @@ from app.db.models import (
     ControlClauseLink,
     ControlItem,
     FrameworkClause,
-    IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEntityClauseLink,
@@ -39,7 +38,6 @@ from app.services.isms.access import can_read_isms
 from app.services.isms.serializers import (
     _asset_out,
     _attach_links,
-    _business_process_out,
     _document_out,
     _effectiveness_measure_out,
     _entity_out,
@@ -264,7 +262,6 @@ def statement_of_applicability(
     isms_documents: list[dict[str, Any]] = []
     isms_org_nodes: list[dict[str, Any]] = []
     isms_assets: list[dict[str, Any]] = []
-    isms_business_processes: list[dict[str, Any]] = []
     isms_effectiveness_measures: list[dict[str, Any]] = []
     isms_meetings: list[dict[str, Any]] = []
     if can_view_isms:
@@ -295,16 +292,6 @@ def statement_of_applicability(
             .order_by(RiskAsset.name.asc())
             .limit(1000)
             .all()
-        ]
-        isms_business_processes = [
-            process
-            for row in db.query(IsmsBusinessProcess)
-            .order_by(
-                IsmsBusinessProcess.sort_order.asc(), IsmsBusinessProcess.name.asc()
-            )
-            .all()
-            # _business_process_out answers None only for a missing row.
-            if (process := _business_process_out(row)) is not None
         ]
         isms_effectiveness_measures = [
             _effectiveness_measure_out(db, row, fw, include_entries=False)
@@ -341,7 +328,6 @@ def statement_of_applicability(
             "isms_documents": len(isms_documents),
             "isms_org_nodes": len(isms_org_nodes),
             "isms_assets": len(isms_assets),
-            "isms_business_processes": len(isms_business_processes),
             "isms_effectiveness_measures": len(isms_effectiveness_measures),
             "isms_meetings": len(isms_meetings),
         },
@@ -354,7 +340,6 @@ def statement_of_applicability(
         "isms_documents": isms_documents,
         "isms_org_nodes": isms_org_nodes,
         "isms_assets": isms_assets,
-        "isms_business_processes": isms_business_processes,
         "isms_effectiveness_measures": isms_effectiveness_measures,
         "isms_meetings": isms_meetings,
     }

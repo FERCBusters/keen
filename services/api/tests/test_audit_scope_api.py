@@ -108,19 +108,6 @@ def test_documents_bring_the_controls_and_clauses_they_are_linked_to(scope):
     assert scope.refs(by_title) == (["A.1", "A.2"], ["9"], ["Operations policy"])
 
 
-def test_replacing_the_controls_keeps_the_clauses_and_documents(scope):
-    scope.put(clauses=["8.2"], documents=["Operations policy"])
-
-    response = scope.call(scope.client, "PUT", "/controls", json={"controls": ["A.1"]})
-
-    assert response.status_code == 200, response.text
-    # Controls brought by the kept clauses and documents stay in scope.
-    assert [c["ref"] for c in response.json()["scoped_controls"]] == ["A.1", "A.2"]
-    detail = scope.detail()
-    assert [c["ref"] for c in detail["scoped_clauses"]] == ["8.2", "9"]
-    assert [d["title"] for d in detail["scoped_documents"]] == ["Operations policy"]
-
-
 @pytest.mark.parametrize(
     "body,detail",
     [

@@ -871,7 +871,6 @@ def test_serializers_tolerate_missing_rows_and_refuse_unknown_entity_types():
 
     assert control_summary(None) == {}
     assert serializers._clause_out(None) == {}
-    assert serializers._business_process_out(None) is None
     assert serializers._asset_category_out(None) is None
     assert serializers._asset_subcategory_out(None) is None
     assert serializers._metric_entry_value_display(None) == ""

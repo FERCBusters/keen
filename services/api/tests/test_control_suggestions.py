@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 SEEDS = json.loads(
-    (Path(__file__).resolve().parents[1] / "alembic/seed_frameworks.json").read_text()
+    (Path(__file__).resolve().parent / "fixtures/seed_frameworks.json").read_text()
 )
 
 

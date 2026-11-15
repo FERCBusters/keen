@@ -405,7 +405,7 @@ def test_loki_events_and_http_credentials_are_connection_scoped(
     import base64
     from datetime import timezone
 
-    import httpx
+    import httpx2 as httpx
     from app.db.models import IngestionCursor
     from app.ingest import loki
 

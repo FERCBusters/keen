@@ -28,7 +28,6 @@ from app.services.audits import operations, reports, scheduling
 from app.services.audits import scope as audit_scope
 from app.services.audits.schemas import (
     AuditAttendeePayload,
-    AuditControlsPayload,
     AuditEvidencePayload,
     AuditEvidenceUpdatePayload,
     AuditFindingPayload,
@@ -142,12 +141,6 @@ def edit(name, ids, control_id):
             db=db,
             user=user,
         ),
-        "replace controls": lambda db, user: operations.replace_audit_controls(
-            audit_id=audit_id,
-            payload=AuditControlsPayload(controls=[control_id]),
-            db=db,
-            user=user,
-        ),
         "add sample": lambda db, user: operations.add_audit_evidence(
             audit_id=audit_id,
             payload=AuditEvidencePayload(
@@ -206,7 +199,6 @@ def edit(name, ids, control_id):
 EDITS = [
     "rename",
     "replace scope",
-    "replace controls",
     "add sample",
     "edit sample",
     "remove sample",
@@ -252,9 +244,9 @@ def test_overlapping_scope_replacements_keep_the_later_scope_whole(race):  # noq
     ids = in_progress_audit(race)
     original, first, second = control(race), control(race), control(race)
     with race.session() as db:
-        operations.replace_audit_controls(
+        operations.replace_audit_scope(
             audit_id=ids["audit"],
-            payload=AuditControlsPayload(controls=[original]),
+            payload=AuditScopePayload(controls=[original]),
             db=db,
             user=db.get(User, race.user_id),
         )

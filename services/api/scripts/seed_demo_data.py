@@ -60,7 +60,6 @@ from app.db.models import (  # noqa: E402
     FrameworkClause,
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
-    IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
@@ -594,28 +593,20 @@ class DemoSeeder:
         return assets
 
     def seed_business_processes(self) -> dict[str, PestleBusinessProcess]:
-        specs = {
-            "onboarding": ("Customer onboarding", "New customer setup and assurance."),
-            "service": ("Service delivery", "Day-to-day hosting and support."),
-            "incident": ("Incident management", "Detection, response, and recovery."),
-            "supplier": ("Supplier management", "Supplier risk and contract reviews."),
+        names = {
+            "onboarding": "Customer onboarding",
+            "service": "Service delivery",
+            "incident": "Incident management",
+            "supplier": "Supplier management",
         }
-        pestle_processes: dict[str, PestleBusinessProcess] = {}
-        for order, (key, (name, description)) in enumerate(specs.items(), start=10):
-            # ISMS business processes drive the application-configuration matrix.
-            # PESTLE(E) has its own business-process table, so seed both and pass
-            # the PESTLE-specific rows to seed_pestle().
-            self.upsert(
-                IsmsBusinessProcess,
-                {"name": self.label(name)},
-                {"description": description, "sort_order": order, "is_default": False},
-            )
-            pestle_processes[key] = self.upsert(
+        return {
+            key: self.upsert(
                 PestleBusinessProcess,
                 {"name": self.label(name)},
                 {"created_by_user_id": self.user.id},
             )
-        return pestle_processes
+            for key, name in names.items()
+        }
 
     def seed_access_matrix(
         self,

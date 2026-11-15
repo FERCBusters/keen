@@ -13,7 +13,6 @@ from app.db.models import (
     ControlItem,
     FrameworkClause,
     IsmsAccessControlMatrixEntry,
-    IsmsBusinessProcess,
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMeasureSecret,
@@ -85,18 +84,6 @@ def _org_node_out(
         "people": people,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-    }
-
-
-def _business_process_out(row: IsmsBusinessProcess | None) -> dict[str, Any] | None:
-    if row is None:
-        return None
-    return {
-        "id": str(row.id),
-        "name": row.name,
-        "description": row.description or "",
-        "sort_order": int(row.sort_order or 0),
-        "is_default": bool(row.is_default),
     }
 
 

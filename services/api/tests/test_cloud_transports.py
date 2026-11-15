@@ -7,7 +7,7 @@ import base64
 import json
 
 import httplib2
-import httpx
+import httpx2 as httpx
 import pytest
 from app.ingest import cloud
 from app.ingest.cloud import api, base, demo, google

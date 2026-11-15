@@ -604,7 +604,7 @@ def test_pdf_preview_concurrency_is_bounded_and_slots_survive_failure(monkeypatc
 
 
 def test_notification_webhook_does_not_buffer_hostile_response():
-    import httpx
+    import httpx2 as httpx
     from app.outbound.question_webhooks import _post_json
 
     class HostileStream(httpx.SyncByteStream):

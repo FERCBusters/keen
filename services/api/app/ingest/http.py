@@ -20,12 +20,12 @@ from contextvars import ContextVar
 from threading import Lock
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2 as httpx
 
 from app.core.config import settings
 from app.security.provider_logging import suppress_provider_logs
 
-suppress_provider_logs("httpx")
+suppress_provider_logs("httpx2")
 
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024

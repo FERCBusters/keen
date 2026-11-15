@@ -52,7 +52,6 @@ async function fixture(t, options = {}) {
         if (options.timelineFail) throw new Error('Offline');
         return options.timeline || timeline;
       }
-      if (u.pathname === '/api/v1/home/controls') return { items: [], sections: [], total: 0 };
       throw new Error('Unexpected GET ' + u);
     },
   });

@@ -54,7 +54,6 @@ SUITE = hpke.Suite(
 )
 KEM, KDF, AEAD = "MLKEM768-X25519", "HKDF-SHA256", "AES-256-GCM"
 ENC_SIZE = 1120
-PUBLIC_SIZE = 1216
 RESPONSE_KEY_SIZE = 32
 TAG_SIZE = 16
 NONCE_SIZE = 12
@@ -74,7 +73,6 @@ VALID_FOR = timedelta(days=37)
 DESTROY_GRACE = timedelta(hours=1)
 
 ENCRYPTION_KEY_ID = scan_pattern(r"[0-9a-f]{16}")
-FINGERPRINT = scan_pattern(r"[A-Za-z0-9_-]{22}")
 
 
 def fingerprint(raw_public_key: bytes) -> str:

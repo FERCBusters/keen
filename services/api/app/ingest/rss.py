@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
-import httpx
+import httpx2 as httpx
 from dateutil import parser as dtparser
 from sqlalchemy.orm import Session
 

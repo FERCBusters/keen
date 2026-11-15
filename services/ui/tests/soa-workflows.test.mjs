@@ -430,7 +430,7 @@ test('sections the user cannot view explain the restriction', async (t) => {
 
 test('an empty framework shows empty states', async (t) => {
   const ui = await soaPage(t, {
-    data: { framework: 'A', can_view_isms: true, counts: { isms_business_processes: 4 } },
+    data: { framework: 'A', can_view_isms: true, counts: { business_processes: 4 } },
   });
   assert.match(ui.el('soaMeta').textContent, /4 business processes/);
   assert.match(ui.el('ismsOrgRows').textContent, /No organisation chart nodes yet/);

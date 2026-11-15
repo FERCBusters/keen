@@ -847,19 +847,6 @@ def pestle_item_changelog(
     )
 
 
-def pestle_business_process_changelog(
-    *, process_id: str, limit: int = 50, offset: int = 0, user, db: Session
-):
-    row = _business_process_or_404(db, process_id)
-    return list_entity_changelogs(
-        db,
-        entity_type="pestle_business_process",
-        entity_id=row.id,
-        limit=limit,
-        offset=offset,
-    )
-
-
 def pestle_visualisations(
     *, framework: str = settings.default_framework_slug, user, db: Session
 ):

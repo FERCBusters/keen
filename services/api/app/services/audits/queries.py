@@ -25,15 +25,10 @@ from app.db.models import (
 from app.services.audits.access import (
     attends,
     audit_or_404,
-    can_read_audit,
     can_see_event,
     require_audit_access,
 )
 from app.services.audits.references import clause_out, control_out, document_out
-from app.services.audits.samples import (
-    clean_audit_sample_entity_type,
-    clean_optional_entity_id,
-)
 from app.services.audits.scope import selectable_clause_descendants
 from app.services.audits.serializers import (
     attendee_dict,
@@ -402,64 +397,6 @@ def list_audits_for_event(*, event_id: str, db: Session, user: User):
             }
             for x in rows
             if x.audit is not None
-        ],
-    }
-
-
-def list_audits_for_entity(
-    *, entity_type: str, entity_id: str, db: Session, user: User
-):
-    sampled_type = clean_audit_sample_entity_type(entity_type)
-    sampled_id = clean_optional_entity_id(entity_id)
-    if not sampled_type or not sampled_id:
-        raise DomainError(status_code=400, detail="entity_id must be a UUID")
-
-    rows = (
-        db.query(AuditEvidence)
-        .join(Audit, Audit.id == AuditEvidence.audit_id)
-        .filter(
-            AuditEvidence.entity_type == sampled_type,
-            AuditEvidence.entity_id == sampled_id,
-        )
-        .order_by(desc(Audit.updated_at), desc(AuditEvidence.added_at))
-        .all()
-    )
-    readable_rows = [
-        x for x in rows if x.audit is not None and can_read_audit(db, user, x.audit)
-    ]
-    user_ids = [
-        x.audit.created_by_user_id
-        for x in readable_rows
-        if x.audit is not None and x.audit.created_by_user_id
-    ]
-    user_ids += [x.added_by_user_id for x in readable_rows if x.added_by_user_id]
-    authors = usernames(db, list(set(user_ids)))
-
-    return {
-        "entity_type": sampled_type,
-        "entity_id": str(sampled_id),
-        "items": [
-            {
-                "audit": audit_summary(db, x.audit, authors),
-                "evidence": {
-                    "id": str(x.id),
-                    "notes": x.notes or "",
-                    "evidence_url": x.evidence_url,
-                    "title": x.title,
-                    "entity_type": x.entity_type,
-                    "entity_id": str(x.entity_id) if x.entity_id else None,
-                    "added_at": iso_dt(x.added_at),
-                    "added_by_user_id": (
-                        str(x.added_by_user_id) if x.added_by_user_id else None
-                    ),
-                    "added_by_username": (
-                        authors.get(x.added_by_user_id, "")
-                        if x.added_by_user_id
-                        else ""
-                    ),
-                },
-            }
-            for x in readable_rows
         ],
     }
 

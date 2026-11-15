@@ -231,7 +231,6 @@ def test_sampling_cannot_grant_itself_bookstack_snapshot_read(
         "isms_org_node",
         "isms_asset",
         "isms_access_control_matrix",
-        "isms_application_configuration",
         "isms_meeting",
         "isms_effectiveness_measure",
         "isms_effectiveness_metric",
@@ -513,7 +512,6 @@ def other_audits(sampling_client):
     [
         ("PATCH", "", {"title": "Unauthorised edit"}),
         ("PUT", "/scope", {"controls": [], "clauses": [], "documents": []}),
-        ("PUT", "/controls", {"controls": []}),
         ("POST", "/evidence", {"evidence_url": "https://evidence.example/report"}),
         ("PATCH", "/evidence/{id}", {"title": "Unauthorised edit"}),
         ("DELETE", "/evidence/{id}", None),
