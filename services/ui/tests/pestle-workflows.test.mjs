@@ -25,7 +25,7 @@ const items = [
     item: HOSTILE + 'Privacy law',
     overall_relevance: { code: 'high', label: 'High' },
     rationale: 'Fines',
-    business_process_count: 1,
+    control_count: 1,
     clause_count: 2,
   },
   {
@@ -34,10 +34,16 @@ const items = [
     lens: 'Internal',
     item: 'Hybrid work',
     overall_relevance: { code: 'medium', label: 'Medium' },
-    business_process_count: 2,
+    control_count: 2,
     clause_count: 1,
   },
-  { id: 'p3', type: 'Social', lens: 'Internal', item: 'Skills', overall_relevance: 'low' },
+  {
+    id: 'p3',
+    type: 'Social',
+    lens: 'Internal',
+    item: 'Skills',
+    overall_relevance: { code: 'low', label: 'Low' },
+  },
   {
     id: 'p4',
     type: 'Legal',
@@ -98,8 +104,6 @@ async function pestlePage(t, options = {}) {
   const state = {
     itemQueries: [],
     posted: [],
-    removed: [],
-    processes: structuredClone(options.processes ?? [{ id: 'b1', name: '<b>Payroll</b>' }]),
   };
   const ui = await page(t, 'pestle', {
     query: options.query || '',
@@ -125,8 +129,6 @@ async function pestlePage(t, options = {}) {
           framework: 'A',
         };
       }
-      if (p === '/api/v1/pestle/business-processes')
-        return { items: structuredClone(state.processes) };
       if (p === '/api/v1/pestle/visualisations') {
         if (options.vizFail) throw new Error('Viz offline');
         return structuredClone(options.visualisations ?? visualisations);
@@ -136,17 +138,6 @@ async function pestlePage(t, options = {}) {
     },
     post: async (u, body) => {
       state.posted.push({ path: u.pathname, body: plain(body) });
-      if (options.postFail) throw new Error('Name taken');
-      if (u.pathname === '/api/v1/pestle/business-processes')
-        state.processes.push({ id: 'b9', name: body.name });
-      return { ok: true };
-    },
-    remove: async (u) => {
-      state.removed.push(u.pathname);
-      if (options.removeFail) throw new Error('In use');
-      state.processes = state.processes.filter(
-        (bp) => decodeURIComponent(u.pathname.split('/').pop()) !== bp.id,
-      );
       return { ok: true };
     },
   });
@@ -178,12 +169,12 @@ test('the PESTLE(E) register lists items safely with relevance badges and counts
       ['High', 'badge text-bg-danger'],
       ['Medium', 'badge text-bg-warning'],
       ['Low', 'badge text-bg-success'],
-      ['N/A', 'badge text-bg-light'],
+      ['N/A', 'badge text-bg-light border'],
     ],
   );
-  assert.match(rows[0].textContent, /1 process\b/);
+  assert.match(rows[0].textContent, /1 control\b/);
   assert.match(rows[0].textContent, /2 clauses/);
-  assert.match(rows[1].textContent, /2 processes/);
+  assert.match(rows[1].textContent, /2 controls/);
   assert.match(rows[1].textContent, /1 clause\b/);
   assert.equal(rows[1].cells[4].textContent.trim(), '-');
   assert.equal(rows[0].querySelector('.btn-outline-primary').textContent, 'Edit');
@@ -230,17 +221,12 @@ test('an empty register says no items match', async (t) => {
   assert.equal(ui.el('pestleItemsMeta').textContent, '0 PESTLE(E) items for A.');
 });
 
-test('readers can view items and processes without management actions', async (t) => {
+test('readers can view items without management actions', async (t) => {
   const { ui } = await pestlePage(t, { me: { can_view_pestle: true } });
   const row = ui.el('pestleRows').querySelector('tr');
   assert.equal(row.querySelector('.btn-outline-primary').textContent, 'View');
   assert.equal(row.querySelector('[data-sample-pestle]'), null);
   assert.equal(ui.el('newPestleItem').classList.contains('d-none'), true);
-  assert.equal(ui.el('addBusinessProcess').style.display, 'none');
-  assert.equal(ui.el('businessProcessName').disabled, true);
-  assert.equal(ui.el('businessProcessList').querySelector('button'), null);
-  assert.match(ui.el('businessProcessList').textContent, /<b>Payroll<\/b>/);
-  assert.equal(ui.el('businessProcessList').querySelector('b'), null);
 });
 
 test('users without PESTLE(E) access see an explanation and no register requests', async (t) => {
@@ -250,64 +236,11 @@ test('users without PESTLE(E) access see an explanation and no register requests
     /You do not have permission to view PESTLE\(E\) assessments/,
   );
   assert.equal(state.itemQueries.length, 0);
-  assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/pestle/business-processes')));
 });
 
 test('a metadata failure is reported', async (t) => {
   const { ui } = await pestlePage(t, { metaFail: true });
   assert.equal(ui.el('status').textContent, 'Failed to load PESTLE(E): Meta offline');
-});
-
-test('business processes are deleted only after confirmation and failures are reported', async (t) => {
-  const prompts = [];
-  const { ui, state } = await pestlePage(t, {
-    processes: [
-      { id: 'b1', name: 'Payroll' },
-      { id: 'b/2', name: 'Sales' },
-    ],
-    confirm: (message) => (prompts.push(message), prompts.length > 1),
-  });
-  const del = (id) => ui.el('businessProcessList').querySelector(`[data-delete-process="${id}"]`);
-  del('b1').click();
-  assert.equal(prompts[0].title, 'Delete business process');
-  assert.deepEqual(state.removed, []);
-  del('b/2').click();
-  await settle(() => ui.el('status').textContent === 'Business process deleted');
-  assert.deepEqual(state.removed, ['/api/v1/pestle/business-processes/b%2F2']);
-  // The register reloads because item process counts change.
-  assert.equal(state.itemQueries.length, 2);
-  assert.equal(del('b/2'), null);
-
-  const failing = await pestlePage(t, { removeFail: true });
-  failing.ui.el('businessProcessList').querySelector('[data-delete-process="b1"]').click();
-  await settle(
-    () => failing.ui.el('status').textContent === 'Failed to delete business process: In use',
-  );
-});
-
-test('adding a business process trims the name and reports failures', async (t) => {
-  const { ui, state } = await pestlePage(t, { processes: [] });
-  assert.match(
-    ui.el('businessProcessList').textContent,
-    /No business processes have been created yet/,
-  );
-  ui.el('businessProcessName').value = '  Customer onboarding  ';
-  ui.el('addBusinessProcess').click();
-  await settle(() => ui.el('status').textContent === 'Business process added');
-  assert.deepEqual(state.posted, [
-    { path: '/api/v1/pestle/business-processes', body: { name: 'Customer onboarding' } },
-  ]);
-  assert.equal(ui.el('businessProcessName').value, '');
-  assert.match(ui.el('businessProcessList').textContent, /Customer onboarding/);
-
-  const failing = await pestlePage(t, { postFail: true });
-  failing.ui.el('businessProcessName').value = 'Payroll';
-  failing.ui.el('addBusinessProcess').click();
-  await settle(
-    () => failing.ui.el('status').textContent === 'Failed to add business process: Name taken',
-  );
-  assert.equal(failing.ui.el('addBusinessProcess').disabled, false);
-  assert.equal(failing.ui.el('businessProcessName').value, 'Payroll');
 });
 
 test('an item can be sampled into an audit from the register', async (t) => {
@@ -341,9 +274,9 @@ function fakeTabs() {
 
 test('tabs follow the tab query parameter and record the active tab', async (t) => {
   const tabs = fakeTabs();
-  const { ui } = await pestlePage(t, { query: '&tab=processes', tabs });
-  assert.deepEqual(tabs.shown, ['businessProcessesTab']);
-  assert.match(ui.window.location.search, /tab=processes/);
+  const { ui } = await pestlePage(t, { query: '&tab=visualisations', tabs });
+  assert.deepEqual(tabs.shown, ['pestleVisualisationsTab']);
+  assert.match(ui.window.location.search, /tab=visualisations/);
   ui.el('pestleItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.doesNotMatch(ui.window.location.search, /tab=/);
   assert.match(ui.window.location.search, /framework=A/);
@@ -355,7 +288,7 @@ test('tabs follow the tab query parameter and record the active tab', async (t) 
 });
 
 test('inherited object names in the tab parameter open the item list', async (t) => {
-  for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+  for (const name of ['processes', 'constructor', '__proto__', 'toString', 'hasOwnProperty']) {
     const tabs = fakeTabs();
     await pestlePage(t, { query: `&tab=${name}`, tabs });
     assert.deepEqual(tabs.shown, ['pestleItemsTab'], name);
@@ -470,7 +403,7 @@ test('visualisations explain empty data, missing D3 and load failures', async (t
   );
 });
 
-test('changing business processes refreshes visualisations on the next visit', async (t) => {
+test('visualisations load once however often the tab is shown', async (t) => {
   const { ui } = await pestlePage(t);
   const vizCalls = () =>
     ui.calls.filter((c) => c.url.startsWith('/api/v1/pestle/visualisations')).length;
@@ -479,11 +412,6 @@ test('changing business processes refreshes visualisations on the next visit', a
   ui.el('pestleVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(vizCalls(), 1);
-  ui.el('businessProcessName').value = 'Logistics';
-  ui.el('addBusinessProcess').click();
-  await settle(() => ui.el('status').textContent === 'Business process added');
-  ui.el('pestleVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => vizCalls() === 2);
 });
 
 test('audit managers can sample items without event access, unlike plain readers', async (t) => {
@@ -507,8 +435,6 @@ test('audit managers can sample items without event access, unlike plain readers
 
 test('visualisation labels follow a dark hex page background and equal relevance sorts by clause', async (t) => {
   const { ui } = await pestlePage(t, {
-    query: '&tab=visualisations',
-    tabs: fakeTabs(),
     visualisations: {
       ...visualisations,
       clause_links: [
@@ -544,13 +470,6 @@ test('visualisation labels follow a dark hex page background and equal relevance
     el === ui.window.document.body ? { backgroundColor: '#123' } : real(el, pseudo);
   ui.el('pestleVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => ui.el('pestleClauseNetwork').querySelector('svg'));
-  // The forced initial render used the white default; redraw against the dark page.
-  ui.el('pestleLensTypeViz').innerHTML = '';
-  ui.el('businessProcessName').value = 'Logistics';
-  ui.el('addBusinessProcess').click();
-  await settle(() => ui.el('status').textContent === 'Business process added');
-  ui.el('pestleVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => ui.el('pestleLensTypeViz').querySelector('svg g text'));
   const axisLabel = ui.el('pestleLensTypeViz').querySelector('svg g text');
   assert.equal(axisLabel.getAttribute('fill'), '#f8fafc');
   assert.equal(axisLabel.getAttribute('stroke'), 'rgb(17, 34, 51)');

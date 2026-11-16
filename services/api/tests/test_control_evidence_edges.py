@@ -29,7 +29,6 @@ from app.security.diary_visibility import (
     diary_filter_condition,
 )
 from app.services.control_inheritance import evidenced_control_ids
-from app.services.controls import control_evidence
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -82,35 +81,6 @@ def _event(db, name, *controls, **columns):
     for control in controls:
         db.add(Mapping(event_id=row.id, control_item_id=control.id, method="rule"))
     return row
-
-
-def test_an_event_removed_while_its_control_is_listed_is_left_out(contract_db):
-    db = contract_db
-    control = ControlItem(framework_slug=TGT, ref="C1", type="control")
-    db.add(control)
-    db.flush()
-    kept = _event(db, "kept", control, timestamp=datetime(2026, 3, 1))
-    removed = _event(db, "removed", control, timestamp=datetime(2026, 3, 2))
-    admin = _user(db, role="admin")
-    db.commit()
-
-    with removed_before(
-        db.get_bind(),
-        "SELECT events.id",
-        "DELETE FROM mappings WHERE event_id = %(id)s;"
-        " DELETE FROM events WHERE id = %(id)s",
-        {"id": str(removed.id)},
-    ) as seen:
-        page = control_evidence(
-            control_id=str(control.id), limit=10, offset=0, db=db, user=admin
-        )
-    assert seen == [
-        "SELECT events.id AS events_id, events.timestamp AS events_timestamp, events.connection_id AS events_connection_id, events.connection_name AS events_connection_name, events.source AS events_source, events.summary AS events_summary, events.raw_pointer AS events_raw_pointer, events.normalized_payload AS events_normalized_payload \nFROM events \nWHERE events.id IN (%(id_1_1)s::UUID, %(id_1_2)s::UUID)"
-    ], "the events of the page were read after the count"
-    # Both events were counted and paged; only the one still stored is listed.
-    assert page["total"] == 2
-    assert [item["event_id"] for item in page["items"]] == [str(kept.id)]
-    assert page["items"][0]["summary"] == "kept"
 
 
 @pytest.fixture

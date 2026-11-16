@@ -39,6 +39,7 @@ from app.mapping.rules import (
     TARGET_KINDS,
     _as_rule_entries,
     evaluate_by_framework,
+    event_fields,
     parse_rules,
     rule_problem,
 )
@@ -1586,22 +1587,7 @@ def preview_rule(*, payload: RuleInput, user: User, db: Session):
     nonmatches: list[dict[str, Any]] = []
     count = 0
     for event in events:
-        hits = evaluate_by_framework(
-            {
-                "source": event.source,
-                "connection_id": event.connection_id,
-                "connection_name": event.connection_name,
-                "system": event.system,
-                "actor": event.actor,
-                "action": event.action,
-                "outcome": event.outcome,
-                "severity": event.severity,
-                "summary": event.summary,
-                "normalized_payload": event.normalized_payload,
-                "raw_pointer": event.raw_pointer,
-            },
-            [rule],
-        )
+        hits = evaluate_by_framework(event_fields(event), [rule])
         if hits:
             count += 1
             if len(examples) < 10:

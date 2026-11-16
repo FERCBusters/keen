@@ -30,9 +30,13 @@ from app.services.frameworks import framework_parameter
 from app.services.isms.link_diary import sync_entity_link_diary
 from app.services.pestle import _clean_lens, _clean_type
 from app.services.risks import (
+    REGISTER_RATINGS,
+    TREATMENT_STATUSES,
+    TREATMENT_STRATEGIES,
     RiskUpsertPayload,
     _apply_payload,
     _clean_risk_types,
+    _replace_clause_links,
     _replace_control_links,
     _risk_or_404,
     _risk_out,
@@ -56,7 +60,13 @@ _CSV_COLUMNS = [
     "treatment_plan",
     "treatment_due_at",
     "controls",
+    "clauses",
 ]
+
+
+def _listed(value: str | None) -> list[str]:
+    """The entries of a semicolon-separated CSV cell."""
+    return [part.strip() for part in (value or "").split(";") if part.strip()]
 
 
 class RegisterRating(BaseModel):
@@ -160,32 +170,6 @@ def register_heatmap(*, user, db: Session):
     return result
 
 
-def list_register(
-    *,
-    framework: str = "iso_27001_2022",
-    limit: int = 200,
-    offset: int = 0,
-    user,
-    db: Session,
-):
-    fw = framework_parameter(framework)
-    limit, offset = max(1, min(limit, 1000)), max(0, offset)
-    rows = (
-        db.query(Risk)
-        .order_by(Risk.updated_at.desc(), Risk.id)
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-    return {
-        "total": db.query(Risk.id).count(),
-        "items": [_register_out(db, r, fw) for r in rows],
-        "thresholds": _settings(db),
-        "limit": limit,
-        "offset": offset,
-    }
-
-
 def update_settings(*, payload: RegisterThresholds, user, db: Session):
     if not (payload.low_max < payload.moderate_max < payload.high_max):
         raise DomainError(400, "Thresholds must increase from low through high")
@@ -202,20 +186,9 @@ def update_settings(*, payload: RegisterThresholds, user, db: Session):
 
 def rate_risk(*, risk_id: uuid.UUID, payload: RegisterRating, user, db: Session):
     row = _risk_or_404(db, str(risk_id))
-    if payload.treatment_strategy not in {
-        "",
-        "mitigate",
-        "accept",
-        "avoid",
-        "transfer",
-    }:
+    if payload.treatment_strategy not in TREATMENT_STRATEGIES:
         raise DomainError(400, "Invalid treatment strategy")
-    if payload.treatment_status not in {
-        "open",
-        "in_progress",
-        "awaiting_review",
-        "closed",
-    }:
+    if payload.treatment_status not in TREATMENT_STATUSES:
         raise DomainError(400, "Invalid treatment status")
     before = _register_out(db, row, "iso_27001_2022")
     for field, value in payload.model_dump().items():
@@ -223,11 +196,6 @@ def rate_risk(*, risk_id: uuid.UUID, payload: RegisterRating, user, db: Session)
             set_treatment_status(row, value)
         else:
             setattr(row, field, value.strip() if isinstance(value, str) else value)
-    row.threat_score = 1
-    row.vulnerability_score = row.register_likelihood or 1
-    row.impact_score = row.register_impact or 1
-    row.residual_vulnerability_score = row.register_residual_likelihood or 1
-    row.residual_impact_score = row.register_residual_impact or 1
     row.risk_score = _score(row.register_likelihood, row.register_impact) or 0
     row.residual_risk_score = (
         _score(row.register_residual_likelihood, row.register_residual_impact) or 0
@@ -397,38 +365,18 @@ def import_register(
                 category_name=entry["category"],
                 subcategory_name=entry["subcategory"],
                 threat_summary=entry["threat_summary"],
-                risk_types=[
-                    part.strip()
-                    for part in (entry["risk_types"] or "").split(";")
-                    if part.strip()
-                ],
+                risk_types=_listed(entry["risk_types"]),
                 risk_owner_username=(entry.get("owner_username") or "").strip() or None,
                 risk_owner_role_id=(entry.get("owner_role_id") or "").strip() or None,
                 framework=fw,
-                controls=[
-                    s.strip()
-                    for s in (entry.get("controls") or "").split(";")
-                    if s.strip()
-                ],
+                controls=_listed(entry.get("controls")),
+                clauses=_listed(entry.get("clauses")),
             )
             row = Risk(created_by_user_id=user.id, created_at=imported_at)
             _apply_payload(db, row, payload, is_create=True)
             row.updated_at = imported_at
-            for field in (
-                "register_likelihood",
-                "register_impact",
-                "register_residual_likelihood",
-                "register_residual_impact",
-            ):
+            for field in REGISTER_RATINGS:
                 setattr(row, field, rating(field))
-            row.vulnerability_score, row.impact_score = (
-                row.register_likelihood or 1,
-                row.register_impact or 1,
-            )
-            row.residual_vulnerability_score, row.residual_impact_score = (
-                row.register_residual_likelihood or 1,
-                row.register_residual_impact or 1,
-            )
             row.risk_score = _score(row.register_likelihood, row.register_impact) or 0
             row.residual_risk_score = (
                 _score(row.register_residual_likelihood, row.register_residual_impact)
@@ -436,13 +384,7 @@ def import_register(
             )
             strategy = (entry.get("treatment_strategy") or "").strip()
             status = (entry.get("treatment_status") or "open").strip()
-            if strategy not in {
-                "",
-                "mitigate",
-                "accept",
-                "avoid",
-                "transfer",
-            } or status not in {"open", "in_progress", "awaiting_review", "closed"}:
+            if strategy not in TREATMENT_STRATEGIES or status not in TREATMENT_STATUSES:
                 raise ValueError("Invalid treatment strategy or status")
             row.treatment_strategy = strategy
             set_treatment_status(row, status)
@@ -451,12 +393,17 @@ def import_register(
             row.treatment_due_at = date.fromisoformat(due) if due else None
             db.add(row)
             db.flush()
+            if payload.clauses:
+                _replace_clause_links(
+                    db, row, framework=fw, clause_values=payload.clauses
+                )
             if payload.controls:
                 _replace_control_links(
                     db, row, framework=fw, control_values=payload.controls
                 )
+            if payload.controls or payload.clauses:
                 linked_risk_ids.append(row.id)
-            db.flush()  # the recorded state reads the new control links
+            db.flush()  # the recorded state reads the new links
             record_entity_changelog(
                 db,
                 entity_type="risk",
@@ -506,6 +453,7 @@ def export_register(*, framework: str = "iso_27001_2022", user, db: Session):
                 if row.risk_owner_role_id
                 else "",
                 "controls": ";".join(c["ref"] for c in item["controls"] or []),
+                "clauses": ";".join(c["ref"] for c in item["clauses"]),
             }
             values.update({k: item.get(k) for k in _CSV_COLUMNS if k not in values})
             writer.writerow({k: _csv_safe(v) for k, v in values.items()})

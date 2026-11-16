@@ -21,7 +21,6 @@ suggested again in that framework.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import uuid
@@ -47,6 +46,7 @@ from app.db.models import (
     RuleSuggestionRun,
     User,
 )
+from app.security.encoding import digest
 from app.security.regex import compile_pattern, scan_pattern
 from app.services.control_inheritance import effective_framework_ids
 from app.services.control_suggestions import activity_words, rank_controls
@@ -176,7 +176,7 @@ class _Proposal:
 
     @property
     def signature(self) -> str:
-        return hashlib.sha256(json.dumps(self.keys).encode()).hexdigest()
+        return digest(json.dumps(self.keys))
 
     @property
     def count(self) -> int:

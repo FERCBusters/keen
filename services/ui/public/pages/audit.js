@@ -56,6 +56,7 @@ import {
   syncRichTextEditors,
   userPillHtml,
   safeExternalHref,
+  canViewAudits,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -175,10 +176,6 @@ let clauseChildrenByParentId = new Map();
 let attendeeUsers = [];
 let attendeePeople = [];
 
-function canViewAudits() {
-  return Boolean(me?.can_view_audits || me?.can_manage_audits || me?.is_admin);
-}
-
 function canManageAudits() {
   return audit ? canEditAuditForUser(me, audit) : canSampleIntoAudit(me);
 }
@@ -289,7 +286,7 @@ function ensureAuditRead() {
   // Let the API be the source of truth. Users who are marked as audit
   // attendees may have access to this one audit even when they do not have
   // the global audits.read permission.
-  if (auditId || canViewAudits()) return true;
+  if (auditId || canViewAudits(me)) return true;
   toast(status, 'Audit access required.', 'danger');
   return false;
 }

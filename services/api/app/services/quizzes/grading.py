@@ -13,14 +13,14 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import iso_or_none, utc_now_naive
 from app.db.models import QuizAnswer, QuizAttempt, QuizRound, User
 from app.services.assurance import person_for_user
 from app.services.errors import DomainError
 from app.services.text import clean_text
 
 from .access import require_manage
-from .common import iso, quiz_or_404
+from .common import quiz_or_404
 from .measure import record_round_result
 from .schemas import QuizGradeInput
 from .scoring import settle, shown_score, text_points, valid_grade
@@ -62,12 +62,12 @@ def grading_queue(*, quiz_id: uuid.UUID, db: Session, user: User) -> dict[str, A
                 "answer_id": str(answer.id),
                 "attempt_id": str(attempt.id),
                 "round_id": str(round_.id),
-                "round_opens_on": iso(round_.opens_on),
+                "round_opens_on": iso_or_none(round_.opens_on),
                 "prompt": item["prompt"],
                 # The question's explanation guides the grade.
                 "guidance": item.get("explanation") or "",
                 "text": answer.text_answer,
-                "submitted_at": iso(attempt.submitted_at),
+                "submitted_at": iso_or_none(attempt.submitted_at),
             }
         )
     return {"items": items, "own_answers_waiting": own}
@@ -132,7 +132,7 @@ def grade_answer(
             "grade": answer.grade,
             "points": answer.points,
             "feedback": answer.feedback,
-            "graded_at": iso(answer.graded_at),
+            "graded_at": iso_or_none(answer.graded_at),
         },
         "attempt": {
             "id": str(attempt.id),

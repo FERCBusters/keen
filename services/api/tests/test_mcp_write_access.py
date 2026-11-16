@@ -20,6 +20,7 @@ from app.db.models import (
     IsmsObjective,
     IsmsSwot,
     McpGrant,
+    PestleItem,
     User,
 )
 from app.security import mcp_tokens
@@ -195,28 +196,38 @@ def test_a_connection_adds_records_through_its_tools(mcpw):
     assert "not granted isms.manage" in refused["content"][0]["text"]
 
 
-def test_a_pestle_connection_adds_and_renames_business_processes(mcpw):
+def test_a_pestle_connection_adds_and_rewords_factors(mcpw):
     mcp = mcpw
     user = mcp.keen.user("pestle.manage")
     token = mcp.connect(user, ["pestle.manage"]).access_token
     added = mcp.tool(
         token,
         "create_record",
-        {"kind": "business_process", "fields": {"name": "Payroll"}},
-    )["structuredContent"]
-    renamed = mcp.tool(
+        {
+            "kind": "pestle_item",
+            "fields": {
+                "type": "Legal",
+                "lens": "External",
+                "item": "Privacy law",
+                "overall_relevance_code": "high",
+            },
+        },
+    )
+    assert added.get("isError") is not True, added
+    reworded = mcp.tool(
         token,
         "update_record",
         {
-            "kind": "business_process",
-            "record_id": added["id"],
-            "fields": {"name": "Payroll and benefits"},
+            "kind": "pestle_item",
+            "record_id": added["structuredContent"]["id"],
+            "fields": {"item": "Privacy law tightens"},
         },
     )
-    assert renamed.get("isError") is not True, renamed
-    listed = mcp.tool(token, "list_choices", {"name": "business_processes"})
-    names = [item["name"] for item in listed["structuredContent"]["items"]]
-    assert names == ["Payroll and benefits"]
+    assert reworded.get("isError") is not True, reworded
+    mcp.db.expire_all()
+    assert [row.item for row in mcp.db.query(PestleItem).all()] == [
+        "Privacy law tightens"
+    ]
     refused = mcp.tool(token, "create_record", {"kind": "objective", "fields": {}})
     assert "not granted isms.manage" in refused["content"][0]["text"]
 

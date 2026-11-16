@@ -1,7 +1,5 @@
 """Local MFA primitives. Pending challenges never enter the session namespace."""
 
-import base64
-import hashlib
 import json
 import secrets
 import time
@@ -16,6 +14,7 @@ from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as now
 from app.core.valkey import get_valkey
 from app.db.models import AuditLog, MfaChallenge, MfaCredential, MfaRecoveryCode, User
+from app.security.encoding import digest, unb64url
 from app.security.rate_limit import (
     address_window_allow,
     client_ip,
@@ -51,18 +50,6 @@ TTL = 300
 # the account then accepts no code until CODE_LOCKOUT has passed.
 CODE_ATTEMPTS = 5
 CODE_LOCKOUT = timedelta(hours=1)
-
-
-def digest(value):
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
-def b64(data):
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
-
-
-def unb64(value):
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
 def origin_config():
@@ -366,11 +353,11 @@ def check_client_data(credential, user=None):
     try:
         if len(json.dumps(credential)) > 65536:
             raise ValueError()
-        client = json.loads(unb64(credential["response"]["clientDataJSON"]))
+        client = json.loads(unb64url(credential["response"]["clientDataJSON"]))
         if client.get("crossOrigin") or client.get("topOrigin"):
             raise ValueError()
         handle = credential["response"].get("userHandle")
-        if handle and user is not None and unb64(handle) != user.id.bytes:
+        if handle and user is not None and unb64url(handle) != user.id.bytes:
             raise ValueError()
     except Exception:
         raise HTTPException(400, "Invalid WebAuthn response")

@@ -12,6 +12,7 @@ import {
   loadEntityChangelog,
   isoDateToDisplay,
   userPillHtml,
+  assetHref,
 } from '/app.js';
 import {
   activateTabFromHashOrQuery,
@@ -39,10 +40,6 @@ const canViewRisks =
   featureEnabled(me, 'risk_cia') && !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
 let asset = null;
 let risksLoaded = false;
-
-function assetHref(id = assetId) {
-  return withFramework(`/isms-asset.html?id=${encodeURIComponent(id)}`, framework);
-}
 
 function renderAsset(row) {
   asset = row;
@@ -155,7 +152,7 @@ $('sampleAssetAudit')?.addEventListener('click', () => {
     entityType: 'isms_asset',
     entityId: asset.id,
     title: asset.asset,
-    evidenceUrl: assetHref(asset.id),
+    evidenceUrl: assetHref(asset.id, framework),
     framework,
     statusEl: status,
   });

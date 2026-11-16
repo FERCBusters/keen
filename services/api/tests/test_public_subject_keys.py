@@ -4,7 +4,7 @@ subjects: created once, stored encrypted, and refused when unreadable."""
 import pytest
 from app.db.models import UeuSettings
 from app.integrations.transport import decrypt, encrypt
-from app.security.agent_signatures import b64url, unb64url
+from app.security.encoding import b64url, unb64url
 from app.services.errors import DomainError
 from app.services.ueu_subjects import public_subject_key, subject_grant
 from cryptography.fernet import Fernet

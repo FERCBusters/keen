@@ -143,9 +143,8 @@ def test_risks_link_the_control_that_shares_a_reference_with_a_clause(catalogue)
     assert [c["id"] for c in created["controls"]] == [control]
     replaced = catalogue.call(
         "PATCH",
-        f"/v1/risks/{created['id']}/controls",
-        {"controls": [" 5.1 "]},
-        framework="A",
+        f"/v1/risks/{created['id']}",
+        {"framework": "A", "controls": [" 5.1 "]},
     )
     assert [c["id"] for c in replaced["controls"]] == [control]
 

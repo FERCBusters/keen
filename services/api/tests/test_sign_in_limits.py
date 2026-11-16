@@ -17,7 +17,7 @@ import sqlalchemy
 from app.api.routes import auth as auth_routes
 from app.core.config import settings
 from app.db.models import AuditLog, User
-from app.security import auth
+from app.security import auth, encoding
 from app.security import sign_in_throttle as throttle
 from app.security.auth import cookie_name as session_cookie_name
 from app.security.rate_limit import login_name
@@ -138,7 +138,7 @@ def test_device_cookie_shape_rotation_and_scope(signin):
     assert new != old
     # Only digests are stored, and the retired token no longer counts.
     devices = signin.store.keys("keen:login:device:*")
-    assert devices == [f"keen:login:device:{throttle._token_hash(new)}"]
+    assert devices == [f"keen:login:device:{encoding.digest(new)}"]
     assert old not in " ".join(devices) and new not in " ".join(devices)
 
     # Recognition speaks only for the name it signed in with.
@@ -339,7 +339,7 @@ def test_an_account_keeps_its_newest_recognised_browsers(signin):
     assert throttle.recognised_device(r, tokens[-1], "k")
     assert throttle.recognised_device(r, tokens[-1], "other") is None
     assert throttle.recognised_device(r, "x" * 129, "k") is None
-    throttle.revoke_account_devices(r, "u1", keep=throttle._token_hash(tokens[-1]))
+    throttle.revoke_account_devices(r, "u1", keep=encoding.digest(tokens[-1]))
     assert len(r.keys("keen:login:device:*")) == 1
 
 

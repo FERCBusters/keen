@@ -75,6 +75,18 @@ def control_by_id_or_ref(
     return control_by_ref(db, framework, text, ignore_case=ignore_case)
 
 
+def clause_by_id_or_ref(
+    db: Session, framework: str, value: str | None
+) -> FrameworkClause | None:
+    """Return the framework's clause named by UUID or by reference, or None."""
+    text = (value or "").strip()
+    qry = db.query(FrameworkClause).filter(FrameworkClause.framework_slug == framework)
+    cid = try_uuid(text)
+    if cid:
+        return qry.filter(FrameworkClause.id == cid).one_or_none()
+    return qry.filter(func.lower(FrameworkClause.ref) == text.lower()).one_or_none()
+
+
 def control_summary(control: ControlItem | None) -> dict[str, Any]:
     """Return the control fields shown wherever an entity lists its controls."""
     if not control:

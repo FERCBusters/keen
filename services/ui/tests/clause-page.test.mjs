@@ -70,6 +70,10 @@ async function clausePage(t, options = {}) {
           ],
         };
       }
+      if (p === '/api/v1/clauses/k1/risks') {
+        if (fail.risks) throw new Error('Risks forbidden');
+        return { framework: 'A', items: options.risks || [] };
+      }
       if (p === '/api/v1/clauses/k1/pestle') {
         if (fail.pestle) throw new Error('PESTLE offline');
         return {
@@ -325,7 +329,7 @@ test('PESTLE and ISMS tabs load linked records on demand', async (t) => {
   assert.match(first.innerHTML, /text-bg-warning">2 Medium[\s\S]*text-bg-danger">1 High/);
   assert.match(
     first.querySelector('a').getAttribute('href'),
-    /pestle_item\.html\?id=p1&framework=A/,
+    /pestle_item\.html\?id=p1&tab=details&framework=A/,
   );
   assert.equal(
     ui.el('clausePestleRows').querySelectorAll('tr')[1].cells[5].textContent.trim(),
@@ -449,7 +453,7 @@ test('PESTLE and ISMS opened while the clause loads use the framework in the add
   await settle(() => ui.el('clausePestleRows').querySelectorAll('tr').length === 2);
   assert.equal(
     ui.el('clausePestleRows').querySelector('a').getAttribute('href'),
-    '/pestle_item.html?id=p1&framework=A',
+    '/pestle_item.html?id=p1&tab=details&framework=A',
   );
   assert.equal(ui.el('openPestleFromClause').getAttribute('href'), '/pestle.html?framework=A');
   tab(ui, 'clauseIsmsTab');
@@ -613,4 +617,56 @@ test('a control catalogue that failed with the page is requested again when edit
     [...ui.el('adminControlsList').querySelectorAll('tbody tr')].map((r) => r.cells[0].textContent),
     ['A1', 'A2', 'A3'],
   );
+});
+
+test('risk readers see the risks linked to the clause, as text', async (t) => {
+  const { ui } = await clausePage(t, {
+    risks: [
+      {
+        id: 'r 1',
+        asset: '<b>Payroll DB</b>',
+        threat_summary: 'Ransomware',
+        category: { name: 'Information' },
+        subcategory: { name: 'Databases' },
+        risk_types: ['Availability'],
+        risk_score: 16,
+        residual_risk_score: 6,
+        risk_owner: { username: 'dana' },
+      },
+    ],
+  });
+  await settle(() => ui.el('clauseRisksView').querySelector('tbody tr'));
+  assert.equal(ui.el('clauseRisksCard').style.display, '');
+  assert.equal(ui.el('clauseRisksCount').textContent, '1');
+  const row = ui.el('clauseRisksView').querySelector('tbody tr');
+  assert.equal(row.querySelector('b'), null);
+  assert.equal(row.querySelector('a').textContent, '<b>Payroll DB</b>');
+  assert.equal(row.querySelector('a').getAttribute('href'), '/risk.html?id=r+1&framework=A');
+  assert.match(row.textContent, /Ransomware.*Information.*Databases.*Availability.*16.*6.*dana/s);
+});
+
+test('a clause without linked risks says so, and the card stays hidden when risks cannot be read', async (t) => {
+  const none = await clausePage(t);
+  await settle(() => none.ui.el('clauseRisksCard').style.display === '');
+  assert.equal(none.ui.el('clauseRisksView').textContent, 'No risks are linked to this clause.');
+  assert.equal(none.ui.el('clauseRisksCount').textContent, '0');
+
+  const failed = await clausePage(t, { fail: { risks: true } });
+  await settle(() => failed.ui.idle());
+  assert.equal(failed.ui.el('clauseRisksCard').style.display, 'none');
+  assert.equal(failed.ui.el('status').textContent, '');
+
+  // Without the feature, or without permission to read risks, nothing is requested.
+  for (const me of [
+    { is_admin: true, features: { enabled: { risk_cia: false } } },
+    { can_view_controls: true, can_view_clauses: true },
+  ]) {
+    const hidden = await clausePage(t, { me });
+    await settle(() => hidden.ui.idle());
+    assert.equal(hidden.ui.el('clauseRisksCard').style.display, 'none');
+    assert.equal(
+      hidden.ui.calls.some((c) => c.url.includes('/risks')),
+      false,
+    );
+  }
 });

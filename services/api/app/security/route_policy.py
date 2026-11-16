@@ -99,7 +99,6 @@ _PERMISSION_WRITES = {
         "/v1/questions/entities/{entity_type}/{entity_id}",
         "/v1/questions/entities/{entity_type}/{entity_id}/mark-seen",
         "/v1/pestle/items",
-        "/v1/pestle/business-processes",
         "/v1/stories",
         "/v1/stories/{story_id}/items",
         "/v1/stories/{story_id}/comments",
@@ -117,9 +116,8 @@ _PERMISSION_WRITES = {
     ),
     "PATCH": (
         "/v1/pestle/items/{item_id}",
-        "/v1/pestle/business-processes/{process_id}",
-        "/v1/pestle/items/{item_id}/business-processes",
         "/v1/pestle/items/{item_id}/clauses",
+        "/v1/pestle/items/{item_id}/controls",
         "/v1/stories/{story_id}",
         "/v1/stories/{story_id}/items/{item_id}",
     ),
@@ -130,7 +128,6 @@ _PERMISSION_WRITES = {
     "DELETE": (
         "/v1/questions/{thread_id}",
         "/v1/pestle/items/{item_id}",
-        "/v1/pestle/business-processes/{process_id}",
         "/v1/stories/{story_id}",
         "/v1/stories/{story_id}/items/{item_id}",
         "/v1/stories/{story_id}/comments/{comment_id}",

@@ -376,6 +376,15 @@ def _entry_threshold_status(
     )
 
 
+@overload
+def _metric_entry_out(
+    row: IsmsEffectivenessMetricEntry,
+    measure: IsmsEffectivenessMeasure | None = None,
+) -> dict[str, Any]: ...
+@overload
+def _metric_entry_out(
+    row: None, measure: IsmsEffectivenessMeasure | None = None
+) -> None: ...
 def _metric_entry_out(
     row: IsmsEffectivenessMetricEntry | None,
     measure: IsmsEffectivenessMeasure | None = None,

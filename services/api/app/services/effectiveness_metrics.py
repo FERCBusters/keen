@@ -15,6 +15,7 @@ from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.models import IsmsEffectivenessMeasure, IsmsEffectivenessMetricEntry
 from app.security.regex import scan_pattern
 from app.services.entity_changelog import record_entity_changelog
+from app.services.isms.serializers import _metric_entry_out
 
 log = logging.getLogger(__name__)
 
@@ -80,45 +81,6 @@ def _is_monthly_zero_target(measure: IsmsEffectivenessMeasure) -> bool:
 
 def _metric_reference_for_period(period_start: date) -> str:
     return f"{AUTO_ZERO_REFERENCE_PREFIX}:{period_start:%Y-%m}"
-
-
-def _metric_out(row: IsmsEffectivenessMetricEntry) -> dict[str, Any]:
-    value_display = ""
-    if row.metric_value is not None:
-        value_display = f"{row.metric_value:g}"
-        if row.metric_unit:
-            value_display = f"{value_display} {row.metric_unit}"
-    if row.qualitative_value:
-        value_display = " ".join([value_display, row.qualitative_value]).strip()
-    period = ""
-    if row.period_start and row.period_end:
-        period = f"{row.period_start.isoformat()} → {row.period_end.isoformat()}"
-    elif row.period_start:
-        period = f"from {row.period_start.isoformat()}"
-    elif row.period_end:
-        period = f"to {row.period_end.isoformat()}"
-    return {
-        "id": str(row.id),
-        "measure_id": str(row.measure_id),
-        "recorded_at": row.recorded_at.isoformat() if row.recorded_at else None,
-        "period_start": row.period_start.isoformat() if row.period_start else None,
-        "period_end": row.period_end.isoformat() if row.period_end else None,
-        "period": period,
-        "metric_value": row.metric_value,
-        "metric_unit": row.metric_unit or "",
-        "qualitative_value": row.qualitative_value or "",
-        "value_display": value_display,
-        "source_type": row.source_type or AUTO_ZERO_SOURCE_TYPE,
-        "source_title": row.source_title or "",
-        "source_url": row.source_url,
-        "source_reference": row.source_reference or "",
-        "source_event_id": str(row.source_event_id) if row.source_event_id else None,
-        "notes": row.notes or "",
-        "raw_payload": row.raw_payload or {},
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "display": value_display or row.source_title or "Metric entry",
-    }
 
 
 def _entry_exists_for_period(
@@ -266,7 +228,7 @@ def materialize_missing_monthly_zero_metrics(
             measure.updated_at = now
             db.add(measure)
             db.flush()
-            after = _metric_out(row)
+            after = _metric_entry_out(row, measure)
             record_entity_changelog(
                 db,
                 entity_type="isms_effectiveness_metric",

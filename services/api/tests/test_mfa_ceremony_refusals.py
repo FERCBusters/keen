@@ -16,7 +16,7 @@ import pyotp
 import pytest
 from app.core.config import settings
 from app.db.models import MfaChallenge, MfaCredential, MfaRecoveryCode, User
-from app.security import mfa
+from app.security import encoding, mfa
 from app.security.auth import cookie_name as session_cookie_name
 from app.security.passwords import hash_password
 from cryptography.fernet import Fernet
@@ -262,7 +262,7 @@ def test_an_oversized_security_key_response_is_refused_before_verification(
             "challenge": options.json()["challenge"],
             "origin": BASE,
         }
-        credential["response"]["clientDataJSON"] = mfa.b64(
+        credential["response"]["clientDataJSON"] = encoding.b64url(
             json.dumps(client_data).encode()
         )
         return client.post(

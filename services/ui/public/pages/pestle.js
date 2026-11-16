@@ -2,9 +2,6 @@ import {
   errorText,
   initNavbar,
   apiGet,
-  apiPost,
-  apiDelete,
-  confirmAction,
   esc,
   toast,
   debounce,
@@ -17,6 +14,7 @@ import {
   canSampleIntoAudit,
   openAuditSampleModal,
   lookupTab,
+  setCsvParam,
 } from '/app.js';
 import {
   enhanceFilterPillMultiSelect,
@@ -31,6 +29,7 @@ import {
   splitLabel,
 } from '/pages/bipartite-graph.js';
 import { affectedBadgesHtml } from '/pages/affected-common.js';
+import { relevanceBadgeHtml, pestleHref } from '/pages/risk-common.js';
 
 const me = await initNavbar();
 initCollapsibleFilterSections();
@@ -53,7 +52,6 @@ let visualisationsLoaded = false;
 const status = document.getElementById('status');
 const newPestleItem = document.getElementById('newPestleItem');
 const pestleItemsTab = document.getElementById('pestleItemsTab');
-const businessProcessesTab = document.getElementById('businessProcessesTab');
 const pestleVisualisationsTab = document.getElementById('pestleVisualisationsTab');
 
 const pestleQ = document.getElementById('pestleQ');
@@ -67,22 +65,11 @@ const pestleLensTypeViz = document.getElementById('pestleLensTypeViz');
 const pestleRelevanceVenn = document.getElementById('pestleRelevanceVenn');
 const pestleClauseNetwork = document.getElementById('pestleClauseNetwork');
 
-const businessProcessEditorCard = document.getElementById('businessProcessEditorCard');
-const businessProcessName = document.getElementById('businessProcessName');
-const addBusinessProcess = document.getElementById('addBusinessProcess');
-const businessProcessList = document.getElementById('businessProcessList');
-
 let meta = { types: [], lenses: [], relevance_levels: [] };
 let items = [];
-let businessProcesses = [];
 
 function filterValues(el) {
   return selectedFilterPillValues(el);
-}
-
-function setCsvParam(url, key, values) {
-  const cleaned = Array.from(new Set(values.map((v) => String(v).trim()).filter(Boolean)));
-  if (cleaned.length) url.searchParams.set(key, cleaned.join(','));
 }
 
 function setupPestleFilterPickers() {
@@ -134,7 +121,6 @@ function activateTab(tabName) {
   const tab = lookupTab(
     {
       items: pestleItemsTab,
-      processes: businessProcessesTab,
       visualisations: pestleVisualisationsTab,
     },
     tabName || 'items',
@@ -146,7 +132,6 @@ function activateTab(tabName) {
 
 function wireTabs() {
   pestleItemsTab?.addEventListener('shown.bs.tab', () => setTabQuery('items'));
-  businessProcessesTab?.addEventListener('shown.bs.tab', () => setTabQuery('processes'));
   pestleVisualisationsTab?.addEventListener('shown.bs.tab', () => {
     setTabQuery('visualisations');
     renderPestleVisualisations().catch((e) =>
@@ -156,10 +141,8 @@ function wireTabs() {
   activateTab(requestedTab);
 }
 
-function relevanceLabel(rowOrCode) {
-  if (typeof rowOrCode === 'object' && rowOrCode) return rowOrCode.label || 'N/A';
-  const code = String(rowOrCode);
-  return meta.relevance_levels.find((x) => x.code === code)?.label || 'N/A';
+function relevanceLabel(code) {
+  return meta.relevance_levels.find((x) => x.code === String(code))?.label || 'N/A';
 }
 
 function fillSelects() {
@@ -184,20 +167,6 @@ function fillSelects() {
   );
 }
 
-function pestleItemHref(id, tab = 'details') {
-  const path = `/pestle_item.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(tab)}`;
-  return withFramework(path, framework);
-}
-
-function badgeForRelevance(rel) {
-  const code = rel?.code || rel;
-  let cls = 'text-bg-light';
-  if (code === 'high') cls = 'text-bg-danger';
-  else if (code === 'medium') cls = 'text-bg-warning';
-  else if (code === 'low') cls = 'text-bg-success';
-  return `<span class="badge ${cls}">${esc(relevanceLabel(rel))}</span>`;
-}
-
 function renderItems() {
   if (!canViewPestle) {
     pestleRows.innerHTML =
@@ -211,15 +180,15 @@ function renderItems() {
   }
   pestleRows.innerHTML = items
     .map((it) => {
-      const href = pestleItemHref(it.id);
+      const href = pestleHref(it.id, framework);
       return `<tr>
       <td>${esc(it.type)}</td>
       <td>${esc(it.lens)}</td>
       <td><a class="fw-semibold" href="${esc(href)}">${esc(shorten(it.item, 160))}</a></td>
-      <td>${badgeForRelevance(it.overall_relevance)}</td>
+      <td>${relevanceBadgeHtml(it.overall_relevance)}</td>
       <td class="wrap small-muted">${esc(shorten(it.rationale || '', 220) || '-')}</td>
       <td>${affectedBadgesHtml(it.affected, framework)}</td>
-      <td><span class="badge text-bg-light">${esc(String(it.business_process_count || 0))} process${Number(it.business_process_count || 0) === 1 ? '' : 'es'}</span></td>
+      <td><span class="badge text-bg-light">${esc(String(it.control_count || 0))} control${Number(it.control_count || 0) === 1 ? '' : 's'}</span></td>
       <td><span class="badge text-bg-light">${esc(String(it.clause_count || 0))} clause${Number(it.clause_count || 0) === 1 ? '' : 's'}</span></td>
       <td class="no-print"><div class="d-flex flex-wrap gap-1"><a class="btn btn-sm btn-outline-primary" href="${esc(href)}">${canManagePestle ? 'Edit' : 'View'}</a>${canSampleAudits ? `<button class="btn btn-sm btn-outline-success" type="button" data-sample-pestle="${esc(it.id)}"><i class="bi bi-clipboard2-plus" aria-hidden="true"></i><span class="visually-hidden">Sample into audit</span></button>` : ''}</div></td>
     </tr>`;
@@ -239,57 +208,6 @@ function renderItems() {
         framework: item.framework || framework,
         statusEl: status,
       });
-    }),
-  );
-}
-
-// The editor follows the person's permissions from the start, so it stays
-// right when the business processes fail to load.
-function applyBusinessProcessAccess() {
-  if (businessProcessEditorCard)
-    businessProcessEditorCard.style.display = canViewPestle ? '' : 'none';
-  if (addBusinessProcess) addBusinessProcess.style.display = canManagePestle ? '' : 'none';
-  if (businessProcessName) businessProcessName.disabled = !canManagePestle;
-}
-
-function renderBusinessProcesses() {
-  if (!businessProcesses.length) {
-    businessProcessList.innerHTML =
-      '<div class="border rounded p-3 bg-light small-muted">No business processes have been created yet.</div>';
-    return;
-  }
-  businessProcessList.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
-    <thead><tr><th>Name</th><th style="width:150px;" class="no-print">Actions</th></tr></thead>
-    <tbody>${businessProcesses
-      .map(
-        (bp) => `<tr>
-      <td class="fw-semibold">${esc(bp.name)}</td>
-      <td class="no-print">${canManagePestle ? `<button class="btn btn-sm btn-outline-danger" type="button" data-delete-process="${esc(bp.id)}">Delete</button>` : '<span class="small-muted">-</span>'}</td>
-    </tr>`,
-      )
-      .join('')}</tbody>
-  </table></div>`;
-  businessProcessList.querySelectorAll('[data-delete-process]').forEach((btn) =>
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.deleteProcess;
-      const bp = businessProcesses.find((x) => String(x.id) === String(id));
-      if (
-        !(await confirmAction({
-          title: 'Delete business process',
-          message: `Delete ${bp.name}? Its relevance links are removed with it.`,
-          confirmLabel: 'Delete',
-          danger: true,
-        }))
-      )
-        return;
-      try {
-        await apiDelete(`/api/v1/pestle/business-processes/${encodeURIComponent(id)}`);
-        await Promise.all([loadBusinessProcesses(), loadItems()]);
-        visualisationsLoaded = false;
-        toast(status, 'Business process deleted', 'success');
-      } catch (e) {
-        toast(status, `Failed to delete business process: ${errorText(e)}`, 'danger');
-      }
     }),
   );
 }
@@ -724,7 +642,7 @@ function drawClauseNetwork(data) {
         primaryLines: splitLabel(primary, maxPrimaryChars, isClause ? 2 : 3),
         secondaryLines: node.subtitle ? splitLabel(node.subtitle, maxSecondaryChars, 1) : [],
         secondaryY: 20,
-        href: isClause ? pestleClauseHref(node.id) : pestleItemHref(node.id),
+        href: isClause ? pestleClauseHref(node.id) : pestleHref(node.id, framework),
       });
     });
     selection
@@ -778,29 +696,6 @@ async function loadItems() {
   }
 }
 
-async function loadBusinessProcesses() {
-  const data = await apiGet('/api/v1/pestle/business-processes?limit=5000');
-  businessProcesses = data.items;
-  renderBusinessProcesses();
-}
-
-addBusinessProcess?.addEventListener('click', async () => {
-  const name = (businessProcessName?.value || '').trim();
-  if (!name) return toast(status, 'Enter a business process name', 'warning');
-  addBusinessProcess.disabled = true;
-  try {
-    await apiPost('/api/v1/pestle/business-processes', { name });
-    if (businessProcessName) businessProcessName.value = '';
-    await loadBusinessProcesses();
-    visualisationsLoaded = false;
-    toast(status, 'Business process added', 'success');
-  } catch (e) {
-    toast(status, `Failed to add business process: ${errorText(e)}`, 'danger');
-  } finally {
-    addBusinessProcess.disabled = false;
-  }
-});
-
 reloadPestle?.addEventListener('click', () =>
   loadItems().catch((e) =>
     toast(status, `Failed to load PESTLE(E) items: ${errorText(e)}`, 'danger'),
@@ -821,14 +716,13 @@ if (newPestleItem) {
 
 setupPestleFilterPickers();
 wireTabs();
-applyBusinessProcessAccess();
 
 try {
   await loadMeta();
   if (!canViewPestle) {
     renderItems();
   } else {
-    await Promise.all([loadItems(), loadBusinessProcesses()]);
+    await loadItems();
     if (requestedTab === 'visualisations') await renderPestleVisualisations(true);
   }
 } catch (e) {

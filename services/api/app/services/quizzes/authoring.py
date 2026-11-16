@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import iso_or_none
 from app.db.models import (
     Quiz,
     QuizAttempt,
@@ -31,7 +32,6 @@ from app.services.text import clean_text
 from .access import can_manage_quizzes, require_manage, require_read
 from .audience import audience_out, audience_size, queue_invitations
 from .common import (
-    iso,
     quiz_or_404,
     quiz_snapshot,
     record_quiz_change,
@@ -119,8 +119,8 @@ def quiz_out(db: Session, quiz: Quiz, *, manager: bool) -> dict[str, Any]:
         "questions": [question_out(q, manager=manager) for q in quiz.questions],
         "rounds": [round_out(quiz, r, stats[r.id], manager=manager) for r in rounds],
         "availability": quiz_availability(quiz, rounds, stats),
-        "created_at": iso(quiz.created_at),
-        "updated_at": iso(quiz.updated_at),
+        "created_at": iso_or_none(quiz.created_at),
+        "updated_at": iso_or_none(quiz.updated_at),
         "can_manage": manager,
     }
     if manager:

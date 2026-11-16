@@ -26,7 +26,7 @@ from urllib.parse import quote
 import app.worker.tasks  # noqa: F401 - registers the worker tasks
 import pytest
 from app.agents import credentials
-from app.agents.credentials import digest, locked_agent
+from app.agents.credentials import locked_agent
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
@@ -43,6 +43,7 @@ from app.integrations.runtime import scrub
 from app.integrations.schema import MAX_DECODINGS, has_dot_segment
 from app.outbound import question_webhooks as qw
 from app.security import auth, mfa, request_limits
+from app.security.encoding import digest
 from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
 from app.security.redaction import (
     REDACTED,

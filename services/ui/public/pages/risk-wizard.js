@@ -1,5 +1,5 @@
 // The risk wizard: one guided path that creates a risk and whatever it needs
-// along the way (an asset, a person or vendor it affects, a business process), or edits
+// along the way (an asset, a person or vendor it affects), or edits
 // an existing register risk. It asks for the method first and shows only the
 // fields that method needs.
 import { featureEnabled } from '/pages/feature-availability.js';
@@ -63,8 +63,6 @@ const state = {
   template: null,
   asset: null, // {id, name} for an existing asset
   newAsset: null, // {name, category, subcategory} for one to create
-  processes: [], // [{id, name}] existing business processes
-  newProcesses: [], // [name]
   // [{kind, id, label, detail}] people, vendors and assets, or
   // {kind: 'new_person' | 'new_vendor', label} to add by name
   parties: [],
@@ -80,8 +78,10 @@ const state = {
   residual: { likelihood: 1, impact: 1 },
   owner: '',
   treatment: { strategy: '', status: 'open', due: '', plan: '' },
-  controls: new Set(),
-  clauseRelevance: new Map(), // clause id -> relevance code
+  // The controls and clauses it is linked to, by id. A PESTLE(E) factor rates
+  // each with a relevance code; a register risk links them plainly ('').
+  controls: new Map(),
+  clauses: new Map(),
   mitigatorContext: null,
   suggestedControlIds: [],
   existing: null, // the risk being edited
@@ -97,7 +97,6 @@ let library = [];
 let affectedOptions = null;
 let affectedPicker = null;
 let pestleMeta = { types: [], lenses: [], relevance_levels: [] };
-let businessProcesses = [];
 let clauses = [];
 let keenAfEnabled = false;
 let thresholds = { low_max: 4, moderate_max: 9, high_max: 16 };
@@ -109,6 +108,7 @@ const STEPS = [
   ['describe', 'Describe it'],
   ['rate', 'Likelihood and impact'],
   ['controls', 'Controls'],
+  ['clauses', 'Clauses'],
   ['review', 'Check and save'],
 ];
 let stepIndex = 0;
@@ -124,7 +124,11 @@ function isPestle() {
 // Steps that do not apply to the chosen method are skipped in both directions.
 function stepApplies(step) {
   if (step === 'parties') return affectedOptions !== null;
-  return state.method !== 'pestle' || step !== 'controls';
+  // A factor belongs to no asset and has no likelihood or impact.
+  if (step === 'subject' || step === 'rate') return !isPestle();
+  // Most frameworks have controls and no clauses.
+  if (step === 'clauses') return clauses.length > 0;
+  return true;
 }
 
 function visibleSteps() {
@@ -138,9 +142,7 @@ function currentStep() {
 function renderStepper() {
   const steps = visibleSteps();
   $('wizardSteps').innerHTML = steps
-    .map(([step, stepLabel], index) => {
-      // A PESTLE(E) factor is rated against clauses, so its rating step is named for them.
-      const label = step === 'rate' && isPestle() ? 'Relevant clauses' : stepLabel;
+    .map(([step, label], index) => {
       const cls = index < stepIndex ? 'done' : index === stepIndex ? 'current' : '';
       return `<li class="risk-wizard-step-pill ${cls}"><button class="btn btn-sm ${index === stepIndex ? 'btn-primary' : index < stepIndex ? 'btn-outline-success' : 'btn-outline-secondary'}" type="button" data-goto-step="${esc(step)}" ${index > stepIndex ? 'disabled' : ''}>${index + 1}. ${esc(label)}</button></li>`;
     })
@@ -152,18 +154,13 @@ function showStep(step) {
     section.hidden = section.dataset.step !== step;
   for (const el of document.querySelectorAll('[data-method-only]'))
     el.hidden = el.dataset.methodOnly !== state.method;
-  for (const el of document.querySelectorAll('[data-method-not]'))
-    el.hidden = el.dataset.methodNot === state.method;
-  for (const el of document.querySelectorAll('[data-subject]'))
-    el.hidden = el.dataset.subject !== (isPestle() ? 'pestle' : 'asset');
   const steps = visibleSteps();
   const last = stepIndex >= steps.length - 1;
   $('backStep').hidden = stepIndex === 0 || step === 'done';
   $('nextStep').innerHTML = last
     ? `<i class="bi bi-check2 me-1" aria-hidden="true"></i>${editingId ? 'Save changes' : isPestle() ? 'Create PESTLE(E) factor' : 'Create risk'}`
     : 'Next<i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>';
-  $('skipStep').hidden =
-    !['parties', 'controls', 'subject'].includes(step) || isPestleSubjectRequired(step);
+  $('skipStep').hidden = !['parties', 'controls', 'clauses'].includes(step);
   $('wizardFooter').hidden = step === 'done';
   $('stepHint').textContent = stepHintFor(step);
   renderStepper();
@@ -173,28 +170,23 @@ function showStep(step) {
   heading?.focus?.();
 }
 
-function isPestleSubjectRequired(step) {
-  return step === 'subject' && !isPestle();
-}
-
 function stepHintFor(step) {
   switch (step) {
     case 'method':
       return 'Step 1 of ' + visibleSteps().length;
     case 'subject':
-      return isPestle()
-        ? 'Processes are optional for a PESTLE(E) factor.'
-        : 'Pick or add one asset.';
+      return 'Pick or add one asset.';
     case 'parties':
       return 'You can skip this and name them later.';
     case 'describe':
       return 'A short name and a few sentences are enough.';
     case 'rate':
-      return isPestle()
-        ? 'Clause relevance is optional.'
-        : 'Use the words beside each scale as a guide.';
+      return 'Use the words beside each scale as a guide.';
     case 'controls':
-      return 'Controls can be added later from the risk page too.';
+    case 'clauses':
+      return isPestle()
+        ? `Relevance to ${step} is optional, and can be set later on the factor's page.`
+        : `You can link ${step} later, by editing the risk.`;
     default:
       return '';
   }
@@ -203,14 +195,11 @@ function stepHintFor(step) {
 // Draws a step's choices from the state before it is shown, however the
 // wizard arrives at it: Next, Skip or a step's Change link.
 function prepareStep(step) {
-  if (step === 'subject') {
-    renderAssets();
-    renderProcesses();
-  }
+  if (step === 'subject') renderAssets();
   if (step === 'parties') renderParties();
   if (step === 'describe') renderDescribe();
   if (step === 'rate') renderRatings();
-  if (step === 'controls') renderControls();
+  if (step === 'controls' || step === 'clauses') renderLinks(step);
 }
 
 function goTo(step) {
@@ -393,35 +382,6 @@ function renderSubcategoryOptions() {
     .join('');
 }
 
-function renderProcesses() {
-  const query = String($('processSearch').value || '').trim();
-  const q = query.toLowerCase();
-  const chosen = new Set(state.processes.map((p) => p.id));
-  const rows = businessProcesses
-    .filter((p) => !q || p.name.toLowerCase().includes(q))
-    .slice(0, 50)
-    .map(
-      (p) => `<label class="list-group-item d-flex gap-2 align-items-center">
-      <input class="form-check-input mt-0" type="checkbox" data-process="${esc(p.id)}" ${chosen.has(p.id) ? 'checked' : ''}>
-      <span>${esc(p.name)}</span>
-    </label>`,
-    );
-  for (const name of state.newProcesses)
-    rows.push(
-      `<label class="list-group-item d-flex gap-2 align-items-center"><input class="form-check-input mt-0" type="checkbox" data-new-process="${esc(name)}" checked><span>${esc(name)} <span class="badge text-bg-light border">new</span></span></label>`,
-    );
-  const exact =
-    businessProcesses.some((p) => p.name.toLowerCase() === q) ||
-    state.newProcesses.some((n) => n.toLowerCase() === q);
-  if (query && !exact)
-    rows.push(
-      `<button class="list-group-item list-group-item-action" type="button" data-add-process="${esc(query)}"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add “${esc(query)}” as a new business process</button>`,
-    );
-  $('processList').innerHTML =
-    rows.join('') ||
-    '<div class="list-group-item small-muted">No business processes yet. Type a name to add one.</div>';
-}
-
 // --- Step 3: who and what is affected ------------------------------------------------------
 
 function renderParties() {
@@ -527,7 +487,6 @@ function renderRatings() {
   ).join('');
   $('treatmentDue').value = state.treatment.due;
   $('treatmentPlan').value = state.treatment.plan;
-  renderClauses();
 }
 
 function updateRating(kind, field, value) {
@@ -548,48 +507,70 @@ function updateRating(kind, field, value) {
   badge.style.backgroundColor = sev.color;
 }
 
-function renderClauses() {
-  const q = String($('clauseSearch').value || '')
+// --- Steps 6 and 7: controls and clauses --------------------------------------------------
+
+// Each step lists one kind of record to tick. A PESTLE(E) factor also says how
+// relevant each ticked record is.
+const LINKS = {
+  controls: {
+    search: 'controlSearch',
+    list: 'controlList',
+    count: 'controlCount',
+    box: 'control',
+    level: 'controlLevel',
+    all: () => allControls,
+  },
+  clauses: {
+    search: 'clauseSearch',
+    list: 'clauseList',
+    count: 'clauseCount',
+    box: 'clause',
+    level: 'clauseLevel',
+    all: () => clauses,
+  },
+};
+
+function dataAttribute(name) {
+  return `data-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+}
+
+function renderLinks(kind) {
+  const spec = LINKS[kind];
+  const chosen = state[kind];
+  $(`${kind}Framework`).textContent = framework || 'this framework';
+  for (const el of document.querySelectorAll(`[data-links-intro="${kind}"]`))
+    el.hidden = el.dataset.linksFor !== (isPestle() ? 'pestle' : 'risk');
+  const q = String($(spec.search).value || '')
     .trim()
     .toLowerCase();
   const levels = pestleMeta.relevance_levels.filter((l) => l.code !== 'na');
-  // An overall relevance of "na" matches no option, so the list shows the first level.
-  const defaultCode = state.relevance;
-  $('clauseList').innerHTML =
-    clauses
-      .filter((c) => !q || `${c.ref} ${c.title}`.toLowerCase().includes(q))
-      .slice(0, 300)
-      .map((c) => {
-        const chosen = state.clauseRelevance.get(c.id);
-        return `<div class="d-flex gap-2 align-items-center py-1">
-        <input class="form-check-input mt-0" type="checkbox" data-clause="${esc(c.id)}" ${chosen ? 'checked' : ''} aria-label="${esc(c.ref)}">
-        <span class="flex-grow-1"><span class="fw-semibold">${esc(c.ref)}</span> <span class="small-muted">${esc(c.title)}</span></span>
-        <select class="form-select form-select-sm w-auto" data-clause-level="${esc(c.id)}" ${chosen ? '' : 'disabled'} aria-label="Relevance of ${esc(c.ref)}">${levels.map((l) => `<option value="${esc(l.code)}" ${(chosen || defaultCode) === l.code ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select>
-      </div>`;
-      })
-      .join('') || '<div class="small-muted">No clauses match.</div>';
-}
-
-// --- Step 6: controls -----------------------------------------------------------------------
-
-function renderControls() {
-  $('controlsFramework').textContent = framework || 'this framework';
-  const q = String($('controlSearch').value || '')
-    .trim()
-    .toLowerCase();
-  const suggested = new Set(state.suggestedControlIds);
-  const rows = allControls
-    .filter((c) => !q || `${c.ref} ${c.title}`.toLowerCase().includes(q))
+  const suggested = new Set(kind === 'controls' ? state.suggestedControlIds : []);
+  const rows = spec
+    .all()
+    .filter((row) => !q || `${row.ref} ${row.title}`.toLowerCase().includes(q))
     .sort((a, b) => Number(suggested.has(b.id)) - Number(suggested.has(a.id)))
     .slice(0, 400)
-    .map(
-      (c) => `<label class="d-flex gap-2 align-items-start py-1">
-      <input class="form-check-input mt-1" type="checkbox" data-control="${esc(c.id)}" ${state.controls.has(c.id) ? 'checked' : ''}>
-      <span><span class="fw-semibold">${esc(c.ref)}</span> ${esc(c.title)}${suggested.has(c.id) ? ' <span class="badge text-bg-info">suggested</span>' : ''}${c.in_scope === false ? ' <span class="badge text-bg-secondary">out of scope</span>' : ''}</span>
-    </label>`,
-    );
-  $('controlList').innerHTML = rows.join('') || '<div class="small-muted">No controls match.</div>';
-  $('controlCount').textContent = String(state.controls.size);
+    .map((row) => {
+      const picked = chosen.has(row.id);
+      // A record ticked before its relevance was chosen takes the overall relevance.
+      const code = chosen.get(row.id) || state.relevance;
+      const select = isPestle()
+        ? `<select class="form-select form-select-sm w-auto" ${dataAttribute(spec.level)}="${esc(row.id)}" ${picked ? '' : 'disabled'} aria-label="Relevance of ${esc(row.ref)}">${levels.map((l) => `<option value="${esc(l.code)}" ${code === l.code ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select>`
+        : '';
+      return `<div class="d-flex gap-2 align-items-center py-1">
+        <label class="d-flex gap-2 align-items-start flex-grow-1 mb-0">
+          <input class="form-check-input mt-1" type="checkbox" ${dataAttribute(spec.box)}="${esc(row.id)}" ${picked ? 'checked' : ''}>
+          <span><span class="fw-semibold">${esc(row.ref)}</span> ${esc(row.title)}${suggested.has(row.id) ? ' <span class="badge text-bg-info">suggested</span>' : ''}${row.in_scope === false ? ' <span class="badge text-bg-secondary">out of scope</span>' : ''}</span>
+        </label>
+        ${select}
+      </div>`;
+    });
+  $(spec.list).innerHTML = rows.join('') || `<div class="small-muted">No ${kind} match.</div>`;
+  $(spec.count).textContent = String(chosen.size);
+  if (kind === 'controls') renderSuggestedControlsNote();
+}
+
+function renderSuggestedControlsNote() {
   const note = $('suggestedControlsNote');
   const templateRefs = (state.template?.suggested_assessment?.keen_af_control_refs || []).filter(
     Boolean,
@@ -609,7 +590,15 @@ function renderControls() {
   note.textContent = bits.join(' ');
 }
 
-// --- Step 7: review -------------------------------------------------------------------------
+// The references of the ticked records, for the review step.
+function pickedRefs(kind) {
+  const picked = [...state[kind].keys()].map(
+    (id) => LINKS[kind].all().find((row) => row.id === id)?.ref || id,
+  );
+  return picked.length ? esc(picked.join(', ')) : '<span class="small-muted">None yet</span>';
+}
+
+// --- Step 8: review -------------------------------------------------------------------------
 
 function reviewRow(label, value, step) {
   return `<dt class="col-sm-4">${esc(label)}</dt><dd class="col-sm-8 d-flex justify-content-between gap-2"><span>${value}</span>${step ? `<button class="btn btn-link btn-sm p-0 align-baseline flex-shrink-0" type="button" data-goto-step="${esc(step)}">Change</button>` : ''}</dd>`;
@@ -622,33 +611,14 @@ function renderReview() {
   );
   if (state.template) rows.push(reviewRow('Template', esc(state.template.name), 'method'));
   if (isPestle()) {
-    const names = [
-      ...state.processes.map((p) => p.name),
-      ...state.newProcesses.map((n) => `${n} (new)`),
-    ];
-    rows.push(
-      reviewRow(
-        'Business processes',
-        names.length ? esc(names.join(', ')) : '<span class="small-muted">None</span>',
-        'subject',
-      ),
-    );
     if (affectedOptions) rows.push(reviewRow('Affects', affectedSummary(), 'parties'));
     rows.push(reviewRow('Factor', esc(state.description), 'describe'));
     rows.push(reviewRow('Type and lens', esc(`${state.pestleType} · ${state.lens}`), 'describe'));
     const level = pestleMeta.relevance_levels.find((l) => l.code === state.relevance);
     rows.push(reviewRow('Overall relevance', esc(level.label), 'describe'));
     if (state.rationale) rows.push(reviewRow('Rationale', esc(state.rationale), 'describe'));
-    const picked = [...state.clauseRelevance.keys()].map(
-      (id) => clauses.find((c) => c.id === id).ref,
-    );
-    rows.push(
-      reviewRow(
-        'Relevant clauses',
-        picked.length ? esc(picked.join(', ')) : '<span class="small-muted">None yet</span>',
-        'rate',
-      ),
-    );
+    rows.push(reviewRow('Relevant controls', pickedRefs('controls'), 'controls'));
+    if (clauses.length) rows.push(reviewRow('Relevant clauses', pickedRefs('clauses'), 'clauses'));
   } else {
     rows.push(
       reviewRow(
@@ -684,14 +654,8 @@ function renderReview() {
         'rate',
       ),
     );
-    const picked = [...state.controls].map((id) => allControls.find((c) => c.id === id)?.ref || id);
-    rows.push(
-      reviewRow(
-        'Controls',
-        picked.length ? esc(picked.join(', ')) : '<span class="small-muted">None yet</span>',
-        'controls',
-      ),
-    );
+    rows.push(reviewRow('Controls', pickedRefs('controls'), 'controls'));
+    if (clauses.length) rows.push(reviewRow('Clauses', pickedRefs('clauses'), 'clauses'));
   }
   if (state.note) rows.push(reviewRow('Notes', esc(state.note), 'describe'));
   $('reviewSummary').innerHTML = rows.join('');
@@ -707,7 +671,6 @@ function ownerLabelFor(value) {
 // --- Validation per step ---------------------------------------------------------------------
 
 function collectStep(step) {
-  if (step === 'subject' && isPestle()) return '';
   if (step === 'subject') {
     if (state.asset) return '';
     const name = String($('assetSearch').value || '').trim();
@@ -741,7 +704,7 @@ function collectStep(step) {
       return 'Tick at least one of confidentiality, integrity or availability, or go back and choose “Simple risk”.';
     return '';
   }
-  if (step === 'rate' && !isPestle()) {
+  if (step === 'rate') {
     state.owner = $('riskOwner').value;
     state.treatment = {
       strategy: $('treatmentStrategy').value,
@@ -771,8 +734,10 @@ function riskPayload() {
     treatment_status: state.treatment.status,
     treatment_plan: state.treatment.plan,
     treatment_due_at: state.treatment.due || null,
-    controls: [...state.controls],
+    controls: [...state.controls.keys()],
   };
+  // A framework without clauses has none to link, and none to clear.
+  if (clauses.length) payload.clauses = [...state.clauses.keys()];
   // Without access to the registers, the links a risk holds stay as they are.
   if (affectedOptions) payload.affected = affectedPayload(state.parties);
   if (state.asset) payload.asset_id = state.asset.id;
@@ -810,12 +775,6 @@ async function saveRisk() {
 
 async function savePestle() {
   const created = [];
-  const processIds = state.processes.map((p) => p.id);
-  for (const name of state.newProcesses) {
-    const process = await apiPost('/api/v1/pestle/business-processes', { name });
-    processIds.push(process.id);
-    created.push(`the business process “${name}”`);
-  }
   const body = {
     framework,
     type: state.pestleType,
@@ -829,18 +788,20 @@ async function savePestle() {
     created.push(...addedByName());
   }
   const item = await apiPost('/api/v1/pestle/items', body);
-  const code = state.relevance && state.relevance !== 'na' ? state.relevance : 'high';
-  if (processIds.length)
-    await apiPatch(`/api/v1/pestle/items/${encodeURIComponent(item.id)}/business-processes`, {
-      items: processIds.map((id) => ({ business_process_id: id, relevance_code: code })),
-    });
-  if (state.clauseRelevance.size)
-    await apiPatch(`/api/v1/pestle/items/${encodeURIComponent(item.id)}/clauses`, {
-      items: [...state.clauseRelevance].map(([id, level]) => ({
-        clause_id: id,
-        relevance_code: level,
-      })),
-    });
+  // A record ticked while the wizard was on another kind of risk has no
+  // relevance of its own yet.
+  const fallback = state.relevance !== 'na' ? state.relevance : 'high';
+  for (const [kind, field] of [
+    ['controls', 'control_id'],
+    ['clauses', 'clause_id'],
+  ])
+    if (state[kind].size)
+      await apiPatch(`/api/v1/pestle/items/${encodeURIComponent(item.id)}/${kind}`, {
+        items: [...state[kind]].map(([id, level]) => ({
+          [field]: id,
+          relevance_code: level || fallback,
+        })),
+      });
   return { saved: item, created };
 }
 
@@ -891,6 +852,7 @@ async function loadOptions() {
     affectedData,
     catalog,
     registerData,
+    clauseData,
   ] = await Promise.all([
     apiGet('/api/v1/risks/categories'),
     apiGet('/api/v1/risks/assets'),
@@ -904,12 +866,18 @@ async function loadOptions() {
     getFrameworkCatalog().catch(() => ({ items: [] })),
     // The heatmap carries the severity thresholds the rating step bands with.
     apiGet('/api/v1/risks/register/heatmap').catch(() => null),
+    featureEnabled(me, 'clauses')
+      ? apiGet(`/api/v1/clauses?framework=${encodeURIComponent(framework)}&limit=5000`).catch(
+          () => ({ items: [] }),
+        )
+      : { items: [] },
   ]);
   categories = categoryData.items;
   assets = assetData.items;
   users = userData.items;
   roles = userData.roles;
   allControls = controlData.items;
+  clauses = clauseData.items;
   library = libraryData.items;
   affectedOptions = affectedData;
   keenAfEnabled = catalog.items.some((item) => item.slug === 'KEEN-AF:1.0');
@@ -923,16 +891,7 @@ async function loadOptions() {
       },
     });
   if (canManagePestle && featureEnabled(me, 'pestle')) {
-    const [meta, processes, clauseData] = await Promise.all([
-      apiGet('/api/v1/pestle/meta').catch(() => pestleMeta),
-      apiGet('/api/v1/pestle/business-processes').catch(() => ({ items: [] })),
-      apiGet(`/api/v1/clauses?framework=${encodeURIComponent(framework)}&limit=5000`).catch(() => ({
-        items: [],
-      })),
-    ]);
-    pestleMeta = meta;
-    businessProcesses = processes.items;
-    clauses = clauseData.items;
+    pestleMeta = await apiGet('/api/v1/pestle/meta').catch(() => pestleMeta);
     if (!state.relevance)
       state.relevance = pestleMeta.relevance_levels.find((l) => l.code !== 'na')?.code;
   }
@@ -966,7 +925,8 @@ async function loadExisting() {
     due: risk.treatment_due_at,
     plan: risk.treatment_plan,
   };
-  state.controls = new Set(risk.controls.map((c) => c.id));
+  state.controls = new Map(risk.controls.map((c) => [c.id, '']));
+  state.clauses = new Map(risk.clauses.map((c) => [c.id, '']));
   $('wizardTitle').textContent = 'Edit risk';
   $('wizardIntro').textContent =
     `Change anything about “${risk.display}”. The register updates when you save.`;
@@ -996,7 +956,7 @@ function applyDraft(draft) {
   if (Array.isArray(draft.controls)) {
     const known = new Set(allControls.map((c) => c.id));
     state.suggestedControlIds = draft.controls.filter((id) => known.has(id));
-    for (const id of state.suggestedControlIds) state.controls.add(id);
+    for (const id of state.suggestedControlIds) state.controls.set(id, '');
   }
   state.parties.push(...affectedChoices(draft.affected));
   if (draft.mitigator_context && typeof draft.mitigator_context === 'object')
@@ -1040,7 +1000,7 @@ $('skipStep').addEventListener('click', () => {
     state.parties = [];
     renderParties();
   }
-  if (step === 'controls') state.controls = new Set();
+  if (step === 'controls' || step === 'clauses') state[step] = new Map();
   stepIndex = Math.min(stepIndex + 1, visibleSteps().length - 1);
   const next = currentStep();
   prepareStep(next);
@@ -1096,29 +1056,6 @@ $('newAssetCategory').addEventListener('input', () => {
 });
 $('newAssetSubcategory').addEventListener('input', renderAssets);
 
-$('processSearch').addEventListener('input', debounce(renderProcesses, 120));
-$('processList').addEventListener('click', (ev) => {
-  const add = ev.target.closest('[data-add-process]');
-  if (add) {
-    state.newProcesses.push(add.dataset.addProcess);
-    $('processSearch').value = '';
-    renderProcesses();
-  }
-});
-$('processList').addEventListener('change', (ev) => {
-  const existing = ev.target.closest('[data-process]');
-  if (existing) {
-    const row = businessProcesses.find((p) => p.id === existing.dataset.process);
-    state.processes = state.processes.filter((p) => p.id !== existing.dataset.process);
-    if (existing.checked && row) state.processes.push({ id: row.id, name: row.name });
-  }
-  const added = ev.target.closest('[data-new-process]');
-  if (added && !added.checked) {
-    state.newProcesses = state.newProcesses.filter((n) => n !== added.dataset.newProcess);
-    renderProcesses();
-  }
-});
-
 $('pestleTypeChoices').addEventListener('change', (ev) => {
   state.pestleType = ev.target.value;
   for (const label of $('pestleTypeChoices').querySelectorAll('label')) {
@@ -1136,31 +1073,23 @@ document.addEventListener('input', (ev) => {
   if (range) updateRating(range.dataset.ratingKind, range.dataset.ratingField, range.value);
 });
 
-$('clauseSearch').addEventListener('input', debounce(renderClauses, 120));
-$('clauseList').addEventListener('change', (ev) => {
-  const box = ev.target.closest('[data-clause]');
-  if (box) {
-    const select = $('clauseList').querySelector(`[data-clause-level="${box.dataset.clause}"]`);
-    if (box.checked) {
-      state.clauseRelevance.set(box.dataset.clause, select.value);
-      select.disabled = false;
-    } else {
-      state.clauseRelevance.delete(box.dataset.clause);
-      select.disabled = true;
-    }
-  }
-  const level = ev.target.closest('[data-clause-level]');
-  if (level && state.clauseRelevance.has(level.dataset.clauseLevel))
-    state.clauseRelevance.set(level.dataset.clauseLevel, level.value);
-});
-
-$('controlSearch').addEventListener('input', debounce(renderControls, 120));
-$('controlList').addEventListener('change', (ev) => {
-  const box = ev.target;
-  if (box.checked) state.controls.add(box.dataset.control);
-  else state.controls.delete(box.dataset.control);
-  $('controlCount').textContent = String(state.controls.size);
-});
+for (const [kind, spec] of Object.entries(LINKS)) {
+  $(spec.search).addEventListener(
+    'input',
+    debounce(() => renderLinks(kind), 120),
+  );
+  $(spec.list).addEventListener('change', (ev) => {
+    const chosen = state[kind];
+    const id = ev.target.dataset[spec.box];
+    if (id) {
+      const select = $(spec.list).querySelector(`[${dataAttribute(spec.level)}="${id}"]`);
+      if (ev.target.checked) chosen.set(id, select ? select.value : '');
+      else chosen.delete(id);
+      if (select) select.disabled = !ev.target.checked;
+    } else chosen.set(ev.target.dataset[spec.level], ev.target.value);
+    $(spec.count).textContent = String(chosen.size);
+  });
+}
 
 // --- Start ------------------------------------------------------------------------------------
 
@@ -1188,10 +1117,7 @@ if (!canManageRisks) {
     renderCategoryOptions();
     stepIndex = 0;
     const first = currentStep();
-    if (first === 'subject') {
-      renderAssets();
-      renderProcesses();
-    }
+    if (first === 'subject') renderAssets();
     showStep(first);
   } catch (e) {
     notify(`Could not start the risk wizard: ${errorText(e)}`);

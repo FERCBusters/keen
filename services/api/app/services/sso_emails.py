@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
@@ -15,6 +14,7 @@ from app.core.datetime_utils import utc_now_naive as now
 from app.core.email_address import compared_mailbox
 from app.core.valkey import get_valkey
 from app.db.models import SsoEmailChallenge, User, UserSsoEmail
+from app.security.encoding import digest
 from app.security.rate_limit import fixed_window_allow
 from app.security.sessions import get_session
 from app.services import mailer, text
@@ -29,10 +29,6 @@ class Address(BaseModel):
 
 class Proof(BaseModel):
     token: str = Field(min_length=20, max_length=128)
-
-
-def digest(value):
-    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def clean_email(value):

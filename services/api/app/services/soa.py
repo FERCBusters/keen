@@ -22,17 +22,15 @@ from app.db.models import (
     IsmsObjective,
     IsmsOrgNode,
     IsmsSwot,
-    PestleBusinessProcess,
     PestleItem,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
-    RiskControlLink,
 )
 from app.services.affected import affected_list
 from app.services.clauses import clause_with_evidence
-from app.services.control_refs import control_summary
+from app.services.control_refs import clause_summary, control_summary
 from app.services.features import state
 from app.services.isms.access import can_read_isms
 from app.services.isms.serializers import (
@@ -46,40 +44,15 @@ from app.services.isms.serializers import (
 )
 from app.services.isms.swot import summary as swot_summary
 from app.services.pestle import can_read_pestle, relevance_summary
-from app.services.risks import can_read_risks, risk_owner_out
-
-
-def _risk_controls(db: Session, risk_id, framework: str) -> list[dict[str, Any]]:
-    rows = (
-        db.query(ControlItem)
-        .join(RiskControlLink, RiskControlLink.control_item_id == ControlItem.id)
-        .filter(
-            RiskControlLink.risk_id == risk_id,
-            RiskControlLink.framework_slug == framework,
-            ControlItem.framework_slug == framework,
-        )
-        .all()
-    )
-    rows.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
-    return [control_summary(c) for c in rows]
-
-
-def _business_process_summary(row: PestleBusinessProcess) -> dict[str, Any]:
-    return {"id": str(row.id), "name": row.name}
+from app.services.risks import (
+    _risk_clauses,
+    _risk_controls,
+    can_read_risks,
+    risk_owner_out,
+)
 
 
 def _pestle_summary(item: PestleItem) -> dict[str, Any]:
-    business_links = sorted(
-        [
-            link
-            for link in list(item.business_process_links or [])
-            if getattr(getattr(link, "relevance", None), "code", None) != "na"
-        ],
-        key=lambda link: (
-            (link.business_process.name or "").lower(),
-            link.business_process.name or "",
-        ),
-    )
     clause_links = sorted(
         [
             link
@@ -99,19 +72,22 @@ def _pestle_summary(item: PestleItem) -> dict[str, Any]:
         "item": item.item or "",
         "overall_relevance": relevance_summary(item.overall_relevance),
         "rationale": item.rationale or "",
-        "business_processes": [
-            {
-                "business_process": _business_process_summary(link.business_process),
-                "relevance": relevance_summary(link.relevance),
-            }
-            for link in business_links
-        ],
         "clauses": [
             {
                 "clause": clause_with_evidence(link.clause),
                 "relevance": relevance_summary(link.relevance),
             }
             for link in clause_links
+        ],
+        "controls": [
+            {
+                "control": control_summary(link.control),
+                "relevance": relevance_summary(link.relevance),
+            }
+            for link in sorted(
+                (link for link in item.control_links if link.relevance.code != "na"),
+                key=lambda link: (link.control.type, _ref_sort_key(link.control.ref)),
+            )
         ],
         "affected": affected_list(list(item.affected_links)),
     }
@@ -136,14 +112,12 @@ def _risk_summary(db: Session, risk: Risk, framework: str) -> dict[str, Any]:
         "risk_types": list(risk.risk_types or []),
         "risk_owner": risk_owner_out(risk),
         "threat_summary": risk.threat_summary or "",
-        "threat_score": int(risk.threat_score or 0),
-        "vulnerability_score": int(risk.vulnerability_score or 0),
-        "impact_score": int(risk.impact_score or 0),
         "risk_score": int(risk.risk_score or 0),
-        "residual_vulnerability_score": int(risk.residual_vulnerability_score or 0),
-        "residual_impact_score": int(risk.residual_impact_score or 0),
         "residual_risk_score": int(risk.residual_risk_score or 0),
-        "controls": _risk_controls(db, risk.id, framework),
+        "controls": [
+            control_summary(c) for c in _risk_controls(db, risk.id, framework)
+        ],
+        "clauses": [clause_summary(c) for c in _risk_clauses(db, risk.id, framework)],
     }
 
 
@@ -212,7 +186,6 @@ def statement_of_applicability(
         risk_rows = [_risk_summary(db, risk, fw) for risk in risks]
 
     pestle_rows: list[dict[str, Any]] = []
-    business_process_rows: list[dict[str, Any]] = []
     if can_view_pestle:
         pestle_items = (
             db.query(PestleItem)
@@ -225,14 +198,6 @@ def statement_of_applicability(
             .all()
         )
         pestle_rows = [_pestle_summary(item) for item in pestle_items]
-        business_processes = (
-            db.query(PestleBusinessProcess)
-            .order_by(PestleBusinessProcess.name.asc())
-            .all()
-        )
-        business_process_rows = [
-            _business_process_summary(row) for row in business_processes
-        ]
 
     can_view_swot = can_view_isms and state(db).enabled("swot")
     swot_rows = []
@@ -323,7 +288,6 @@ def statement_of_applicability(
             "clauses": len(clause_rows),
             "risks": len(risk_rows),
             "pestle": len(pestle_rows),
-            "business_processes": len(business_process_rows),
             "isms_objectives": len(isms_objectives),
             "isms_documents": len(isms_documents),
             "isms_org_nodes": len(isms_org_nodes),
@@ -335,7 +299,6 @@ def statement_of_applicability(
         "clauses": clause_rows,
         "risks": risk_rows,
         "pestle_items": pestle_rows,
-        "business_processes": business_process_rows,
         "isms_objectives": isms_objectives,
         "isms_documents": isms_documents,
         "isms_org_nodes": isms_org_nodes,

@@ -66,9 +66,8 @@ def entries(keen, monkeypatch):  # noqa: F811 - fixture imported above
     db.commit()
     risk_manager = keen.client(keen.user("risk.manage"))
     linked = risk_manager.patch(
-        f"/v1/risks/{risk.id}/controls",
-        params={"framework": FW},
-        json={"controls": [CONTROL]},
+        f"/v1/risks/{risk.id}",
+        json={"framework": FW, "controls": [CONTROL]},
         headers=unsafe(risk_manager),
     )
     assert linked.status_code == 200, linked.text

@@ -18,7 +18,7 @@ from typing import Any
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import iso_or_none, utc_now_naive
 from app.db.models import Quiz, QuizAttempt, QuizParticipant, QuizRound, User
 from app.services.errors import DomainError
 from app.services.features import state
@@ -40,7 +40,7 @@ from .audience import (
     round_invite_uid,
     sync_participants,
 )
-from .common import iso, quiz_or_404, round_or_404, sitting_url
+from .common import quiz_or_404, round_or_404, sitting_url
 from .measure import record_round_result, round_result_recorded
 from .results import round_out, round_stats
 from .schemas import QuizRoundInput, QuizRoundUpdate
@@ -96,10 +96,10 @@ def quiz_availability(quiz: Quiz, rounds, stats) -> dict[str, Any]:
                 return {
                     "state": "draft",
                     "on_activation": "scheduled",
-                    "opens_on": iso(next_date),
+                    "opens_on": iso_or_none(next_date),
                 }
         until = today + timedelta(days=int(quiz.due_days or 1))
-        return {"state": "draft", "on_activation": "now", "until": iso(until)}
+        return {"state": "draft", "on_activation": "now", "until": iso_or_none(until)}
     sittable = [
         r for r in rounds if r.status == "open" and r.opens_on <= today <= r.due_on
     ]
@@ -107,14 +107,14 @@ def quiz_availability(quiz: Quiz, rounds, stats) -> dict[str, Any]:
         latest = max(sittable, key=lambda r: (r.due_on, r.created_at))
         return {
             "state": "open",
-            "until": iso(latest.due_on),
+            "until": iso_or_none(latest.due_on),
             "people": stats[latest.id].participants,
         }
     dates = [r.opens_on for r in rounds if r.status == "open" and r.opens_on > today]
     if next_date is not None:
         dates.append(next_date)
     if dates:
-        return {"state": "waiting", "opens_on": iso(min(dates))}
+        return {"state": "waiting", "opens_on": iso_or_none(min(dates))}
     return {"state": "no_round"}
 
 

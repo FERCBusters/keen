@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import ControlItem, FrameworkClause, User
 from app.security.rich_text import sanitize_rich_text_html
 from app.services.context import ChangeContext
-from app.services.control_refs import control_by_id_or_ref
+from app.services.control_refs import clause_by_id_or_ref, control_by_id_or_ref
 from app.services.entity_changelog import record_entity_changelog
 from app.services.errors import DomainError
 from app.services.text import clean_text
@@ -65,13 +64,7 @@ def _control_by_ref_or_id(db: Session, raw: str, framework: str) -> ControlItem:
 
 def _clause_by_ref_or_id(db: Session, raw: str, framework: str) -> FrameworkClause:
     value = (raw or "").strip()
-    cid = _try_uuid(value)
-    qry = db.query(FrameworkClause).filter(FrameworkClause.framework_slug == framework)
-    row = (
-        qry.filter(FrameworkClause.id == cid).one_or_none()
-        if cid
-        else qry.filter(func.lower(FrameworkClause.ref) == value.lower()).one_or_none()
-    )
+    row = clause_by_id_or_ref(db, framework, value)
     if not row:
         raise DomainError(status_code=400, detail=f"Unknown clause: {value}")
     return row

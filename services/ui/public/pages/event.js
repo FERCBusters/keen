@@ -30,6 +30,7 @@ import {
   preselectSamplingAudit,
   rememberSamplingAudit,
   lookupTab,
+  canViewAudits,
 } from '/app.js';
 
 const PRINT_MODE = (() => {
@@ -974,10 +975,6 @@ function _currentEventRelativeUrl() {
   return withFramework(`/event.html?id=${encodeURIComponent(currentEvent.id)}`, fw);
 }
 
-function canViewAuditEngagements() {
-  return Boolean(me?.can_view_audits || me?.can_manage_audits || me?.is_admin);
-}
-
 function renderAuditSamples(items) {
   const card = document.getElementById('auditSamplesCard');
   const body = document.getElementById('auditSamples');
@@ -1046,7 +1043,7 @@ function showStories(eventId) {
 async function refreshAuditSamples(eventId) {
   if (!featureEnabled(me, 'audits')) return;
   const card = document.getElementById('auditSamplesCard');
-  if (!canViewAuditEngagements()) {
+  if (!canViewAudits(me)) {
     if (card) card.style.display = 'none';
     setEventTab('audits', false);
     return;

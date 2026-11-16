@@ -160,7 +160,6 @@ def list_items(
     control="",
     clause="",
     framework=None,
-    **unused,
 ):
     require_access(db, user)
     qry = db.query(IsmsSwot)

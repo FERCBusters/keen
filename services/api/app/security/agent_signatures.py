@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -19,6 +20,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from app.agents.ueu.jcs import canonical
+from app.security.encoding import b64url, unb64url
 from app.security.regex import scan_pattern
 
 OPERATIONS = ("otlp-logs", "heartbeat", "renew")
@@ -28,9 +30,9 @@ COMPONENTS = (
     '"content-type")'
 )
 _INPUT = scan_pattern(
-    r'keen=\("@method" "keen-agent-operation" "keen-encryption-key" "content-digest"'
-    r' "content-type"\)'
-    r';created=([0-9]{1,12});keyid="([0-9a-f-]{36}:[0-9a-f]{16})"'
+    "keen="
+    + re.escape(COMPONENTS)
+    + r';created=([0-9]{1,12});keyid="([0-9a-f-]{36}:[0-9a-f]{16})"'
     r';nonce="([A-Za-z0-9_-]{22})";alg="ed25519"'
 )
 _SIGNATURE = scan_pattern(r"keen=:([A-Za-z0-9+/]{86}==):")
@@ -54,14 +56,6 @@ class SignedRequest:
     digest: str
     params: str
     signature: bytes
-
-
-def b64url(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode().rstrip("=")
-
-
-def unb64url(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
 def public_key(value: str) -> Ed25519PublicKey:

@@ -6,7 +6,6 @@ authenticate with a bearer token instead; that credential type is chosen when
 an administrator registers the identity and never changes.
 """
 
-import hashlib
 import hmac
 from contextlib import contextmanager
 from datetime import timedelta
@@ -25,15 +24,12 @@ from app.security.agent_signatures import (
     verify_digest,
     verify_request,
 )
+from app.security.encoding import digest
 from app.security.rate_limit import fixed_window_allow
 from app.security.regex import scan_pattern
 
 NONCE_SECONDS = 600
 RENEWAL_GRACE = timedelta(hours=24)
-
-
-def digest(value):
-    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def parse_agent_credential(authorization):

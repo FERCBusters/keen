@@ -360,7 +360,6 @@ def test_every_router_has_an_availability_decision():
                         "relationships",
                         "effectiveness",
                         "meetings",
-                        "business_processes",
                         "objectives",
                         "documents",
                         "organisation",

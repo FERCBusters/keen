@@ -569,6 +569,27 @@ def _conditions_hold(
     return True
 
 
+def event_fields(event: Any) -> dict[str, Any]:
+    """An event as rule conditions read it.
+
+    Collection, the rule preview and the backfill all match on this one view,
+    so a rule decides the same way wherever it is evaluated.
+    """
+    return {
+        "source": event.source,
+        "connection_id": event.connection_id,
+        "connection_name": event.connection_name,
+        "system": event.system,
+        "actor": event.actor,
+        "action": event.action,
+        "outcome": event.outcome,
+        "severity": event.severity,
+        "summary": event.summary,
+        "raw_pointer": event.raw_pointer,
+        "normalized_payload": event.normalized_payload,
+    }
+
+
 @overload
 def evaluate_by_framework(
     event: dict[str, Any],

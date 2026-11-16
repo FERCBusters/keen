@@ -13,8 +13,6 @@ from app.db.models import (
     IsmsPerson,
     IsmsVendor,
     ManagedConfiguration,
-    PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
     PestleClauseRelevance,
     PestleItem,
     PestleRelevanceLevel,
@@ -80,14 +78,6 @@ RULES = {
         "Economical": {"scenario_terms": ["inflation"]},
         # Not a PESTLE(E) type, so never reported.
         "Spiritual": {"scenario_terms": ["regulator"]},
-    },
-    "pestle_business_processes": {
-        "Board Strategy": {
-            "pestle_types": ["Legal"],
-            "terms": ["board"],
-            "reason": "Board oversight.",
-        },
-        "software development": {"terms": ["code"]},
     },
     "affected": {
         "regulators": {
@@ -457,9 +447,7 @@ def test_a_failed_full_text_query_leaves_the_transaction_usable(
 def _registers(db):
     high = PestleRelevanceLevel(code="high", label="High", sort_order=1)
     na = PestleRelevanceLevel(code="na", label="Not applicable", sort_order=9)
-    board = PestleBusinessProcess(name="Board Strategy")
-    software = PestleBusinessProcess(name="Software Development")
-    db.add_all([high, na, board, software])
+    db.add_all([high, na])
     db.flush()
     context_clause = FrameworkClause(framework_slug="A", ref="4.1", sort_order=1)
     parties_clause = FrameworkClause(
@@ -503,16 +491,6 @@ def _registers(db):
     db.flush()
     db.add_all(
         [
-            PestleBusinessProcessRelevance(
-                pestle_item_id=fines.id,
-                business_process_id=board.id,
-                relevance_id=high.id,
-            ),
-            PestleBusinessProcessRelevance(
-                pestle_item_id=fines.id,
-                business_process_id=software.id,
-                relevance_id=na.id,
-            ),
             PestleClauseRelevance(
                 pestle_item_id=fines.id,
                 clause_id=parties_clause.id,
@@ -565,7 +543,6 @@ def _registers(db):
     )
     db.flush()
     return dict(
-        board=board,
         fines=fines,
         exact=exact,
         commissioner=commissioner,
@@ -593,26 +570,12 @@ def test_related_registers_are_matched_and_drafts_avoid_duplicates(
         }
     ]
     assert [s["label"] for s in _signals(result, "pestle_type")] == ["Legal"]
-    assert result["business_process_suggestions"] == [
-        {
-            "id": str(rows["board"].id),
-            "name": "Board Strategy",
-            "score": 4,
-            "matched_terms": ["Legal"],
-            "reason": "Board oversight.",
-            "relevance_code": "medium",
-            "exists": True,
-        }
-    ]
-
     suggestions = {item["item"]: item for item in result["pestle_suggestions"]}
     assert set(suggestions) == {"Regulator fines", "Regulator"}
     fines = suggestions["Regulator fines"]
     assert fines["id"] == str(rows["fines"].id) and fines["framework"] == "A"
     assert "The scenario matched the Legal PESTLE(E) lens." in fines["reasons"]
     # Links marked not applicable are left out of the summary.
-    assert [bp["name"] for bp in fines["business_processes"]] == ["Board Strategy"]
-    assert fines["business_processes"][0]["relevance_label"] == "High"
     assert [c["clause"]["ref"] for c in fines["clauses"]] == ["4.2"]
     exact = suggestions["Regulator"]
     assert (
@@ -628,7 +591,6 @@ def test_related_registers_are_matched_and_drafts_avoid_duplicates(
         in (draft["rationale"])
     )
     assert "Possible existing related items:" in draft["rationale"]
-    assert draft["business_processes"] == result["business_process_suggestions"]
 
     # The asset is named in the issue; the regulator group finds the vendor
     # whose description names a commissioner. Nothing new is proposed.
@@ -715,27 +677,6 @@ def test_related_registers_are_read_with_a_bounded_number_of_statements(
         sqlalchemy.event.remove(engine, "before_cursor_execute", record)
     assert result["existing_matches"]["cia_risks"]
     assert len(statements) <= 19, len(statements)
-
-
-def test_pestle_hits_default_to_board_strategy_without_process_rules(
-    contract_db, monkeypatch
-):
-    rules = {**RULES, "pestle_business_processes": {}}
-    result = _analyse(contract_db, monkeypatch, rules=rules, issue="Regulator fine")
-    assert result["business_process_suggestions"] == [
-        {
-            "id": None,
-            "name": "Board Strategy",
-            "score": 1,
-            "matched_terms": [],
-            "reason": "Default governance process for a newly identified PESTLE(E) scenario.",
-            "relevance_code": "medium",
-            "exists": False,
-        }
-    ]
-    draft = result["draft_pestle_item"]
-    assert draft["business_processes"] == []  # nothing to link until it exists
-    assert draft["item"] == "Regulator fine"
 
 
 def test_existing_pestle_items_alone_shape_the_draft(contract_db, monkeypatch):

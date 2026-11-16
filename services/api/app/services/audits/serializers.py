@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import iso_or_none
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -45,14 +46,6 @@ def usernames(db: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         return {}
     rows = db.query(User.id, User.username).filter(User.id.in_(ids)).all()
     return {uid: uname for uid, uname in rows}
-
-
-def iso_dt(v: datetime | None) -> str | None:
-    return v.isoformat() if v else None
-
-
-def iso_date(v: date | None) -> str | None:
-    return v.isoformat() if v else None
 
 
 def audit_summary(
@@ -112,15 +105,15 @@ def audit_summary(
         "framework_slug": a.framework_slug,
         "status": a.status,
         "audit_type": a.audit_type or "internal",
-        "start_date": iso_date(a.start_date),
-        "end_date": iso_date(a.end_date),
+        "start_date": iso_or_none(a.start_date),
+        "end_date": iso_or_none(a.end_date),
         "schedule_recurrence": a.schedule_recurrence or "once",
         "schedule_interval": int(a.schedule_interval or 1),
         "schedule_date_rule": a.schedule_date_rule or "exact",
         "schedule_anchor_month": a.schedule_anchor_month,
-        "schedule_next_run_date": iso_date(a.schedule_next_run_date),
-        "schedule_until_date": iso_date(a.schedule_until_date),
-        "schedule_last_run_date": iso_date(a.schedule_last_run_date),
+        "schedule_next_run_date": iso_or_none(a.schedule_next_run_date),
+        "schedule_until_date": iso_or_none(a.schedule_until_date),
+        "schedule_last_run_date": iso_or_none(a.schedule_last_run_date),
         "schedule_last_created_audit_id": (
             str(a.schedule_last_created_audit_id)
             if a.schedule_last_created_audit_id
@@ -132,8 +125,8 @@ def audit_summary(
         "created_by_username": (
             authors.get(a.created_by_user_id, "") if a.created_by_user_id else ""
         ),
-        "created_at": iso_dt(a.created_at),
-        "updated_at": iso_dt(a.updated_at),
+        "created_at": iso_or_none(a.created_at),
+        "updated_at": iso_or_none(a.updated_at),
         "notes": a.notes or "",
         "report_notes": a.notes or "",
         "executive_summary": a.executive_summary or "",
@@ -151,7 +144,7 @@ def report_dict(a: Audit) -> dict[str, Any] | None:
         "content_type": a.final_report_content_type,
         "sha256": a.final_report_sha256,
         "size_bytes": a.final_report_size_bytes,
-        "uploaded_at": iso_dt(a.final_report_uploaded_at),
+        "uploaded_at": iso_or_none(a.final_report_uploaded_at),
         "download_url": f"/api/v1/audits/{a.id}/report",
     }
 
@@ -196,13 +189,13 @@ def evidence_dict(
         "added_by_username": (
             added_by.get(e.added_by_user_id, "") if e.added_by_user_id else ""
         ),
-        "added_at": iso_dt(e.added_at),
+        "added_at": iso_or_none(e.added_at),
         "event": (
             None
             if ev is None
             else {
                 "id": str(ev.id),
-                "timestamp": iso_dt(ev.timestamp),
+                "timestamp": iso_or_none(ev.timestamp),
                 "source": ev.source,
                 "connection_id": ev.connection_id,
                 "connection_name": ev.connection_name,
@@ -236,7 +229,7 @@ def attendee_dict(x: AuditAttendee) -> dict[str, Any]:
         "name": x.name,
         "email": x.email or user_email(u),
         "role": x.role,
-        "created_at": iso_dt(x.created_at),
+        "created_at": iso_or_none(x.created_at),
     }
 
 
@@ -261,8 +254,8 @@ def finding_dict(
         "created_by_username": (
             authors.get(x.created_by_user_id, "") if x.created_by_user_id else ""
         ),
-        "created_at": iso_dt(x.created_at),
-        "updated_at": iso_dt(x.updated_at),
+        "created_at": iso_or_none(x.created_at),
+        "updated_at": iso_or_none(x.updated_at),
     }
 
 
@@ -282,10 +275,10 @@ def coverage_source_out(
         "start_date": (
             occurrence_date.isoformat()
             if occurrence_date
-            else iso_date(audit.start_date)
+            else iso_or_none(audit.start_date)
         ),
         "occurrence_date": occurrence_date.isoformat() if occurrence_date else None,
-        "end_date": iso_date(audit.end_date),
+        "end_date": iso_or_none(audit.end_date),
         "framework_slug": audit.framework_slug,
     }
 

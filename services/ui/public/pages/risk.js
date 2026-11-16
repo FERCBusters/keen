@@ -160,40 +160,64 @@ function renderMitigatorContext(risk) {
     }`;
 }
 
-function renderControls(risk) {
-  const items = risk.controls;
-  if (controlsCount) controlsCount.textContent = String(items.length);
-  if (!items.length) {
-    linkedControls.className = 'p-3 small-muted';
-    linkedControls.innerHTML = 'No controls are mapped to this risk for the selected framework.';
-    return;
-  }
-  linkedControls.className = 'table-responsive';
-  linkedControls.innerHTML = `
+// A risk's controls and its clauses are listed the same way; only a control
+// has a scope.
+const LINKED = [
+  {
+    key: 'controls',
+    heading: 'Control',
+    page: '/control.html',
+    count: controlsCount,
+    list: linkedControls,
+    scope: (c) =>
+      `<td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>`,
+  },
+  {
+    key: 'clauses',
+    heading: 'Clause',
+    page: '/clause.html',
+    count: document.getElementById('clausesCount'),
+    list: document.getElementById('linkedClauses'),
+    scope: null,
+  },
+];
+
+function renderLinked(risk) {
+  for (const linked of LINKED) {
+    const items = risk[linked.key];
+    linked.count.textContent = String(items.length);
+    if (!items.length) {
+      linked.list.className = 'p-3 small-muted';
+      linked.list.textContent = `No ${linked.key} are mapped to this risk for the selected framework.`;
+      continue;
+    }
+    linked.list.className = 'table-responsive';
+    linked.list.innerHTML = `
     <table class="table table-sm table-hover align-middle mb-0">
       <thead>
         <tr>
-          <th style="width:130px;">Control</th>
+          <th style="width:130px;">${linked.heading}</th>
           <th>Title</th>
-          <th style="width:120px;">Scope</th>
+          ${linked.scope ? '<th style="width:120px;">Scope</th>' : ''}
         </tr>
       </thead>
       <tbody>
         ${items
           .map((c) => {
             const href = withFramework(
-              `/control.html?id=${encodeURIComponent(c.id)}`,
+              `${linked.page}?id=${encodeURIComponent(c.id)}`,
               risk.framework,
             );
             return `<tr>
             <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref)}</a></td>
             <td class="wrap">${esc(c.title)}</td>
-            <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>
+            ${linked.scope ? linked.scope(c) : ''}
           </tr>`;
           })
           .join('')}
       </tbody>
     </table>`;
+  }
 }
 
 function renderRisk(risk) {
@@ -245,7 +269,7 @@ function renderRisk(risk) {
   setText(threatSummary, threat, 'No threat summary.');
   setText(riskNote, risk?.note, 'No note.');
   renderMitigatorContext(risk);
-  renderControls(risk);
+  renderLinked(risk);
 }
 
 sampleRiskAudit?.addEventListener('click', () => {
@@ -265,7 +289,7 @@ deleteRisk?.addEventListener('click', async () => {
   if (
     !(await confirmAction({
       title: 'Delete risk',
-      message: `Delete “${riskDisplayTitle(risk)}”? Its links to controls and posture checks, and to the people, vendors / 3rd parties and assets it affects, are removed with it.`,
+      message: `Delete “${riskDisplayTitle(risk)}”? Its links to controls, clauses and posture checks, and to the people, vendors / 3rd parties and assets it affects, are removed with it.`,
       confirmLabel: 'Delete',
       danger: true,
     }))

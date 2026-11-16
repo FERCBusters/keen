@@ -526,28 +526,3 @@ def test_reading_the_register_needs_isms_read_and_changes_need_isms_manage(reg):
     assert names(reg.call(reg.reader, "GET", "licenses")["items"]) == [
         "Enterprise seat"
     ]
-
-
-def test_the_risk_register_refuses_unknown_organisation_chart_nodes_too(reg):
-    risks = reg.keen.client(reg.keen.user("risk.manage"))
-    held = reg.asset()
-    unknown = str(uuid.uuid4())
-    body = {"category_name": "Data", "subcategory_name": "Databases"}
-
-    created = risks.post(
-        "/v1/risks/assets",
-        json={**body, "name": "Kiosk", "owner_org_node_id": unknown},
-        headers=unsafe(risks),
-    )
-    updated = risks.patch(
-        f"/v1/risks/assets/{held['id']}",
-        json={**body, "name": held["name"], "owner_org_node_id": unknown},
-        headers=unsafe(risks),
-    )
-
-    for refused in (created, updated):
-        assert (refused.status_code, refused.json()["detail"]) == (
-            400,
-            "Unknown organisation chart node",
-        )
-    assert reg.call(reg.reader, "GET", "assets")["items"] == [held]

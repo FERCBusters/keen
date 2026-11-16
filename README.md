@@ -125,7 +125,7 @@ Detailed setup, backup and administration guidance lives in the application's **
 
 - `services/api/`: FastAPI application, Celery tasks, Alembic baseline and backend tests.
 - `services/ui/`: browser UI, nginx configuration and frontend tests.
-- `config/`: source and mapping configuration examples.
+- `config/`: the shipped source and mapping configuration defaults; `docs/config-examples/` holds worked examples.
 
 The CI workflow in `.github/workflows/tests.yml` installs locked dependencies and runs `bash tests.sh` against disposable PostgreSQL and Valkey services. Set `KEEN_TEST_DATABASE_URL` to a dedicated test database and `KEEN_REDIS_URL` to the test broker before running it. The suite changes database contents. See [TESTING.md](TESTING.md) for the development test environment.
 

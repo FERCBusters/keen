@@ -16,6 +16,7 @@ from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     ControlItem,
+    FrameworkClause,
     IsmsLicense,
     IsmsOrgNode,
     IsmsOrgNodeUser,
@@ -23,6 +24,7 @@ from app.db.models import (
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
+    RiskClauseLink,
     RiskControlLink,
     RiskLibraryEntry,
     User,
@@ -39,6 +41,8 @@ from app.services.affected_links import replace_affected_links
 from app.services.context import ChangeContext
 from app.services.control_refs import (
     CLAUSE_ROW_TYPE,
+    clause_by_id_or_ref,
+    clause_summary,
     control_by_id_or_ref,
     control_summary,
 )
@@ -54,12 +58,8 @@ from app.services.isms.link_diary import (
     sync_entity_link_diary,
 )
 from app.services.isms.mutations import (
-    _delete_entity_links,
     asset_category_by_id,
     asset_or_404,
-    license_or_404,
-    license_or_create_by_name,
-    org_node_or_400,
 )
 from app.services.record_imports import IMPORT_ROWS, import_rows, row_payload
 from app.services.risk_mitigator import RISK_TYPES, analyse_risk_mitigation
@@ -70,6 +70,13 @@ RISK_MANAGE_PERMISSION = "risk.manage"
 _RISK_TYPE_CANON = {x.lower(): x for x in RISK_TYPES}
 TREATMENT_STRATEGIES = {"", "mitigate", "accept", "avoid", "transfer"}
 TREATMENT_STATUSES = {"open", "in_progress", "awaiting_review", "closed"}
+# The conventional 5x5 register ratings a risk's two scores are derived from.
+REGISTER_RATINGS = (
+    "register_likelihood",
+    "register_impact",
+    "register_residual_likelihood",
+    "register_residual_impact",
+)
 
 
 def set_treatment_status(risk: Risk, status: str) -> None:
@@ -84,31 +91,6 @@ def set_treatment_status(risk: Risk, status: str) -> None:
     else:
         risk.closed_at = None
     risk.treatment_status = status
-
-
-class RiskCategoryPayload(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-
-
-class RiskSubcategoryPayload(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    category_id: uuid.UUID | None = None
-
-
-class RiskAssetPayload(BaseModel):
-    name: str = Field(..., min_length=1, max_length=256)
-    category_id: uuid.UUID | None = None
-    category_name: str | None = Field(default=None, max_length=128)
-    subcategory_id: uuid.UUID | None = None
-    subcategory_name: str | None = Field(default=None, max_length=128)
-    license_id: uuid.UUID | None = None
-    license_name: str | None = Field(default=None, max_length=256)
-    owner_org_node_id: uuid.UUID | None = None
-    description: str | None = Field(default=None, max_length=20000)
-
-
-class RiskControlLinksPayload(BaseModel):
-    controls: list[str] = Field(default_factory=list)
 
 
 class RiskMitigatorAnalysePayload(BaseModel):
@@ -147,15 +129,12 @@ class RiskUpsertPayload(BaseModel):
     register_impact: int | None = Field(default=None, ge=1, le=5)
     register_residual_likelihood: int | None = Field(default=None, ge=1, le=5)
     register_residual_impact: int | None = Field(default=None, ge=1, le=5)
-    threat_score: int | None = None
-    vulnerability_score: int | None = None
-    impact_score: int | None = None
-    residual_vulnerability_score: int | None = None
-    residual_impact_score: int | None = None
     note: str | None = Field(default=None, max_length=20000)
     mitigator_context: dict[str, Any] | None = None
     framework: str | None = Field(default=None, max_length=64)
     controls: list[str] | None = None
+    # Clause references or ids in the framework; omit to keep the risk's clauses.
+    clauses: list[str] | None = None
     library_template_id: uuid.UUID | None = None
 
 
@@ -204,14 +183,6 @@ def _require_risk_read_or_owner(db: Session, user: User, risk: Risk) -> None:
             status_code=403,
             detail="risk.read permission or risk ownership required",
         )
-
-
-def _clean_score(raw: int | None, *, default: int = 1, label: str = "score") -> int:
-    # The request schema has already made the score an integer.
-    n = default if raw is None else int(raw)
-    if n < 0 or n > 5:
-        raise DomainError(status_code=400, detail=f"{label} must be between 0 and 5")
-    return n
 
 
 def _clean_risk_types(raw: list[str] | None) -> list[str]:
@@ -324,50 +295,26 @@ def _subcategory_or_create(
     raise DomainError(status_code=400, detail="asset subcategory is required")
 
 
-def _license_from_payload(
-    db: Session, payload: RiskUpsertPayload | RiskAssetPayload
-) -> IsmsLicense | None:
-    license_id = getattr(payload, "license_id", None)
-    if license_id:
-        return license_or_404(db, license_id)
-    license_name = getattr(payload, "license_name", None)
-    if license_name:
-        return license_or_create_by_name(db, license_name)
-    return None
-
-
-def _asset_name_from_payload(
-    payload: RiskUpsertPayload | RiskAssetPayload,
-) -> str | None:
-    return getattr(payload, "asset_name", None) or getattr(payload, "name", None)
-
-
 def _asset_or_create(
     db: Session,
-    payload: RiskUpsertPayload | RiskAssetPayload,
+    payload: RiskUpsertPayload,
     *,
     existing: RiskAsset | None = None,
 ) -> RiskAsset:
-    fields = set(getattr(payload, "model_fields_set", set()) or set())
-    asset_id = getattr(payload, "asset_id", None)
-    if asset_id and not (
-        fields
-        & {
-            "asset_name",
-            "name",
-            "category_id",
-            "category_name",
-            "subcategory_id",
-            "subcategory_name",
-            "license_id",
-            "license_name",
-        }
-    ):
-        return asset_or_404(db, asset_id)
+    """The asset a risk names: one picked by id, or found or added by name."""
+    described = payload.model_fields_set & {
+        "asset_name",
+        "category_id",
+        "category_name",
+        "subcategory_id",
+        "subcategory_name",
+    }
+    if payload.asset_id and not described:
+        return asset_or_404(db, payload.asset_id)
 
-    base_asset = asset_or_404(db, asset_id) if asset_id else existing
+    base_asset = asset_or_404(db, payload.asset_id) if payload.asset_id else existing
     name = clean_text(
-        _asset_name_from_payload(payload) or (base_asset.name if base_asset else None),
+        payload.asset_name or (base_asset.name if base_asset else None),
         max_len=256,
         required=True,
         label="asset",
@@ -375,15 +322,15 @@ def _asset_or_create(
 
     category = _category_or_create(
         db,
-        category_id=getattr(payload, "category_id", None),
-        category_name=getattr(payload, "category_name", None),
+        category_id=payload.category_id,
+        category_name=payload.category_name,
         existing=base_asset.category if base_asset else None,
     )
     subcategory = _subcategory_or_create(
         db,
         category=category,
-        subcategory_id=getattr(payload, "subcategory_id", None),
-        subcategory_name=getattr(payload, "subcategory_name", None),
+        subcategory_id=payload.subcategory_id,
+        subcategory_name=payload.subcategory_name,
         existing=base_asset.subcategory if base_asset else None,
     )
 
@@ -403,16 +350,10 @@ def _asset_or_create(
         name=name,
         category_id=category.id,
         subcategory_id=subcategory.id,
-        owner_org_node_id=org_node_or_400(
-            db, getattr(payload, "owner_org_node_id", None)
-        ),
-        description=clean_text(getattr(payload, "description", None), max_len=20000),
+        license="",
         created_at=_utcnow(),
         updated_at=_utcnow(),
     )
-    license_row = _license_from_payload(db, payload)
-    row.license_id = license_row.id if license_row else None
-    row.license = license_row.name if license_row else ""
     db.add(row)
     db.flush()
     return row
@@ -452,7 +393,7 @@ def _control_or_404(db: Session, framework: str, value: str) -> ControlItem:
     return row
 
 
-def _dedupe_controls(values: list[str] | None) -> list[str]:
+def _dedupe_controls(values: list[str] | None, label: str = "controls") -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for raw in values or []:
@@ -462,7 +403,7 @@ def _dedupe_controls(values: list[str] | None) -> list[str]:
         seen.add(v)
         out.append(v)
     if len(out) > 1000:
-        raise DomainError(status_code=400, detail="Too many controls")
+        raise DomainError(status_code=400, detail=f"Too many {label}")
     return out
 
 
@@ -494,6 +435,51 @@ def _replace_control_links(
         db.flush()
         sync_entity_link_diary(db, "risk", risk.id, user)
     return controls
+
+
+def _replace_clause_links(
+    db: Session, risk: Risk, *, framework: str, clause_values: list[str] | None
+) -> None:
+    """Replace the risk's clauses in one framework; other frameworks' stay."""
+    clauses = []
+    for value in _dedupe_controls(clause_values, "clauses"):
+        clause = clause_by_id_or_ref(db, framework, value)
+        if not clause:
+            raise DomainError(
+                status_code=400, detail=f"Unknown clause for {framework}: {value}"
+            )
+        clauses.append(clause)
+    db.query(RiskClauseLink).filter(
+        RiskClauseLink.risk_id == risk.id,
+        RiskClauseLink.framework_slug == framework,
+    ).delete()
+    now = _utcnow()
+    for clause_id in dict.fromkeys(clause.id for clause in clauses):
+        db.add(
+            RiskClauseLink(
+                risk_id=risk.id,
+                framework_slug=framework,
+                clause_id=clause_id,
+                created_at=now,
+            )
+        )
+    db.flush()
+
+
+def _risk_clauses(
+    db: Session, risk_id: uuid.UUID, framework: str
+) -> list[FrameworkClause]:
+    rows = (
+        db.query(FrameworkClause)
+        .join(RiskClauseLink, RiskClauseLink.clause_id == FrameworkClause.id)
+        .filter(
+            RiskClauseLink.risk_id == risk_id,
+            RiskClauseLink.framework_slug == framework,
+        )
+        .all()
+    )
+    rows.sort(key=lambda c: (int(c.sort_order or 0), _ref_sort_key(c.ref)))
+    return rows
 
 
 def _score_class(score: int | None) -> str:
@@ -633,6 +619,19 @@ def _risk_out(
             .scalar()
             or 0
         )
+    clauses = _risk_clauses(db, risk.id, fw) if include_controls else []
+    if include_controls:
+        clause_count = len(clauses)
+    else:
+        clause_count = int(
+            db.query(func.count(RiskClauseLink.clause_id))
+            .filter(
+                RiskClauseLink.risk_id == risk.id,
+                RiskClauseLink.framework_slug == fw,
+            )
+            .scalar()
+            or 0
+        )
     asset = risk.asset
     category = asset.category if asset else None
     subcategory = asset.subcategory if asset else None
@@ -661,13 +660,8 @@ def _risk_out(
         "register_impact": risk.register_impact,
         "register_residual_likelihood": risk.register_residual_likelihood,
         "register_residual_impact": risk.register_residual_impact,
-        "threat_score": int(risk.threat_score or 0),
-        "vulnerability_score": int(risk.vulnerability_score or 0),
-        "impact_score": int(risk.impact_score or 0),
         "risk_score": int(risk.risk_score or 0),
         "risk_score_class": _score_class(risk.risk_score),
-        "residual_vulnerability_score": int(risk.residual_vulnerability_score or 0),
-        "residual_impact_score": int(risk.residual_impact_score or 0),
         "residual_risk_score": int(risk.residual_risk_score or 0),
         "residual_risk_score_class": _score_class(risk.residual_risk_score),
         "note": risk.note or "",
@@ -680,6 +674,8 @@ def _risk_out(
         "controls": [control_summary(c) for c in controls]
         if include_controls
         else None,
+        "clause_count": clause_count,
+        "clauses": [clause_summary(c) for c in clauses] if include_controls else None,
     }
 
 
@@ -765,25 +761,6 @@ def _apply_payload(
             label="threat_summary",
         )
 
-    if is_create or "threat_score" in fields:
-        risk.threat_score = _clean_score(payload.threat_score, label="threat_score")
-    if is_create or "vulnerability_score" in fields:
-        risk.vulnerability_score = _clean_score(
-            payload.vulnerability_score, label="vulnerability_score"
-        )
-    if is_create or "impact_score" in fields:
-        risk.impact_score = _clean_score(payload.impact_score, label="impact_score")
-
-    if is_create or "residual_vulnerability_score" in fields:
-        risk.residual_vulnerability_score = _clean_score(
-            payload.residual_vulnerability_score,
-            label="residual_vulnerability_score",
-        )
-    if is_create or "residual_impact_score" in fields:
-        risk.residual_impact_score = _clean_score(
-            payload.residual_impact_score, label="residual_impact_score"
-        )
-
     if is_create or "note" in fields:
         risk.note = clean_text(
             payload.note, max_len=20000, required=False, label="note"
@@ -801,42 +778,12 @@ def _apply_payload(
             raise DomainError(status_code=400, detail="mitigator_context is too large")
         risk.mitigator_context = context
 
-    # The register's four ratings are the single source of truth. The
-    # three-factor score columns mirror them for the SoA and change history.
-    rating_fields = (
-        "register_likelihood",
-        "register_impact",
-        "register_residual_likelihood",
-        "register_residual_impact",
-    )
-    if (
-        is_create
-        or fields.intersection(rating_fields)
-        or fields.intersection(
-            {
-                "threat_score",
-                "vulnerability_score",
-                "impact_score",
-                "residual_vulnerability_score",
-                "residual_impact_score",
-            }
-        )
-    ):
-        for name, legacy in (
-            ("register_likelihood", "vulnerability_score"),
-            ("register_impact", "impact_score"),
-            ("register_residual_likelihood", "residual_vulnerability_score"),
-            ("register_residual_impact", "residual_impact_score"),
-        ):
-            if name in fields:
-                setattr(risk, name, getattr(payload, name))
-            elif is_create or (legacy in fields and name not in fields):
-                setattr(risk, name, max(1, int(getattr(risk, legacy))))
-        risk.threat_score = 1
-        risk.vulnerability_score = risk.register_likelihood or 1
-        risk.impact_score = risk.register_impact or 1
-        risk.residual_vulnerability_score = risk.register_residual_likelihood or 1
-        risk.residual_impact_score = risk.register_residual_impact or 1
+    # A rating the request leaves out keeps its value; a new risk starts at 1.
+    for name in REGISTER_RATINGS:
+        if name in fields:
+            setattr(risk, name, getattr(payload, name))
+        elif is_create:
+            setattr(risk, name, 1)
     risk.risk_score = (risk.register_likelihood or 0) * (risk.register_impact or 0)
     risk.residual_risk_score = (risk.register_residual_likelihood or 0) * (
         risk.register_residual_impact or 0
@@ -863,183 +810,6 @@ def list_risk_categories(*, user, db: Session):
             for c in rows
         ]
     }
-
-
-def create_risk_category(*, payload: RiskCategoryPayload, user, db: Session):
-    name = clean_text(payload.name, max_len=128, required=True, label="name")
-    existing = (
-        db.query(RiskCategory)
-        .filter(func.lower(RiskCategory.name) == name.lower())
-        .one_or_none()
-    )
-    if existing:
-        raise DomainError(status_code=400, detail="Asset category already exists")
-    row = RiskCategory(name=name, created_at=_utcnow(), updated_at=_utcnow())
-    db.add(row)
-    db.flush()
-    # Make the category immediately usable for assets.
-    db.add(
-        RiskAssetSubcategory(
-            category_id=row.id,
-            name="General",
-            created_at=_utcnow(),
-            updated_at=_utcnow(),
-        )
-    )
-    db.commit()
-    db.refresh(row)
-    return {"id": str(row.id), "name": row.name}
-
-
-def update_risk_category(
-    *, category_id: str, payload: RiskCategoryPayload, user, db: Session
-):
-    cid = _try_uuid(category_id)
-    if not cid:
-        raise DomainError(status_code=400, detail="category_id must be a UUID")
-    row = db.query(RiskCategory).filter(RiskCategory.id == cid).one_or_none()
-    if not row:
-        raise DomainError(status_code=404, detail="Asset category not found")
-    name = clean_text(payload.name, max_len=128, required=True, label="name")
-    conflict = (
-        db.query(RiskCategory)
-        .filter(
-            func.lower(RiskCategory.name) == name.lower(), RiskCategory.id != row.id
-        )
-        .one_or_none()
-    )
-    if conflict:
-        raise DomainError(status_code=400, detail="Asset category already exists")
-    row.name = name
-    row.updated_at = _utcnow()
-    db.add(row)
-    db.commit()
-    return {"id": str(row.id), "name": row.name}
-
-
-def delete_risk_category(*, category_id: str, user, db: Session):
-    cid = _try_uuid(category_id)
-    if not cid:
-        raise DomainError(status_code=400, detail="category_id must be a UUID")
-    row = db.query(RiskCategory).filter(RiskCategory.id == cid).one_or_none()
-    if not row:
-        raise DomainError(status_code=404, detail="Asset category not found")
-    in_use = db.query(RiskAsset.id).filter(RiskAsset.category_id == row.id).first()
-    if in_use:
-        raise DomainError(
-            status_code=400, detail="Cannot delete a category used by assets"
-        )
-    db.delete(row)
-    db.commit()
-    return {"ok": True}
-
-
-def list_risk_subcategories(*, category_id: str = "", user, db: Session):
-    qry = db.query(RiskAssetSubcategory).join(
-        RiskCategory, RiskCategory.id == RiskAssetSubcategory.category_id
-    )
-    cid = _try_uuid(category_id) if category_id else None
-    if category_id and not cid:
-        raise DomainError(status_code=400, detail="category_id must be a UUID")
-    if cid:
-        qry = qry.filter(RiskAssetSubcategory.category_id == cid)
-    rows = qry.order_by(
-        func.lower(RiskCategory.name), func.lower(RiskAssetSubcategory.name)
-    ).all()
-    return {
-        "items": [
-            {
-                **_subcategory_out(sc),
-                "category": _category_out(sc.category),
-                "created_at": sc.created_at.isoformat() if sc.created_at else None,
-                "updated_at": sc.updated_at.isoformat() if sc.updated_at else None,
-            }
-            for sc in rows
-        ]
-    }
-
-
-def create_risk_subcategory(*, payload: RiskSubcategoryPayload, user, db: Session):
-    category = _category_or_create(
-        db,
-        category_id=payload.category_id,
-        category_name=None,
-    )
-    name = clean_text(payload.name, max_len=128, required=True, label="name")
-    existing = (
-        db.query(RiskAssetSubcategory)
-        .filter(
-            RiskAssetSubcategory.category_id == category.id,
-            func.lower(RiskAssetSubcategory.name) == name.lower(),
-        )
-        .one_or_none()
-    )
-    if existing:
-        raise DomainError(status_code=400, detail="Asset subcategory already exists")
-    row = RiskAssetSubcategory(
-        category_id=category.id,
-        name=name,
-        created_at=_utcnow(),
-        updated_at=_utcnow(),
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"id": str(row.id), "name": row.name, "category_id": str(row.category_id)}
-
-
-def _subcategory_or_404(db: Session, subcategory_id: str) -> RiskAssetSubcategory:
-    """Return the subcategory a request path names, or answer 404."""
-    sid = _try_uuid(subcategory_id)
-    if not sid:
-        raise DomainError(status_code=400, detail="subcategory_id must be a UUID")
-    row = (
-        db.query(RiskAssetSubcategory)
-        .filter(RiskAssetSubcategory.id == sid)
-        .one_or_none()
-    )
-    if not row:
-        raise DomainError(status_code=404, detail="Asset subcategory not found")
-    return row
-
-
-def update_risk_subcategory(
-    *, subcategory_id: str, payload: RiskSubcategoryPayload, user, db: Session
-):
-    row = _subcategory_or_404(db, subcategory_id)
-    category = row.category
-    if payload.category_id and payload.category_id != row.category_id:
-        category = asset_category_by_id(db, payload.category_id)
-    name = clean_text(payload.name, max_len=128, required=True, label="name")
-    conflict = (
-        db.query(RiskAssetSubcategory)
-        .filter(
-            RiskAssetSubcategory.category_id == category.id,
-            func.lower(RiskAssetSubcategory.name) == name.lower(),
-            RiskAssetSubcategory.id != row.id,
-        )
-        .one_or_none()
-    )
-    if conflict:
-        raise DomainError(status_code=400, detail="Asset subcategory already exists")
-    row.category_id = category.id
-    row.name = name
-    row.updated_at = _utcnow()
-    db.add(row)
-    db.commit()
-    return {"id": str(row.id), "name": row.name, "category_id": str(row.category_id)}
-
-
-def delete_risk_subcategory(*, subcategory_id: str, user, db: Session):
-    row = _subcategory_or_404(db, subcategory_id)
-    in_use = db.query(RiskAsset.id).filter(RiskAsset.subcategory_id == row.id).first()
-    if in_use:
-        raise DomainError(
-            status_code=400, detail="Cannot delete a subcategory used by assets"
-        )
-    db.delete(row)
-    db.commit()
-    return {"ok": True}
 
 
 def list_risk_assets(
@@ -1075,74 +845,6 @@ def list_risk_assets(
         qry = qry.filter(RiskAsset.subcategory_id == sid)
     rows = qry.order_by(func.lower(RiskAsset.name)).all()
     return {"items": [_asset_out(a) for a in rows]}
-
-
-def create_risk_asset(*, payload: RiskAssetPayload, user, db: Session):
-    row = _asset_or_create(db, payload)
-    db.commit()
-    db.refresh(row)
-    return _asset_out(row)
-
-
-def update_risk_asset(*, asset_id: str, payload: RiskAssetPayload, user, db: Session):
-    row = asset_or_404(db, asset_id)
-    category = _category_or_create(
-        db,
-        category_id=payload.category_id,
-        category_name=payload.category_name,
-        existing=row.category,
-    )
-    subcategory = _subcategory_or_create(
-        db,
-        category=category,
-        subcategory_id=payload.subcategory_id,
-        subcategory_name=payload.subcategory_name,
-        existing=row.subcategory,
-    )
-    name = clean_text(payload.name, max_len=256, required=True, label="asset")
-    conflict = (
-        db.query(RiskAsset)
-        .filter(
-            func.lower(RiskAsset.name) == name.lower(),
-            RiskAsset.category_id == category.id,
-            RiskAsset.subcategory_id == subcategory.id,
-            RiskAsset.id != row.id,
-        )
-        .one_or_none()
-    )
-    if conflict:
-        raise DomainError(status_code=400, detail="Asset already exists")
-    row.name = name
-    row.category_id = category.id
-    row.subcategory_id = subcategory.id
-    fields = set(payload.model_fields_set or set())
-    if {"license_id", "license_name"} & fields:
-        license_row = _license_from_payload(db, payload)
-        row.license_id = license_row.id if license_row else None
-        row.license = license_row.name if license_row else ""
-    if "owner_org_node_id" in fields:
-        row.owner_org_node_id = org_node_or_400(db, payload.owner_org_node_id)
-    if "description" in fields:
-        row.description = clean_text(payload.description, max_len=20000)
-    row.updated_at = _utcnow()
-    db.add(row)
-    db.commit()
-    return _asset_out(row)
-
-
-def delete_risk_asset(*, asset_id: str, user, db: Session):
-    row = asset_or_404(db, asset_id)
-    in_use = db.query(Risk.id).filter(Risk.asset_id == row.id).first()
-    if in_use:
-        raise DomainError(
-            status_code=400, detail="Cannot delete an asset used by risks"
-        )
-    # The asset is also an ISMS record: its framework links, and the diary entry
-    # that counts them as control evidence, go with it.
-    _delete_entity_links(db, "asset", row.id, settings.default_framework_slug)
-    db.delete(row)
-    db.commit()
-    return {"ok": True}
 
 
 def list_risk_owner_users(*, user, db: Session):
@@ -1472,6 +1174,8 @@ def insert_risk(
         _replace_control_links(
             db, risk, framework="KEEN-AF:1.0", control_values=template_refs
         )
+    if payload.clauses is not None:
+        _replace_clause_links(db, risk, framework=fw, clause_values=payload.clauses)
     db.flush()
     # One entry records every framework's links, including template links.
     sync_entity_link_diary(db, "risk", risk.id, user)
@@ -1521,6 +1225,7 @@ RISK_IMPORT_FIELDS = (
     "risk_owner_username",
     "note",
     "controls",
+    "clauses",
     "library_template_id",
 )
 
@@ -1555,6 +1260,7 @@ def import_risks(*, payload: RiskImportPayload, framework: str, user, db: Sessio
             "subcategory": (out["subcategory"] or {}).get("name"),
             "owner": out["risk_owner"]["name"],
             "controls": [control["ref"] for control in out["controls"] or []],
+            "clauses": [clause["ref"] for clause in out["clauses"] or []],
             "affected": [item["label"] for item in out["affected"]],
         }
 
@@ -1598,10 +1304,16 @@ def update_risk(*, risk_id: str, payload: RiskUpsertPayload, user, db: Session):
     _apply_payload(db, risk, payload, is_create=False)
     if payload.affected is not None:
         _replace_affected(db, risk, payload.affected, user=user)
+    # Clauses are stored first, so the one diary entry the links share
+    # records both kinds.
+    if payload.clauses is not None:
+        _replace_clause_links(db, risk, framework=fw, clause_values=payload.clauses)
     if payload.controls is not None:
         _replace_control_links(
             db, risk, framework=fw, control_values=payload.controls, user=user
         )
+    elif payload.clauses is not None:
+        sync_entity_link_diary(db, "risk", risk.id, user)
     db.add(risk)
     db.flush()
     record_entity_changelog(
@@ -1661,43 +1373,6 @@ def get_risk_controls(
     }
 
 
-def update_risk_controls(
-    *,
-    risk_id: str,
-    payload: RiskControlLinksPayload,
-    framework: str = settings.default_framework_slug,
-    user,
-    db: Session,
-):
-    fw = framework_parameter(framework)
-    risk = _risk_or_404(db, risk_id)
-    before_risk = risk_changelog_state(db, risk.id, framework=fw)
-    controls = _replace_control_links(
-        db, risk, framework=fw, control_values=payload.controls, user=user
-    )
-    risk.updated_at = _utcnow()
-    db.add(risk)
-    db.flush()
-    record_entity_changelog(
-        db,
-        entity_type="risk",
-        entity_id=risk.id,
-        action="updated",
-        before=before_risk,
-        after=risk_changelog_state(db, risk.id, framework=fw),
-        user=user,
-        request_method="PATCH",
-        request_path=f"/v1/risks/{risk_id}/controls",
-    )
-    db.commit()
-    return {
-        "ok": True,
-        "risk_id": str(risk.id),
-        "framework": fw,
-        "controls": [control_summary(c) for c in controls],
-    }
-
-
 def control_risks(
     *,
     control_id: str,
@@ -1731,6 +1406,35 @@ def control_risks(
     )
     return {
         "control": control_summary(control),
+        "framework": fw,
+        "items": [_risk_out(db, r, framework=fw, include_controls=False) for r in rows],
+    }
+
+
+def clause_risks(*, clause_id: str, user, db: Session):
+    """The risks linked to a clause, in the clause's own framework."""
+    cid = _try_uuid(clause_id)
+    if not cid:
+        raise DomainError(status_code=400, detail="clause_id must be a UUID")
+    clause = db.get(FrameworkClause, cid)
+    if not clause:
+        raise DomainError(status_code=404, detail="Clause not found")
+    fw = clause.framework_slug
+    rows = (
+        db.query(Risk)
+        .join(RiskClauseLink, RiskClauseLink.risk_id == Risk.id)
+        .join(RiskAsset, RiskAsset.id == Risk.asset_id)
+        .filter(
+            RiskClauseLink.clause_id == clause.id,
+            RiskClauseLink.framework_slug == fw,
+        )
+        .order_by(
+            Risk.risk_score.desc(), RiskAsset.name.asc(), Risk.threat_summary.asc()
+        )
+        .all()
+    )
+    return {
+        "clause": clause_summary(clause),
         "framework": fw,
         "items": [_risk_out(db, r, framework=fw, include_controls=False) for r in rows],
     }

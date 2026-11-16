@@ -31,6 +31,7 @@ from app.db.models import (
     User,
 )
 from app.security.auth import ROLE_NORMAL
+from app.security.encoding import digest
 from app.security.mcp_tokens import (
     ACCESS_PREFIX,
     ACCESS_TOKEN_SECONDS,
@@ -43,7 +44,6 @@ from app.security.mcp_tokens import (
     REFRESH_TOKEN_SECONDS,
     SCOPES,
     WRITE_SCOPES,
-    digest,
     grantable_scopes,
     granted_scopes,
     new_secret,

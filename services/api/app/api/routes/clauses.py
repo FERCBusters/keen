@@ -21,11 +21,6 @@ def list_clauses(
     return service.list_clauses(framework=framework, limit=limit, offset=offset, db=db)
 
 
-@router.get("/v1/clauses/{clause_id}")
-def get_clause(clause_id: str, db: Session = Depends(get_db)):
-    return service.get_clause(clause_id=clause_id, db=db)
-
-
 @router.get("/v1/clauses/{clause_id}/changelog")
 def clause_changelog(
     clause_id: str,

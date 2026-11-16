@@ -609,42 +609,6 @@ pestle_types:
       - whistleblower
       - AI
 
-pestle_business_processes:
-  Board Strategy:
-    reason: The issue affects governance, strategic direction, policy or board-level risk appetite.
-    pestle_types: [Political, Legal, Ethical, Environmental]
-    terms: [board, strategy, governance, leadership, government, policy, legislation, regulator, regulatory, reputation, ethical, csr, sustainability, sanctions]
-  Business Development:
-    reason: The issue affects customers, subscribers, markets, pricing, sales or revenue opportunities.
-    pestle_types: [Economical, Social]
-    terms: [customer, customers, subscriber, subscribers, market, sales, marketing, pricing, business development, competition, subscriptions, revenue, complaints]
-  Development Operations:
-    reason: The issue affects delivery pipelines, deployment, change management or operational development work.
-    pestle_types: [Technological]
-    terms: [devops, deployment, release, change, configuration, patch, upgrades, automation, implementation, support]
-  Implementation and Support:
-    reason: The issue affects customer-facing implementation, support, incident handling or service delivery.
-    pestle_types: [Social, Technological]
-    terms: [support, implementation, customer, customers, subscriber, incident, alert, notifiable event, service desk, training, complaints]
-  Platform Security and Operations:
-    reason: The issue affects platform resilience, security operations, threat intelligence or infrastructure.
-    pestle_types: [Technological, Legal]
-    terms: [platform, security, operations, cyber, ransomware, ddos, vulnerability, threat intelligence, ncsc, cloud, outage, backup, monitoring, infrastructure]
-  Software Development:
-    reason: The issue affects application code, development practice, software supply chain or technical design.
-    pestle_types: [Technological, Ethical]
-    terms: [software, code, application, api, secure development, ai, artificial intelligence, machine learning, vulnerability, patch, repository, development]
-  Architecture and requirements:
-    reason: The issue affects architecture, requirements, assurance criteria or design decisions.
-    pestle_types: [Technological, Legal, Ethical]
-    terms: [architecture, requirements, design, assurance, compatibility, interoperability, data transfer, privacy by design, technical evolution]
-
-# Who an issue affects. Keen Mitigator suggests existing People, Vendors / 3rd
-# parties and Assets and never creates them. A record whose name appears in the
-# issue is a strong match. When the issue mentions a group below (any of its
-# terms), the records of the group's kinds whose name or description holds one
-# of its record words are suggested too. A group with no kinds is reported as a
-# signal only, so the person names who is affected.
 affected:
   customers:
     label: Customers and members

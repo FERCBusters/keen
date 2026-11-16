@@ -19,6 +19,7 @@ from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentKey, Artifact, Event, KeenAgent, UeuBatch, UeuEvidence
 from app.ingest import common
 from app.security import agent_signatures as signatures
+from app.security import encoding
 from app.services import ueu_evidence
 from app.services.ueu_evidence import display_payload, evidence_record
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -179,14 +180,14 @@ def test_python_reproduces_the_agents_transport_vectors():
     assert hashlib.sha256(public).hexdigest()[:16] == statement["key_id"]
     info = server_keys.request_info("heartbeat", statement["key_id"], VECTORS["key_id"])
     assert info == VECTORS["sealed_request_info"].encode()
-    wire = signatures.unb64url(VECTORS["sealed_request"])
+    wire = encoding.unb64url(VECTORS["sealed_request"])
     plain = server_keys.SUITE.decrypt(wire, private, info)
     assert b64url(plain) == VECTORS["sealed_request_plaintext"]
     key = bytes.fromhex(VECTORS["response_key_hex"])
     assert plain[:32] == key
     aad = server_keys.response_aad("heartbeat", 200)
     assert aad == VECTORS["response_aad"].encode()
-    sealed = signatures.unb64url(VECTORS["sealed_response"])
+    sealed = encoding.unb64url(VECTORS["sealed_response"])
     assert (
         sealed[:12]
         + AESGCM(key).encrypt(sealed[:12], VECTORS["response_payload"].encode(), aad)

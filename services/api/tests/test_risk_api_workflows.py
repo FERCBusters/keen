@@ -12,7 +12,6 @@ from app.db.models import (
     ControlItem,
     EntityChangelog,
     Framework,
-    IsmsLicense,
     IsmsOrgNode,
     IsmsOrgNodeUser,
     Risk,
@@ -127,7 +126,6 @@ def test_risk_routes_require_sign_in_and_the_matching_permission(reg):
     read_paths = (
         "/v1/risks",
         "/v1/risks/categories",
-        "/v1/risks/subcategories",
         "/v1/risks/assets",
         "/v1/risks/controls-without-risks",
         "/v1/risks/users",
@@ -145,30 +143,10 @@ def test_risk_routes_require_sign_in_and_the_matching_permission(reg):
         if path != "/v1/risks/users":
             reg.read("GET", path)
     reg.read("GET", "/v1/risks/users", status=403)
-    category_id = risk["category"]["id"]
-    subcategory_id = risk["subcategory"]["id"]
     writes = (
         ("POST", "/v1/risks", _risk_body()),
         ("PATCH", f"/v1/risks/{risk['id']}", {"note": "changed"}),
         ("DELETE", f"/v1/risks/{risk['id']}", None),
-        ("PATCH", f"/v1/risks/{risk['id']}/controls", {"controls": []}),
-        ("POST", "/v1/risks/categories", {"name": "Facilities"}),
-        ("PATCH", f"/v1/risks/categories/{category_id}", {"name": "Renamed"}),
-        ("DELETE", f"/v1/risks/categories/{category_id}", None),
-        (
-            "POST",
-            "/v1/risks/subcategories",
-            {"name": "Backups", "category_id": category_id},
-        ),
-        ("PATCH", f"/v1/risks/subcategories/{subcategory_id}", {"name": "Renamed"}),
-        ("DELETE", f"/v1/risks/subcategories/{subcategory_id}", None),
-        (
-            "POST",
-            "/v1/risks/assets",
-            {"name": "CRM", "category_id": category_id},
-        ),
-        ("PATCH", f"/v1/risks/assets/{risk['asset_id']}", {"name": "Renamed"}),
-        ("DELETE", f"/v1/risks/assets/{risk['asset_id']}", None),
     )
     for method, path, body in writes:
         reg.read(method, path, body, status=403)
@@ -248,14 +226,13 @@ def test_new_risks_normalise_types_and_derive_scores_from_register_ratings(reg):
         2,
         "low",
     )
-    # Legacy score columns mirror the register ratings for older consumers.
     assert (
-        created["threat_score"],
-        created["vulnerability_score"],
-        created["impact_score"],
-        created["residual_vulnerability_score"],
-        created["residual_impact_score"],
-    ) == (1, 3, 4, 2, 1)
+        created["register_likelihood"],
+        created["register_impact"],
+        created["register_residual_likelihood"],
+        created["register_residual_impact"],
+    ) == (3, 4, 2, 1)
+    assert "threat_score" not in created and "impact_score" not in created
     assert created["created_by"] == reg.manager.username
     assert created["asset"] == "Payroll database"
     assert created["category"]["name"] == "Data"
@@ -300,12 +277,12 @@ def test_new_risks_normalise_types_and_derive_scores_from_register_ratings(reg):
         ),
         ({"register_likelihood": 6}, 422, None),
         ({"register_impact": 0}, 422, None),
+        ({"clauses": ["NOT-A-CLAUSE"]}, 400, "Unknown clause for A: NOT-A-CLAUSE"),
         (
-            {"vulnerability_score": 9},
+            {"clauses": [f"K-{n}" for n in range(1001)]},
             400,
-            "vulnerability_score must be between 0 and 5",
+            "Too many clauses",
         ),
-        ({"residual_impact_score": -1}, 400, "residual_impact_score must be between"),
         ({"framework": "A B"}, 400, "Invalid framework"),
         ({"framework": "../A"}, 400, "Invalid framework"),
         ({"framework": "x" * 65}, 422, None),
@@ -412,7 +389,6 @@ def test_risk_updates_change_only_the_fields_sent(reg):
     rerated = reg.manage("PATCH", path, {"register_impact": 5})
     assert rerated["register_likelihood"] == 3
     assert (rerated["risk_score"], rerated["risk_score_class"]) == (15, "high")
-    assert rerated["impact_score"] == 5
     assert rerated["residual_risk_score"] == created["residual_risk_score"]
 
     retyped = reg.manage("PATCH", path, {"risk_types": ["availability"]})
@@ -420,16 +396,9 @@ def test_risk_updates_change_only_the_fields_sent(reg):
     # Clearing the CIA associations makes it a general register entry.
     assert reg.manage("PATCH", path, {"risk_types": []})["method"] == "general"
 
-    # Older clients that still send the three-factor scores update the ratings.
-    legacy = reg.manage(
-        "PATCH",
-        path,
-        {"vulnerability_score": 4, "residual_impact_score": 3},
-    )
-    assert legacy["register_likelihood"] == 4
-    assert legacy["register_residual_impact"] == 3
-    assert legacy["risk_score"] == 20
-    assert legacy["residual_risk_score"] == 2 * 3
+    # The three-factor scores Keen once kept are no longer read.
+    ignored = reg.manage("PATCH", path, {"vulnerability_score": 4})
+    assert ignored["register_likelihood"] == 3 and ignored["risk_score"] == 15
 
     reg.manage("PATCH", path, {"framework": "A B"}, status=400)
     reg.manage("PATCH", "/v1/risks/not-a-uuid", {"note": "x"}, status=400)
@@ -440,7 +409,7 @@ def test_risk_updates_change_only_the_fields_sent(reg):
     assert final["note"] == HOSTILE
     changelog = reg.read("GET", f"{path}/changelog")
     actions = [item["action"] for item in changelog["items"]]
-    assert actions.count("updated") == 5 and actions[-1] == "created"
+    assert actions.count("updated") == 4 and actions[-1] == "created"
     note_change = next(
         change
         for item in changelog["items"]
@@ -584,20 +553,11 @@ def test_risk_controls_are_linked_by_id_or_reference_within_one_framework(reg):
     in_b = reg.read("GET", path, params={"framework": "B"})
     assert in_b["control_count"] == 0 and in_b["controls"] == []
     response = reg.manage(
-        "PATCH",
-        f"{path}/controls",
-        {"controls": ["A.5.2"]},
-        status=400,
-        params={"framework": "B"},
+        "PATCH", path, {"framework": "B", "controls": ["A.5.2"]}, status=400
     )
     assert response["detail"] == "Unknown control for B: A.5.2"
 
-    linked_b = reg.manage(
-        "PATCH",
-        f"{path}/controls",
-        {"controls": [str(b1.id)]},
-        params={"framework": "B"},
-    )
+    linked_b = reg.manage("PATCH", path, {"framework": "B", "controls": [str(b1.id)]})
     assert linked_b["framework"] == "B"
     assert [c["id"] for c in linked_b["controls"]] == [str(b1.id)]
     listed = reg.read("GET", f"{path}/controls", params={"framework": "A"})
@@ -614,12 +574,10 @@ def test_risk_controls_are_linked_by_id_or_reference_within_one_framework(reg):
 
     changelog = reg.read("GET", f"{path}/changelog")["items"]
     assert changelog[0]["request_path"] == f"/v1/risks/{created['id']}"
-    control_change = next(
-        item for item in changelog if item["request_path"].endswith("/controls")
+    assert any(change["field"] == "controls" for change in changelog[1]["changes"]), (
+        changelog[1]
     )
-    assert any(change["field"] == "controls" for change in control_change["changes"])
 
-    reg.manage("PATCH", "/v1/risks/not-a-uuid/controls", {"controls": []}, status=400)
     reg.read("GET", f"/v1/risks/{uuid.uuid4()}/controls", status=404)
     reg.read("GET", f"{path}/controls", params={"framework": "A B"}, status=400)
     assert a10.id  # linked above by reference
@@ -791,299 +749,95 @@ def test_register_filters_by_category_owner_and_risk_type(reg, register):
 # --- Asset categories, subcategories and assets ---------------------------------
 
 
-def test_asset_categories_are_unique_and_start_with_a_general_subcategory(reg):
-    created = reg.manage("POST", "/v1/risks/categories", {"name": f" {HOSTILE} "})
-    assert created["name"] == HOSTILE
-    listed = reg.read("GET", "/v1/risks/categories")["items"]
-    assert [(c["name"], [s["name"] for s in c["subcategories"]]) for c in listed] == [
-        (HOSTILE, ["General"])
-    ]
-    duplicate = reg.manage(
-        "POST", "/v1/risks/categories", {"name": HOSTILE.upper()}, status=400
-    )
-    assert duplicate["detail"] == "Asset category already exists"
-    blank = reg.manage("POST", "/v1/risks/categories", {"name": "   "}, status=400)
-    assert blank["detail"] == "name is required"
-    reg.manage("POST", "/v1/risks/categories", {"name": "x" * 129}, status=422)
+def test_assets_are_searchable_by_name_licence_and_category(reg):
+    db = reg.db
+    listing = "/v1/risks/assets"
 
-    data = reg.manage("POST", "/v1/risks/categories", {"name": "Data"})
-    path = f"/v1/risks/categories/{created['id']}"
-    renamed = reg.manage("PATCH", path, {"name": "Facilities"})
-    assert renamed == {"id": created["id"], "name": "Facilities"}
-    conflict = reg.manage("PATCH", path, {"name": "DATA"}, status=400)
-    assert conflict["detail"] == "Asset category already exists"
-    # Renaming a category to a different case of its own name is allowed.
-    assert reg.manage("PATCH", path, {"name": "FACILITIES"})["name"] == "FACILITIES"
-    reg.manage("PATCH", "/v1/risks/categories/nope", {"name": "X"}, status=400)
-    reg.manage(
-        "PATCH", f"/v1/risks/categories/{uuid.uuid4()}", {"name": "X"}, status=404
-    )
-    names = [c["name"] for c in reg.read("GET", "/v1/risks/categories")["items"]]
-    assert names == ["Data", "FACILITIES"]
-    assert data["name"] == "Data"
+    def asset(name, category, subcategory, licence=""):
+        cat = db.query(RiskCategory).filter_by(name=category).one_or_none()
+        if cat is None:
+            cat = RiskCategory(name=category)
+            db.add(cat)
+            db.flush()
+        sub = RiskAssetSubcategory(category_id=cat.id, name=subcategory)
+        existing = (
+            db.query(RiskAssetSubcategory)
+            .filter_by(category_id=cat.id, name=subcategory)
+            .one_or_none()
+        )
+        if existing is None:
+            db.add(sub)
+            db.flush()
+        row = RiskAsset(
+            name=name,
+            category_id=cat.id,
+            subcategory_id=(existing or sub).id,
+            license=licence,
+        )
+        db.add(row)
+        db.commit()
+        return row
 
-
-def test_asset_categories_in_use_cannot_be_deleted(reg):
-    risk = _create(reg)
-    category_path = f"/v1/risks/categories/{risk['category']['id']}"
-    subcategory_path = f"/v1/risks/subcategories/{risk['subcategory']['id']}"
-    asset_path = f"/v1/risks/assets/{risk['asset_id']}"
-
-    response = reg.manage("DELETE", category_path, status=400)
-    assert response["detail"] == "Cannot delete a category used by assets"
-    response = reg.manage("DELETE", subcategory_path, status=400)
-    assert response["detail"] == "Cannot delete a subcategory used by assets"
-    response = reg.manage("DELETE", asset_path, status=400)
-    assert response["detail"] == "Cannot delete an asset used by risks"
-
-    reg.manage("DELETE", f"/v1/risks/{risk['id']}")
-    assert reg.manage("DELETE", asset_path) == {"ok": True}
-    assert reg.manage("DELETE", subcategory_path) == {"ok": True}
-    general = reg.manage(
-        "POST",
-        "/v1/risks/subcategories",
-        {"name": "Archive", "category_id": risk["category"]["id"]},
-    )
-    assert reg.manage("DELETE", category_path) == {"ok": True}
-    # Deleting a category removes its remaining subcategories.
-    assert reg.db.get(RiskAssetSubcategory, uuid.UUID(general["id"])) is None
-    assert reg.read("GET", "/v1/risks/categories")["items"] == []
-
-    for kind in ("categories", "subcategories", "assets"):
-        reg.manage("DELETE", f"/v1/risks/{kind}/not-a-uuid", status=400)
-        reg.manage("DELETE", f"/v1/risks/{kind}/{uuid.uuid4()}", status=404)
-
-
-def test_subcategories_are_unique_within_their_category(reg):
-    data = reg.manage("POST", "/v1/risks/categories", {"name": "Data"})
-    hardware = reg.manage("POST", "/v1/risks/categories", {"name": "Hardware"})
-    create = "/v1/risks/subcategories"
-
-    hostile = reg.manage("POST", create, {"name": HOSTILE, "category_id": data["id"]})
-    assert hostile == {"id": hostile["id"], "name": HOSTILE, "category_id": data["id"]}
-    response = reg.manage(
-        "POST", create, {"name": HOSTILE.upper(), "category_id": data["id"]}, status=400
-    )
-    assert response["detail"] == "Asset subcategory already exists"
-    servers = reg.manage("POST", create, {"name": "Servers", "category_id": data["id"]})
-    elsewhere = reg.manage(
-        "POST", create, {"name": "servers", "category_id": hardware["id"]}
-    )
-    response = reg.manage("POST", create, {"name": "Orphan"}, status=400)
-    assert response["detail"] == "asset category is required"
-    response = reg.manage(
-        "POST", create, {"name": "Orphan", "category_id": str(uuid.uuid4())}, status=400
-    )
-    assert response["detail"] == "Unknown asset category"
-    reg.manage("POST", create, {"name": "  ", "category_id": data["id"]}, status=400)
-    reg.manage("DELETE", f"{create}/{hostile['id']}")
-
-    listed = reg.read("GET", create, params={"category_id": data["id"]})["items"]
-    assert [s["name"] for s in listed] == ["General", "Servers"]
-    assert all(s["category"]["name"] == "Data" for s in listed)
-    everything = reg.read("GET", create)["items"]
-    assert [(s["category"]["name"], s["name"]) for s in everything] == [
-        ("Data", "General"),
-        ("Data", "Servers"),
-        ("Hardware", "General"),
-        ("Hardware", "servers"),
-    ]
-    reg.read("GET", create, params={"category_id": "nope"}, status=400)
-
-    # Moving into a category that already has the name is refused.
-    path = f"{create}/{servers['id']}"
-    response = reg.manage(
-        "PATCH", path, {"name": "SERVERS", "category_id": hardware["id"]}, status=400
-    )
-    assert response["detail"] == "Asset subcategory already exists"
-    moved = reg.manage(
-        "PATCH", path, {"name": "Storage", "category_id": hardware["id"]}
-    )
-    assert moved == {
-        "id": servers["id"],
-        "name": "Storage",
-        "category_id": hardware["id"],
-    }
-    # Without a category, a rename stays in the current category.
-    renamed = reg.manage("PATCH", f"{create}/{elsewhere['id']}", {"name": "Network"})
-    assert renamed["category_id"] == hardware["id"]
-    reg.manage(
-        "PATCH",
-        path,
-        {"name": "Storage", "category_id": str(uuid.uuid4())},
-        status=400,
-    )
-    reg.manage("PATCH", f"{create}/nope", {"name": "X"}, status=400)
-    # An unknown subcategory in the path is missing, for edits and deletions alike.
-    for method, body in (("PATCH", {"name": "X"}), ("DELETE", None)):
-        response = reg.manage(method, f"{create}/{uuid.uuid4()}", body, status=404)
-        assert response["detail"] == "Asset subcategory not found"
-    names = [
-        s["name"]
-        for s in reg.read("GET", create, params={"category_id": hardware["id"]})[
-            "items"
-        ]
-    ]
-    assert names == ["General", "Network", "Storage"]
-
-
-def test_assets_carry_licences_owners_and_descriptions(reg):
-    team = _org_node(reg.db, "Finance", node_type="team")
-    create = "/v1/risks/assets"
-    crm = reg.manage(
-        "POST",
-        create,
-        {
-            "name": " CRM ",
-            "category_name": "Software",
-            "subcategory_name": "SaaS",
-            "license_name": "Enterprise seat",
-            "owner_org_node_id": str(team.id),
-            "description": HOSTILE,
-        },
-    )
-    assert crm["name"] == "CRM" and crm["asset"] == "CRM"
-    assert crm["license"] == crm["license_name"] == "Enterprise seat"
-    assert crm["license_entity"] == {
-        "id": crm["license_id"],
-        "name": "Enterprise seat",
-    }
-    assert crm["owner_org_node"] == {
-        "id": str(team.id),
-        "name": "Finance",
-        "node_type": "team",
-    }
-    assert crm["description"] == HOSTILE
-    assert crm["category"]["name"] == "Software"
-    assert crm["subcategory"]["name"] == "SaaS"
-
-    # The same asset is not duplicated, and licences are reused by name.
-    reg.manage(
-        "POST",
-        create,
-        {"name": "crm", "category_name": "software", "subcategory_name": "saas"},
-    )
-    assert reg.db.query(RiskAsset).count() == 1
-    erp = reg.manage(
-        "POST",
-        create,
-        {
-            "name": "ERP",
-            "category_id": crm["category"]["id"],
-            "subcategory_id": crm["subcategory"]["id"],
-            "license_name": "ENTERPRISE SEAT",
-        },
-    )
-    assert erp["license_id"] == crm["license_id"]
-    assert reg.db.query(IsmsLicense).count() == 1
-    missing = reg.manage(
-        "POST",
-        create,
-        {
-            "name": "Ghost",
-            "category_name": "Software",
-            "subcategory_name": "SaaS",
-            "license_id": str(uuid.uuid4()),
-        },
-        status=404,
-    )
-    assert missing["detail"] == "License not found"
-    response = reg.manage(
-        "POST",
-        create,
-        {"name": "Ghost", "category_id": crm["category"]["id"]},
-        status=400,
-    )
-    assert response["detail"] == "asset subcategory is required"
-    response = reg.manage(
-        "POST",
-        create,
-        {
-            "name": "Ghost",
-            "category_id": crm["category"]["id"],
-            "subcategory_id": str(uuid.uuid4()),
-        },
-        status=400,
-    )
-    assert response["detail"] == "Unknown asset subcategory"
-    assert reg.db.query(RiskAsset).count() == 2
-
-
-def test_assets_are_searchable_and_editable(reg):
-    create = "/v1/risks/assets"
-    base = {"category_name": "Software", "subcategory_name": "SaaS"}
-    crm = reg.manage(
-        "POST", create, {**base, "name": "CRM", "license_name": "Enterprise seat"}
-    )
-    erp = reg.manage("POST", create, {**base, "name": "ERP"})
-    laptop = reg.manage(
-        "POST",
-        create,
-        {
-            "name": "Laptop",
-            "category_name": "Hardware",
-            "subcategory_name": "Endpoints",
-        },
-    )
+    crm = asset("CRM", "Software", "SaaS", "Enterprise seat")
+    asset("ERP", "Software", "SaaS")
+    laptop = asset("Laptop", "Hardware", "Endpoints")
 
     def names(**params):
-        return [a["name"] for a in reg.read("GET", create, params=params)["items"]]
+        return [a["name"] for a in reg.read("GET", listing, params=params)["items"]]
 
     assert names() == ["CRM", "ERP", "Laptop"]
     assert names(q="ENTERPRISE") == ["CRM"]  # licence name
     assert names(q="saas") == ["CRM", "ERP"]  # subcategory
     assert names(q="hardware") == ["Laptop"]  # category
-    assert names(category_id=laptop["category"]["id"]) == ["Laptop"]
-    assert names(subcategory_id=crm["subcategory"]["id"]) == ["CRM", "ERP"]
-    reg.read("GET", create, params={"category_id": "nope"}, status=400)
-    reg.read("GET", create, params={"subcategory_id": "nope"}, status=400)
+    assert names(category_id=str(laptop.category_id)) == ["Laptop"]
+    assert names(subcategory_id=str(crm.subcategory_id)) == ["CRM", "ERP"]
+    reg.read("GET", listing, params={"category_id": "nope"}, status=400)
+    reg.read("GET", listing, params={"subcategory_id": "nope"}, status=400)
 
-    path = f"{create}/{crm['id']}"
-    renamed = reg.manage("PATCH", path, {"name": "CRM platform"})
-    assert renamed["name"] == "CRM platform"
-    assert renamed["license"] == "Enterprise seat"  # licence fields not sent
-    unlicensed = reg.manage(
-        "PATCH", path, {"name": "CRM platform", "license_name": None}
-    )
-    assert (unlicensed["license"], unlicensed["license_id"]) == ("", None)
-    described = reg.manage(
-        "PATCH", path, {"name": "CRM platform", "description": f" {HOSTILE} "}
-    )
-    assert described["description"] == HOSTILE
-    moved = reg.manage(
-        "PATCH",
-        path,
-        {
-            "name": "CRM platform",
-            "category_id": laptop["category"]["id"],
-            "subcategory_id": laptop["subcategory"]["id"],
-        },
-    )
-    assert moved["category"]["name"] == "Hardware"
-    assert moved["subcategory"]["name"] == "Endpoints"
-    assert names(category_id=laptop["category"]["id"]) == ["CRM platform", "Laptop"]
-    assert names(subcategory_id=crm["subcategory"]["id"]) == ["ERP"]
+    # An asset names the organisation chart node that owns it, when it has one.
+    owner = _org_node(db, "IT operations", node_type="team")
+    laptop.owner_org_node_id = owner.id
+    db.commit()
+    by_name = {a["name"]: a for a in reg.read("GET", listing)["items"]}
+    assert by_name["Laptop"]["owner_org_node"] == {
+        "id": str(owner.id),
+        "name": "IT operations",
+        "node_type": "team",
+    }
+    assert by_name["CRM"]["owner_org_node"] is None
 
-    response = reg.manage(
-        "PATCH", f"{create}/{erp['id']}", {"name": "erp", **base}, status=200
+
+def test_a_risk_names_its_asset_by_category_and_subcategory_ids(reg):
+    first = _create(reg)
+    category, subcategory = first["category"]["id"], first["subcategory"]["id"]
+    # The wizard sends the ids of the category and subcategory it listed.
+    second = _create(
+        reg,
+        asset_name="Payroll archive",
+        category_name=None,
+        subcategory_name=None,
+        category_id=category,
+        subcategory_id=subcategory,
     )
-    assert response["name"] == "erp"
-    response = reg.manage(
-        "PATCH",
-        path,
-        {
-            "name": "LAPTOP",
-            "category_id": laptop["category"]["id"],
-            "subcategory_id": laptop["subcategory"]["id"],
-        },
+    assert second["category"]["id"] == category
+    assert second["subcategory"]["id"] == subcategory
+    assert second["asset_id"] != first["asset_id"]
+
+    # A subcategory of another category is not this category's.
+    other = _create(reg, asset_name="Badge reader", category_name="Kit")
+    refused = reg.manage(
+        "POST",
+        "/v1/risks",
+        _risk_body(
+            asset_name="Turnstile",
+            category_name=None,
+            subcategory_name=None,
+            category_id=other["category"]["id"],
+            subcategory_id=subcategory,
+        ),
         status=400,
     )
-    assert response["detail"] == "Asset already exists"
-    response = reg.manage("PATCH", path, {"name": "   "}, status=400)
-    assert response["detail"] == "asset is required"
-    reg.manage("PATCH", f"{create}/nope", {"name": "X"}, status=400)
-    reg.manage("PATCH", f"{create}/{uuid.uuid4()}", {"name": "X"}, status=404)
-    assert reg.db.get(RiskAsset, uuid.UUID(crm["id"])).name == "CRM platform"
+    assert refused["detail"] == "Unknown asset subcategory"
 
 
 # --- Mitigator analysis -----------------------------------------------------------
@@ -1092,11 +846,14 @@ def test_assets_are_searchable_and_editable(reg):
 def test_mitigator_analysis_validates_references_without_creating_records(reg):
     # The register's write gate covers the analysis endpoint (see access_policy).
     reg.read("POST", "/v1/risks/mitigator/analyse", {"issue": "x"}, status=403)
-    data = reg.manage("POST", "/v1/risks/categories", {"name": "Data"})
-    hardware = reg.manage("POST", "/v1/risks/categories", {"name": "Hardware"})
-    hardware_general = reg.read(
-        "GET", "/v1/risks/subcategories", params={"category_id": hardware["id"]}
-    )["items"][0]
+    db = reg.db
+    data = RiskCategory(name="Data")
+    hardware = RiskCategory(name="Hardware")
+    db.add_all([data, hardware])
+    db.flush()
+    hardware_general = RiskAssetSubcategory(category_id=hardware.id, name="General")
+    db.add(hardware_general)
+    db.commit()
     path = "/v1/risks/mitigator/analyse"
 
     cases = [
@@ -1109,8 +866,8 @@ def test_mitigator_analysis_validates_references_without_creating_records(reg):
         (
             {
                 "issue": "x",
-                "category_id": data["id"],
-                "subcategory_id": hardware_general["id"],
+                "category_id": str(data.id),
+                "subcategory_id": str(hardware_general.id),
             },
             400,
             "Unknown asset subcategory",
@@ -1186,10 +943,6 @@ def test_a_general_risk_has_a_title_and_no_cia_associations(reg):
     # The title is searchable and travels through the register.
     found = reg.read("GET", "/v1/risks", params={"framework": "A", "q": "leaves the"})
     assert [r["id"] for r in found["items"]] == [created["id"]]
-    register = reg.read("GET", "/v1/risks/register", params={"framework": "A"})
-    assert {r["id"]: r["title"] for r in register["items"]}[created["id"]] == (
-        "Payroll data leaves the building"
-    )
     changelog = reg.read("GET", f"/v1/risks/{created['id']}/changelog")
     assert changelog["items"][0]["entity_title"] == "Payroll data leaves the building"
 
@@ -1426,73 +1179,6 @@ def test_switched_off_registers_are_neither_listed_nor_named(reg):
 
 
 # --- Licences and ownership on assets -------------------------------------------------
-
-
-def test_assets_take_an_existing_licence_by_id_and_drop_a_blank_licence_name(reg):
-    licence = IsmsLicense(name="Site licence", description="")
-    reg.db.add(licence)
-    reg.db.commit()
-    create = "/v1/risks/assets"
-
-    licensed = reg.manage(
-        "POST",
-        create,
-        {
-            "name": "Mail gateway",
-            "category_name": "Software",
-            "subcategory_name": "SaaS",
-            "license_id": str(licence.id),
-        },
-    )
-    assert licensed["license_entity"] == {"id": str(licence.id), "name": "Site licence"}
-    assert reg.db.query(IsmsLicense).count() == 1
-
-    cleared = reg.manage(
-        "PATCH",
-        f"{create}/{licensed['id']}",
-        {"name": "Mail gateway", "license_name": "   "},
-    )
-    assert (cleared["license"], cleared["license_id"]) == ("", None)
-    assert reg.db.query(IsmsLicense).count() == 1
-
-
-def test_asset_edits_move_ownership_between_organisational_nodes(reg):
-    team = _org_node(reg.db, "Finance", node_type="team")
-    other = _org_node(reg.db, "Operations", node_type="team")
-    create = "/v1/risks/assets"
-    asset = reg.manage(
-        "POST",
-        create,
-        {
-            "name": "Ledger",
-            "category_name": "Software",
-            "subcategory_name": "SaaS",
-            "owner_org_node_id": str(team.id),
-        },
-    )
-    assert asset["owner_org_node"]["name"] == "Finance"
-
-    moved = reg.manage(
-        "PATCH",
-        f"{create}/{asset['id']}",
-        {
-            "name": "Ledger",
-            "owner_org_node_id": str(other.id),
-        },
-    )
-    assert moved["owner_org_node"] == {
-        "id": str(other.id),
-        "name": "Operations",
-        "node_type": "team",
-    }
-    unknown = reg.manage(
-        "PATCH",
-        f"{create}/{asset['id']}",
-        {"name": "Ledger", "owner_org_node_id": str(uuid.uuid4())},
-        status=400,
-    )
-    assert "org" in unknown["detail"].lower()
-    assert reg.db.get(RiskAsset, uuid.UUID(asset["id"])).owner_org_node_id == other.id
 
 
 # --- Records that are gone ------------------------------------------------------------

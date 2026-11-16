@@ -1,10 +1,11 @@
-import hashlib
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.security.encoding import digest
 
 
 class Strict(BaseModel):
@@ -102,8 +103,6 @@ class Health(Strict):
 
 
 def fingerprint(event):
-    return hashlib.sha256(
-        json.dumps(
-            event.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-        ).encode()
-    ).hexdigest()
+    return digest(
+        json.dumps(event.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    )

@@ -98,7 +98,6 @@ async function wizard(t, storage) {
         return { thresholds: { low_max: 4, moderate_max: 9, high_max: 16 } };
       if (p === '/api/v1/pestle/meta')
         return { types: ['Legal'], lenses: ['External'], relevance_levels: [] };
-      if (p === '/api/v1/pestle/business-processes') return { items: [] };
       if (p === '/api/v1/clauses') return { items: [] };
       throw new Error('Unexpected GET ' + u);
     },

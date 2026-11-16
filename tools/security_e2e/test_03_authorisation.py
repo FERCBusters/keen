@@ -27,7 +27,7 @@ READS = [
     ("/api/v1/graph/clause_source", EVENTS),
     ("/api/v1/graph/risk_control", RISK),
     ("/api/v1/risks", RISK),
-    ("/api/v1/risks/register", RISK),
+    ("/api/v1/risks/register/heatmap", RISK),
     ("/api/v1/risks/register/export.csv", RISK),
     ("/api/v1/risks/{risk}", RISK),
     ("/api/v1/risks/{risk}/changelog", RISK),

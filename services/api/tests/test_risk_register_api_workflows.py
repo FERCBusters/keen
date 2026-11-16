@@ -34,7 +34,7 @@ COLUMNS = (
     "asset,category,subcategory,threat_summary,risk_types,owner_username,"
     "owner_role_id,register_likelihood,register_impact,"
     "register_residual_likelihood,register_residual_impact,treatment_strategy,"
-    "treatment_status,treatment_plan,treatment_due_at,controls"
+    "treatment_status,treatment_plan,treatment_due_at,controls,clauses"
 )
 
 
@@ -88,7 +88,6 @@ def test_register_routes_follow_the_risk_permissions(reg):  # noqa: F811
         status=201,
     )
     reads = (
-        "/v1/risks/register",
         "/v1/risks/register/heatmap",
         "/v1/risks/register/export.csv",
         "/v1/risks/library",
@@ -133,9 +132,10 @@ def test_register_routes_follow_the_risk_permissions(reg):  # noqa: F811
 
     assert reg.db.query(Risk).count() == 1
     assert reg.db.query(RiskLibraryEntry).count() == 1
-    unchanged = reg.read("GET", "/v1/risks/register", params={"framework": "A"})
-    assert unchanged["thresholds"] == {"low_max": 4, "moderate_max": 9, "high_max": 16}
-    assert unchanged["items"][0]["treatment_status"] == "open"
+    heatmap = reg.read("GET", "/v1/risks/register/heatmap")
+    assert heatmap["thresholds"] == {"low_max": 4, "moderate_max": 9, "high_max": 16}
+    unchanged = reg.read("GET", f"/v1/risks/{risk['id']}", params={"framework": "A"})
+    assert unchanged["treatment_status"] == "open"
 
 
 # --- Ratings and treatment --------------------------------------------------------
@@ -151,12 +151,6 @@ def test_ratings_and_treatment_update_scores_and_the_changelog(reg):  # noqa: F8
         2,
     )
     assert (rated["risk_score"], rated["residual_risk_score"]) == (20, 2)
-    assert (rated["vulnerability_score"], rated["impact_score"]) == (5, 4)
-    assert (
-        rated["residual_vulnerability_score"],
-        rated["residual_impact_score"],
-    ) == (2, 1)
-    assert rated["threat_score"] == 1
     assert rated["treatment_strategy"] == "mitigate"
     assert rated["treatment_status"] == "in_progress"
     assert rated["treatment_plan"] == HOSTILE
@@ -194,8 +188,8 @@ def test_ratings_and_treatment_update_scores_and_the_changelog(reg):  # noqa: F8
     reg.manage("PATCH", f"/v1/risks/{uuid.uuid4()}/register", _rating(), status=404)
     reg.manage("PATCH", "/v1/risks/not-a-uuid/register", _rating(), status=422)
 
-    current = reg.read("GET", "/v1/risks/register", params={"framework": "A"})
-    assert current["items"][0]["register_likelihood"] is None
+    current = reg.read("GET", f"/v1/risks/{risk['id']}", params={"framework": "A"})
+    assert current["register_likelihood"] is None
 
     entries = (
         reg.db.query(EntityChangelog)
@@ -208,7 +202,7 @@ def test_ratings_and_treatment_update_scores_and_the_changelog(reg):  # noqa: F8
     assert {"register_likelihood", "treatment_plan", "treatment_status"} <= fields
 
 
-def test_register_lists_risks_with_thresholds_and_a_heatmap(reg):  # noqa: F811
+def test_the_heatmap_counts_rated_risks_under_the_saved_thresholds(reg):  # noqa: F811
     first = _create(reg, asset_name="Payroll")
     second = _create(reg, asset_name="Website")
     unrated = _create(reg, asset_name="Kiosk")
@@ -228,31 +222,6 @@ def test_register_lists_risks_with_thresholds_and_a_heatmap(reg):  # noqa: F811
             register_residual_impact=None,
         ),
     )
-
-    listed = reg.read("GET", "/v1/risks/register", params={"framework": "A"})
-    assert listed["total"] == 3
-    assert [item["id"] for item in listed["items"]] == [
-        unrated["id"],
-        second["id"],
-        first["id"],
-    ]  # most recently updated first
-    assert listed["thresholds"] == {"low_max": 4, "moderate_max": 9, "high_max": 16}
-    second_item = listed["items"][1]
-    assert second_item["register_residual_score"] is None
-    assert second_item["framework"] == "A"
-    page = reg.read(
-        "GET",
-        "/v1/risks/register",
-        params={"framework": "A", "limit": 1, "offset": 1},
-    )
-    assert [item["id"] for item in page["items"]] == [second["id"]]
-    clamped = reg.read(
-        "GET",
-        "/v1/risks/register",
-        params={"framework": "A", "limit": 0, "offset": -3},
-    )
-    assert (clamped["limit"], clamped["offset"]) == (1, 0)
-    reg.read("GET", "/v1/risks/register", params={"framework": "A B"}, status=400)
 
     heatmap = reg.read("GET", "/v1/risks/register/heatmap")
     assert heatmap["inherent"] == [{"likelihood": 5, "impact": 4, "count": 2}]
@@ -285,9 +254,7 @@ def test_register_lists_risks_with_thresholds_and_a_heatmap(reg):  # noqa: F811
             assert (
                 response["detail"] == "Thresholds must increase from low through high"
             )
-    thresholds = reg.read("GET", "/v1/risks/register", params={"framework": "A"})[
-        "thresholds"
-    ]
+    thresholds = reg.read("GET", "/v1/risks/register/heatmap")["thresholds"]
     assert thresholds == {"low_max": 3, "moderate_max": 8, "high_max": 15}
 
 
@@ -447,21 +414,23 @@ def test_register_csv_import_and_export_round_trip(reg):  # noqa: F811
     # A byte-order mark from spreadsheet exports is accepted.
     assert _import(reg, "", raw=b"\xef\xbb\xbf" + text.encode()) == {"created": 2}
 
-    listed = reg.read("GET", "/v1/risks/register", params={"framework": "A"})
-    by_asset = {item["asset"]: item for item in listed["items"]}
+    listed = reg.read("GET", "/v1/risks", params={"framework": "A"})
+    by_asset = {
+        item["asset"]: reg.read(
+            "GET", f"/v1/risks/{item['id']}", params={"framework": "A"}
+        )
+        for item in listed["items"]
+    }
     payroll = by_asset["Payroll database"]
     assert payroll["risk_types"] == ["Confidentiality", "Integrity"]
     assert payroll["risk_owner"]["id"] == str(owner.id)
-    assert (payroll["register_inherent_score"], payroll["register_residual_score"]) == (
-        20,
-        2,
-    )
+    assert (payroll["risk_score"], payroll["residual_risk_score"]) == (20, 2)
     assert payroll["treatment_due_at"] == "2026-12-31"
     assert [c["ref"] for c in payroll["controls"]] == ["A.5.1", "A.5.2"]
     website = by_asset["Website"]
     assert website["risk_owner"]["type"] == "role"
     assert website["threat_summary"] == "Defacement, then outage"
-    assert website["register_inherent_score"] is None
+    assert website["register_likelihood"] is None
     assert website["treatment_status"] == "open"
     assert website["risk_score"] == 0
 
@@ -483,6 +452,7 @@ def test_register_csv_import_and_export_round_trip(reg):  # noqa: F811
         "treatment_plan": "Encrypt exports",
         "treatment_due_at": "2026-12-31",
         "controls": "A.5.1;A.5.2",
+        "clauses": "",
     }
     assert exported["Website"]["owner_role_id"] == str(role.id)
     assert exported["Website"]["register_likelihood"] == ""
@@ -551,7 +521,7 @@ def test_exported_cells_cannot_become_spreadsheet_formulas(reg):  # noqa: F811
     [
         ("asset,category\nA,B\n", "row header: CSV requires asset, category"),
         (_csv(), "row header: CSV contains no risks"),
-        (_csv("A,B,C,D,Integrity,,,,,,,,,,,,extra"), "row 2: Row 2: extra columns"),
+        (_csv("A,B,C,D,Integrity,,,,,,,,,,,,,extra"), "row 2: Row 2: extra columns"),
         (
             _csv("A,B,C,D,Integrity,,,6,,,,,,,,"),
             "row 2: register_likelihood must be 1-5",

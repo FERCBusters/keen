@@ -39,7 +39,7 @@ from app.db.models import (
 )
 from app.db.session import Base, get_db
 from app.security import auth as identity
-from app.security import mfa
+from app.security import encoding, mfa
 from app.security.auth import cookie_name as session_cookie_name
 from app.security.passwords import hash_password
 from app.security.sessions import create_session
@@ -780,12 +780,12 @@ class LocalMfaTests(unittest.TestCase):
             + cose
         )
         credential = {
-            "id": mfa.b64(cid),
-            "rawId": mfa.b64(cid),
+            "id": encoding.b64url(cid),
+            "rawId": encoding.b64url(cid),
             "type": "public-key",
             "response": {
-                "clientDataJSON": mfa.b64(client),
-                "attestationObject": mfa.b64(
+                "clientDataJSON": encoding.b64url(client),
+                "attestationObject": encoding.b64url(
                     cbor2.dumps({"fmt": "none", "attStmt": {}, "authData": authdata})
                 ),
             },
@@ -810,14 +810,14 @@ class LocalMfaTests(unittest.TestCase):
             authdata + hashlib.sha256(client).digest(), ec.ECDSA(hashes.SHA256())
         )
         return {
-            "id": mfa.b64(cid),
-            "rawId": mfa.b64(cid),
+            "id": encoding.b64url(cid),
+            "rawId": encoding.b64url(cid),
             "type": "public-key",
             "response": {
-                "clientDataJSON": mfa.b64(client),
-                "authenticatorData": mfa.b64(authdata),
-                "signature": mfa.b64(signature),
-                "userHandle": mfa.b64(self.uid.bytes),
+                "clientDataJSON": encoding.b64url(client),
+                "authenticatorData": encoding.b64url(authdata),
+                "signature": encoding.b64url(signature),
+                "userHandle": encoding.b64url(self.uid.bytes),
             },
         }
 
@@ -865,9 +865,11 @@ class LocalMfaTests(unittest.TestCase):
                 cross=kind == "cross",
             )
             if kind == "user":
-                assertion["response"]["userHandle"] = mfa.b64(uuid.uuid4().bytes)
+                assertion["response"]["userHandle"] = encoding.b64url(
+                    uuid.uuid4().bytes
+                )
             if kind == "signature":
-                assertion["response"]["signature"] = mfa.b64(b"invalid")
+                assertion["response"]["signature"] = encoding.b64url(b"invalid")
             self.assertEqual(
                 outcome(self.post("webauthn/verify", {"credential": assertion})),
                 KEY_REFUSED,
@@ -925,7 +927,9 @@ class LocalMfaTests(unittest.TestCase):
         # Without an issued challenge no assertion can verify.
         private = ec.generate_private_key(ec.SECP256R1())
         cid = os.urandom(32)
-        stray = self.assertion(private, cid, {"challenge": mfa.b64(os.urandom(32))})
+        stray = self.assertion(
+            private, cid, {"challenge": encoding.b64url(os.urandom(32))}
+        )
         self.assertEqual(
             outcome(self.post("webauthn/verify", {"credential": stray})), KEY_REFUSED
         )
@@ -972,8 +976,8 @@ class LocalMfaTests(unittest.TestCase):
                 db.add(
                     MfaCredential(
                         user_id=self.uid,
-                        credential_id=mfa.b64(os.urandom(32)),
-                        public_key=mfa.b64(b"synthetic-public-key"),
+                        credential_id=encoding.b64url(os.urandom(32)),
+                        public_key=encoding.b64url(b"synthetic-public-key"),
                         sign_count=0,
                         name=f"Key {index}",
                     )
@@ -1035,7 +1039,8 @@ def ceremony(keen, monkeypatch):  # noqa: F811 - fixture imported above
     user.mfa_totp_secret = Fernet(key).encrypt(secret.encode()).decode()
     codes = ["%032X" % n for n in range(1, 3)]
     keen.db.add_all(
-        MfaRecoveryCode(user_id=user.id, code_hash=mfa.digest(code)) for code in codes
+        MfaRecoveryCode(user_id=user.id, code_hash=encoding.digest(code))
+        for code in codes
     )
     keen.db.commit()
 

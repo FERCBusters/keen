@@ -6,27 +6,23 @@
 // keyboard users reach from each document's actions.
 //
 // All names are set as text, so hostile folder or document names stay inert.
-import { apiDelete, apiGet, apiPatch, apiPost, confirmAction, errorText, toast } from '/app.js';
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  confirmAction,
+  errorText,
+  icon,
+  node,
+  toast,
+} from '/app.js';
 
 const API = '/api/v1/isms/document-folders';
 // The two views that are not folders: every document, and documents filed in
 // no folder. Dropping a folder on "All documents" moves it to the top level.
 export const ALL = null;
 export const UNFILED = '';
-
-function node(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [name, value] of Object.entries(attrs)) {
-    if (name === 'class') el.className = value;
-    else el.setAttribute(name, value);
-  }
-  el.append(...children.filter((child) => child !== null));
-  return el;
-}
-
-function icon(name) {
-  return node('i', { class: `bi ${name}`, 'aria-hidden': 'true' });
-}
 
 // The key a view carries in the tree: "all", "unfiled" or a folder id.
 const keyOf = (view) => (view === ALL ? 'all' : view === UNFILED ? 'unfiled' : view);

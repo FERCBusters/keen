@@ -1,4 +1,5 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
+import { controlHref, relevanceBadgeHtml } from '/pages/risk-common.js';
 import {
   affectedBadges,
   affectedChoices,
@@ -71,11 +72,34 @@ const relatedControls = document.getElementById('relatedControls');
 const pestleAffected = document.getElementById('pestleAffected');
 const pestleAffectedPicker = document.getElementById('pestleAffectedPicker');
 
-const businessProcessRelevanceList = document.getElementById('businessProcessRelevanceList');
-const clauseRelevanceList = document.getElementById('clauseRelevanceList');
-const clauseRelevanceFilter = document.getElementById('clauseRelevanceFilter');
-const saveBusinessProcessRelevance = document.getElementById('saveBusinessProcessRelevance');
-const saveClauseRelevance = document.getElementById('saveClauseRelevance');
+// The factor is rated against clauses and against controls in the same way:
+// one editor each, differing in the record it lists and the path it saves to.
+const RELEVANCE_EDITORS = [
+  {
+    key: 'clause',
+    path: 'clauses',
+    plural: 'clauses',
+    heading: 'Clause',
+    saved: 'Clause relevance saved',
+    href: clauseHref,
+    list: document.getElementById('clauseRelevanceList'),
+    filter: document.getElementById('clauseRelevanceFilter'),
+    save: document.getElementById('saveClauseRelevance'),
+    rows: [],
+  },
+  {
+    key: 'control',
+    path: 'controls',
+    plural: 'controls',
+    heading: 'Control',
+    saved: 'Control relevance saved',
+    href: (id) => controlHref(id, framework),
+    list: document.getElementById('controlRelevanceList'),
+    filter: document.getElementById('controlRelevanceFilter'),
+    save: document.getElementById('saveControlRelevance'),
+    rows: [],
+  },
+];
 
 const pestleChangelogEl = document.getElementById('pestleChangelog');
 const pestleQuestions = mountQuestionThreads({
@@ -93,8 +117,6 @@ let currentItem = null;
 // Managers who may read the People, Vendors and asset registers pick who and
 // what the item affects; everyone else sees the records it names.
 let affectedPicker = null;
-let processRelevanceRows = [];
-let clauseRelevanceRows = [];
 
 function setTabQuery(tabName) {
   const p = new URLSearchParams(location.search);
@@ -148,15 +170,6 @@ function relevanceOptions(selectedCodeOrId = 'na') {
     .join('');
 }
 
-function badgeForRelevance(rel) {
-  const code = rel.code;
-  let cls = 'text-bg-light';
-  if (code === 'high') cls = 'text-bg-danger';
-  else if (code === 'medium') cls = 'text-bg-warning';
-  else if (code === 'low') cls = 'text-bg-success';
-  return `<span class="badge ${cls}">${esc(rel.label)}</span>`;
-}
-
 function fillSelects() {
   const typeOptions = meta.types
     .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`)
@@ -171,10 +184,6 @@ function fillSelects() {
 
 function clauseHref(id) {
   return withFramework(`/clause.html?id=${encodeURIComponent(id)}&tab=pestle`, framework);
-}
-
-function controlHref(id) {
-  return withFramework(`/control.html?id=${encodeURIComponent(id)}`, framework);
 }
 
 function setFormReadOnly(readonly) {
@@ -192,9 +201,7 @@ function setFormReadOnly(readonly) {
   if (samplePestleAudit)
     samplePestleAudit.style.display = canSampleIntoAudit(me, 'pestle_item') && itemId ? '' : 'none';
   if (deletePestleItem) deletePestleItem.style.display = !disabled && itemId ? '' : 'none';
-  if (saveBusinessProcessRelevance)
-    saveBusinessProcessRelevance.style.display = disabled ? 'none' : '';
-  if (saveClauseRelevance) saveClauseRelevance.style.display = disabled ? 'none' : '';
+  for (const editor of RELEVANCE_EDITORS) editor.save.style.display = disabled ? 'none' : '';
 }
 
 function formPayload() {
@@ -244,7 +251,7 @@ function renderRelatedControls(item) {
     <tbody>${rows
       .map(
         (c) => `<tr>
-      <td class="fw-semibold"><a href="${esc(controlHref(c.id))}">${esc(c.ref)}</a></td>
+      <td class="fw-semibold"><a href="${esc(controlHref(c.id, framework))}">${esc(c.ref)}</a></td>
       <td class="wrap">${esc(c.title)}</td>
       <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>
     </tr>`,
@@ -279,7 +286,7 @@ function renderItem(item = null) {
   }
   if (pestleBadges) {
     pestleBadges.innerHTML = isExisting
-      ? `${badgeForRelevance(item.overall_relevance)} <span class="badge badge-soft">${esc(item.type)}</span> <span class="badge badge-soft">${esc(item.lens)}</span>`
+      ? `${relevanceBadgeHtml(item.overall_relevance)} <span class="badge badge-soft">${esc(item.type)}</span> <span class="badge badge-soft">${esc(item.lens)}</span>`
       : '<span class="badge text-bg-light">unsaved</span>';
   }
 
@@ -289,63 +296,38 @@ function renderItem(item = null) {
     if (pestleChangelogEl)
       pestleChangelogEl.innerHTML = '<div class="p-3 small-muted">Save the item first.</div>';
     pestleQuestions.refresh();
-    processRelevanceRows = [];
-    clauseRelevanceRows = [];
-    renderProcessRelevance();
-    renderClauseRelevance();
+    for (const editor of RELEVANCE_EDITORS) {
+      editor.rows = [];
+      renderRelevance(editor);
+    }
   }
 }
 
-function renderProcessRelevance() {
+function renderRelevance(editor) {
   if (!itemId) {
-    businessProcessRelevanceList.innerHTML = '<div class="small-muted">Save the item first.</div>';
+    editor.list.innerHTML = '<div class="small-muted">Save the item first.</div>';
     return;
   }
-  if (!processRelevanceRows.length) {
-    businessProcessRelevanceList.innerHTML =
-      '<div class="small-muted">No business processes exist yet. Add them from the PESTLE(E) impact assessment page.</div>';
-    return;
-  }
-  businessProcessRelevanceList.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
-    <thead><tr><th>Business process</th><th style="width:140px;">Relevance</th></tr></thead>
-    <tbody>${processRelevanceRows
-      .map((row) => {
-        const bp = row.business_process;
-        return `<tr>
-        <td>${esc(bp.name)}</td>
-        <td><select class="form-select form-select-sm process-relevance" data-process-id="${esc(bp.id)}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
-      </tr>`;
-      })
-      .join('')}</tbody>
-  </table></div>`;
-}
-
-function renderClauseRelevance() {
-  if (!itemId) {
-    clauseRelevanceList.innerHTML = '<div class="small-muted">Save the item first.</div>';
-    return;
-  }
-  const q = String(clauseRelevanceFilter?.value || '')
+  const q = String(editor.filter.value || '')
     .trim()
     .toLowerCase();
-  const rows = clauseRelevanceRows.filter((row) => {
-    if (!q) return true;
-    const c = row.clause;
-    return `${c.ref} ${c.title}`.toLowerCase().includes(q);
+  const rows = editor.rows.filter((row) => {
+    const target = row[editor.key];
+    return !q || `${target.ref} ${target.title}`.toLowerCase().includes(q);
   });
   if (!rows.length) {
-    clauseRelevanceList.innerHTML = '<div class="small-muted">No clauses match.</div>';
+    editor.list.innerHTML = `<div class="small-muted">No ${esc(editor.plural)} match.</div>`;
     return;
   }
-  clauseRelevanceList.innerHTML = `<div class="table-responsive" style="max-height:620px;"><table class="table table-sm align-middle mb-0">
-    <thead><tr><th style="width:120px;">Clause</th><th>Title</th><th style="width:140px;">Relevance</th></tr></thead>
+  editor.list.innerHTML = `<div class="table-responsive" style="max-height:620px;"><table class="table table-sm align-middle mb-0">
+    <thead><tr><th style="width:120px;">${esc(editor.heading)}</th><th>Title</th><th style="width:140px;">Relevance</th></tr></thead>
     <tbody>${rows
       .map((row) => {
-        const c = row.clause;
+        const target = row[editor.key];
         return `<tr>
-        <td><a class="fw-semibold" href="${esc(clauseHref(c.id))}">${esc(c.ref)}</a></td>
-        <td class="wrap small-muted">${esc(c.title)}</td>
-        <td><select class="form-select form-select-sm clause-relevance" data-clause-id="${esc(c.id)}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance?.code || 'na')}</select></td>
+        <td><a class="fw-semibold" href="${esc(editor.href(target.id))}">${esc(target.ref)}</a></td>
+        <td class="wrap small-muted">${esc(target.title)}</td>
+        <td><select class="form-select form-select-sm" data-relevance-of="${esc(target.id)}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance.code)}</select></td>
       </tr>`;
       })
       .join('')}</tbody>
@@ -372,14 +354,13 @@ async function loadItem() {
 }
 
 async function loadItemRelations(id) {
-  const [bpData, clauseData] = await Promise.all([
-    apiGet(`/api/v1/pestle/items/${encodeURIComponent(id)}/business-processes`),
-    apiGet(`/api/v1/pestle/items/${encodeURIComponent(id)}/clauses`),
-  ]);
-  processRelevanceRows = bpData.items;
-  clauseRelevanceRows = clauseData.items;
-  renderProcessRelevance();
-  renderClauseRelevance();
+  await Promise.all(
+    RELEVANCE_EDITORS.map(async (editor) => {
+      const data = await apiGet(`/api/v1/pestle/items/${encodeURIComponent(id)}/${editor.path}`);
+      editor.rows = data.items;
+      renderRelevance(editor);
+    }),
+  );
 }
 
 async function loadPestleChangelog() {
@@ -428,73 +409,50 @@ async function saveCurrentItem(ev) {
   }
 }
 
-function collectProcessRelevancePayload() {
+// A filtered list shows some rows only; the rest keep the relevance they had.
+function relevancePayload(editor) {
+  const shown = new Map(
+    Array.from(editor.list.querySelectorAll('[data-relevance-of]')).map((sel) => [
+      sel.dataset.relevanceOf,
+      sel.value,
+    ]),
+  );
   return {
-    items: Array.from(businessProcessRelevanceList.querySelectorAll('.process-relevance'))
-      .map((sel) => ({
-        business_process_id: sel.dataset.processId,
-        relevance_code: sel.value,
-      }))
-      .filter((x) => x.business_process_id),
-  };
-}
-
-function collectClauseRelevancePayload() {
-  const visible = Array.from(clauseRelevanceList.querySelectorAll('.clause-relevance'));
-  const updates = new Map(visible.map((sel) => [sel.dataset.clauseId, sel.value]));
-  return {
-    items: clauseRelevanceRows
-      .map((row) => {
-        const cid = row.clause.id;
-        return {
-          clause_id: cid,
-          relevance_code: updates.has(cid) ? updates.get(cid) : row.relevance.code,
-        };
-      })
-      .filter((x) => x.clause_id),
+    items: editor.rows.map((row) => {
+      const id = row[editor.key].id;
+      return {
+        [`${editor.key}_id`]: id,
+        relevance_code: shown.has(id) ? shown.get(id) : row.relevance.code,
+      };
+    }),
   };
 }
 
 pestleForm?.addEventListener('submit', saveCurrentItem);
-clauseRelevanceFilter?.addEventListener('input', debounce(renderClauseRelevance, 200));
-
-saveBusinessProcessRelevance?.addEventListener('click', async () => {
-  if (!canManagePestle || !itemId) return;
-  saveBusinessProcessRelevance.disabled = true;
-  try {
-    const data = await apiPatch(
-      `/api/v1/pestle/items/${encodeURIComponent(itemId)}/business-processes`,
-      collectProcessRelevancePayload(),
-    );
-    processRelevanceRows = data.items;
-    renderProcessRelevance();
-    await Promise.all([loadItem(), loadPestleChangelog()]);
-    toast(status, 'Business process relevance saved', 'success');
-  } catch (e) {
-    toast(status, `Failed to save process relevance: ${errorText(e)}`, 'danger');
-  } finally {
-    saveBusinessProcessRelevance.disabled = false;
-  }
-});
-
-saveClauseRelevance?.addEventListener('click', async () => {
-  if (!canManagePestle || !itemId) return;
-  saveClauseRelevance.disabled = true;
-  try {
-    const data = await apiPatch(
-      `/api/v1/pestle/items/${encodeURIComponent(itemId)}/clauses`,
-      collectClauseRelevancePayload(),
-    );
-    clauseRelevanceRows = data.items;
-    renderClauseRelevance();
-    await Promise.all([loadItem(), loadPestleChangelog()]);
-    toast(status, 'Clause relevance saved', 'success');
-  } catch (e) {
-    toast(status, `Failed to save clause relevance: ${errorText(e)}`, 'danger');
-  } finally {
-    saveClauseRelevance.disabled = false;
-  }
-});
+for (const editor of RELEVANCE_EDITORS) {
+  editor.filter.addEventListener(
+    'input',
+    debounce(() => renderRelevance(editor), 200),
+  );
+  editor.save.addEventListener('click', async () => {
+    if (!canManagePestle || !itemId) return;
+    editor.save.disabled = true;
+    try {
+      const data = await apiPatch(
+        `/api/v1/pestle/items/${encodeURIComponent(itemId)}/${editor.path}`,
+        relevancePayload(editor),
+      );
+      editor.rows = data.items;
+      renderRelevance(editor);
+      await Promise.all([loadItem(), loadPestleChangelog()]);
+      toast(status, editor.saved, 'success');
+    } catch (e) {
+      toast(status, `Failed to save ${editor.key} relevance: ${errorText(e)}`, 'danger');
+    } finally {
+      editor.save.disabled = false;
+    }
+  });
+}
 
 samplePestleAudit?.addEventListener('click', () => {
   openAuditSampleModal({

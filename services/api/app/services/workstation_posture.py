@@ -19,7 +19,7 @@ from datetime import timedelta
 from pydantic import Field
 
 from app.agents.ueu.catalogue import KEEN_VERSIONS
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import iso_utc, utc_now_naive
 from app.db.models import (
     AgentPostureObservation,
     Event,
@@ -34,7 +34,7 @@ from app.services.errors import DomainError
 from app.services.features import state as feature_state
 from app.services.frameworks import framework_parameter
 from app.services.isms.metric_values import threshold_status
-from app.services.ueu_evidence import PLATFORMS
+from app.services.ueu_evidence import COVERAGE, PLATFORMS
 
 RULES_VERSION = "keen-workstation-posture-2"
 CHECKS = {
@@ -51,7 +51,6 @@ THRESHOLDS = {
     "keen.workstation.antivirus_signature_age_days": ("antivirus", "days"),
 }
 TARGETED = {check for check, _ in THRESHOLDS.values()}
-COVERAGE = "evidence.collection.completed"
 # Every KEEN catalogue defines the posture checks alike.
 POSTURE_CATALOGUES = [{"id": "keen", "version": v} for v in KEEN_VERSIONS]
 MAX_STREAMS = 128
@@ -353,10 +352,6 @@ def _platform(agent, events):
     return None
 
 
-def _iso(value):
-    return value.isoformat() + "Z" if value is not None else None
-
-
 def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
     # Posture is derived evidence; People access alone never discloses it.
     from app.services.isms.access import can_read_isms
@@ -436,7 +431,7 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
                         "status": status,
                         "reason": o["reason"],
                         "detail": detail,
-                        "observed_at": _iso(event.timestamp),
+                        "observed_at": iso_utc(event.timestamp),
                         "event_id": str(event.id),
                     }
                 )
@@ -494,7 +489,7 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
                 "platform": _platform(agent, grouped.get(agent.id, [])),
                 "active": active,
                 "revoked": not agent.enabled,
-                "last_seen": _iso(agent.last_seen),
+                "last_seen": iso_utc(agent.last_seen),
                 "overflow": bool(agent.health.get("posture_overflow")),
                 "met": sum(c["status"] == "met" for c in checks),
                 "target": len(CHECKS),

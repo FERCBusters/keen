@@ -20,7 +20,7 @@
       <div>
         <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/risks.html?tab=pestle">← Risks</a></div>
         <h1 class="h3 mb-1">PESTLE(E) impact assessment</h1>
-        <div class="small-muted">Assess Political, Economical, Social, Technological, Legal, Environmental and Ethical items against business processes and framework clauses.</div>
+        <div class="small-muted">Assess Political, Economical, Social, Technological, Legal, Environmental and Ethical items against framework controls and clauses.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" data-nav-fw="1" href="/mitigator.html"><img src="/keen-mitigator-64.png" alt="" class="keen-mitigator-icon-sm"> Keen Mitigator</a>
@@ -34,9 +34,6 @@
     <ul class="nav nav-tabs mb-3 no-print" id="pestlePageTabs" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="pestleItemsTab" data-bs-toggle="tab" data-bs-target="#pestleItemsPane" type="button" role="tab" aria-controls="pestleItemsPane" aria-selected="true">PESTLE(E) items</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="businessProcessesTab" data-bs-toggle="tab" data-bs-target="#businessProcessesPane" type="button" role="tab" aria-controls="businessProcessesPane" aria-selected="false">Business processes</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="pestleVisualisationsTab" data-bs-toggle="tab" data-bs-target="#pestleVisualisationsPane" type="button" role="tab" aria-controls="pestleVisualisationsPane" aria-selected="false" data-feature="visualisations">Visualisations</button>
@@ -75,7 +72,7 @@
                     <th style="width:130px;">Relevance</th>
                     <th>Rationale</th>
                     <th style="width:170px;">Affects</th>
-                    <th style="width:150px;">Processes</th>
+                    <th style="width:120px;">Controls</th>
                     <th style="width:120px;">Clauses</th>
                     <th style="width:120px;" class="no-print">Actions</th>
                   </tr>
@@ -83,27 +80,6 @@
                 <tbody id="pestleRows"><tr><td colspan="8" class="p-4 small-muted">Loading PESTLE(E) items</td></tr></tbody>
               </table>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="tab-pane fade" id="businessProcessesPane" role="tabpanel" aria-labelledby="businessProcessesTab" tabindex="0">
-        <div class="card mb-3 no-print" id="businessProcessEditorCard">
-          <div class="card-header">
-            <div class="fw-bold">Business processes</div>
-            <div class="small-muted">Create the organisation-specific business processes that PESTLE(E) items are scored against.</div>
-          </div>
-          <div class="card-body">
-            <div class="row g-2 align-items-end mb-3">
-              <div class="col-12 col-lg-8">
-                <label class="form-label" for="businessProcessName">Business process name</label>
-                <input id="businessProcessName" class="form-control" maxlength="256" placeholder="e.g. Customer onboarding">
-              </div>
-              <div class="col-12 col-lg-4">
-                <button id="addBusinessProcess" class="btn btn-primary w-100" type="button">Add business process</button>
-              </div>
-            </div>
-            <div id="businessProcessList" class="small-muted">Loading business processes</div>
           </div>
         </div>
       </section>

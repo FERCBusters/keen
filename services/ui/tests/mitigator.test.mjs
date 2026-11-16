@@ -487,7 +487,6 @@ test('an unnamed PESTLE(E) factor without clauses or matched words, and controls
           confidence: 'weak',
           matched_terms: [],
           clauses: [],
-          business_processes: [],
         },
       ],
     },

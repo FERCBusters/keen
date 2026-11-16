@@ -100,11 +100,7 @@ class OutboundWebhookConfig:
         # Anything other than a reply reads the question URLs.
         ev = (event or "created").strip().lower()
         if ev == "reply":
-            use_fallback = bool(
-                getattr(
-                    settings, "question_reply_webhook_use_question_urls_if_empty", True
-                )
-            )
+            use_fallback = settings.question_reply_webhook_use_question_urls_if_empty
 
             slack_raw = settings.question_reply_webhook_slack_urls or (
                 settings.question_webhook_slack_urls if use_fallback else ""

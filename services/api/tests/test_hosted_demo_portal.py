@@ -49,7 +49,6 @@ def portal_environment(expires_at):
     return {
         "KEEN_DATABASE_URL": "postgresql+psycopg2://keen:synthetic@postgres:5432/keen",
         "KEEN_REDIS_URL": "redis://:synthetic@valkey:6379/0",
-        "KEEN_ENV": "production",
         "KEEN_HOSTED_MODE": "true",
         "KEEN_DEMO_MODE": "true",
         "KEEN_RSS_ENABLED": "true",

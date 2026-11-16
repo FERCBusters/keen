@@ -17,7 +17,7 @@ from cryptography.fernet import InvalidToken
 from app.db.models import UeuSettings
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
-from app.security.agent_signatures import b64url, unb64url
+from app.security.encoding import b64url, unb64url
 from app.services.errors import DomainError
 
 

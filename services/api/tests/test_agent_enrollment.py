@@ -5,11 +5,11 @@ from datetime import timedelta
 
 import app.services.agent_enrollment as agent_enrollment_operations
 import pytest
-from app.agents.credentials import digest
 from app.api.context import change_context
 from app.api.routes import agent_enrollment as api
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
+from app.security.encoding import digest
 from app.services.errors import DomainError
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError

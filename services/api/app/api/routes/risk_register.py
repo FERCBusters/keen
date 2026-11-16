@@ -24,19 +24,6 @@ def register_heatmap(user=Depends(require_risk_read), db: Session = Depends(get_
     return service.register_heatmap(user=user, db=db)
 
 
-@router.get("/v1/risks/register")
-def list_register(
-    framework: str = "iso_27001_2022",
-    limit: int = 200,
-    offset: int = 0,
-    user=Depends(require_risk_read),
-    db: Session = Depends(get_db),
-):
-    return service.list_register(
-        framework=framework, limit=limit, offset=offset, user=user, db=db
-    )
-
-
 @router.patch("/v1/risks/register/settings")
 def update_settings(
     payload: RegisterThresholds,

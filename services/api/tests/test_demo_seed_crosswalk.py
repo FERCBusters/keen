@@ -36,6 +36,7 @@ from app.db.models import (
     User,
 )
 from app.services.control_inheritance import evidence_pairs
+from demo_pestle import CONTROLS
 from seed_demo_data import DemoConfig, DemoSeeder, seed
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -426,10 +427,6 @@ def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
         assert risk.residual_risk_score == (
             risk.register_residual_likelihood * risk.register_residual_impact
         )
-        assert (risk.vulnerability_score, risk.impact_score) == (
-            risk.register_likelihood,
-            risk.register_impact,
-        )
         assert (risk.risk_owner_user_id is None) != (risk.risk_owner_role_id is None)
         assert TREATMENT_STRATEGIES == {"", "avoid", "mitigate", "accept", "transfer"}
         assert TREATMENT_STATUSES == {
@@ -461,7 +458,10 @@ def test_pestle_analysis_covers_every_factor_in_both_lenses(seeded):
     items = db.query(PestleItem).all()
     assert Counter(i.type for i in items) == {t: 3 for t in PESTLE_TYPES}
     assert {i.overall_relevance.code for i in items} == {"high", "medium", "low"}
-    assert all(i.business_process_links and i.clause_links for i in items)
+    assert all(i.clause_links for i in items)
+    # Some factors are rated against the controls they bear on most.
+    rated = {i.item: len(i.control_links) for i in items if i.control_links}
+    assert rated == {f"Demo {item}": len(refs) for item, refs in CONTROLS.items()}
     counts = pestle_visualisations(framework="iso_27001_2022", user=user, db=db)[
         "lens_type_counts"
     ]

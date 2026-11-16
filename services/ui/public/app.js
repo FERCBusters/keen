@@ -23,6 +23,25 @@ import {
 } from '/vendor/mosp-design-system/app.js';
 import * as mosp from '/vendor/mosp-design-system/app.js';
 
+// Builds an element without parsing HTML: attributes are set as given and
+// text children are inserted as text, so no value needs escaping. `class` sets
+// the class name, `hidden` the hidden state; a null child is left out.
+export function node(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [name, value] of Object.entries(attrs)) {
+    if (name === 'class') el.className = value;
+    else if (name === 'hidden') el.hidden = value;
+    else el.setAttribute(name, value);
+  }
+  el.append(...children.filter((child) => child !== null));
+  return el;
+}
+
+// A decorative Bootstrap icon.
+export function icon(name) {
+  return node('i', { class: `bi ${name}`, 'aria-hidden': 'true' });
+}
+
 // Pages build API paths from record identifiers and query values, and the
 // browser resolves a "." or ".." path segment (encoded or not) before the
 // request leaves, so an identifier of ".." would send the page's session and
@@ -933,6 +952,11 @@ export function auditStatusLabel(auditOrStatus = null) {
   return v.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
 }
 
+// Whether the account may open audits at all.
+export function canViewAudits(me = null) {
+  return Boolean(me?.can_view_audits || me?.can_manage_audits || me?.is_admin);
+}
+
 export function canSampleIntoAudit(me = null, entityType = '') {
   if (!featureEnabled(me, 'sampling')) return false;
   if ((!entityType || entityType === 'event') && !featureEnabled(me, 'event_sampling'))
@@ -1494,4 +1518,53 @@ export async function loadEntityChangelog(
     container.innerHTML = '<div class="text-danger p-3">Failed to load changelog.</div>';
     return null;
   }
+}
+
+// How far a control applies to a clause, as the control and clause pages show it.
+export function applicabilityBadge(v) {
+  if (v === 'partially_applicable')
+    return '<span class="badge text-bg-warning">Partially applicable</span>';
+  if (v === 'applicable') return '<span class="badge badge-soft">Applicable</span>';
+  return '<span class="badge text-bg-light">Not applicable</span>';
+}
+
+// The entries of a comma-separated value, as filters arrive in an address.
+export function splitList(value) {
+  return String(value || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+// Sets a comma-separated filter on a request, leaving it off when nothing is chosen.
+export function setCsvParam(url, key, values) {
+  const cleaned = Array.from(new Set(values.map((v) => String(v).trim()).filter(Boolean)));
+  if (cleaned.length) url.searchParams.set(key, cleaned.join(','));
+}
+
+// Each source's label and colour by name, for source badges; empty when the
+// account may not list sources.
+export async function loadSourceLabels() {
+  try {
+    const data = await apiGet('/api/v1/sources');
+    return Object.fromEntries(
+      data.items.map((x) => {
+        const source = String(x.source).trim();
+        return [source, { source, label: x.label, color: x.color }];
+      }),
+    );
+  } catch {
+    return {};
+  }
+}
+
+export function assetHref(id, framework) {
+  return mosp.withFramework(`/isms-asset.html?id=${encodeURIComponent(id)}`, framework);
+}
+
+export function metricHref(id, framework) {
+  return mosp.withFramework(
+    `/isms-effectiveness-metric.html?id=${encodeURIComponent(id)}`,
+    framework,
+  );
 }

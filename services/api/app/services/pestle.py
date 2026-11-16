@@ -17,9 +17,8 @@ from app.db.models import (
     ControlClauseLink,
     ControlItem,
     FrameworkClause,
-    PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
     PestleClauseRelevance,
+    PestleControlRelevance,
     PestleItem,
     PestleRelevanceLevel,
     User,
@@ -36,10 +35,14 @@ from app.services.affected import (
     affected_loads,
 )
 from app.services.affected_links import replace_affected_links
-from app.services.control_refs import clause_summary, control_summary
+from app.services.control_refs import (
+    CLAUSE_ROW_TYPE,
+    clause_summary,
+    control_by_id_or_ref,
+    control_summary,
+)
 from app.services.entity_changelog import (
     list_entity_changelogs,
-    pestle_business_process_changelog_state,
     pestle_item_changelog_state,
     record_entity_changelog,
 )
@@ -97,23 +100,17 @@ class PestleItemPayload(BaseModel):
     affected: list[AffectedRef] | None = Field(default=None, max_length=MAX_AFFECTED)
 
 
-class BusinessProcessPayload(BaseModel):
-    name: str = Field(..., min_length=1, max_length=256)
-
-
 class RelevanceLinkPayload(BaseModel):
-    business_process_id: uuid.UUID | None = None
     clause_id: uuid.UUID | None = None
+    control_id: uuid.UUID | None = None
     relevance_id: uuid.UUID | None = None
     relevance_code: str | None = Field(default="na", max_length=32)
 
 
-class BusinessProcessLinksPayload(BaseModel):
-    items: list[RelevanceLinkPayload] = Field(default_factory=list)
+class RelevanceLinksPayload(BaseModel):
+    """The clauses, or the controls, a factor is relevant to, and how strongly."""
 
-
-class ClauseLinksPayload(BaseModel):
-    items: list[RelevanceLinkPayload] = Field(default_factory=list)
+    items: list[RelevanceLinkPayload] = Field(default_factory=list, max_length=5000)
 
 
 def _replace_affected(
@@ -232,14 +229,9 @@ def relevance_summary(row: PestleRelevanceLevel | None) -> dict[str, Any]:
     }
 
 
-def _business_process_out(row: PestleBusinessProcess) -> dict[str, Any]:
-    return {
-        "id": str(row.id),
-        "name": row.name,
-        "created_by": getattr(row.created_by, "username", None),
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-    }
+def _rated(links) -> list:
+    """The links whose relevance is above "na"; saving stores no other."""
+    return [link for link in links if link.relevance.code != "na"]
 
 
 def _related_controls_for_item(
@@ -274,16 +266,8 @@ def _item_out(
     *,
     include_links: bool = False,
 ) -> dict[str, Any]:
-    business_links = [
-        link
-        for link in list(row.business_process_links or [])
-        if getattr(getattr(link, "relevance", None), "code", None) != "na"
-    ]
-    clause_links = [
-        link
-        for link in list(row.clause_links or [])
-        if getattr(getattr(link, "relevance", None), "code", None) != "na"
-    ]
+    clause_links = _rated(row.clause_links)
+    control_links = _rated(row.control_links)
     out: dict[str, Any] = {
         "id": str(row.id),
         "framework": row.framework_slug,
@@ -298,26 +282,11 @@ def _item_out(
         "created_by": getattr(row.created_by, "username", None),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        "business_process_count": len(business_links),
         "clause_count": len(clause_links),
+        "control_count": len(control_links),
         "affected": affected_list(list(row.affected_links)),
     }
     if include_links:
-        out["business_processes"] = [
-            {
-                "business_process": _business_process_out(link.business_process),
-                "relevance": relevance_summary(link.relevance),
-                "relevance_id": str(link.relevance_id),
-                "updated_at": link.updated_at.isoformat() if link.updated_at else None,
-            }
-            for link in sorted(
-                business_links,
-                key=lambda x: (
-                    (x.business_process.name or "").lower(),
-                    x.business_process.name or "",
-                ),
-            )
-        ]
         out["clauses"] = [
             {
                 "clause": clause_summary(link.clause),
@@ -331,6 +300,18 @@ def _item_out(
                     int(x.clause.sort_order or 0),
                     _ref_sort_key(x.clause.ref),
                 ),
+            )
+        ]
+        out["controls"] = [
+            {
+                "control": control_summary(link.control),
+                "relevance": relevance_summary(link.relevance),
+                "relevance_id": str(link.relevance_id),
+                "updated_at": link.updated_at.isoformat() if link.updated_at else None,
+            }
+            for link in sorted(
+                control_links,
+                key=lambda x: (x.control.type, _ref_sort_key(x.control.ref)),
             )
         ]
         out["related_controls"] = [
@@ -347,24 +328,6 @@ def _item_or_404(db: Session, item_id: str | uuid.UUID) -> PestleItem:
     row = db.query(PestleItem).filter(PestleItem.id == iid).one_or_none()
     if not row:
         raise DomainError(status_code=404, detail="PESTLE(E) item not found")
-    return row
-
-
-def _business_process_or_404(
-    db: Session, process_id: str | uuid.UUID
-) -> PestleBusinessProcess:
-    pid = (
-        process_id if isinstance(process_id, uuid.UUID) else _try_uuid(str(process_id))
-    )
-    if not pid:
-        raise DomainError(status_code=400, detail="business_process_id must be a UUID")
-    row = (
-        db.query(PestleBusinessProcess)
-        .filter(PestleBusinessProcess.id == pid)
-        .one_or_none()
-    )
-    if not row:
-        raise DomainError(status_code=404, detail="Business process not found")
     return row
 
 
@@ -564,183 +527,78 @@ def delete_pestle_item(*, item_id: str, user, db: Session):
     return {"ok": True}
 
 
-def list_business_processes(
-    *, q: str = "", limit: int = 5000, offset: int = 0, user, db: Session
-):
-    limit = max(1, min(int(limit or 5000), 5000))
-    offset = max(0, int(offset or 0))
-    qry = db.query(PestleBusinessProcess)
-    sq = (q or "").strip().lower()
-    if sq:
-        qry = qry.filter(func.lower(PestleBusinessProcess.name).like(f"%{sq}%"))
-    total = int(qry.count() or 0)
-    rows = (
-        qry.order_by(func.lower(PestleBusinessProcess.name).asc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-    return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "items": [_business_process_out(r) for r in rows],
-    }
+def _control_or_404(db: Session, control_id: uuid.UUID, framework: str) -> ControlItem:
+    row = control_by_id_or_ref(db, framework, str(control_id))
+    if not row or row.type == CLAUSE_ROW_TYPE:
+        raise DomainError(status_code=404, detail="Control not found")
+    return row
 
 
-def create_business_process(*, payload: BusinessProcessPayload, user, db: Session):
-    name = clean_text(payload.name, max_len=256, required=True, label="name")
-    existing = (
-        db.query(PestleBusinessProcess)
-        .filter(func.lower(PestleBusinessProcess.name) == name.lower())
-        .one_or_none()
-    )
-    if existing:
-        raise DomainError(status_code=400, detail="Business process already exists")
-    row = PestleBusinessProcess(
-        name=name,
-        created_by_user_id=user.id,
-        created_at=_utcnow(),
-        updated_at=_utcnow(),
-    )
-    db.add(row)
-    db.flush()
-    record_entity_changelog(
-        db,
-        entity_type="pestle_business_process",
-        entity_id=row.id,
-        action="created",
-        before=None,
-        after=pestle_business_process_changelog_state(db, row.id),
-        user=user,
-        request_method="POST",
-        request_path="/v1/pestle/business-processes",
-    )
-    db.commit()
-    db.refresh(row)
-    return _business_process_out(row)
-
-
-def update_business_process(
-    *, process_id: str, payload: BusinessProcessPayload, user, db: Session
-):
-    row = _business_process_or_404(db, process_id)
-    name = clean_text(payload.name, max_len=256, required=True, label="name")
-    conflict = (
-        db.query(PestleBusinessProcess)
-        .filter(
-            func.lower(PestleBusinessProcess.name) == name.lower(),
-            PestleBusinessProcess.id != row.id,
-        )
-        .one_or_none()
-    )
-    if conflict:
-        raise DomainError(status_code=400, detail="Business process already exists")
-    before = pestle_business_process_changelog_state(db, row.id)
-    row.name = name
-    row.updated_at = _utcnow()
-    db.add(row)
-    db.flush()
-    record_entity_changelog(
-        db,
-        entity_type="pestle_business_process",
-        entity_id=row.id,
-        action="updated",
-        before=before,
-        after=pestle_business_process_changelog_state(db, row.id),
-        user=user,
-        request_method="PATCH",
-        request_path=f"/v1/pestle/business-processes/{process_id}",
-    )
-    db.commit()
-    db.refresh(row)
-    return _business_process_out(row)
-
-
-def delete_business_process(*, process_id: str, user, db: Session):
-    row = _business_process_or_404(db, process_id)
-    before = pestle_business_process_changelog_state(db, row.id)
-    record_entity_changelog(
-        db,
-        entity_type="pestle_business_process",
-        entity_id=row.id,
-        action="deleted",
-        before=before,
-        after=None,
-        user=user,
-        request_method="DELETE",
-        request_path=f"/v1/pestle/business-processes/{process_id}",
-    )
-    db.delete(row)
-    db.commit()
-    return {"ok": True}
-
-
-def get_item_business_process_relevance(*, item_id: str, user, db: Session):
-    row = _item_or_404(db, item_id)
-    processes = (
-        db.query(PestleBusinessProcess)
-        .order_by(func.lower(PestleBusinessProcess.name).asc())
-        .all()
-    )
-    links = {
-        str(link.business_process_id): link for link in row.business_process_links or []
-    }
+def _relevance_rows(
+    db: Session, row: PestleItem, targets: list, links: list, key: str, summary
+) -> dict[str, Any]:
+    """Every clause, or control, of the factor's framework with its relevance."""
+    by_target = {getattr(link, key + "_id"): link for link in links}
     default = _default_relevance(db)
-    return {
-        "item": _item_out(db, row),
-        "items": [
+    items = []
+    for target in targets:
+        link = by_target.get(target.id)
+        relevance = link.relevance if link else default
+        items.append(
             {
-                "business_process": _business_process_out(proc),
-                "relevance": relevance_summary(
-                    links[str(proc.id)].relevance if str(proc.id) in links else default
-                ),
-                "relevance_id": str(
-                    links[str(proc.id)].relevance_id
-                    if str(proc.id) in links
-                    else default.id
-                ),
+                key.removesuffix("_item"): summary(target),
+                "relevance": relevance_summary(relevance),
+                "relevance_id": str(relevance.id),
             }
-            for proc in processes
-        ],
-    }
+        )
+    return {"item": _item_out(db, row), "items": items}
 
 
-def replace_item_business_process_relevance(
-    *, item_id: str, payload: BusinessProcessLinksPayload, user, db: Session
-):
-    row = _item_or_404(db, item_id)
+def _replace_relevance(
+    db: Session,
+    row: PestleItem,
+    payload: RelevanceLinksPayload,
+    *,
+    model,
+    key: str,
+    field: str,
+    resolve,
+    user,
+    request_path: str,
+) -> None:
+    """Replace the factor's clause, or control, relevance with the payload's.
+
+    ``field`` names the payload member that carries the target's id and ``key``
+    the link column it is stored in. A relevance of "na" stores no link.
+    """
     before = pestle_item_changelog_state(db, row.id)
-    db.query(PestleBusinessProcessRelevance).filter(
-        PestleBusinessProcessRelevance.pestle_item_id == row.id
-    ).delete()
+    db.query(model).filter(model.pestle_item_id == row.id).delete()
     now = _utcnow()
-    seen: set[str] = set()
-    for link in payload.items or []:
-        if not link.business_process_id:
+    seen: set[uuid.UUID] = set()
+    for link in payload.items:
+        target_id = getattr(link, field)
+        if not target_id or target_id in seen:
             continue
-        pid = str(link.business_process_id)
-        if pid in seen:
-            continue
-        seen.add(pid)
-        process = _business_process_or_404(db, link.business_process_id)
+        seen.add(target_id)
+        target = resolve(db, target_id, row.framework_slug)
         relevance = _relevance_by_id_or_code(
             db, relevance_id=link.relevance_id, relevance_code=link.relevance_code
         )
         if relevance.code == "na":
             continue
         db.add(
-            PestleBusinessProcessRelevance(
+            model(
                 pestle_item_id=row.id,
-                business_process_id=process.id,
                 relevance_id=relevance.id,
                 created_at=now,
                 updated_at=now,
+                **{key: target.id},
             )
         )
     row.updated_at = now
     db.add(row)
     db.flush()
+    db.expire(row, ["clause_links", "control_links"])
     record_entity_changelog(
         db,
         entity_type="pestle_item",
@@ -750,10 +608,9 @@ def replace_item_business_process_relevance(
         after=pestle_item_changelog_state(db, row.id),
         user=user,
         request_method="PATCH",
-        request_path=f"/v1/pestle/items/{item_id}/business-processes",
+        request_path=request_path,
     )
     db.commit()
-    return get_item_business_process_relevance(item_id=str(row.id), user=user, db=db)
 
 
 def get_item_clause_relevance(*, item_id: str, user, db: Session):
@@ -761,81 +618,64 @@ def get_item_clause_relevance(*, item_id: str, user, db: Session):
     clauses = (
         db.query(FrameworkClause)
         .filter(FrameworkClause.framework_slug == row.framework_slug)
-        .order_by(FrameworkClause.sort_order.asc(), FrameworkClause.ref.asc())
         .all()
     )
     clauses.sort(key=lambda c: (int(c.sort_order or 0), _ref_sort_key(c.ref)))
-    links = {str(link.clause_id): link for link in row.clause_links or []}
-    default = _default_relevance(db)
-    return {
-        "item": _item_out(db, row),
-        "items": [
-            {
-                "clause": clause_summary(clause),
-                "relevance": relevance_summary(
-                    links[str(clause.id)].relevance
-                    if str(clause.id) in links
-                    else default
-                ),
-                "relevance_id": str(
-                    links[str(clause.id)].relevance_id
-                    if str(clause.id) in links
-                    else default.id
-                ),
-            }
-            for clause in clauses
-        ],
-    }
+    return _relevance_rows(
+        db, row, clauses, list(row.clause_links), "clause", clause_summary
+    )
 
 
 def replace_item_clause_relevance(
-    *, item_id: str, payload: ClauseLinksPayload, user, db: Session
+    *, item_id: str, payload: RelevanceLinksPayload, user, db: Session
 ):
     row = _item_or_404(db, item_id)
-    before = pestle_item_changelog_state(db, row.id)
-    db.query(PestleClauseRelevance).filter(
-        PestleClauseRelevance.pestle_item_id == row.id
-    ).delete()
-    now = _utcnow()
-    seen: set[str] = set()
-    for link in payload.items or []:
-        if not link.clause_id:
-            continue
-        cid = str(link.clause_id)
-        if cid in seen:
-            continue
-        seen.add(cid)
-        clause = _clause_or_404(db, link.clause_id, framework=row.framework_slug)
-        relevance = _relevance_by_id_or_code(
-            db, relevance_id=link.relevance_id, relevance_code=link.relevance_code
-        )
-        if relevance.code == "na":
-            continue
-        db.add(
-            PestleClauseRelevance(
-                pestle_item_id=row.id,
-                clause_id=clause.id,
-                relevance_id=relevance.id,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-    row.updated_at = now
-    db.add(row)
-    db.flush()
-    record_entity_changelog(
+    _replace_relevance(
         db,
-        entity_type="pestle_item",
-        entity_id=row.id,
-        action="updated",
-        before=before,
-        after=pestle_item_changelog_state(db, row.id),
+        row,
+        payload,
+        model=PestleClauseRelevance,
+        key="clause_id",
+        field="clause_id",
+        resolve=_clause_or_404,
         user=user,
-        request_method="PATCH",
         request_path=f"/v1/pestle/items/{item_id}/clauses",
     )
-    db.commit()
     return get_item_clause_relevance(item_id=str(row.id), user=user, db=db)
+
+
+def get_item_control_relevance(*, item_id: str, user, db: Session):
+    row = _item_or_404(db, item_id)
+    controls = (
+        db.query(ControlItem)
+        .filter(
+            ControlItem.framework_slug == row.framework_slug,
+            ControlItem.type != CLAUSE_ROW_TYPE,
+        )
+        .all()
+    )
+    controls.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
+    return _relevance_rows(
+        db, row, controls, list(row.control_links), "control_item", control_summary
+    )
+
+
+def replace_item_control_relevance(
+    *, item_id: str, payload: RelevanceLinksPayload, user, db: Session
+):
+    row = _item_or_404(db, item_id)
+    _replace_relevance(
+        db,
+        row,
+        payload,
+        model=PestleControlRelevance,
+        key="control_item_id",
+        field="control_id",
+        resolve=_control_or_404,
+        user=user,
+        request_path=f"/v1/pestle/items/{item_id}/controls",
+    )
+    return get_item_control_relevance(item_id=str(row.id), user=user, db=db)
 
 
 def pestle_item_changelog(
@@ -882,23 +722,12 @@ def pestle_visualisations(
         item_summaries.append(_item_out(db, item))
 
     clause_links = []
-    process_links = []
     if item_ids:
-        rows = (
+        for link in _rated(
             db.query(PestleClauseRelevance)
-            .join(PestleItem, PestleItem.id == PestleClauseRelevance.pestle_item_id)
-            .join(
-                FrameworkClause, FrameworkClause.id == PestleClauseRelevance.clause_id
-            )
-            .join(
-                PestleRelevanceLevel,
-                PestleRelevanceLevel.id == PestleClauseRelevance.relevance_id,
-            )
             .filter(PestleClauseRelevance.pestle_item_id.in_(item_ids))
-            .filter(PestleRelevanceLevel.code != "na")
             .all()
-        )
-        for link in rows:
+        ):
             clause_links.append(
                 {
                     "item_id": str(link.pestle_item_id),
@@ -914,40 +743,6 @@ def pestle_visualisations(
                     "relevance": relevance_summary(link.relevance),
                 }
             )
-        proc_rows = (
-            db.query(PestleBusinessProcessRelevance)
-            .join(
-                PestleItem,
-                PestleItem.id == PestleBusinessProcessRelevance.pestle_item_id,
-            )
-            .join(
-                PestleBusinessProcess,
-                PestleBusinessProcess.id
-                == PestleBusinessProcessRelevance.business_process_id,
-            )
-            .join(
-                PestleRelevanceLevel,
-                PestleRelevanceLevel.id == PestleBusinessProcessRelevance.relevance_id,
-            )
-            .filter(PestleBusinessProcessRelevance.pestle_item_id.in_(item_ids))
-            .filter(PestleRelevanceLevel.code != "na")
-            .all()
-        )
-        for process_link in proc_rows:
-            process_links.append(
-                {
-                    "item_id": str(process_link.pestle_item_id),
-                    "item": process_link.pestle_item.item,
-                    "item_type": process_link.pestle_item.type,
-                    "type": process_link.pestle_item.type,
-                    "lens": process_link.pestle_item.lens,
-                    "business_process_id": str(process_link.business_process_id),
-                    "business_process": process_link.business_process.name,
-                    "relevance_code": process_link.relevance.code,
-                    "relevance_label": process_link.relevance.label,
-                    "relevance": relevance_summary(process_link.relevance),
-                }
-            )
 
     return {
         "framework": fw,
@@ -957,8 +752,19 @@ def pestle_visualisations(
         "lens_type_counts": lens_type_counts,
         "relevance_counts": list(relevance_counts.values()),
         "clause_links": clause_links,
-        "process_links": process_links,
     }
+
+
+def _factors_out(db: Session, links: list) -> list[dict[str, Any]]:
+    links.sort(key=lambda x: (x.pestle_item.type, x.pestle_item.lens))
+    return [
+        {
+            "pestle_item": _item_out(db, link.pestle_item),
+            "relevance": relevance_summary(link.relevance),
+            "relevance_id": str(link.relevance_id),
+        }
+        for link in links
+    ]
 
 
 def clause_pestle_relevance(*, clause_id: str, user, db: Session):
@@ -970,21 +776,21 @@ def clause_pestle_relevance(*, clause_id: str, user, db: Session):
         .filter(PestleItem.framework_slug == clause.framework_slug)
         .all()
     )
-    links.sort(
-        key=lambda x: (
-            x.pestle_item.type,
-            x.pestle_item.lens,
-            _ref_sort_key(x.pestle_item.type),
-        )
+    return {"clause": clause_summary(clause), "items": _factors_out(db, links)}
+
+
+def control_pestle_relevance(*, control_id: str, user, db: Session):
+    cid = _try_uuid(control_id)
+    if not cid:
+        raise DomainError(status_code=400, detail="control_id must be a UUID")
+    control = db.get(ControlItem, cid)
+    if not control:
+        raise DomainError(status_code=404, detail="Control not found")
+    links = (
+        db.query(PestleControlRelevance)
+        .join(PestleItem, PestleItem.id == PestleControlRelevance.pestle_item_id)
+        .filter(PestleControlRelevance.control_item_id == control.id)
+        .filter(PestleItem.framework_slug == control.framework_slug)
+        .all()
     )
-    return {
-        "clause": clause_summary(clause),
-        "items": [
-            {
-                "pestle_item": _item_out(db, link.pestle_item),
-                "relevance": relevance_summary(link.relevance),
-                "relevance_id": str(link.relevance_id),
-            }
-            for link in links
-        ],
-    }
+    return {"control": control_summary(control), "items": _factors_out(db, links)}

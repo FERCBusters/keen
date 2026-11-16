@@ -11,12 +11,8 @@ from app.db.session import get_db
 from app.security.auth import require_authenticated
 from app.services import risks as service
 from app.services.risks import (
-    RiskAssetPayload,
-    RiskCategoryPayload,
-    RiskControlLinksPayload,
     RiskImportPayload,
     RiskMitigatorAnalysePayload,
-    RiskSubcategoryPayload,
     RiskUpsertPayload,
     can_manage_risks,
     can_read_risks,
@@ -46,77 +42,6 @@ def list_risk_categories(
     return service.list_risk_categories(user=user, db=db)
 
 
-@router.post("/v1/risks/categories")
-def create_risk_category(
-    payload: RiskCategoryPayload,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.create_risk_category(payload=payload, user=user, db=db)
-
-
-@router.patch("/v1/risks/categories/{category_id}")
-def update_risk_category(
-    category_id: str,
-    payload: RiskCategoryPayload,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.update_risk_category(
-        category_id=category_id, payload=payload, user=user, db=db
-    )
-
-
-@router.delete("/v1/risks/categories/{category_id}")
-def delete_risk_category(
-    category_id: str,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.delete_risk_category(category_id=category_id, user=user, db=db)
-
-
-@router.get("/v1/risks/subcategories")
-def list_risk_subcategories(
-    category_id: str = "",
-    user=Depends(require_risk_read),
-    db: Session = Depends(get_db),
-):
-    return service.list_risk_subcategories(category_id=category_id, user=user, db=db)
-
-
-@router.post("/v1/risks/subcategories")
-def create_risk_subcategory(
-    payload: RiskSubcategoryPayload,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.create_risk_subcategory(payload=payload, user=user, db=db)
-
-
-@router.patch("/v1/risks/subcategories/{subcategory_id}")
-def update_risk_subcategory(
-    subcategory_id: str,
-    payload: RiskSubcategoryPayload,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.update_risk_subcategory(
-        subcategory_id=subcategory_id, payload=payload, user=user, db=db
-    )
-
-
-@router.delete("/v1/risks/subcategories/{subcategory_id}")
-def delete_risk_subcategory(
-    subcategory_id: str,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.delete_risk_subcategory(
-        subcategory_id=subcategory_id, user=user, db=db
-    )
-
-
 @router.get("/v1/risks/assets")
 def list_risk_assets(
     q: str = "",
@@ -128,36 +53,6 @@ def list_risk_assets(
     return service.list_risk_assets(
         q=q, category_id=category_id, subcategory_id=subcategory_id, user=user, db=db
     )
-
-
-@router.post("/v1/risks/assets")
-def create_risk_asset(
-    payload: RiskAssetPayload,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.create_risk_asset(payload=payload, user=user, db=db)
-
-
-@router.patch("/v1/risks/assets/{asset_id}")
-def update_risk_asset(
-    asset_id: str,
-    payload: RiskAssetPayload,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.update_risk_asset(
-        asset_id=asset_id, payload=payload, user=user, db=db
-    )
-
-
-@router.delete("/v1/risks/assets/{asset_id}")
-def delete_risk_asset(
-    asset_id: str,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.delete_risk_asset(asset_id=asset_id, user=user, db=db)
 
 
 @router.get("/v1/risks/users")
@@ -319,19 +214,6 @@ def get_risk_controls(
     )
 
 
-@router.patch("/v1/risks/{risk_id}/controls")
-def update_risk_controls(
-    risk_id: str,
-    payload: RiskControlLinksPayload,
-    framework: str = settings.default_framework_slug,
-    user=Depends(require_risk_manage),
-    db: Session = Depends(get_db),
-):
-    return service.update_risk_controls(
-        risk_id=risk_id, payload=payload, framework=framework, user=user, db=db
-    )
-
-
 @router.get("/v1/controls/{control_id}/risks")
 def control_risks(
     control_id: str,
@@ -342,3 +224,12 @@ def control_risks(
     return service.control_risks(
         control_id=control_id, framework=framework, user=user, db=db
     )
+
+
+@router.get("/v1/clauses/{clause_id}/risks")
+def clause_risks(
+    clause_id: str,
+    user=Depends(require_risk_read),
+    db: Session = Depends(get_db),
+):
+    return service.clause_risks(clause_id=clause_id, user=user, db=db)

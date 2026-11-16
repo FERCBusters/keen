@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.datetime_utils import iso_or_none
 from app.db.models import (
     IsmsPerson,
     Quiz,
@@ -30,7 +31,7 @@ from app.services.schedules import occurrences_between, today_for_schedule
 
 from .access import can_manage_quizzes, require_manage, require_read
 from .attempts import attempt_view
-from .common import iso, quiz_or_404, result_ready
+from .common import quiz_or_404, result_ready
 from .scoring import TROPHIES, passed, shown_score, trophy
 
 # Questions listed in each insight.
@@ -91,11 +92,11 @@ def round_out(
     shown = manager or _ready(round_, stats)
     return {
         "id": str(round_.id),
-        "opens_on": iso(round_.opens_on),
-        "due_on": iso(round_.due_on),
+        "opens_on": iso_or_none(round_.opens_on),
+        "due_on": iso_or_none(round_.due_on),
         "status": round_.status,
         "scheduled": bool(round_.scheduled),
-        "closed_at": iso(round_.closed_at),
+        "closed_at": iso_or_none(round_.closed_at),
         "participants": stats.participants,
         "started": stats.started,
         "pending_grading": stats.pending,
@@ -295,7 +296,7 @@ def _people(
             "attempt_id": str(attempt.id) if attempt else None,
             "status": attempt.status if attempt else "not_started",
             "pages_saved": attempt.pages_saved if attempt else 0,
-            "submitted_at": iso(attempt.submitted_at) if attempt else None,
+            "submitted_at": iso_or_none(attempt.submitted_at) if attempt else None,
             "score": shown_score(attempt.score) if attempt else None,
             "passed": passed(attempt.score, quiz.pass_mark) if attempt else None,
             "trophy": trophy(attempt.score, quiz.pass_mark) if attempt else None,
@@ -404,7 +405,7 @@ def quiz_calendar(
     quizzes = db.query(Quiz).filter(Quiz.framework_slug == fw).all()
     titles = {quiz.id: quiz.title for quiz in quizzes}
     occurrences = [
-        {"date": iso(day), "quiz_id": str(quiz.id), "title": quiz.title}
+        {"date": iso_or_none(day), "quiz_id": str(quiz.id), "title": quiz.title}
         for quiz in quizzes
         if quiz.status == "active"
         for day in occurrences_between(quiz, start=first, end=last, limit=100)
@@ -422,16 +423,16 @@ def quiz_calendar(
         else []
     )
     return {
-        "start": iso(first),
-        "end": iso(last),
+        "start": iso_or_none(first),
+        "end": iso_or_none(last),
         "occurrences": sorted(occurrences, key=lambda o: (o["date"], o["title"])),
         "rounds": [
             {
                 "id": str(round_.id),
                 "quiz_id": str(round_.quiz_id),
                 "title": titles[round_.quiz_id],
-                "opens_on": iso(round_.opens_on),
-                "due_on": iso(round_.due_on),
+                "opens_on": iso_or_none(round_.opens_on),
+                "due_on": iso_or_none(round_.due_on),
                 "status": round_.status,
             }
             for round_ in rounds

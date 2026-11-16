@@ -1,6 +1,6 @@
 """PESTLE(E) register workflows through the assembled application.
 
-Items, business processes, relevance links, visualisations and change history
+Items, clause and control relevance links, visualisations and change history
 are exercised with real sign-in, CSRF and permission resolution.
 """
 
@@ -14,7 +14,7 @@ from app.db.models import (
     EntityChangelog,
     Framework,
     FrameworkClause,
-    PestleBusinessProcessRelevance,
+    PestleControlRelevance,
     PestleItem,
 )
 
@@ -59,7 +59,16 @@ def pestle(keen):  # noqa: F811 - fixture imported above
     logging = ControlItem(
         framework_slug="A", ref="A.10", type="annex_control", title="Logging"
     )
-    db.add_all([context, parties, improvement, other, access, logging])
+    elsewhere = ControlItem(
+        framework_slug="B", ref="B.1", type="annex_control", title="Elsewhere"
+    )
+    # Clauses are also catalogue rows; a factor's controls never name one.
+    clause_row = ControlItem(
+        framework_slug="A", ref="4.1", type="clause", title="Context"
+    )
+    db.add_all(
+        [context, parties, improvement, other, access, logging, elsewhere, clause_row]
+    )
     db.flush()
     db.add_all(
         [
@@ -94,6 +103,8 @@ def pestle(keen):  # noqa: F811 - fixture imported above
         other=other,
         access=access,
         logging=logging,
+        elsewhere=elsewhere,
+        clause_row=clause_row,
         manage=lambda *a, **k: _send(manager_client, *a, **k),
         read=lambda *a, **k: _send(reader_client, *a, **k),
     )
@@ -115,19 +126,16 @@ def _item(pestle, **overrides):
 def test_pestle_routes_follow_the_read_and_manage_permissions(pestle):
     app = pestle.keen
     item = _item(pestle)
-    process = pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": "Payroll"}
-    )
     reads = (
         "/v1/pestle/meta",
         "/v1/pestle/items",
         f"/v1/pestle/items/{item['id']}",
-        f"/v1/pestle/items/{item['id']}/business-processes",
         f"/v1/pestle/items/{item['id']}/clauses",
+        f"/v1/pestle/items/{item['id']}/controls",
         f"/v1/pestle/items/{item['id']}/changelog",
-        "/v1/pestle/business-processes",
         "/v1/pestle/visualisations",
         f"/v1/clauses/{pestle.context.id}/pestle",
+        f"/v1/controls/{pestle.access.id}/pestle",
     )
     anonymous = app.client()
     nobody = app.client(app.user())
@@ -157,11 +165,8 @@ def test_pestle_routes_follow_the_read_and_manage_permissions(pestle):
             {"type": "Legal", "lens": "External", "item": "X"},
         ),
         ("DELETE", f"/v1/pestle/items/{item['id']}", None),
-        ("POST", "/v1/pestle/business-processes", {"name": "Sales"}),
-        ("PATCH", f"/v1/pestle/business-processes/{process['id']}", {"name": "Sales"}),
-        ("DELETE", f"/v1/pestle/business-processes/{process['id']}", None),
-        ("PATCH", f"/v1/pestle/items/{item['id']}/business-processes", {"items": []}),
         ("PATCH", f"/v1/pestle/items/{item['id']}/clauses", {"items": []}),
+        ("PATCH", f"/v1/pestle/items/{item['id']}/controls", {"items": []}),
     )
     for method, path, body in writes:
         assert pestle.read(method, path, body, status=403) == {
@@ -180,8 +185,8 @@ def test_pestle_routes_follow_the_read_and_manage_permissions(pestle):
     _send(
         risk_manager,
         "PATCH",
-        f"/v1/pestle/business-processes/{process['id']}",
-        {"name": "Payroll run"},
+        f"/v1/pestle/items/{item['id']}/controls",
+        {"items": [{"control_id": str(pestle.access.id), "relevance_code": "low"}]},
     )
     meta = pestle.read("GET", "/v1/pestle/meta")
     assert meta["permissions"] == {"can_view_pestle": True, "can_manage_pestle": False}
@@ -207,7 +212,7 @@ def test_items_are_validated_and_normalised(pestle):
     assert created["item"] == HOSTILE and created["rationale"] == HOSTILE
     assert created["overall_relevance"]["code"] == "high"
     assert created["created_by"] == pestle.manager.username
-    assert created["business_processes"] == [] and created["clauses"] == []
+    assert created["controls"] == [] and created["clauses"] == []
 
     defaulted = _item(pestle, overall_relevance_code=None, rationale=None)
     assert (
@@ -342,129 +347,13 @@ def test_items_are_filtered_searched_and_paged(pestle):
     assert (clamped["limit"], clamped["offset"]) == (500, 0)
 
 
-def test_business_processes_are_unique_and_tracked(pestle):
-    created = pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": f" {HOSTILE} "}
-    )
-    assert (
-        created["name"] == HOSTILE and created["created_by"] == pestle.manager.username
-    )
-    payroll = pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": "Payroll"}
-    )
-    response = pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": "PAYROLL"}, status=400
-    )
-    assert response["detail"] == "Business process already exists"
-    assert pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": "  "}, status=400
-    ) == {"detail": "name is required"}
-    assert pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": ""}, status=422
-    ) == {
-        "detail": [
-            {
-                "type": "string_too_short",
-                "loc": ["body", "name"],
-                "msg": "String should have at least 1 character",
-            }
-        ]
-    }
-
-    listed = pestle.read("GET", "/v1/pestle/business-processes")
-    assert listed["total"] == 2
-    assert [
-        p["name"]
-        for p in pestle.read("GET", "/v1/pestle/business-processes", q="pay")["items"]
-    ] == ["Payroll"]
-    page = pestle.read("GET", "/v1/pestle/business-processes", limit=1, offset=1)
-    assert len(page["items"]) == 1 and page["total"] == 2
-
-    path = f"/v1/pestle/business-processes/{payroll['id']}"
-    renamed = pestle.manage("PATCH", path, {"name": "Payroll run"})
-    assert renamed["name"] == "Payroll run"
-    response = pestle.manage("PATCH", path, {"name": HOSTILE.upper()}, status=400)
-    assert response["detail"] == "Business process already exists"
-    assert pestle.manage(
-        "PATCH", "/v1/pestle/business-processes/nope", {"name": "X"}, status=400
-    ) == {"detail": "business_process_id must be a UUID"}
-    assert pestle.manage(
-        "PATCH",
-        f"/v1/pestle/business-processes/{uuid.uuid4()}",
-        {"name": "X"},
-        status=404,
-    ) == {"detail": "Business process not found"}
-    history = pestle.db.query(EntityChangelog.action).filter_by(
-        entity_id=uuid.UUID(payroll["id"])
-    )
-    assert sorted(action for (action,) in history) == ["created", "updated"]
-    assert pestle.manage("DELETE", path) == {"ok": True}
-    assert (
-        pestle.db.query(EntityChangelog)
-        .filter_by(entity_id=uuid.UUID(payroll["id"]), action="deleted")
-        .count()
-        == 1
-    )
-
-
-def test_items_link_business_processes_and_clauses_by_relevance(pestle):
+def test_items_link_clauses_and_controls_by_relevance(pestle):
     item = _item(pestle)
-    payroll = pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": "Payroll"}
-    )
-    sales = pestle.manage("POST", "/v1/pestle/business-processes", {"name": "Sales"})
-    support = pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": "Support"}
-    )
     path = f"/v1/pestle/items/{item['id']}"
-
-    initial = pestle.read("GET", f"{path}/business-processes")
-    assert {row["relevance"]["code"] for row in initial["items"]} == {"na"}
-    linked = pestle.manage(
-        "PATCH",
-        f"{path}/business-processes",
-        {
-            "items": [
-                {"business_process_id": payroll["id"], "relevance_code": "high"},
-                {
-                    "business_process_id": payroll["id"],
-                    "relevance_code": "low",
-                },  # first wins
-                {"business_process_id": sales["id"], "relevance_code": "2"},
-                {"business_process_id": support["id"], "relevance_code": "n/a"},
-                {"relevance_code": "high"},
-            ]
-        },
-    )
-    relevance = {
-        row["business_process"]["name"]: row["relevance"]["code"]
-        for row in linked["items"]
-    }
-    assert relevance == {"Payroll": "high", "Sales": "medium", "Support": "na"}
-    assert linked["item"]["business_process_count"] == 2
-
-    # A failed replacement leaves the existing links in place.
-    response = pestle.manage(
-        "PATCH",
-        f"{path}/business-processes",
-        {
-            "items": [
-                {"business_process_id": str(uuid.uuid4()), "relevance_code": "high"}
-            ]
-        },
-        status=404,
-    )
-    assert response["detail"] == "Business process not found"
-    assert pestle.manage(
-        "PATCH",
-        f"{path}/business-processes",
-        {"items": [{"business_process_id": sales["id"], "relevance_code": "urgent"}]},
-        status=400,
-    ) == {"detail": "Unknown relevance_code"}
-    assert pestle.db.query(PestleBusinessProcessRelevance).count() == 2
 
     clauses = pestle.read("GET", f"{path}/clauses")
     assert [row["clause"]["ref"] for row in clauses["items"]] == ["4.1", "4.2", "10"]
+    assert {row["relevance"]["code"] for row in clauses["items"]} == {"na"}
     response = pestle.manage(
         "PATCH",
         f"{path}/clauses",
@@ -500,15 +389,53 @@ def test_items_link_business_processes_and_clauses_by_relevance(pestle):
     }
     assert codes == {"4.1": "high", "4.2": "na", "10": "low"}
 
+    # Controls are rated the same way, in the factor's own framework.
+    controls = pestle.read("GET", f"{path}/controls")
+    assert [row["control"]["ref"] for row in controls["items"]] == ["A.2", "A.10"]
+    assert {row["relevance"]["code"] for row in controls["items"]} == {"na"}
+    linked = pestle.manage(
+        "PATCH",
+        f"{path}/controls",
+        {
+            "items": [
+                {"control_id": str(pestle.logging.id), "relevance_code": "high"},
+                # The first rating of a control wins.
+                {"control_id": str(pestle.logging.id), "relevance_code": "low"},
+                {"control_id": str(pestle.access.id), "relevance_code": "n/a"},
+                {"relevance_code": "high"},
+            ]
+        },
+    )
+    assert {
+        row["control"]["ref"]: row["relevance"]["code"] for row in linked["items"]
+    } == {"A.2": "na", "A.10": "high"}
+    assert linked["item"]["control_count"] == 1
+
+    # A failed replacement leaves the existing links in place.
+    for control_id in (pestle.elsewhere.id, pestle.clause_row.id, uuid.uuid4()):
+        response = pestle.manage(
+            "PATCH",
+            f"{path}/controls",
+            {"items": [{"control_id": str(control_id), "relevance_code": "high"}]},
+            status=404,
+        )
+        assert response["detail"] == "Control not found"
+    assert pestle.manage(
+        "PATCH",
+        f"{path}/controls",
+        {"items": [{"control_id": str(pestle.access.id), "relevance_code": "urgent"}]},
+        status=400,
+    ) == {"detail": "Unknown relevance_code"}
+    assert pestle.db.query(PestleControlRelevance).count() == 1
+
     detail = pestle.read("GET", path)
-    assert [bp["business_process"]["name"] for bp in detail["business_processes"]] == [
-        "Payroll",
-        "Sales",
-    ]
     assert [c["clause"]["ref"] for c in detail["clauses"]] == ["4.1", "10"]
+    assert [
+        (c["control"]["ref"], c["relevance"]["code"]) for c in detail["controls"]
+    ] == [("A.10", "high")]
     # Related controls come through clauses with a relevance other than N/A.
     assert [c["ref"] for c in detail["related_controls"]] == ["A.2", "A.10"]
-    assert detail["clause_count"] == 2
+    assert (detail["clause_count"], detail["control_count"]) == (2, 1)
 
     clause_view = pestle.read("GET", f"/v1/clauses/{pestle.context.id}/pestle")
     assert clause_view["clause"]["ref"] == "4.1"
@@ -524,9 +451,30 @@ def test_items_link_business_processes_and_clauses_by_relevance(pestle):
         "detail": "clause_id must be a UUID"
     }
 
+    control_view = pestle.read("GET", f"/v1/controls/{pestle.logging.id}/pestle")
+    assert control_view["control"]["ref"] == "A.10"
+    assert [
+        (row["pestle_item"]["id"], row["relevance"]["code"])
+        for row in control_view["items"]
+    ] == [(item["id"], "high")]
+    assert pestle.read("GET", f"/v1/controls/{pestle.access.id}/pestle")["items"] == []
+    assert pestle.read("GET", f"/v1/controls/{uuid.uuid4()}/pestle", status=404) == {
+        "detail": "Control not found"
+    }
+    assert pestle.read("GET", "/v1/controls/nope/pestle", status=400) == {
+        "detail": "control_id must be a UUID"
+    }
+
     history = pestle.read("GET", f"{path}/changelog")["items"]
     paths = {entry["request_path"] for entry in history}
-    assert {f"{path}/business-processes", f"{path}/clauses"} <= paths
+    assert {f"{path}/controls", f"{path}/clauses"} <= paths
+    recorded = next(e for e in history if e["request_path"] == f"{path}/controls")
+    change = next(c for c in recorded["changes"] if c["field"] == "controls")
+    assert [(c["ref"], c["relevance"]) for c in change["after"]] == [("A.10", "1 High")]
+
+    # Deleting the factor removes its links with it.
+    pestle.manage("DELETE", path)
+    assert pestle.db.query(PestleControlRelevance).count() == 0
 
 
 def test_visualisations_summarise_items_and_links(pestle):
@@ -539,14 +487,11 @@ def test_visualisations_summarise_items_and_links(pestle):
         overall_relevance_code="medium",
     )
     _item(pestle, framework="B", item="Elsewhere")
-    process = pestle.manage(
-        "POST", "/v1/pestle/business-processes", {"name": "Payroll"}
-    )
     path = f"/v1/pestle/items/{legal['id']}"
     pestle.manage(
         "PATCH",
-        f"{path}/business-processes",
-        {"items": [{"business_process_id": process["id"], "relevance_code": "high"}]},
+        f"{path}/controls",
+        {"items": [{"control_id": str(pestle.access.id), "relevance_code": "high"}]},
     )
     pestle.manage(
         "PATCH",
@@ -564,10 +509,7 @@ def test_visualisations_summarise_items_and_links(pestle):
     assert [
         (link["clause_ref"], link["relevance_code"]) for link in view["clause_links"]
     ] == [("4.1", "medium")]
-    assert [
-        (link["business_process"], link["relevance_code"])
-        for link in view["process_links"]
-    ] == [("Payroll", "high")]
+    assert "control_links" not in view
     empty = pestle.read("GET", "/v1/pestle/visualisations", framework="C")
     assert empty["items"] == [] and empty["clause_links"] == []
     assert pestle.read(

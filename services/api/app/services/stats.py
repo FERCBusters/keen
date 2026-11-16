@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.cache import cached_json
 from app.core.config import settings
-from app.core.datetime_utils import after_inclusive_date, utc_now_naive
+from app.core.datetime_utils import after_inclusive_date, to_utc_naive, utc_now_naive
 from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _control_upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
@@ -519,12 +519,6 @@ def _stats_events_timeseries(
         dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
-    def _naive_utc(dt: datetime) -> datetime:
-        """Convert an aware datetime to a naive UTC datetime (for DB comparisons)."""
-        if dt.tzinfo is None:
-            return dt
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
-
     def _floor(dt: datetime, unit: str) -> datetime:
         unit = (unit or "day").strip().lower()
         if unit == "day":
@@ -558,11 +552,11 @@ def _stats_events_timeseries(
         # supplied bound is comparable with a defaulted one.
         if end_ts is None:
             end_ts = utc_now_naive()
-        end_ts = _naive_utc(end_ts)
+        end_ts = to_utc_naive(end_ts)
         if start_ts is None:
             days = max(1, min(int(days or 120), 3650))
             start_ts = end_ts - timedelta(days=days)
-        start_ts = _naive_utc(start_ts)
+        start_ts = to_utc_naive(start_ts)
         if start_ts > end_ts:
             start_ts, end_ts = end_ts, start_ts
 

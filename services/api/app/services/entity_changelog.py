@@ -16,11 +16,11 @@ from app.db.models import (
     ControlOwner,
     EntityChangelog,
     FrameworkClause,
-    PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
     PestleClauseRelevance,
+    PestleControlRelevance,
     PestleItem,
     Risk,
+    RiskClauseLink,
     RiskControlLink,
     User,
 )
@@ -30,6 +30,7 @@ from app.services.control_refs import control_summary
 _CHANGE_FIELD_LABELS = {
     "agenda_minutes_notes": "Agenda/minutes/notes",
     "access_control_matrix": "Access control matrix",
+    # The next three label history recorded before managed hosting accounts went.
     "account_id": "hosting account ID",
     "aws_accounts": "managed hosting accounts",
     "aws_account_ids": "managed hosting accounts",
@@ -38,7 +39,6 @@ _CHANGE_FIELD_LABELS = {
     "asset": "Asset",
     "attendees": "Attendees",
     "apologies": "Apologies",
-    "business_process": "Business process",
     "completion_method": "Completion method",
     "completion_target_date": "Completion target date",
     "controls": "Linked controls",
@@ -102,13 +102,11 @@ _CHANGE_FIELD_LABELS = {
     "category": "Category",
     "evidence_mappings": "Evidence mappings",
     "framework": "Framework",
-    "impact_score": "Impact score",
     "nature": "Nature of interest",
     "lens": "Lens",
     "item": "Item",
     "overall_relevance": "Overall relevance",
     "rationale": "Rationale",
-    "business_processes": "Business process relevance",
     "communications": "Communications",
     "mitigator_context": "Keen Mitigator context",
     "in_scope": "Scope",
@@ -119,18 +117,14 @@ _CHANGE_FIELD_LABELS = {
     "owner_user_id": "Owner",
     "parent": "Parent clause",
     "ref": "Reference",
-    "residual_impact_score": "Residual impact score",
     "residual_risk_score": "Residual risk score",
-    "residual_vulnerability_score": "Residual vulnerability score",
     "risk_score": "Risk score",
     "risk_types": "Risk types",
     "subcategory": "Subcategory",
-    "threat_score": "Threat score",
     "threat_summary": "Threat summary",
     "title": "Title",
     "type": "Type",
     "upstream_url": "Upstream guidance URL",
-    "vulnerability_score": "Vulnerability score",
 }
 
 _ENTITY_LABELS = {
@@ -141,6 +135,7 @@ _ENTITY_LABELS = {
     "isms_asset": "ISMS Asset",
     "isms_license": "ISMS License",
     "isms_access_control_matrix": "ISMS access control matrix",
+    # Managed hosting accounts were removed; their history is still shown.
     "isms_aws_account": "ISMS Managed Hosting Account",
     "isms_meeting": "ISMS meeting",
     "isms_effectiveness_measure": "ISMS effectiveness measure",
@@ -149,7 +144,6 @@ _ENTITY_LABELS = {
     "clause": "Clause",
     "risk": "CIA triad risk",
     "pestle_item": "PESTLE(E) item",
-    "pestle_business_process": "PESTLE(E) business process",
     "story": "Story",
     "quiz": "Quiz",
 }
@@ -481,6 +475,25 @@ def _risk_controls(
     return out
 
 
+def _risk_clauses(
+    db: Session, risk_id: uuid.UUID, framework: str | None = None
+) -> list[dict[str, Any]]:
+    qry = db.query(RiskClauseLink).filter(RiskClauseLink.risk_id == risk_id)
+    if framework:
+        qry = qry.filter(RiskClauseLink.framework_slug == framework)
+    out = [
+        {
+            "id": str(link.clause.id),
+            "framework": link.framework_slug,
+            "ref": link.clause.ref,
+            "title": link.clause.title,
+        }
+        for link in qry.all()
+    ]
+    out.sort(key=lambda x: (x["framework"], _ref_sort_key(x["ref"] or "")))
+    return out
+
+
 def risk_changelog_state(
     db: Session, risk_or_id: Risk | uuid.UUID | str, *, framework: str | None = None
 ) -> dict[str, Any] | None:
@@ -524,16 +537,12 @@ def risk_changelog_state(
         if risk.risk_owner_role_id
         else None,
         "threat_summary": risk.threat_summary,
-        "threat_score": risk.threat_score,
-        "vulnerability_score": risk.vulnerability_score,
-        "impact_score": risk.impact_score,
         "risk_score": risk.risk_score,
-        "residual_vulnerability_score": risk.residual_vulnerability_score,
-        "residual_impact_score": risk.residual_impact_score,
         "residual_risk_score": risk.residual_risk_score,
         "note": risk.note,
         "mitigator_context": risk.mitigator_context or {},
         "controls": _risk_controls(db, risk.id, framework=framework),
+        "clauses": _risk_clauses(db, risk.id, framework=framework),
         "created_at": risk.created_at.isoformat() if risk.created_at else None,
         "updated_at": risk.updated_at.isoformat() if risk.updated_at else None,
     }
@@ -542,28 +551,6 @@ def risk_changelog_state(
 def _pestle_relevance_label(link: Any) -> str | None:
     rel = getattr(link, "relevance", None)
     return str(getattr(rel, "label", None) or getattr(rel, "code", None) or "") or None
-
-
-def _pestle_business_process_links(
-    db: Session, item_id: uuid.UUID
-) -> list[dict[str, Any]]:
-    rows = (
-        db.query(PestleBusinessProcessRelevance)
-        .filter(PestleBusinessProcessRelevance.pestle_item_id == item_id)
-        .all()
-    )
-    out: list[dict[str, Any]] = []
-    for link in rows:
-        proc = link.business_process
-        out.append(
-            {
-                "id": str(proc.id),
-                "name": proc.name,
-                "relevance": _pestle_relevance_label(link),
-            }
-        )
-    out.sort(key=lambda x: (x.get("name") or "").lower())
-    return out
 
 
 def _pestle_clause_links(db: Session, item_id: uuid.UUID) -> list[dict[str, Any]]:
@@ -584,6 +571,25 @@ def _pestle_clause_links(db: Session, item_id: uuid.UUID) -> list[dict[str, Any]
             }
         )
     out.sort(key=lambda x: (_ref_sort_key(x.get("ref") or ""), x.get("title") or ""))
+    return out
+
+
+def _pestle_control_links(db: Session, item_id: uuid.UUID) -> list[dict[str, Any]]:
+    rows = (
+        db.query(PestleControlRelevance)
+        .filter(PestleControlRelevance.pestle_item_id == item_id)
+        .all()
+    )
+    out = [
+        {
+            "id": str(link.control.id),
+            "ref": link.control.ref,
+            "title": link.control.title,
+            "relevance": _pestle_relevance_label(link),
+        }
+        for link in rows
+    ]
+    out.sort(key=lambda x: (_ref_sort_key(x["ref"] or ""), x["title"] or ""))
     return out
 
 
@@ -609,54 +615,11 @@ def pestle_item_changelog_state(
         "item": item.item,
         "overall_relevance": getattr(rel, "label", None) or getattr(rel, "code", None),
         "rationale": item.rationale,
-        "business_processes": _pestle_business_process_links(db, item.id),
         "clauses": _pestle_clause_links(db, item.id),
+        "controls": _pestle_control_links(db, item.id),
         "affected": affected_labels(list(item.affected_links)),
         "created_at": item.created_at.isoformat() if item.created_at else None,
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
-    }
-
-
-def pestle_business_process_changelog_state(
-    db: Session, process_or_id: PestleBusinessProcess | uuid.UUID | str
-) -> dict[str, Any] | None:
-    process = (
-        process_or_id if isinstance(process_or_id, PestleBusinessProcess) else None
-    )
-    if process is None:
-        pid = (
-            process_or_id
-            if isinstance(process_or_id, uuid.UUID)
-            else uuid.UUID(str(process_or_id))
-        )
-        process = (
-            db.query(PestleBusinessProcess)
-            .filter(PestleBusinessProcess.id == pid)
-            .one_or_none()
-        )
-    if process is None:
-        return None
-    links: list[dict[str, Any]] = []
-    for link in list(process.pestle_links or []):
-        item = link.pestle_item
-        links.append(
-            {
-                "id": str(item.id),
-                "type": item.type,
-                "lens": item.lens,
-                "item": item.item,
-                "relevance": _pestle_relevance_label(link),
-            }
-        )
-    links.sort(
-        key=lambda x: (x.get("type") or "", x.get("lens") or "", x.get("item") or "")
-    )
-    return {
-        "id": str(process.id),
-        "name": process.name,
-        "business_processes": links,
-        "created_at": process.created_at.isoformat() if process.created_at else None,
-        "updated_at": process.updated_at.isoformat() if process.updated_at else None,
     }
 
 

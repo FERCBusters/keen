@@ -28,7 +28,6 @@ ISMS_OWNERS = {
     "documents": "documents",
     "organisation": "organisation",
     "assets": "assets",
-    "business_processes": "business_processes",
     "access_control": "access_control",
     "effectiveness": "effectiveness",
     "meetings": "meetings",

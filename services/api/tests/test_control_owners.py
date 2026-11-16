@@ -66,7 +66,7 @@ def test_administrators_choose_owners_whom_everyone_sees(lab):
 
     clause = rows["4.1"].id
     assert put("clause", clause, [ada.id]).status_code == 200
-    assert reader.get(f"/v1/clauses/{clause}").json()["owners"] == [
+    assert reader.get(f"/v1/clauses/{clause}/controls").json()["clause"]["owners"] == [
         {"id": str(ada.id), "username": ada.username}
     ]
     # Clearing leaves none.

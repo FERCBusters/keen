@@ -18,8 +18,6 @@ from app.db.models import (
     ControlItem,
     IsmsPerson,
     IsmsVendor,
-    PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
     PestleClauseRelevance,
     PestleItem,
     Risk,
@@ -33,27 +31,10 @@ from app.services import features
 from app.services.affected import KIND_FEATURES, record_out
 from app.services.control_refs import clause_summary, control_summary
 from app.services.mitigator_catalogue import catalogue_tokens, rank_library
+from app.services.pestle import PESTLE_TYPES
 
 _TOKEN_RE = scan_pattern(r"[a-z0-9][a-z0-9+._/-]*", re.I)
 RISK_TYPES = {"Confidentiality", "Integrity", "Availability"}
-_PESTLE_TYPES = {
-    "Political",
-    "Economical",
-    "Social",
-    "Technological",
-    "Legal",
-    "Environmental",
-    "Ethical",
-}
-_BUSINESS_PROCESS_NAMES = [
-    "Board Strategy",
-    "Business Development",
-    "Development Operations",
-    "Implementation and Support",
-    "Platform Security and Operations",
-    "Software Development",
-    "Architecture and requirements",
-]
 
 
 def _default_rules_path() -> str:
@@ -338,7 +319,7 @@ def _detect_pestle_types(
         canonical = next(
             (
                 value
-                for value in _PESTLE_TYPES
+                for value in PESTLE_TYPES
                 if value.lower() == str(pestle_type).lower()
             ),
             None,
@@ -377,83 +358,7 @@ def _detect_pestle_types(
     return out, signals, terms
 
 
-def _detect_business_processes(
-    db: Session,
-    *,
-    text_blob: str,
-    rules: dict[str, Any],
-    pestle_hits: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    by_name = {
-        _norm_text(row.name): row
-        for row in db.query(PestleBusinessProcess)
-        .filter(PestleBusinessProcess.name.in_(_BUSINESS_PROCESS_NAMES))
-        .all()
-    }
-    scored: list[dict[str, Any]] = []
-    signals: list[dict[str, Any]] = []
-    terms: list[str] = []
-    hit_types = {str(h.get("type") or "") for h in pestle_hits}
-
-    for name, cfg in (rules.get("pestle_business_processes") or {}).items():
-        canonical = next(
-            (bp for bp in _BUSINESS_PROCESS_NAMES if bp.lower() == str(name).lower()),
-            str(name),
-        )
-        matched = [t for t in cfg.get("terms") or [] if _contains_term(text_blob, t)]
-        type_bonus = [t for t in cfg.get("pestle_types") or [] if t in hit_types]
-        if not matched and not type_bonus:
-            continue
-        score = len(matched) * 6 + len(type_bonus) * 4
-        row = by_name.get(_norm_text(canonical))
-        item = {
-            "id": str(row.id) if row else None,
-            "name": canonical,
-            "score": score,
-            "matched_terms": _unique_strs(matched + type_bonus)[:12],
-            "reason": cfg.get("reason")
-            or "The scenario matched this business process.",
-            "relevance_code": "high" if score >= 10 else "medium",
-            "exists": bool(row),
-        }
-        scored.append(item)
-        terms.extend(cfg.get("terms") or [])
-        signals.append(
-            {
-                "kind": "business_process",
-                "label": canonical,
-                "matched_terms": item["matched_terms"],
-                "reason": item["reason"],
-            }
-        )
-
-    if not scored and pestle_hits:
-        # A conservative default keeps a freshly-created item useful without
-        # pretending to know operational relevance.
-        row = by_name.get(_norm_text("Board Strategy"))
-        scored.append(
-            {
-                "id": str(row.id) if row else None,
-                "name": "Board Strategy",
-                "score": 1,
-                "matched_terms": [],
-                "reason": "Default governance process for a newly identified PESTLE(E) scenario.",
-                "relevance_code": "medium",
-                "exists": bool(row),
-            }
-        )
-
-    scored.sort(
-        key=lambda row: (-float(row.get("score") or 0), str(row.get("name") or ""))
-    )
-    return scored[:4], signals, terms
-
-
 def _pestle_item_doc(row: PestleItem) -> str:
-    business_processes = " ".join(
-        getattr(link.business_process, "name", "") or ""
-        for link in (row.business_process_links or [])
-    )
     clauses = " ".join(
         f"{getattr(link.clause, 'ref', '')} {getattr(link.clause, 'title', '')}"
         for link in (row.clause_links or [])
@@ -465,7 +370,6 @@ def _pestle_item_doc(row: PestleItem) -> str:
             row.rationale,
             row.type,
             row.lens,
-            business_processes,
             clauses,
         ]
     )
@@ -479,11 +383,6 @@ def _pestle_item_out(
         for link in (row.clause_links or [])
         if getattr(getattr(link, "relevance", None), "code", None) != "na"
     ]
-    bp_links = [
-        link
-        for link in (row.business_process_links or [])
-        if getattr(getattr(link, "relevance", None), "code", None) != "na"
-    ]
     return {
         "id": str(row.id),
         "framework": row.framework_slug,
@@ -495,21 +394,6 @@ def _pestle_item_out(
         "confidence": _confidence(score, strong=28, medium=14),
         "matched_terms": _unique_strs(matched_terms)[:12],
         "reasons": _unique_strs(reasons)[:4],
-        "business_processes": [
-            {
-                "id": str(link.business_process_id),
-                "name": getattr(link.business_process, "name", ""),
-                "relevance_code": getattr(
-                    getattr(link, "relevance", None), "code", None
-                ),
-                "relevance_label": getattr(
-                    getattr(link, "relevance", None), "label", None
-                ),
-            }
-            for link in sorted(
-                bp_links, key=lambda x: getattr(x.business_process, "name", "")
-            )
-        ],
         "clauses": [
             {
                 "clause": clause_summary(link.clause),
@@ -542,9 +426,6 @@ def _search_pestle_items(
     rows = (
         db.query(PestleItem)
         .options(
-            selectinload(PestleItem.business_process_links).joinedload(
-                PestleBusinessProcessRelevance.business_process
-            ),
             selectinload(PestleItem.clause_links).joinedload(
                 PestleClauseRelevance.clause
             ),
@@ -563,7 +444,7 @@ def _search_pestle_items(
             reasons.append(f"The scenario matched the {row.type} PESTLE(E) lens.")
         if matched_terms:
             reasons.append(
-                "The PESTLE(E) item text, rationale, clauses or business processes matched the issue keywords."
+                "The PESTLE(E) item text, rationale or clauses matched the issue keywords."
             )
         # Exact-ish duplicate guard: if the user's sentence contains the item name,
         # or the item name contains a meaningful issue phrase, push it up.
@@ -599,7 +480,6 @@ def _draft_pestle_item(
     framework: str,
     issue: str,
     pestle_hits: list[dict[str, Any]],
-    business_processes: list[dict[str, Any]],
     existing_pestle_items: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     if not pestle_hits and not existing_pestle_items:
@@ -637,7 +517,6 @@ def _draft_pestle_item(
         "item": _short_issue_title(issue),
         "overall_relevance_code": "medium",
         "rationale": "\n".join([line for line in rationale_lines if line]).strip(),
-        "business_processes": [bp for bp in business_processes if bp.get("id")],
     }
 
 
@@ -908,20 +787,12 @@ def analyse_risk_mitigation(
         rules=rules,
         active_flags=active_flags,
     )
-    business_processes, business_process_signals, bp_terms = _detect_business_processes(
-        db,
-        text_blob=text_blob,
-        rules=rules,
-        pestle_hits=pestle_hits,
-    )
     affected_suggestions, affected_signals, affected_terms = _suggest_affected(
         db, text_blob=text_blob, rules=rules
     )
     signals.extend(pestle_signals)
-    signals.extend(business_process_signals)
     signals.extend(affected_signals)
     terms_for_matching.extend(pestle_terms)
-    terms_for_matching.extend(bp_terms)
     terms_for_matching.extend(affected_terms)
 
     # Let the user's own words influence matches as well, without letting very short
@@ -1123,7 +994,6 @@ def analyse_risk_mitigation(
         framework=framework,
         issue=threat_summary,
         pestle_hits=pestle_hits,
-        business_processes=business_processes,
         existing_pestle_items=existing_pestle_items,
     )
 
@@ -1171,11 +1041,6 @@ def analyse_risk_mitigation(
         "subcategory_name": subcategory_name or None,
         "risk_types": selected_types,
         "threat_summary": threat_summary,
-        "threat_score": 1,
-        "vulnerability_score": 1,
-        "impact_score": 1,
-        "residual_vulnerability_score": 1,
-        "residual_impact_score": 1,
         "note": note,
         "framework": framework,
         "controls": selected_control_ids,
@@ -1193,7 +1058,6 @@ def analyse_risk_mitigation(
         "control_suggestions": suggestions,
         "library_suggestions": library_suggestions,
         "pestle_hits": pestle_hits,
-        "business_process_suggestions": business_processes,
         "pestle_suggestions": existing_pestle_items,
         "affected_suggestions": affected_suggestions,
         "existing_matches": {

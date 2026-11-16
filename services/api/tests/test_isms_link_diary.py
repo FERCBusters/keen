@@ -294,27 +294,6 @@ def test_risk_entries_carry_no_threat_summary(db):
     assert _automatic(db, entry.id) == {"A.8.2": "editor"}
 
 
-def test_deleting_an_asset_from_the_risk_register_withdraws_its_links(db, storage):
-    from app.db.models import IsmsEntityControlLink
-    from app.services.risks import delete_risk_asset
-
-    editor = _user(db, "editor")
-    asset = _asset(db)
-    _link(db, asset, editor, "A.5.1", entity_type="asset")
-    entry = _entry(db, "asset", asset.id)
-    assert _automatic(db, entry.id) == {"A.5.1": "editor"}
-
-    delete_risk_asset(asset_id=str(asset.id), user=editor, db=db)
-    assert _entry(db, "asset", asset.id) is None
-    assert db.query(Mapping).filter_by(event_id=entry.id).count() == 0
-    assert (
-        db.query(IsmsEntityControlLink)
-        .filter_by(entity_type="asset", entity_id=asset.id)
-        .count()
-        == 0
-    )
-
-
 def test_deleting_a_record_withdraws_its_entry(db, storage):
     editor = _user(db, "editor")
     document = _document(db)
@@ -597,9 +576,8 @@ def test_assembled_reads_follow_the_source_record_rules(keen):  # noqa: F811
     assert created.status_code == 200, created.text
     risk_manager = keen.client(keen.user("risk.manage"))
     linked = risk_manager.patch(
-        f"/v1/risks/{risk.id}/controls",
-        params={"framework": FW},
-        json={"controls": ["A.5.9"]},
+        f"/v1/risks/{risk.id}",
+        json={"framework": FW, "controls": ["A.5.9"]},
         headers=unsafe(risk_manager),
     )
     assert linked.status_code == 200, linked.text
@@ -616,12 +594,9 @@ def test_assembled_reads_follow_the_source_record_rules(keen):  # noqa: F811
         listing = client.get("/v1/events", params={"source": "diary", "framework": FW})
         assert listing.status_code == 200, listing.text
         assert {uuid.UUID(item["id"]) for item in listing.json()["items"]} == visible
-        evidence = client.get(f"/v1/controls/{control.id}/evidence")
-        assert evidence.status_code == 200, evidence.text
         for entry in (document_entry, risk_entry):
             detail = client.get(f"/v1/events/{entry.id}", params={"framework": FW})
             assert detail.status_code == (200 if entry.id in visible else 404)
-            assert (str(entry.id) in evidence.text) is (entry.id in visible)
 
 
 CSV_HEADER = "asset,category,subcategory,threat_summary,risk_types,controls\n"

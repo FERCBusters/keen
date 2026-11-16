@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.agents import server_keys
 from app.agents.credentials import (
     bounded_lock_wait,
-    digest,
     live_only,
     reauthenticate,
     revoke_keys,
@@ -25,6 +24,7 @@ from app.core.datetime_utils import utc_now_naive
 from app.core.valkey import get_valkey
 from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
 from app.security.agent_signatures import SignatureError, key_id, verify_proof
+from app.security.encoding import digest
 from app.security.rate_limit import address_window_allow, fixed_window_allow
 from app.security.regex import scan_pattern
 from app.services.context import ChangeContext

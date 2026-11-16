@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import math
 import secrets
@@ -28,6 +27,7 @@ from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.core.email_address import compared_mailbox, single_mailbox
 from app.db.models import OidcLoginState, User, UserIdentity, UserSsoEmail
+from app.security.encoding import digest
 from app.security.sso_http import client_options
 
 TOKEN_ENDPOINT_AUTH_METHODS = ("client_secret_basic", "client_secret_post")
@@ -54,7 +54,6 @@ class SsoProvider:
     username_claims: str = "preferred_username,email"
     allowed_email_domains: str = ""
     auto_provision: bool = False
-    auto_provision_role: str = "pending"
     auto_link_existing: bool = True
     token_endpoint_auth_method: str = "client_secret_basic"
     supports_id_token: bool = True
@@ -78,10 +77,6 @@ def _split_csv(value: str) -> list[str]:
     return [x.strip() for x in (value or "").split(",") if x.strip()]
 
 
-def _setting(name: str, default: Any = "") -> Any:
-    return getattr(settings, name, default)
-
-
 def _first_nonempty(*values: Any) -> str:
     for v in values:
         s = str(v or "").strip()
@@ -93,42 +88,35 @@ def _first_nonempty(*values: Any) -> str:
 def _oidc_provider() -> SsoProvider:
     return SsoProvider(
         key="oidc",
-        allowed_algs=tuple(
-            str(_setting("oidc_allowed_algs", "RS256")).replace(",", " ").split()
-        ),
+        allowed_algs=tuple(str(settings.oidc_allowed_algs).replace(",", " ").split()),
         kind="oidc",
-        label=_first_nonempty(_setting("oidc_provider_label", ""), "OpenID Connect"),
-        enabled=bool(_setting("oidc_enabled", False)),
-        client_id=_first_nonempty(_setting("oidc_client_id", "")),
-        client_secret=_first_nonempty(_setting("oidc_client_secret", "")),
-        authorization_endpoint=_first_nonempty(
-            _setting("oidc_authorization_endpoint", "")
-        ),
-        token_endpoint=_first_nonempty(_setting("oidc_token_endpoint", "")),
-        jwks_uri=_first_nonempty(_setting("oidc_jwks_uri", "")),
-        issuer=_first_nonempty(_setting("oidc_issuer", "")),
-        userinfo_endpoint=_first_nonempty(_setting("oidc_userinfo_endpoint", "")),
-        scopes=_first_nonempty(_setting("oidc_scopes", ""), "openid email profile"),
-        redirect_uri=_first_nonempty(_setting("oidc_redirect_uri", "")),
-        end_session_endpoint=_first_nonempty(_setting("oidc_end_session_endpoint", "")),
+        label=_first_nonempty(settings.oidc_provider_label, "OpenID Connect"),
+        enabled=bool(settings.oidc_enabled),
+        client_id=_first_nonempty(settings.oidc_client_id),
+        client_secret=_first_nonempty(settings.oidc_client_secret),
+        authorization_endpoint=_first_nonempty(settings.oidc_authorization_endpoint),
+        token_endpoint=_first_nonempty(settings.oidc_token_endpoint),
+        jwks_uri=_first_nonempty(settings.oidc_jwks_uri),
+        issuer=_first_nonempty(settings.oidc_issuer),
+        userinfo_endpoint=_first_nonempty(settings.oidc_userinfo_endpoint),
+        scopes=_first_nonempty(settings.oidc_scopes, "openid email profile"),
+        redirect_uri=_first_nonempty(settings.oidc_redirect_uri),
+        end_session_endpoint=_first_nonempty(settings.oidc_end_session_endpoint),
         post_logout_redirect_uri=_first_nonempty(
-            _setting("oidc_post_logout_redirect_uri", "")
+            settings.oidc_post_logout_redirect_uri
         ),
         username_claims=_first_nonempty(
-            _setting("oidc_username_claims", ""),
+            settings.oidc_username_claims,
             "preferred_username,email",
         ),
-        allowed_email_domains=_first_nonempty(
-            _setting("oidc_allowed_email_domains", "")
-        ),
-        auto_provision=bool(_setting("oidc_auto_provision", False)),
-        auto_provision_role="",
-        auto_link_existing=bool(_setting("oidc_auto_link_existing", True)),
+        allowed_email_domains=_first_nonempty(settings.oidc_allowed_email_domains),
+        auto_provision=bool(settings.oidc_auto_provision),
+        auto_link_existing=bool(settings.oidc_auto_link_existing),
         token_endpoint_auth_method=_first_nonempty(
-            _setting("oidc_token_endpoint_auth_method", ""), "client_secret_basic"
+            settings.oidc_token_endpoint_auth_method, "client_secret_basic"
         ).lower(),
         supports_id_token=True,
-        id_token_leeway_seconds=int(_setting("oidc_id_token_leeway_seconds", 60) or 0),
+        id_token_leeway_seconds=int(settings.oidc_id_token_leeway_seconds or 0),
     )
 
 
@@ -136,49 +124,40 @@ def _google_provider() -> SsoProvider:
     return SsoProvider(
         key="google",
         kind="oidc",
-        label=_first_nonempty(_setting("google_provider_label", ""), "Google"),
-        enabled=bool(_setting("google_sso_enabled", False)),
-        client_id=_first_nonempty(_setting("google_client_id", "")),
-        client_secret=_first_nonempty(_setting("google_client_secret", "")),
+        label=_first_nonempty(settings.google_provider_label, "Google"),
+        enabled=bool(settings.google_sso_enabled),
+        client_id=_first_nonempty(settings.google_client_id),
+        client_secret=_first_nonempty(settings.google_client_secret),
         authorization_endpoint=_first_nonempty(
-            _setting("google_authorization_endpoint", ""),
+            settings.google_authorization_endpoint,
             "https://accounts.google.com/o/oauth2/v2/auth",
         ),
         token_endpoint=_first_nonempty(
-            _setting("google_token_endpoint", ""),
+            settings.google_token_endpoint,
             "https://oauth2.googleapis.com/token",
         ),
         jwks_uri=_first_nonempty(
-            _setting("google_jwks_uri", ""),
+            settings.google_jwks_uri,
             "https://www.googleapis.com/oauth2/v3/certs",
         ),
         issuer=_first_nonempty(
-            _setting("google_issuer", ""),
+            settings.google_issuer,
             "https://accounts.google.com,accounts.google.com",
         ),
         userinfo_endpoint=_first_nonempty(
-            _setting("google_userinfo_endpoint", ""),
+            settings.google_userinfo_endpoint,
             "https://openidconnect.googleapis.com/v1/userinfo",
         ),
-        scopes=_first_nonempty(_setting("google_scopes", ""), "openid email profile"),
-        redirect_uri=_first_nonempty(_setting("google_redirect_uri", "")),
-        end_session_endpoint=_first_nonempty(
-            _setting("google_end_session_endpoint", "")
-        ),
+        scopes=_first_nonempty(settings.google_scopes, "openid email profile"),
+        redirect_uri=_first_nonempty(settings.google_redirect_uri),
+        end_session_endpoint=_first_nonempty(settings.google_end_session_endpoint),
         post_logout_redirect_uri=_first_nonempty(
-            _setting("google_post_logout_redirect_uri", "")
+            settings.google_post_logout_redirect_uri
         ),
-        username_claims=_first_nonempty(
-            _setting("google_username_claims", ""), "email"
-        ),
-        allowed_email_domains=_first_nonempty(
-            _setting("google_allowed_email_domains", "")
-        ),
-        auto_provision=bool(_setting("google_auto_provision", False)),
-        auto_provision_role=_first_nonempty(
-            _setting("google_auto_provision_role", ""), "pending"
-        ),
-        auto_link_existing=bool(_setting("google_auto_link_existing", True)),
+        username_claims=_first_nonempty(settings.google_username_claims, "email"),
+        allowed_email_domains=_first_nonempty(settings.google_allowed_email_domains),
+        auto_provision=bool(settings.google_auto_provision),
+        auto_link_existing=bool(settings.google_auto_link_existing),
         token_endpoint_auth_method="client_secret_post",
         supports_id_token=True,
     )
@@ -188,38 +167,33 @@ def _github_provider() -> SsoProvider:
     return SsoProvider(
         key="github",
         kind="github",
-        label=_first_nonempty(_setting("github_provider_label", ""), "GitHub"),
-        enabled=bool(_setting("github_sso_enabled", False)),
-        client_id=_first_nonempty(_setting("github_client_id", "")),
-        client_secret=_first_nonempty(_setting("github_client_secret", "")),
+        label=_first_nonempty(settings.github_provider_label, "GitHub"),
+        enabled=bool(settings.github_sso_enabled),
+        client_id=_first_nonempty(settings.github_client_id),
+        client_secret=_first_nonempty(settings.github_client_secret),
         authorization_endpoint=_first_nonempty(
-            _setting("github_authorization_endpoint", ""),
+            settings.github_authorization_endpoint,
             "https://github.com/login/oauth/authorize",
         ),
         token_endpoint=_first_nonempty(
-            _setting("github_token_endpoint", ""),
+            settings.github_token_endpoint,
             "https://github.com/login/oauth/access_token",
         ),
         userinfo_endpoint=_first_nonempty(
-            _setting("github_user_endpoint", ""), "https://api.github.com/user"
+            settings.github_user_endpoint, "https://api.github.com/user"
         ),
         emails_endpoint=_first_nonempty(
-            _setting("github_emails_endpoint", ""),
+            settings.github_emails_endpoint,
             "https://api.github.com/user/emails",
         ),
         issuer=_first_nonempty(
-            _setting("github_issuer", ""), "https://github.com/login/oauth"
+            settings.github_issuer, "https://github.com/login/oauth"
         ),
-        scopes=_first_nonempty(_setting("github_scopes", ""), "read:user user:email"),
-        redirect_uri=_first_nonempty(_setting("github_redirect_uri", "")),
-        allowed_email_domains=_first_nonempty(
-            _setting("github_allowed_email_domains", "")
-        ),
-        auto_provision=bool(_setting("github_auto_provision", False)),
-        auto_provision_role=_first_nonempty(
-            _setting("github_auto_provision_role", ""), "pending"
-        ),
-        auto_link_existing=bool(_setting("github_auto_link_existing", True)),
+        scopes=_first_nonempty(settings.github_scopes, "read:user user:email"),
+        redirect_uri=_first_nonempty(settings.github_redirect_uri),
+        allowed_email_domains=_first_nonempty(settings.github_allowed_email_domains),
+        auto_provision=bool(settings.github_auto_provision),
+        auto_link_existing=bool(settings.github_auto_link_existing),
         token_endpoint_auth_method="client_secret_post",
         supports_id_token=False,
     )
@@ -325,7 +299,7 @@ def _require_provider_config(provider_key: str | None) -> SsoProvider:
             continue
         scheme = urlsplit(value).scheme.lower()
         if scheme != "https" and not (
-            scheme == "http" and bool(_setting("oidc_allow_insecure_http", False))
+            scheme == "http" and bool(settings.oidc_allow_insecure_http)
         ):
             raise HTTPException(
                 status_code=500,
@@ -466,7 +440,7 @@ def sso_binding_cookie() -> str:
 
 
 def _browser_state(provider_key: str, secret: str) -> str:
-    return hashlib.sha256((provider_key + "\0" + secret).encode()).hexdigest()
+    return digest(provider_key + "\0" + secret)
 
 
 def set_sso_binding(response, request):

@@ -1,5 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
+import { linkedRisksTable, pestleFactorRows } from '/pages/risk-common.js';
 import {
   fmtTs,
   errorText,
@@ -17,6 +18,7 @@ import {
   showTableLoading,
   debounce,
   loadEntityChangelog,
+  applicabilityBadge,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -83,20 +85,21 @@ function activateClauseTab(tabName) {
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
 
-function pestleHref(itemId) {
-  return withFramework(
-    `/pestle_item.html?id=${encodeURIComponent(itemId)}`,
-    clause?.framework || framework,
-  );
-}
-
-function pestleRelevanceBadge(rel) {
-  const code = rel?.code || 'na';
-  let cls = 'text-bg-light';
-  if (code === 'high') cls = 'text-bg-danger';
-  else if (code === 'medium') cls = 'text-bg-warning';
-  else if (code === 'low') cls = 'text-bg-success';
-  return `<span class="badge ${cls}">${esc(rel?.label || 'N/A')}</span>`;
+// Risk readers see the risks linked to the clause; nobody else sees the card.
+async function loadClauseRisks() {
+  if (!featureEnabled(me, 'risk_cia')) return;
+  if (!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks)) return;
+  const card = document.getElementById('clauseRisksCard');
+  try {
+    const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/risks`);
+    document.getElementById('clauseRisksCount').textContent = String(data.items.length);
+    const view = document.getElementById('clauseRisksView');
+    if (data.items.length) view.replaceChildren(linkedRisksTable(data.items, data.framework));
+    else view.textContent = 'No risks are linked to this clause.';
+    card.style.display = '';
+  } catch (e) {
+    card.style.display = 'none';
+  }
 }
 
 async function loadClausePestle() {
@@ -114,19 +117,7 @@ async function loadClausePestle() {
         '<tr><td colspan="6" class="p-4 small-muted">No PESTLE(E) items are currently linked to this clause.</td></tr>';
       return;
     }
-    clausePestleRows.innerHTML = items
-      .map((row) => {
-        const it = row.pestle_item;
-        return `<tr>
-        <td>${esc(it.type || '')}</td>
-        <td>${esc(it.lens || '')}</td>
-        <td><a class="fw-semibold" href="${esc(pestleHref(it.id))}">${esc(it.item)}</a></td>
-        <td>${pestleRelevanceBadge(row.relevance)}</td>
-        <td>${pestleRelevanceBadge(it.overall_relevance)}</td>
-        <td class="wrap small-muted">${esc(it.rationale || '-')}</td>
-      </tr>`;
-      })
-      .join('');
+    clausePestleRows.replaceChildren(...pestleFactorRows(items, clause?.framework || framework));
   } catch (e) {
     clausePestleRows.innerHTML =
       '<tr><td colspan="6" class="p-4 text-danger">Failed to load PESTLE(E) relevance.</td></tr>';
@@ -219,13 +210,6 @@ function applicabilityLabel(v) {
   if (v === 'partially_applicable') return 'Partially applicable';
   if (v === 'applicable') return 'Applicable';
   return 'Not applicable';
-}
-
-function applicabilityBadge(v) {
-  if (v === 'partially_applicable')
-    return '<span class="badge text-bg-warning">Partially applicable</span>';
-  if (v === 'applicable') return '<span class="badge badge-soft">Applicable</span>';
-  return '<span class="badge text-bg-light">Not applicable</span>';
 }
 
 function linkedMap() {
@@ -465,6 +449,7 @@ async function load() {
   showTableLoading(rowsEl, 4, 'Loading linked controls');
   try {
     await reloadLinkedControls();
+    await loadClauseRisks();
     await loadClauseChangelog();
     await loadAdminControls();
   } catch (e) {

@@ -31,7 +31,6 @@ DEFINITIONS = (
     ("documents", "Policies and processes", "isms"),
     ("organisation", "Organisation", "isms"),
     ("assets", "Assets and licences", "isms"),
-    ("business_processes", "Business processes", "isms"),
     ("access_control", "Access control matrix", "isms"),
     ("effectiveness", "Effectiveness measures", "isms"),
     ("quizzes", "Quizzes", "isms"),
@@ -75,7 +74,6 @@ ENTITY_FEATURES = {
     "license": "assets",
     "swot": "swot",
     "org_node": "organisation",
-    "business_process": "business_processes",
     "story": "stories",
     "quiz": "quizzes",
 }
@@ -85,11 +83,9 @@ SECTION_FEATURES = {
     "org": "organisation",
     "assets": "assets",
     "access": "access_control",
-    "app": "access_control",
     "effectiveness": "effectiveness",
     "meetings": "meetings",
     "swot": "swot",
-    "business_processes": "business_processes",
     "people": "people",
     "vendors": "vendors",
 }

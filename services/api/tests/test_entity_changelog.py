@@ -7,10 +7,6 @@ from datetime import datetime
 import pytest
 from app.db.models import (
     EntityChangelog,
-    PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
-    PestleItem,
-    PestleRelevanceLevel,
 )
 from app.services import entity_changelog as log
 
@@ -109,67 +105,8 @@ def test_a_summary_names_the_first_four_changes_and_counts_the_rest(contract_db)
         log.clause_changelog_state,
         log.risk_changelog_state,
         log.pestle_item_changelog_state,
-        log.pestle_business_process_changelog_state,
     ],
 )
 def test_the_state_of_a_missing_entity_is_empty(contract_db, state):
     assert state(contract_db, uuid.uuid4()) is None
     assert state(contract_db, str(uuid.uuid4())) is None
-
-
-def test_a_business_process_state_lists_its_factors_in_order(contract_db):
-    high = PestleRelevanceLevel(code="high", label="1 High", sort_order=1)
-    low = PestleRelevanceLevel(code="low", label="3 Low", sort_order=3)
-    contract_db.add_all([high, low])
-    contract_db.flush()
-    process = PestleBusinessProcess(name="Payroll run")
-    legal = PestleItem(
-        framework_slug="A",
-        type="Legal",
-        lens="External",
-        item="Privacy law",
-        overall_relevance_id=high.id,
-    )
-    economic = PestleItem(
-        framework_slug="A",
-        type="Economical",
-        lens="External",
-        item="Interest rates",
-        overall_relevance_id=low.id,
-    )
-    contract_db.add_all([process, legal, economic])
-    contract_db.flush()
-    contract_db.add_all(
-        [
-            PestleBusinessProcessRelevance(
-                pestle_item_id=legal.id,
-                business_process_id=process.id,
-                relevance_id=high.id,
-            ),
-            PestleBusinessProcessRelevance(
-                pestle_item_id=economic.id,
-                business_process_id=process.id,
-                relevance_id=low.id,
-            ),
-        ]
-    )
-    contract_db.flush()
-    contract_db.expire_all()
-
-    state = log.pestle_business_process_changelog_state(contract_db, process.id)
-
-    assert state["name"] == "Payroll run"
-    assert [
-        (link["type"], link["item"], link["relevance"])
-        for link in state["business_processes"]
-    ] == [
-        ("Economical", "Interest rates", "3 Low"),
-        ("Legal", "Privacy law", "1 High"),
-    ]
-    # The same state is produced from the record itself.
-    assert (
-        log.pestle_business_process_changelog_state(
-            contract_db, contract_db.get(PestleBusinessProcess, process.id)
-        )
-        == state
-    )

@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
@@ -31,6 +31,7 @@ from app.db.models import (
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
     Mapping,
+    RiskClauseLink,
     RiskControlLink,
     User,
 )
@@ -79,10 +80,9 @@ _RECORD_PAGES = {
     "risk": "/risk.html?id={id}",
 }
 # Risks keep their control links in a table of their own.
-_DIRECT_LINKS: dict[
-    str, tuple[type[RiskControlLink], InstrumentedAttribute[uuid.UUID]]
-] = {
-    "risk": (RiskControlLink, RiskControlLink.risk_id),
+# Risks keep their control and clause links in their own tables.
+_DIRECT_LINKS: dict[str, tuple[type[RiskControlLink], type[RiskClauseLink]]] = {
+    "risk": (RiskControlLink, RiskClauseLink),
 }
 _SECTION_PAGES = {"org_node": "/isms.html?tab=org"}
 
@@ -118,42 +118,48 @@ def _link_state(
 ) -> tuple[set[uuid.UUID], dict[str, list[str]]]:
     """Return the catalogue item IDs to map and the references per framework."""
 
-    refs: dict[str, list[str]] = {}
+    control_query = db.query(
+        ControlItem.id, ControlItem.framework_slug, ControlItem.ref
+    )
+    clause_query = db.query(FrameworkClause.framework_slug, FrameworkClause.ref)
     if entity_type in _DIRECT_LINKS:
-        link, owner = _DIRECT_LINKS[entity_type]
-        rows = (
-            db.query(ControlItem.id, ControlItem.framework_slug, ControlItem.ref)
-            .join(link, link.control_item_id == ControlItem.id)
-            .filter(owner == entity_id)
+        control_link, clause_link = _DIRECT_LINKS[entity_type]
+        controls = (
+            control_query.join(
+                control_link, control_link.control_item_id == ControlItem.id
+            )
+            .filter(control_link.risk_id == entity_id)
             .all()
         )
-        for _item_id, framework, ref in rows:
-            refs.setdefault(framework, []).append(ref or "")
-        return {row.id for row in rows}, refs
-
-    controls = (
-        db.query(ControlItem.id, ControlItem.framework_slug, ControlItem.ref)
-        .join(
-            IsmsEntityControlLink,
-            IsmsEntityControlLink.control_item_id == ControlItem.id,
+        clauses = (
+            clause_query.join(clause_link, clause_link.clause_id == FrameworkClause.id)
+            .filter(clause_link.risk_id == entity_id)
+            .all()
         )
-        .filter(
-            IsmsEntityControlLink.entity_type == entity_type,
-            IsmsEntityControlLink.entity_id == entity_id,
+    else:
+        controls = (
+            control_query.join(
+                IsmsEntityControlLink,
+                IsmsEntityControlLink.control_item_id == ControlItem.id,
+            )
+            .filter(
+                IsmsEntityControlLink.entity_type == entity_type,
+                IsmsEntityControlLink.entity_id == entity_id,
+            )
+            .all()
         )
-        .all()
-    )
-    clauses = (
-        db.query(FrameworkClause.framework_slug, FrameworkClause.ref)
-        .join(
-            IsmsEntityClauseLink, IsmsEntityClauseLink.clause_id == FrameworkClause.id
+        clauses = (
+            clause_query.join(
+                IsmsEntityClauseLink,
+                IsmsEntityClauseLink.clause_id == FrameworkClause.id,
+            )
+            .filter(
+                IsmsEntityClauseLink.entity_type == entity_type,
+                IsmsEntityClauseLink.entity_id == entity_id,
+            )
+            .all()
         )
-        .filter(
-            IsmsEntityClauseLink.entity_type == entity_type,
-            IsmsEntityClauseLink.entity_id == entity_id,
-        )
-        .all()
-    )
+    refs: dict[str, list[str]] = {}
     item_ids = {row.id for row in controls}
     for _item_id, framework, ref in controls:
         refs.setdefault(framework, []).append(ref or "")

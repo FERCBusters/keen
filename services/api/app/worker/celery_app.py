@@ -107,7 +107,8 @@ TASK_SECONDS = 3300
 celery_app.conf.task_soft_time_limit = TASK_SECONDS
 celery_app.conf.task_time_limit = TASK_SECONDS + RUN_GRACE_SECONDS
 
-# Beat schedules
+# Beat schedules. A crontab minute step only divides the hour: "*/110" matches
+# minute 0 alone, so an interval that is no divisor of 60 is given in seconds.
 celery_app.conf.beat_schedule = {
     "dispatch-imap": {"task": "keen.dispatch_imap", "schedule": 300.0},
     "ingest-gitea": {
@@ -148,27 +149,27 @@ celery_app.conf.beat_schedule = {
     },
     "ingest-github-every-110m": {
         "task": "app.worker.tasks.ingest_github_all_task",
-        "schedule": crontab(minute="*/110"),
+        "schedule": 6600.0,
     },
     "ingest-forgejo-every-95m": {
         "task": "app.worker.tasks.ingest_forgejo_all_task",
-        "schedule": crontab(minute="*/95"),
+        "schedule": 5700.0,
     },
     "ingest-jenkins-every-75m": {
         "task": "app.worker.tasks.ingest_jenkins_all_task",
-        "schedule": crontab(minute="*/75"),
+        "schedule": 4500.0,
     },
     "ingest-taiga-every-25m": {
         "task": "app.worker.tasks.ingest_taiga_all_task",
-        "schedule": crontab(minute="*/25"),
+        "schedule": 1500.0,
     },
     "ingest-bookstack-every-61m": {
         "task": "app.worker.tasks.ingest_bookstack_all_task",
-        "schedule": crontab(minute="*/61"),
+        "schedule": 3660.0,
     },
     "ingest-rss-every-45m": {
         "task": "app.worker.tasks.ingest_rss_all_task",
-        "schedule": crontab(minute="*/45"),
+        "schedule": 2700.0,
     },
     "ingest-google-workspace-every-30m": {
         "task": "app.worker.tasks.ingest_google_workspace_all_task",

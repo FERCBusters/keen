@@ -46,7 +46,7 @@ const factor = (overrides = {}) => ({
   item: 'Privacy law tightens retention',
   overall_relevance: { code: 'high', label: '1 High' },
   rationale: '',
-  business_process_count: 0,
+  control_count: 0,
   clause_count: 0,
   ...overrides,
 });

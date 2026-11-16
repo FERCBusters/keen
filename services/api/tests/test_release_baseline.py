@@ -144,6 +144,9 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0054_drop_unused_columns",
+        "0053_risk_and_factor_links",
+        "0052_remove_business_processes",
         "0051_isms_business_processes",
         "0050_external_auditor_questions",
         "0049_default_groups",

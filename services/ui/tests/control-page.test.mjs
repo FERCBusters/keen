@@ -139,6 +139,10 @@ async function controlPage(t, options = {}) {
           ],
         };
       }
+      if (p === '/api/v1/controls/c1/pestle') {
+        if (fail.pestle) throw new Error('PESTLE forbidden');
+        return { items: options.pestle || [] };
+      }
       if (p === '/api/v1/controls/c1/isms') {
         if (fail.isms) throw new Error('ISMS offline');
         // Policies and measures appear under Requirements, not the ISMS tab.
@@ -1637,4 +1641,77 @@ test('saving the justification while the clause catalogue loads reports the save
   assert.equal(ui.el('status').textContent, 'Control justification saved');
   release();
   await settle(() => ui.el('adminClausesList').querySelector('select'));
+});
+
+const governance = (ui) =>
+  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+
+test('PESTLE(E) readers see the factors rated against the control on the Governance tab', async (t) => {
+  const { ui } = await controlPage(t, {
+    pestle: [
+      {
+        pestle_item: {
+          id: 'p1',
+          type: 'Legal',
+          lens: 'External',
+          item: '<b>Privacy law</b>',
+          overall_relevance: { code: 'high', label: '1 High' },
+          rationale: '',
+        },
+        relevance: { code: 'medium', label: '2 Medium' },
+      },
+    ],
+  });
+  governance(ui);
+  await settle(() => ui.el('controlPestleRows').querySelector('a'));
+  assert.equal(ui.el('controlPestleCard').style.display, '');
+  const row = ui.el('controlPestleRows').querySelector('tr');
+  assert.equal(row.querySelector('b'), null);
+  assert.equal(row.querySelector('a').textContent, '<b>Privacy law</b>');
+  assert.equal(
+    row.querySelector('a').getAttribute('href'),
+    '/pestle_item.html?id=p1&tab=details&framework=A',
+  );
+  assert.deepEqual(
+    [...row.querySelectorAll('.badge')].map((b) => [b.textContent, b.className]),
+    [
+      ['2 Medium', 'badge text-bg-warning'],
+      ['1 High', 'badge text-bg-danger'],
+    ],
+  );
+  // The factors load once however often the tab is shown.
+  const requests = () => ui.calls.filter((c) => c.url.endsWith('/pestle')).length;
+  assert.equal(requests(), 1);
+  governance(ui);
+  await settle(() => ui.idle());
+  assert.equal(requests(), 1);
+});
+
+test('a control with no rated factors says so, and the card stays hidden when they cannot be read', async (t) => {
+  const none = await controlPage(t);
+  governance(none.ui);
+  await settle(() => none.ui.el('controlPestleCard').style.display === '');
+  assert.equal(
+    none.ui.el('controlPestleRows').textContent,
+    'No PESTLE(E) factors are rated against this control.',
+  );
+
+  const failed = await controlPage(t, { fail: { pestle: true } });
+  governance(failed.ui);
+  await settle(() => failed.ui.idle());
+  assert.equal(failed.ui.el('controlPestleCard').style.display, 'none');
+
+  for (const me of [
+    { is_admin: true, features: { enabled: { pestle: false } } },
+    { can_view_controls: true, can_view_risks: true },
+  ]) {
+    const hidden = await controlPage(t, { me });
+    governance(hidden.ui);
+    await settle(() => hidden.ui.idle());
+    assert.equal(hidden.ui.el('controlPestleCard').style.display, 'none');
+    assert.equal(
+      hidden.ui.calls.some((c) => c.url.endsWith('/pestle')),
+      false,
+    );
+  }
 });

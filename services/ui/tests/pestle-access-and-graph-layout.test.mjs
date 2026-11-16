@@ -63,7 +63,6 @@ function visualisations(clauseLinks, counts = { Internal: { Legal: 1 }, External
       count: 0,
     })),
     clause_links: clauseLinks,
-    process_links: [],
   };
 }
 
@@ -82,10 +81,7 @@ function fakeTabs() {
   };
 }
 
-async function pestle(
-  t,
-  { me = { is_admin: true }, query = '', viz, width, backgrounds, processesFail = false } = {},
-) {
+async function pestle(t, { me = { is_admin: true }, query = '', viz, width, backgrounds } = {}) {
   const itemQueries = [];
   const ui = await page(t, 'pestle', {
     me,
@@ -116,10 +112,6 @@ async function pestle(
         itemQueries.push(Object.fromEntries(u.searchParams));
         return { framework: 'A', total: 0, limit: 5000, offset: 0, items: [] };
       }
-      if (u.pathname === '/api/v1/pestle/business-processes') {
-        if (processesFail) throw new Error('Processes offline');
-        return { total: 0, limit: 5000, offset: 0, items: [] };
-      }
       if (u.pathname === '/api/v1/pestle/visualisations') return structuredClone(viz);
       throw new Error('Unexpected GET ' + u);
     },
@@ -145,18 +137,13 @@ const nodeLines = (node) =>
 
 test('leaving a tab on a page opened without a query string leaves a bare address', async (t) => {
   const { ui } = await pestle(t);
-  ui.window.history.replaceState({}, '', '/pestle.html?tab=processes');
+  ui.window.history.replaceState({}, '', '/pestle.html?tab=visualisations');
   ui.el('pestleItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.equal(ui.window.location.href, 'https://keen.example/pestle.html');
-  ui.el('businessProcessesTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  assert.equal(ui.window.location.href, 'https://keen.example/pestle.html?tab=processes');
 });
 
-test('users without PESTLE(E) access see no business-process editor and reloading sends nothing', async (t) => {
+test('users without PESTLE(E) access send nothing when reloading or searching', async (t) => {
   const { ui, itemQueries } = await pestle(t, { me: { can_view_events: true } });
-  assert.equal(ui.el('businessProcessEditorCard').style.display, 'none');
-  assert.equal(ui.el('addBusinessProcess').style.display, 'none');
-  assert.equal(ui.el('businessProcessName').disabled, true);
   ui.el('reloadPestle').click();
   ui.el('pestleQ').value = 'privacy';
   ui.el('pestleQ').dispatchEvent(new ui.window.Event('input'));
@@ -164,19 +151,6 @@ test('users without PESTLE(E) access see no business-process editor and reloadin
   assert.equal(itemQueries.length, 0);
   assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/pestle/items')));
   assert.match(ui.el('pestleRows').textContent, /do not have permission/);
-
-  // Readers keep the editor card in view.
-  const reader = await pestle(t, { me: { can_view_pestle: true } });
-  assert.equal(reader.ui.el('businessProcessEditorCard').style.display, '');
-  assert.equal(reader.ui.el('addBusinessProcess').style.display, 'none');
-});
-
-test('a reader whose business processes fail to load is offered no Add button', async (t) => {
-  const { ui } = await pestle(t, { me: { can_view_pestle: true }, processesFail: true });
-  await settle(() => /Processes offline/.test(ui.el('status').textContent));
-  assert.equal(ui.el('businessProcessEditorCard').style.display, '');
-  assert.equal(ui.el('addBusinessProcess').style.display, 'none');
-  assert.equal(ui.el('businessProcessName').disabled, true);
 });
 
 test('graph labels read an opaque rgb background without alpha and skip colours they cannot parse', async (t) => {

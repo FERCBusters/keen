@@ -27,6 +27,7 @@ import {
   setOffsetPagerDisabled,
   offsetPagerState,
   wireOffsetPagerButtons,
+  splitList,
 } from '/app.js';
 import {
   enhanceFilterPillMultiSelect,
@@ -79,13 +80,6 @@ function controlHeading(ref) {
   const title = String(controlsIndex?.[r]?.title || '').trim();
   // Include BOTH reference + title when we have it.
   return title ? `${r} - ${title}` : r;
-}
-
-function splitList(value) {
-  return String(value || '')
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean);
 }
 
 function describeList(values, one, many) {

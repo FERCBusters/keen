@@ -45,23 +45,32 @@ from .serializers import (
 )
 
 
-def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
-    fw = framework_parameter(framework)
-    section_key = _clean_isms_section(section)
-    include_all = section_key is None
+def _section_scope(db: Session, framework: str, section: str | None):
+    """The framework, the section asked for, and a test of which sections to fill.
 
+    One section is refused when its feature is switched off; with none named,
+    every section whose feature is on is wanted.
+    """
     from app.services.features import SECTION_FEATURES, state
 
+    fw = framework_parameter(framework)
+    section_key = _clean_isms_section(section)
     features = state(db)
     if section_key in SECTION_FEATURES:
         features.require(SECTION_FEATURES[section_key])
 
     def wants(*keys: str) -> bool:
         return any(
-            (include_all or section_key == key)
+            (section_key is None or section_key == key)
             and features.enabled(SECTION_FEATURES[key])
             for key in keys
         )
+
+    return fw, section_key, wants, features
+
+
+def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
+    fw, section_key, wants, features = _section_scope(db, framework, section)
 
     payload: dict[str, Any] = {
         "framework": fw,
@@ -86,7 +95,7 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
         )
         payload["users"] = [_user_summary(u) for u in users]
 
-    if wants("org", "assets", "access", "app"):
+    if wants("org", "assets", "access"):
         org_nodes = (
             db.query(IsmsOrgNode)
             .order_by(IsmsOrgNode.sort_order.asc(), IsmsOrgNode.name.asc())
@@ -96,13 +105,13 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
             _org_node_out(n, include_people=False) for n in org_nodes
         ]
 
-    if wants("app", "meetings"):
+    if wants("meetings"):
         docs = db.query(IsmsDocument).order_by(IsmsDocument.title.asc()).all()
         payload["documents"] = [
             _document_out(db, d, fw, include_links=False) for d in docs
         ]
 
-    if wants("access", "app"):
+    if wants("access"):
         assets = db.query(RiskAsset).order_by(func.lower(RiskAsset.name).asc()).all()
         payload["assets"] = [_asset_out(db, a, fw, include_links=False) for a in assets]
 
@@ -161,22 +170,7 @@ def isms_meta(*, framework: str, section: str | None, user: User, db: Session):
 
 
 def isms_summary(*, framework: str, section: str | None, user: User, db: Session):
-    fw = framework_parameter(framework)
-    section_key = _clean_isms_section(section)
-    include_all = section_key is None
-
-    from app.services.features import SECTION_FEATURES, state
-
-    features = state(db)
-    if section_key in SECTION_FEATURES:
-        features.require(SECTION_FEATURES[section_key])
-
-    def wants(*keys: str) -> bool:
-        return any(
-            (include_all or section_key == key)
-            and features.enabled(SECTION_FEATURES[key])
-            for key in keys
-        )
+    fw, section_key, wants, features = _section_scope(db, framework, section)
 
     counts = {
         "objectives": int(db.query(IsmsObjective.id).count() or 0),

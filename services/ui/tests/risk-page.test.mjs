@@ -46,6 +46,7 @@ function risk(overrides = {}) {
       { id: 'c1', ref: 'A1', title: '<i>Backups</i>', in_scope: true },
       { id: 'c2', ref: 'A2', title: 'Restore tests', in_scope: false },
     ],
+    clauses: [{ id: 'k 1', ref: '6.1', title: '<i>Planning</i>' }],
     mitigator_context: {
       source: 'keen_mitigator',
       risk_weights: { Confidentiality: 3, Integrity: 2 },
@@ -151,6 +152,13 @@ test('risk details render scores, types, controls and mitigator context as text'
   assert.equal(ui.el('editRisk').getAttribute('href'), '/risk-wizard.html?id=r1&framework=A');
   assert.equal(ui.el('deleteRisk').style.display, '');
   assert.match(ui.el('riskVisualisation').getAttribute('href'), /tab=visualisations/);
+  // Linked clauses are listed like controls, without a scope column.
+  const clauses = ui.el('linkedClauses');
+  assert.equal(ui.el('clausesCount').textContent, '1');
+  assert.equal(clauses.querySelector('i'), null);
+  assert.equal(clauses.querySelector('a').getAttribute('href'), '/clause.html?id=k+1&framework=A');
+  assert.match(clauses.textContent, /6\.1\s*<i>Planning<\/i>/);
+  assert.doesNotMatch(clauses.textContent, /Scope/);
   assert.equal(ui.el('riskTypes').querySelector('b'), null);
   // The kind badge, then one badge per security property.
   assert.equal(ui.el('riskTypes').querySelectorAll('.badge').length, 3);
@@ -229,10 +237,13 @@ test('risks without optional data show fallbacks and readers lose edit and sampl
       risk_score: 2,
       residual_risk_score: 0,
       controls: [],
+      clauses: [],
     },
     swot: [],
   });
   assert.equal(ui.el('riskTitle').textContent, 'Laptop');
+  assert.equal(ui.el('clausesCount').textContent, '0');
+  assert.match(ui.el('linkedClauses').textContent, /No clauses are mapped/);
   assert.equal(ui.el('threatSummary').textContent, 'No threat summary.');
   assert.equal(ui.el('riskNote').textContent, 'No note.');
   assert.equal(ui.el('riskCategory').textContent, '-');
@@ -346,7 +357,7 @@ test('risk managers delete a risk after confirming it and return to the register
   assert.equal(asked[0].danger, true);
   assert.equal(
     asked[0].message,
-    'Delete “<img src=x onerror=alert(1)>Payroll DB - Ransomware”? Its links to controls and ' +
+    'Delete “<img src=x onerror=alert(1)>Payroll DB - Ransomware”? Its links to controls, clauses and ' +
       'posture checks, and to the people, vendors / 3rd parties and assets it affects, are removed with it.',
   );
 

@@ -23,7 +23,6 @@ EVIDENCE_ROUTES = [
     ("GET", "/v1/sources"),
     ("GET", "/v1/sources/meta"),
     ("GET", "/v1/sources/github/insights"),
-    ("GET", f"/v1/controls/{ID}/evidence"),
     ("GET", f"/v1/controls/{ID}/evidence/summary"),
     ("GET", "/v1/events"),
     ("GET", "/v1/events/facets"),

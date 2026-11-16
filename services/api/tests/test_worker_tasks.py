@@ -8,6 +8,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from app.worker import tasks as wt
+from app.worker.celery_app import (
+    HTTP_INGEST_SOURCES,
+    SOURCE_RUN_SECONDS,
+    celery_app,
+)
+from celery.schedules import crontab
 from sqlalchemy.exc import OperationalError
 
 RESULT = [{"ok": True}]
@@ -938,3 +944,40 @@ def test_dispatch_imap_task_queues_nothing_without_enabled_connections():
     ):
         assert wt.dispatch_imap_task() == {"queued": 0}
     imap_delay.assert_not_called()
+
+
+def test_every_scheduled_interval_is_the_interval_its_schedule_names():
+    """A crontab step only divides its field: "*/110" minutes runs hourly.
+
+    Each stepped crontab field must therefore divide its range, so the gap
+    between runs is the step throughout; a collection whose interval is no
+    divisor of an hour is scheduled in seconds, as its entry name says.
+    """
+
+    def step(text):
+        return int(text[2:]) if str(text).startswith("*/") else None
+
+    assert step("*/110") == 110 and 60 % 110 != 0  # the shape this test refuses
+    entries = celery_app.conf.beat_schedule
+    for name, entry in entries.items():
+        schedule = entry["schedule"]
+        if isinstance(schedule, crontab):
+            for text, size in ((schedule._orig_minute, 60), (schedule._orig_hour, 24)):
+                if step(text) is not None:
+                    assert size % step(text) == 0, name
+    assert entries["ingest-github-every-110m"]["schedule"] == 110 * 60
+    assert entries["ingest-forgejo-every-95m"]["schedule"] == 95 * 60
+    assert entries["ingest-jenkins-every-75m"]["schedule"] == 75 * 60
+    assert entries["ingest-bookstack-every-61m"]["schedule"] == 61 * 60
+    assert entries["ingest-rss-every-45m"]["schedule"] == 45 * 60
+    assert entries["ingest-taiga-every-25m"]["schedule"] == 25 * 60
+    # A source's run budget sits below the interval between its runs.
+    for source in HTTP_INGEST_SOURCES:
+        task = f"app.worker.tasks.ingest_{source}_all_task"
+        (schedule,) = [e["schedule"] for e in entries.values() if e["task"] == task]
+        interval = (
+            60 * 60 // len(schedule.minute)
+            if isinstance(schedule, crontab)
+            else schedule
+        )
+        assert SOURCE_RUN_SECONDS[source] < interval, source

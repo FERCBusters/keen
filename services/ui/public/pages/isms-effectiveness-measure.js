@@ -19,6 +19,8 @@ import {
   loadEntityChangelog,
   effectivenessMetricValueHtml,
   effectivenessMetricThresholdBadgeHtml,
+  loadSourceLabels,
+  metricHref,
 } from '/app.js';
 import { mountStoryRelated } from '/pages/story-related.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
@@ -45,10 +47,6 @@ function measureHref(id = measureId) {
   return withFramework(`/isms-effectiveness-measure.html?id=${encodeURIComponent(id)}`, framework);
 }
 
-function metricHref(id) {
-  return withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(id)}`, framework);
-}
-
 function sourceHtml(entry) {
   const source = entry.source_type;
   const badge = sourceBadgeHtml(
@@ -71,7 +69,7 @@ function sourceHtml(entry) {
 function latestValueHtml(entry, row) {
   if (!entry) return '<span class="small-muted">No metric entries yet.</span>';
   const valueHtml = effectivenessMetricValueHtml(entry, row, {
-    href: metricHref(entry.id),
+    href: metricHref(entry.id, framework),
     fallback: 'Metric entry',
   });
   return `${valueHtml}${effectivenessMetricThresholdBadgeHtml(row, entry)}${entry.period ? `<div class="small-muted">${esc(entry.period)}</div>` : ''}`;
@@ -205,10 +203,10 @@ function renderMetrics() {
         return `<tr data-metric-id="${esc(entry.id)}">
       <td class="small-muted" data-sort="${esc(entry.recorded_at)}">${esc(fmtTs(entry.recorded_at))}</td>
       <td>${esc(entry.period || '-')}</td>
-      <td>${effectivenessMetricValueHtml(entry, measure, { href: metricHref(entry.id), fallback: 'Metric entry' })}${effectivenessMetricThresholdBadgeHtml(measure, entry)}</td>
+      <td>${effectivenessMetricValueHtml(entry, measure, { href: metricHref(entry.id, framework), fallback: 'Metric entry' })}${effectivenessMetricThresholdBadgeHtml(measure, entry)}</td>
       <td class="wrap">${sourceHtml(entry)}</td>
       <td class="wrap small-muted">${esc(shorten(entry.notes || entry.qualitative_value || '', 180) || '-')}</td>
-      <td class="no-print text-nowrap"><div class="btn-group btn-group-sm"><a class="btn btn-outline-primary" href="${esc(metricHref(entry.id))}" title="Open metric entry"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="visually-hidden">Open</span></a>${sample}${del}</div></td>
+      <td class="no-print text-nowrap"><div class="btn-group btn-group-sm"><a class="btn btn-outline-primary" href="${esc(metricHref(entry.id, framework))}" title="Open metric entry"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="visually-hidden">Open</span></a>${sample}${del}</div></td>
     </tr>`;
       })
       .join('') ||
@@ -406,19 +404,6 @@ function renderMetricTrend() {
   meta.textContent = `${data.length} numeric metric ${data.length === 1 ? 'entry' : 'entries'} plotted${selectedSource ? ` for ${selectedSource}` : ''}${nonNumericCount ? ` (${nonNumericCount} qualitative/non-numeric omitted)` : ''}.`;
 }
 
-async function loadSourceMeta() {
-  try {
-    const data = await apiGet('/api/v1/sources');
-    sourceMeta = {};
-    for (const x of data.items) {
-      const src = String(x.source).trim();
-      sourceMeta[src] = { source: src, label: x.label, color: x.color };
-    }
-  } catch {
-    sourceMeta = {};
-  }
-}
-
 async function loadChangelog() {
   await loadEntityChangelog(
     $('measureChangelog'),
@@ -442,7 +427,7 @@ async function load() {
     return;
   }
   try {
-    await loadSourceMeta();
+    sourceMeta = await loadSourceLabels();
     const row = await apiGet(
       `/api/v1/isms/effectiveness-measures/${encodeURIComponent(measureId)}?framework=${encodeURIComponent(framework)}`,
     );
@@ -504,7 +489,7 @@ document.addEventListener('click', async (ev) => {
       entityType: 'isms_effectiveness_metric',
       entityId: id,
       title: entry?.value_display || 'Metric entry',
-      evidenceUrl: metricHref(id),
+      evidenceUrl: metricHref(id, framework),
       framework,
       statusEl: status,
     });

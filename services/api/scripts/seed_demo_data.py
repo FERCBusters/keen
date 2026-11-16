@@ -73,7 +73,6 @@ from app.db.models import (  # noqa: E402
     IsmsObjectiveResourceUser,
     IsmsOrgNode,
     Mapping,
-    PestleBusinessProcess,
     PestleRelevanceLevel,
     Risk,
     RiskAsset,
@@ -231,11 +230,6 @@ class DemoSeeder:
             "register_impact": impact,
             "register_residual_likelihood": residual_likelihood,
             "register_residual_impact": residual_impact,
-            "threat_score": 1,
-            "vulnerability_score": likelihood,
-            "impact_score": impact,
-            "residual_vulnerability_score": residual_likelihood,
-            "residual_impact_score": residual_impact,
             "risk_score": likelihood * impact,
             "residual_risk_score": residual_likelihood * residual_impact,
         }
@@ -591,22 +585,6 @@ class DemoSeeder:
                 },
             )
         return assets
-
-    def seed_business_processes(self) -> dict[str, PestleBusinessProcess]:
-        names = {
-            "onboarding": "Customer onboarding",
-            "service": "Service delivery",
-            "incident": "Incident management",
-            "supplier": "Supplier management",
-        }
-        return {
-            key: self.upsert(
-                PestleBusinessProcess,
-                {"name": self.label(name)},
-                {"created_by_user_id": self.user.id},
-            )
-            for key, name in names.items()
-        }
 
     def seed_access_matrix(
         self,
@@ -1878,9 +1856,8 @@ class DemoSeeder:
         org_nodes = self.seed_org_nodes()
         licenses = self.seed_licenses()
         assets = self.seed_assets(licenses, org_nodes)
-        processes = self.seed_business_processes()
         risks = seed_risks(self, assets, org_nodes)
-        seed_pestle(self, processes)
+        seed_pestle(self)
         self.seed_access_matrix(assets, org_nodes)
         docs = seed_documents(self)
         diary_events = self.seed_diary_events()

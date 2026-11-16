@@ -28,7 +28,6 @@ nothing about which accounts exist.
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 import time
 
@@ -36,6 +35,7 @@ from fastapi import Response
 from redis import Redis
 
 from app.core.config import settings
+from app.security import encoding
 from app.security.rate_limit import login_name
 
 FREE_FAILURES = 5
@@ -64,7 +64,7 @@ def name_key(username: str, method: str = "local") -> str:
     names distinct (security.auth.create_user), so a key names one account.
     """
 
-    return hashlib.sha256(f"{method}\0{login_name(username)}".encode()).hexdigest()
+    return encoding.digest(f"{method}\0{login_name(username)}")
 
 
 def wait_seconds(failures: int) -> int:
@@ -89,10 +89,6 @@ def device_cookie_name() -> str:
     return name
 
 
-def _token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
 def _failures_key(key: str) -> str:
     return f"{_PREFIX}:failures:{key}"
 
@@ -115,7 +111,7 @@ def recognised_device(r: Redis, token: str | None, key: str) -> str | None:
     raw = (token or "").strip()
     if not raw or len(raw) > _DEVICE_TOKEN_MAX_LENGTH:
         return None
-    digest = _token_hash(raw)
+    digest = encoding.digest(raw)
     return digest if r.hget(_device_key(digest), "name") == key else None
 
 
@@ -210,7 +206,7 @@ def issue_device(
     if replaces:
         revoke_device(r, replaces)
     token = secrets.token_urlsafe(32)
-    digest = _token_hash(token)
+    digest = encoding.digest(token)
     account = _account_devices_key(user_id)
     pipe = r.pipeline()
     pipe.hset(

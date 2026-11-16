@@ -11,6 +11,7 @@ import {
   getCurrentFramework,
   withFramework,
   showTableLoading,
+  splitList,
 } from '/app.js';
 import {
   enhanceFilterPillMultiSelect,
@@ -28,13 +29,6 @@ const filterEl = document.getElementById('sourcesFilter');
 const typePicker = document.getElementById('sourceTypes');
 const searchInput = document.getElementById('sourcesSearch');
 const coverageSelect = document.getElementById('sourcesCoverage');
-
-function splitList(value) {
-  return String(value || '')
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean);
-}
 
 // Filters arrive from badges and links as ?source= or ?type=, one or several.
 function readFilters() {

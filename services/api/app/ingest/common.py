@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import Artifact, ControlItem, Event, Framework, Mapping
 from app.db.session import track_unpublished_object
-from app.mapping.rules import CLAUSE, evaluate_by_framework, load_rules
+from app.mapping.rules import (
+    CLAUSE,
+    evaluate_by_framework,
+    event_fields,
+    load_rules,
+)
 from app.mapping.targets import Target, resolve_targets
 from app.security.redaction import (
     combine_redaction_status,
@@ -76,19 +81,7 @@ def apply_rules(db: Session, ev: Event) -> int:
     # Coordinate rule evaluation with connection removal, until this transaction commits.
     db.execute(text("SELECT pg_advisory_xact_lock_shared(1262830926)"))
     rules = load_rules(settings.rules_path, db=db)
-    event_dict = {
-        "source": ev.source,
-        "connection_id": ev.connection_id,
-        "system": ev.system,
-        "actor": ev.actor,
-        "action": ev.action,
-        "outcome": ev.outcome,
-        "severity": ev.severity,
-        "summary": ev.summary,
-        "raw_pointer": ev.raw_pointer,
-        "normalized_payload": ev.normalized_payload,
-    }
-    matched = evaluate_by_framework(event_dict, rules, details=True)
+    matched = evaluate_by_framework(event_fields(ev), rules, details=True)
     if not matched:
         return 0
 

@@ -10,7 +10,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="KEEN_", case_sensitive=False)
 
-    env: str = Field(default="dev")
     timezone: str = Field(default="Etc/UTC")
     # Visible date input format used by MOSP shared date widgets. API values remain YYYY-MM-DD.
     # Allowed: ymd/iso/YYYY-MM-DD or dmy/DD/MM/YYYY.
@@ -175,9 +174,10 @@ class Settings(BaseSettings):
     # while KEEN_TRUST_REMOTE_USER is on; there is no default.
     remote_user_trusted_cidrs: str = Field(default="")
 
-    @field_validator("remote_user_trusted_cidrs")
+    @field_validator("remote_user_trusted_cidrs", "security_trusted_proxy_cidrs")
     @classmethod
-    def validate_remote_user_proxies(cls, value):
+    def validate_proxy_networks(cls, value):
+        """Each comma-separated entry is an address or network."""
         for entry in value.split(","):
             if entry.strip():
                 ipaddress.ip_network(entry.strip())
@@ -344,14 +344,6 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------------
     # Used for scheduled audit attendee notifications.
     security_trusted_proxy_cidrs: str = Field(default="")
-
-    @field_validator("security_trusted_proxy_cidrs")
-    @classmethod
-    def validate_security_proxies(cls, value):
-        for entry in value.split(","):
-            if entry.strip():
-                ipaddress.ip_network(entry.strip())
-        return value
 
     smtp_host: str = Field(default="")
     smtp_port: int = Field(default=587)

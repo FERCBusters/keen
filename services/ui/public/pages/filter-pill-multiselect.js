@@ -1,17 +1,10 @@
-import { esc } from '/app.js';
+import { esc, splitList } from '/app.js';
 
 const instances = new Map();
 
 function targetEl(target) {
   if (typeof target === 'string') return document.getElementById(target.replace(/^#/, ''));
   return target;
-}
-
-function splitValues(value) {
-  return String(value || '')
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean);
 }
 
 function uniqueValues(values) {
@@ -32,7 +25,7 @@ function readElementValues(el) {
     return Array.from(el.selectedOptions)
       .map((opt) => String(opt.value || '').trim())
       .filter(Boolean);
-  return splitValues(el.value || '');
+  return splitList(el.value || '');
 }
 
 function writeElementValues(el, values) {

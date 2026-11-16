@@ -11,7 +11,7 @@ from unittest.mock import Mock
 import pytest
 from app.core.config import Settings, settings
 from app.db.models import User
-from app.security import auth, passwords
+from app.security import auth, encoding, passwords
 from pydantic import ValidationError
 
 # Imported fixture: the assembled application with an in-memory session store.
@@ -32,8 +32,8 @@ def legacy_hash(password, iterations=LEGACY_ITERATIONS):
         [
             "pbkdf2_sha256",
             str(iterations),
-            passwords._b64u_encode(salt),
-            passwords._b64u_encode(digest),
+            encoding.b64url(salt),
+            encoding.b64url(digest),
         ]
     )
 

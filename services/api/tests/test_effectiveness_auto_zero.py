@@ -20,6 +20,7 @@ from app.db.models import (
     ManagedConfiguration,
 )
 from app.services import effectiveness_metrics as metrics
+from app.services.isms.serializers import _metric_entry_out
 
 TODAY = date(2026, 4, 10)  # last closed month: March 2026
 
@@ -254,7 +255,7 @@ def test_month_arithmetic_clamps_to_the_last_day():
 )
 def test_metric_entries_describe_their_value_and_period(fields, display, period):
     row = IsmsEffectivenessMetricEntry(measure_id=uuid.uuid4(), **fields)
-    out = metrics._metric_out(row)
+    out = _metric_entry_out(row, IsmsEffectivenessMeasure())
     assert out["value_display"] == display
     assert out["period"] == period
     assert out["display"] == (display or fields.get("source_title") or "Metric entry")

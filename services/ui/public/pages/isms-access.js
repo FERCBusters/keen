@@ -10,6 +10,7 @@ import {
   canSampleIntoAudit,
   openAuditSampleModal,
   loadEntityChangelog,
+  assetHref,
 } from '/app.js';
 import { activateTabFromHashOrQuery, badgeList } from '/pages/isms-detail-common.js';
 
@@ -27,15 +28,11 @@ function accessHref(id = accessId) {
   return withFramework(`/isms-access.html?id=${encodeURIComponent(id)}`, framework);
 }
 
-function assetHref(id) {
-  return withFramework(`/isms-asset.html?id=${encodeURIComponent(id)}`, framework);
-}
-
 function serviceHtml(row) {
   const service = row.service;
   const label = service?.asset || service?.name || '-';
   if (!service?.id) return esc(label);
-  return `<a href="${esc(assetHref(service.id))}">${esc(label)}</a>`;
+  return `<a href="${esc(assetHref(service.id, framework))}">${esc(label)}</a>`;
 }
 
 function renderAccess(row) {

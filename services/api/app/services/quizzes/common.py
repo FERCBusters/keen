@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.datetime_utils import iso_or_none
 from app.db.models import Quiz, QuizRound, User
 from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
@@ -56,21 +57,17 @@ def result_ready(status: str, complete: int, pending: int) -> bool:
     return status == "closed" and pending == 0 and complete >= MIN_COHORT
 
 
-def iso(value: Any) -> str | None:
-    return value.isoformat() if value is not None else None
-
-
 def schedule_out(quiz: Quiz) -> dict[str, Any]:
     """A quiz's schedule, named as it is sent and as audit schedules are."""
     return {
-        "start_date": iso(quiz.start_date),
+        "start_date": iso_or_none(quiz.start_date),
         "schedule_recurrence": quiz.schedule_recurrence or "once",
         "schedule_interval": int(quiz.schedule_interval or 1),
         "schedule_date_rule": quiz.schedule_date_rule or "exact",
         "schedule_anchor_month": quiz.schedule_anchor_month,
-        "schedule_until_date": iso(quiz.schedule_until_date),
-        "schedule_next_run_date": iso(quiz.schedule_next_run_date),
-        "schedule_last_run_date": iso(quiz.schedule_last_run_date),
+        "schedule_until_date": iso_or_none(quiz.schedule_until_date),
+        "schedule_next_run_date": iso_or_none(quiz.schedule_next_run_date),
+        "schedule_last_run_date": iso_or_none(quiz.schedule_last_run_date),
         "label": schedule_label(quiz),
     }
 
@@ -93,7 +90,7 @@ def quiz_snapshot(quiz: Quiz) -> dict[str, Any]:
         "show_scores": bool(quiz.show_scores),
         "reveal_answers": quiz.reveal_answers,
         "due_days": quiz.due_days,
-        "start_date": iso(quiz.start_date),
+        "start_date": iso_or_none(quiz.start_date),
         "schedule": schedule_label(quiz),
         "questions": [
             {

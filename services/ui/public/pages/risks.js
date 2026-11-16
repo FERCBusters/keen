@@ -23,6 +23,7 @@ import {
   initCollapsibleFilterSections,
   canSampleIntoAudit,
   openAuditSampleModal,
+  setCsvParam,
 } from '/app.js';
 import {
   enhanceFilterPillMultiSelect,
@@ -44,6 +45,7 @@ import {
   riskHref,
   controlHref,
   pestleHref,
+  relevanceBadgeHtml,
   riskWizardHref,
 } from '/pages/risk-common.js';
 import { affectedBadgesHtml } from '/pages/affected-common.js';
@@ -133,11 +135,6 @@ function setupFilterPickers() {
     searchPlaceholder: 'Filter types',
     options: RISK_TYPE_FILTER_OPTIONS,
   });
-}
-
-function setCsvParam(url, key, values) {
-  const cleaned = Array.from(new Set(values.map((v) => String(v).trim()).filter(Boolean)));
-  if (cleaned.length) url.searchParams.set(key, cleaned.join(','));
 }
 
 function renderCategoryFilters() {
@@ -409,19 +406,6 @@ function closeRating() {
 
 // --- PESTLE(E) --------------------------------------------------------------------------------
 
-function pestleRelevanceBadge(level) {
-  const code = String(level?.code || '').toLowerCase();
-  const cls =
-    code === 'high'
-      ? 'text-bg-danger'
-      : code === 'medium'
-        ? 'text-bg-warning'
-        : code === 'low'
-          ? 'text-bg-success'
-          : 'text-bg-light border';
-  return `<span class="badge ${cls}">${esc(level?.label || 'N/A')}</span>`;
-}
-
 async function loadPestle() {
   if (!canViewPestle || !featureEnabled(me, 'pestle')) return;
   showTableLoading($('pestleRows'), 8, 'Loading PESTLE(E) factors');
@@ -450,9 +434,9 @@ async function loadPestle() {
         <td><span class="badge text-bg-info">${esc(item.type)}</span></td>
         <td>${esc(item.lens)}</td>
         <td><a class="fw-semibold" href="${esc(pestleHref(item.id, framework))}">${esc(item.item)}</a>${item.rationale ? `<div class="small-muted text-truncate" style="max-width:420px;">${esc(item.rationale)}</div>` : ''}</td>
-        <td>${pestleRelevanceBadge(item.overall_relevance)}</td>
+        <td>${relevanceBadgeHtml(item.overall_relevance)}</td>
         <td>${affectedBadgesHtml(item.affected, framework)}</td>
-        <td>${esc(String(item.business_process_count))}</td>
+        <td>${esc(String(item.control_count))}</td>
         <td>${esc(String(item.clause_count))}</td>
         <td class="no-print"><a class="btn btn-sm btn-outline-secondary" href="${esc(pestleHref(item.id, framework))}">Open</a></td>
       </tr>`,
@@ -460,7 +444,7 @@ async function loadPestle() {
           .join('')
       : '<tr><td colspan="8" class="p-4 text-center small-muted">No PESTLE(E) factors yet. Use “Add a PESTLE(E) factor” to record one.</td></tr>';
     $('pestleMeta').textContent =
-      `${pestleItems.length} factor${pestleItems.length === 1 ? '' : 's'} for ${data.framework}. Open a factor to score its relevance to business processes and clauses.`;
+      `${pestleItems.length} factor${pestleItems.length === 1 ? '' : 's'} for ${data.framework}. Open a factor to score its relevance to controls and clauses.`;
     loaded.pestle = true;
   } catch (e) {
     $('pestleRows').innerHTML =

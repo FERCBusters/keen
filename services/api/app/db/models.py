@@ -510,10 +510,6 @@ class Artifact(Base):
     redaction_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="unknown"
     )
-    pii_flags: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-    retention_class: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="default"
-    )
 
     # Free-form metadata (e.g. lineage notes, tool versions)
     meta: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
@@ -708,8 +704,6 @@ class EntityChangelog(Base):
     request_path: Mapped[str | None] = mapped_column(
         String(256), nullable=True, index=True
     )
-
-    changed_by = relationship("User", foreign_keys=[changed_by_user_id])
 
 
 # -----------------------------------------------------------------------------
@@ -1183,16 +1177,7 @@ class Risk(Base):
         index=True,
     )
     threat_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    threat_score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    vulnerability_score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    impact_score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     risk_score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    residual_vulnerability_score: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1
-    )
-    residual_impact_score: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1
-    )
     residual_risk_score: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # The conventional 5x5 register ratings, from which the risk scores and
     # the three-factor score columns follow.
@@ -1238,6 +1223,9 @@ class Risk(Base):
     control_links = relationship(
         "RiskControlLink", back_populates="risk", cascade="all, delete-orphan"
     )
+    clause_links = relationship(
+        "RiskClauseLink", back_populates="risk", cascade="all, delete-orphan"
+    )
     affected_links = relationship(
         "AffectedLink",
         back_populates="risk",
@@ -1249,20 +1237,6 @@ class Risk(Base):
         CheckConstraint(
             "risk_owner_user_id IS NULL OR risk_owner_role_id IS NULL",
             name="ck_risks_one_owner",
-        ),
-        CheckConstraint("threat_score between 0 and 5", name="ck_risks_threat_score"),
-        CheckConstraint(
-            "vulnerability_score between 0 and 5",
-            name="ck_risks_vulnerability_score",
-        ),
-        CheckConstraint("impact_score between 0 and 5", name="ck_risks_impact_score"),
-        CheckConstraint(
-            "residual_vulnerability_score between 0 and 5",
-            name="ck_risks_residual_vulnerability_score",
-        ),
-        CheckConstraint(
-            "residual_impact_score between 0 and 5",
-            name="ck_risks_residual_impact_score",
         ),
         CheckConstraint(
             "register_likelihood between 1 and 5", name="ck_risks_register_likelihood"
@@ -1408,6 +1382,33 @@ class RiskControlLink(Base):
     control = relationship("ControlItem")
 
 
+class RiskClauseLink(Base):
+    """A framework clause a risk bears on, as RiskControlLink is for a control."""
+
+    __tablename__ = "risk_clause_links"
+
+    risk_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("risks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    framework_slug: Mapped[str] = mapped_column(
+        String(64), primary_key=True, nullable=False, index=True
+    )
+    clause_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("framework_clauses.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+
+    risk = relationship("Risk", back_populates="clause_links")
+    clause = relationship("FrameworkClause")
+
+
 # -----------------------------------------------------------------------------
 # PESTLE(E) impact assessment
 # -----------------------------------------------------------------------------
@@ -1458,13 +1459,13 @@ class PestleItem(Base):
 
     overall_relevance = relationship("PestleRelevanceLevel")
     created_by = relationship("User", foreign_keys=[created_by_user_id])
-    business_process_links = relationship(
-        "PestleBusinessProcessRelevance",
+    clause_links = relationship(
+        "PestleClauseRelevance",
         back_populates="pestle_item",
         cascade="all, delete-orphan",
     )
-    clause_links = relationship(
-        "PestleClauseRelevance",
+    control_links = relationship(
+        "PestleControlRelevance",
         back_populates="pestle_item",
         cascade="all, delete-orphan",
     )
@@ -1474,66 +1475,6 @@ class PestleItem(Base):
         cascade="all, delete-orphan",
         order_by="AffectedLink.created_at, AffectedLink.id",
     )
-
-
-class PestleBusinessProcess(Base):
-    __tablename__ = "pestle_business_processes"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(
-        String(256), unique=True, nullable=False, index=True
-    )
-    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False, index=True
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    created_by = relationship("User", foreign_keys=[created_by_user_id])
-    pestle_links = relationship(
-        "PestleBusinessProcessRelevance",
-        back_populates="business_process",
-        cascade="all, delete-orphan",
-    )
-
-
-class PestleBusinessProcessRelevance(Base):
-    __tablename__ = "pestle_business_process_relevance"
-
-    pestle_item_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("pestle_items.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    business_process_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("pestle_business_processes.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    relevance_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("pestle_relevance_levels.id"),
-        nullable=False,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-    pestle_item = relationship("PestleItem", back_populates="business_process_links")
-    business_process = relationship(
-        "PestleBusinessProcess", back_populates="pestle_links"
-    )
-    relevance = relationship("PestleRelevanceLevel")
 
 
 class PestleClauseRelevance(Base):
@@ -1564,6 +1505,40 @@ class PestleClauseRelevance(Base):
 
     pestle_item = relationship("PestleItem", back_populates="clause_links")
     clause = relationship("FrameworkClause")
+    relevance = relationship("PestleRelevanceLevel")
+
+
+class PestleControlRelevance(Base):
+    """How relevant a factor is to one control, as PestleClauseRelevance is for a clause."""
+
+    __tablename__ = "pestle_control_relevance"
+
+    pestle_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pestle_items.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    control_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("control_items.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    relevance_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pestle_relevance_levels.id"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    pestle_item = relationship("PestleItem", back_populates="control_links")
+    control = relationship("ControlItem")
     relevance = relationship("PestleRelevanceLevel")
 
 
@@ -2254,7 +2229,6 @@ class IsmsEffectivenessMetricEntry(Base):
     )
 
     measure = relationship("IsmsEffectivenessMeasure", back_populates="metric_entries")
-    source_event = relationship("Event", foreign_keys=[source_event_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
 
     __table_args__ = (
@@ -2497,9 +2471,6 @@ class Audit(ScheduleColumns, Base):
     meta: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
 
     created_by = relationship("User", foreign_keys=[created_by_user_id])
-    final_report_uploaded_by = relationship(
-        "User", foreign_keys=[final_report_uploaded_by_user_id]
-    )
     evidence = relationship(
         "AuditEvidence", back_populates="audit", cascade="all, delete-orphan"
     )

@@ -2,7 +2,7 @@
 // third parties and assets it names. The risk wizard, the risk and PESTLE(E)
 // pages, the registers and the Statement of Applicability show and pick them
 // the same way.
-import { apiGet, localPath, withFramework } from '/app.js';
+import { apiGet, icon, localPath, node, withFramework } from '/app.js';
 
 export const AFFECTED_KINDS = {
   person: { label: 'Person', icon: 'bi-person' },
@@ -66,21 +66,6 @@ export function affectedChoices(items) {
       label: String(item.label ?? ''),
       detail: String(item.detail ?? ''),
     }));
-}
-
-function node(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [name, value] of Object.entries(attrs)) {
-    if (name === 'class') el.className = value;
-    else if (name === 'hidden') el.hidden = value;
-    else el.setAttribute(name, value);
-  }
-  el.append(...children.filter((child) => child !== null));
-  return el;
-}
-
-function icon(name) {
-  return node('i', { class: `bi ${name}`, 'aria-hidden': 'true' });
 }
 
 // A picker in `container`: search the registers, tick records, and add a

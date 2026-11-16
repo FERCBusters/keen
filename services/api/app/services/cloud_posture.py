@@ -17,7 +17,7 @@ from pydantic import Field
 from sqlalchemy import func
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import iso_utc, utc_now_naive
 from app.db.models import (
     CloudPostureScope,
     CloudProvider,
@@ -40,10 +40,6 @@ from app.services.frameworks import framework_parameter
 ACTIVITY_SHOWN = 20
 # One refresh request per provider in this window.
 REFRESH_SPACING = timedelta(minutes=2)
-
-
-def _iso(value):
-    return value.isoformat() + "Z" if value is not None else None
 
 
 def _require_read(db, user):
@@ -183,7 +179,7 @@ def _scope_out(provider, scope, links, people) -> dict:
         "key": scope.scope_key,
         "label": scope.label,
         "kind": scope.kind or provider.scope_noun,
-        "checked_at": _iso(scope.checked_at),
+        "checked_at": iso_utc(scope.checked_at),
         "met": sum(1 for c in judged if c["status"] == "met"),
         "judged": len(judged),
         "checks": checks,
@@ -202,7 +198,7 @@ def _activity(db, key) -> list[dict]:
     return [
         {
             "id": str(e.id),
-            "timestamp": _iso(e.timestamp),
+            "timestamp": iso_utc(e.timestamp),
             "actor": e.actor or "",
             "action": e.action or "",
             "outcome": e.outcome or "",
@@ -245,12 +241,12 @@ def vendor_posture(*, db, user, vendor_id):
                 "label": provider.label,
                 "scope_noun": provider.scope_noun,
                 "enabled": enabled(provider),
-                "checked_at": _iso(row.checked_at),
-                "attempted_at": _iso(row.attempted_at),
+                "checked_at": iso_utc(row.checked_at),
+                "attempted_at": iso_utc(row.attempted_at),
                 "error": REASONS.get(row.error, "") if row.error else "",
                 "stale": bool(row.checked_at and now - row.checked_at > 2 * interval),
                 "reads_activity": provider.activity is not None,
-                "activity_at": _iso(row.activity_at),
+                "activity_at": iso_utc(row.activity_at),
                 "activity_error": REASONS.get(row.activity_error, "")
                 if row.activity_error
                 else "",

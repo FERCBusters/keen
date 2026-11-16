@@ -302,7 +302,7 @@ def test_risk_scores_controls_owner_and_change_history(api):
     updated = request(api, "PATCH", path, {"register_likelihood": 1})
     assert updated["risk_score"] == 5
     assert len(request(api, "GET", path + "/controls")["items"]) == 1
-    request(api, "PATCH", path + "/controls", {"controls": [], "framework": "A"})
+    request(api, "PATCH", path, {"controls": [], "framework": "A"})
     assert request(api, "GET", path + "/controls")["items"] == []
     assert len(request(api, "GET", path + "/changelog")["items"]) == 3
     assert request(api, "GET", "risks", q="Disclosure")["total"] == 1

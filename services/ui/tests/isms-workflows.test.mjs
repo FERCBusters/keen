@@ -42,7 +42,6 @@ const meta = {
     { id: 'cat2', name: 'Hardware', subcategories: [{ id: 'sub3', name: 'Laptops' }] },
   ],
   licenses: [{ id: 'l1', name: 'Enterprise', description: 'Per user', asset_count: 1 }],
-  business_processes: [],
   controls: [{ id: 'c1', ref: 'A.5.1', title: 'Policies' }],
   clauses: [{ id: 'k1', ref: '5.1', title: 'Leadership' }],
 };

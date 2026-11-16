@@ -23,7 +23,7 @@ from webauthn.helpers.structs import (
 )
 
 from app.db.models import MfaCredential, MfaRecoveryCode
-from app.security import mfa
+from app.security import encoding, mfa
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 
@@ -160,11 +160,11 @@ def authentication_options(*, context: ChangeContext, db: Session, row, user):
     options = generate_authentication_options(
         rp_id=rp,
         allow_credentials=[
-            PublicKeyCredentialDescriptor(id=mfa.unb64(c.credential_id))
+            PublicKeyCredentialDescriptor(id=encoding.unb64url(c.credential_id))
             for c in credentials
         ],
     )
-    row.data = {"authenticate": mfa.b64(options.challenge)}
+    row.data = {"authenticate": encoding.b64url(options.challenge)}
     db.commit()
     return json.loads(options_to_json(options))
 
@@ -193,10 +193,10 @@ def authentication_verify(
         origin, rp = mfa.origin_config()
         result = verify_authentication_response(
             credential=payload.credential,
-            expected_challenge=mfa.unb64(challenge),
+            expected_challenge=encoding.unb64url(challenge),
             expected_rp_id=rp,
             expected_origin=origin,
-            credential_public_key=mfa.unb64(credential.public_key),
+            credential_public_key=encoding.unb64url(credential.public_key),
             credential_current_sign_count=credential.sign_count,
             require_user_verification=False,
         )
@@ -227,14 +227,14 @@ def registration_options(*, context: ChangeContext, db: Session, row, user):
         user_id=user.id.bytes,
         user_name=user.username,
         exclude_credentials=[
-            PublicKeyCredentialDescriptor(id=mfa.unb64(c.credential_id))
+            PublicKeyCredentialDescriptor(id=encoding.unb64url(c.credential_id))
             for c in credentials
         ],
         authenticator_selection=AuthenticatorSelectionCriteria(
             user_verification=UserVerificationRequirement.PREFERRED
         ),
     )
-    row.data = {**row.data, "register": mfa.b64(options.challenge)}
+    row.data = {**row.data, "register": encoding.b64url(options.challenge)}
     db.commit()
     return json.loads(options_to_json(options))
 
@@ -252,7 +252,7 @@ def registration_verify(
         origin, rp = mfa.origin_config()
         result = verify_registration_response(
             credential=payload.credential,
-            expected_challenge=mfa.unb64(challenge),
+            expected_challenge=encoding.unb64url(challenge),
             expected_rp_id=rp,
             expected_origin=origin,
             require_user_presence=True,
@@ -263,7 +263,7 @@ def registration_verify(
         raise DomainError(400, "Registration failed; request another challenge")
     if (
         db.query(MfaCredential)
-        .filter(MfaCredential.credential_id == mfa.b64(result.credential_id))
+        .filter(MfaCredential.credential_id == encoding.b64url(result.credential_id))
         .first()
     ):
         db.commit()
@@ -271,8 +271,8 @@ def registration_verify(
     db.add(
         MfaCredential(
             user_id=user.id,
-            credential_id=mfa.b64(result.credential_id),
-            public_key=mfa.b64(result.credential_public_key),
+            credential_id=encoding.b64url(result.credential_id),
+            public_key=encoding.b64url(result.credential_public_key),
             sign_count=result.sign_count,
             name=payload.name.strip() or "Security key / passkey",
         )

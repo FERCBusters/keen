@@ -106,18 +106,24 @@ async function pestleItem(t, options = {}) {
         if (fail.affected) throw new Error('Registers offline');
         return structuredClone(options.affectedOptions || affectedOptions);
       }
-      if (p === '/api/v1/pestle/items/p1/business-processes')
+      if (p === '/api/v1/pestle/items/p1/controls')
         return {
           items: [
-            { business_process: { id: 'b1', name: 'Payroll <b>' }, relevance: { code: 'medium' } },
-            { business_process: { id: 'b2', name: 'Sales' } },
+            {
+              control: { id: 'c1', ref: 'A1', title: 'Privacy <b>' },
+              relevance: { code: 'medium' },
+            },
+            { control: { id: 'c2', ref: 'A2', title: 'Retention' }, relevance: { code: 'na' } },
           ],
         };
       if (p === '/api/v1/pestle/items/p1/clauses')
         return {
           items: [
             { clause: { id: 'k1', ref: '4.1', title: 'Context' }, relevance: { code: 'low' } },
-            { clause: { id: 'k2', ref: '6.1', title: 'Risks and opportunities' } },
+            {
+              clause: { id: 'k2', ref: '6.1', title: 'Risks and opportunities' },
+              relevance: { code: 'na' },
+            },
           ],
         };
       if (p === '/api/v1/pestle/items/p1/changelog') {
@@ -277,19 +283,15 @@ test('read-only PESTLE viewers see disabled fields and no mutation controls', as
     'savePestleItem',
     'deletePestleItem',
     'samplePestleAudit',
-    'saveBusinessProcessRelevance',
+    'saveControlRelevance',
     'saveClauseRelevance',
   ])
     assert.equal(ui.el(id).style.display, 'none', id);
   assert.equal(ui.el('pestleQuestions').querySelector('[data-question-ask]').hidden, true);
   assert.match(ui.el('relatedControls').textContent, /No controls are related/);
   tab(ui, 'pestleRelevanceTab');
-  await settle(() => ui.el('businessProcessRelevanceList').querySelector('select'));
-  assert.ok(
-    [...ui.document.querySelectorAll('.process-relevance, .clause-relevance')].every(
-      (s) => s.disabled,
-    ),
-  );
+  await settle(() => ui.el('controlRelevanceList').querySelector('select'));
+  assert.ok([...ui.document.querySelectorAll('[data-relevance-of]')].every((s) => s.disabled));
   ui.el('pestleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   ui.el('saveClauseRelevance').click();
   await new Promise((r) => setTimeout(r, 10));
@@ -313,7 +315,7 @@ test('new PESTLE items require text and are created before relevance can be edit
   assert.equal(ui.el('pestleItemMeta').textContent, 'A · new item');
   assert.match(ui.el('pestleBadges').textContent, /unsaved/);
   assert.match(ui.el('relatedControls').textContent, /Save the item and map clauses/);
-  assert.match(ui.el('businessProcessRelevanceList').textContent, /Save the item first/);
+  assert.match(ui.el('controlRelevanceList').textContent, /Save the item first/);
   assert.match(ui.el('pestleChangelog').textContent, /Save the item first/);
   assert.equal(ui.el('deletePestleItem').style.display, 'none');
   // Questions wait until the item exists.
@@ -349,7 +351,7 @@ test('new PESTLE items require text and are created before relevance can be edit
     },
   });
   assert.match(ui.window.location.search, /id=p1/);
-  assert.ok(ui.el('businessProcessRelevanceList').querySelector('select'));
+  assert.ok(ui.el('controlRelevanceList').querySelector('select'));
   assert.equal(ui.el('deletePestleItem').style.display, '');
   await settle(() => ui.el('thread-t1'));
   assert.equal(ask.hidden, false);
@@ -375,54 +377,62 @@ test('failed saves report the error and re-enable the save button', async (t) =>
   await settle(() => /Failed to save PESTLE\(E\) item: Rejected/.test(ui.el('status').textContent));
   assert.equal(ui.el('savePestleItem').disabled, false);
   tab(ui, 'pestleRelevanceTab');
-  await settle(() => ui.el('businessProcessRelevanceList').querySelector('select'));
-  ui.el('saveBusinessProcessRelevance').click();
-  await settle(() => /Failed to save process relevance/.test(ui.el('status').textContent));
+  await settle(() => ui.el('controlRelevanceList').querySelector('select'));
+  ui.el('saveControlRelevance').click();
+  await settle(() => /Failed to save control relevance/.test(ui.el('status').textContent));
   ui.el('saveClauseRelevance').click();
   await settle(() => /Failed to save clause relevance/.test(ui.el('status').textContent));
 });
 
-test('business process and clause relevance are edited and saved, including filtered clauses', async (t) => {
+test('control and clause relevance are edited and saved, including filtered rows', async (t) => {
   const { ui, state } = await pestleItem(t);
   tab(ui, 'pestleRelevanceTab');
-  await settle(() => ui.el('clauseRelevanceList').querySelector('select'));
+  await settle(
+    () =>
+      ui.el('clauseRelevanceList').querySelector('select') &&
+      ui.el('controlRelevanceList').querySelector('select'),
+  );
   assert.match(ui.window.location.search, /tab=relevance/);
-  assert.equal(ui.el('businessProcessRelevanceList').querySelector('b'), null);
-  const proc = ui.document.querySelector('[data-process-id="b1"]');
-  assert.equal(proc.value, 'medium');
-  assert.equal(ui.document.querySelector('[data-process-id="b2"]').value, 'na');
-  proc.value = 'high';
-  ui.el('saveBusinessProcessRelevance').click();
-  await settle(() => ui.el('status').textContent === 'Business process relevance saved');
+  const rated = (list, id) => ui.el(list).querySelector(`[data-relevance-of="${id}"]`);
+  // Control titles are text, and each control links to its page.
+  assert.equal(ui.el('controlRelevanceList').querySelector('b'), null);
+  assert.match(ui.el('controlRelevanceList').textContent, /Privacy <b>/);
+  assert.equal(
+    ui.el('controlRelevanceList').querySelector('a').getAttribute('href'),
+    '/control.html?id=c1&framework=A',
+  );
+  assert.equal(rated('controlRelevanceList', 'c1').value, 'medium');
+  assert.equal(rated('controlRelevanceList', 'c2').value, 'na');
+  rated('controlRelevanceList', 'c1').value = 'high';
+  ui.el('saveControlRelevance').click();
+  await settle(() => ui.el('status').textContent === 'Control relevance saved');
   assert.deepEqual(state.patched[0], {
-    path: '/api/v1/pestle/items/p1/business-processes',
+    path: '/api/v1/pestle/items/p1/controls',
     body: {
       items: [
-        { business_process_id: 'b1', relevance_code: 'high' },
-        { business_process_id: 'b2', relevance_code: 'na' },
+        { control_id: 'c1', relevance_code: 'high' },
+        { control_id: 'c2', relevance_code: 'na' },
       ],
     },
   });
-  assert.match(
-    ui.el('businessProcessRelevanceList').textContent,
-    /No business processes exist yet/,
-  );
+  assert.match(ui.el('controlRelevanceList').textContent, /No controls match/);
 
   // Filtering hides a clause; the hidden clause keeps its existing relevance in the payload.
   ui.el('clauseRelevanceFilter').value = 'risks';
   ui.el('clauseRelevanceFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.deepEqual(
-    [...ui.document.querySelectorAll('.clause-relevance')].map((s) => s.dataset.clauseId),
-    ['k2'],
-  );
-  ui.document.querySelector('[data-clause-id="k2"]').value = 'high';
+  await settle(() => ui.el('clauseRelevanceList').querySelectorAll('select').length === 1);
+  assert.equal(rated('clauseRelevanceList', 'k1'), null);
+  rated('clauseRelevanceList', 'k2').value = 'high';
   ui.el('saveClauseRelevance').click();
   await settle(() => ui.el('status').textContent === 'Clause relevance saved');
-  assert.deepEqual(state.patched[1].body, {
-    items: [
-      { clause_id: 'k1', relevance_code: 'low' },
-      { clause_id: 'k2', relevance_code: 'high' },
-    ],
+  assert.deepEqual(state.patched[1], {
+    path: '/api/v1/pestle/items/p1/clauses',
+    body: {
+      items: [
+        { clause_id: 'k1', relevance_code: 'low' },
+        { clause_id: 'k2', relevance_code: 'high' },
+      ],
+    },
   });
   assert.match(ui.el('clauseRelevanceList').textContent, /No clauses match/);
 });
@@ -573,7 +583,7 @@ test('a new item opens its deep-linked tab and every pane asks for a save first'
   tab(ui, 'pestleChangelogTab');
   assert.equal(ui.el('pestleChangelog').textContent.trim(), 'Save the item first.');
   tab(ui, 'pestleRelevanceTab');
-  assert.match(ui.el('businessProcessRelevanceList').textContent, /Save the item first/);
+  assert.match(ui.el('controlRelevanceList').textContent, /Save the item first/);
   assert.match(ui.el('clauseRelevanceList').textContent, /Save the item first/);
   // The address keeps the tab and never names an item that does not exist yet.
   const search = new URL(ui.window.location.href).searchParams;

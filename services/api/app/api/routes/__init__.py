@@ -64,7 +64,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "PESTLE(E)",
-        "description": "PESTLE(E) impact items, business processes and relevance mappings.",
+        "description": "PESTLE(E) impact items and their relevance to clauses and controls.",
     },
     {
         "name": "Affected records",

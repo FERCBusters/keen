@@ -33,9 +33,9 @@ const item = {
   created_by: 'root',
   created_at: '2026-03-01T00:00:00Z',
   updated_at: '2026-03-02T00:00:00Z',
-  business_process_count: 0,
+  control_count: 0,
   clause_count: 0,
-  business_processes: [],
+  controls: [],
   clauses: [],
   related_controls: [],
   affected: [],
@@ -99,13 +99,13 @@ test('returning to the details tab of an unsaved item leaves a bare address', as
 test('saving relevance before the item exists sends nothing', async (t) => {
   const { ui, requests } = await pestleItem(t, { query: '' });
   // Managers see the save buttons on a new item, beside the request to save it first.
-  assert.equal(ui.el('saveBusinessProcessRelevance').style.display, '');
-  assert.match(ui.el('businessProcessRelevanceList').textContent, /Save the item first/);
-  ui.el('saveBusinessProcessRelevance').click();
+  assert.equal(ui.el('saveControlRelevance').style.display, '');
+  assert.match(ui.el('controlRelevanceList').textContent, /Save the item first/);
+  ui.el('saveControlRelevance').click();
   ui.el('saveClauseRelevance').click();
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(requests, []);
-  assert.equal(ui.el('saveBusinessProcessRelevance').disabled, false);
+  assert.equal(ui.el('saveControlRelevance').disabled, false);
   assert.equal(ui.el('status').textContent, '');
 });
 

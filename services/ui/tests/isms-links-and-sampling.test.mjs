@@ -15,7 +15,6 @@ const meta = {
   assets: [],
   asset_categories: [],
   licenses: [],
-  business_processes: [],
   controls: [{ id: 'c1', ref: 'A.5.1', title: 'Policies' }],
   clauses: [{ id: 'k1', ref: '5.1', title: 'Leadership' }],
   effectiveness_metric_sources: [

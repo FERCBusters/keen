@@ -75,7 +75,6 @@ async function fixture(t, options = {}) {
           assets: [],
           asset_categories: [],
           licenses: [],
-          business_processes: [],
           controls: [],
           clauses: [],
         };

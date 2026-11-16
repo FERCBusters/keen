@@ -16,7 +16,7 @@ import {
   lookupTab,
 } from '/app.js';
 import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
-import { scoreBadge } from '/pages/risk-common.js';
+import { relevanceBadgeHtml, scoreBadge } from '/pages/risk-common.js';
 import { affectedBadgesHtml } from '/pages/affected-common.js';
 
 await initNavbar();
@@ -49,7 +49,6 @@ let soa = {
   clauses: [],
   risks: [],
   pestle_items: [],
-  business_processes: [],
   isms_objectives: [],
   isms_documents: [],
   isms_effectiveness_measures: [],
@@ -152,16 +151,6 @@ function effectivenessLatestValue(item) {
   return `${valueHtml}<div class="small-muted">${esc(bits.join(' · '))}</div>`;
 }
 
-function relevanceBadge(rel) {
-  const label = rel?.label || '-';
-  const code = rel?.code || '';
-  let cls = 'text-bg-light';
-  if (code === 'high') cls = 'text-bg-danger';
-  else if (code === 'medium') cls = 'text-bg-warning';
-  else if (code === 'low') cls = 'badge-soft';
-  return `<span class="badge ${cls}">${esc(label)}</span>`;
-}
-
 function filterText(el) {
   return String(el?.value || '')
     .trim()
@@ -251,7 +240,9 @@ function renderRisks() {
 
   const rows = risks.filter((r) => {
     if (!q) return true;
-    const controls = (r.controls || []).map((c) => `${c.ref} ${c.title || ''}`).join(' ');
+    const controls = [...(r.controls || []), ...r.clauses]
+      .map((c) => `${c.ref} ${c.title || ''}`)
+      .join(' ');
     return `${r.asset || ''} ${r.category?.name || ''} ${r.subcategory?.name || ''} ${(r.risk_types || []).join(' ')} ${r.threat_summary || ''} ${controls}`
       .toLowerCase()
       .includes(q);
@@ -265,7 +256,13 @@ function renderRisks() {
             (c) =>
               `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
           )
-          .join('') || '<span class="small-muted">-</span>';
+          .join('') +
+          r.clauses
+            .map(
+              (c) =>
+                `<a class="badge text-bg-light border text-decoration-none me-1 mb-1" href="${esc(withFramework(`/clause.html?id=${encodeURIComponent(c.id)}`, c.framework))}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
+            )
+            .join('') || '<span class="small-muted">-</span>';
       return `<tr>
       <td>${riskLink(r)}</td>
       <td>${esc(r.category?.name || '-')}</td>
@@ -297,25 +294,25 @@ function renderPestle() {
 
   const rows = items.filter((item) => {
     if (!q) return true;
-    const processes = (item.business_processes || [])
-      .map((x) => `${x.business_process?.name || ''} ${x.relevance?.label || ''}`)
+    const controls = item.controls
+      .map((x) => `${x.control.ref} ${x.control.title || ''} ${x.relevance.label}`)
       .join(' ');
     const clauses = (item.clauses || [])
       .map((x) => `${x.clause?.ref || ''} ${x.clause?.title || ''} ${x.relevance?.label || ''}`)
       .join(' ');
     const affected = item.affected.map((x) => x.label).join(' ');
-    return `${item.type || ''} ${item.lens || ''} ${item.item || ''} ${item.rationale || ''} ${item.overall_relevance?.label || ''} ${affected} ${processes} ${clauses}`
+    return `${item.type || ''} ${item.lens || ''} ${item.item || ''} ${item.rationale || ''} ${item.overall_relevance?.label || ''} ${affected} ${controls} ${clauses}`
       .toLowerCase()
       .includes(q);
   });
 
   pestleRows.innerHTML = rows
     .map((item) => {
-      const processes =
-        (item.business_processes || [])
+      const controls =
+        item.controls
           .map(
             (x) =>
-              `<span class="badge badge-soft me-1 mb-1" title="${esc(x.relevance?.label || '-')}">${esc(x.business_process?.name || 'Business process')}</span>`,
+              `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(x.control.id)}`, x.control.framework))}" title="${esc(`${x.control.title || ''} · ${x.relevance.label}`)}">${esc(x.control.ref)}</a>`,
           )
           .join('') || '<span class="small-muted">-</span>';
       const clauses =
@@ -333,10 +330,10 @@ function renderPestle() {
       <td>${esc(item.type || '-')}</td>
       <td>${esc(item.lens || '-')}</td>
       <td class="wrap fw-semibold">${pestleLink(item)}</td>
-      <td>${relevanceBadge(item.overall_relevance)}</td>
+      <td>${relevanceBadgeHtml(item.overall_relevance)}</td>
       <td class="wrap small-muted">${esc(shorten(item.rationale || '', 220) || '-')}</td>
       <td>${affectedBadgesHtml(item.affected, framework)}</td>
-      <td>${processes}</td>
+      <td>${controls}</td>
       <td>${clauses}</td>
     </tr>`;
     })
@@ -470,7 +467,7 @@ function renderSwot() {
 function renderAll() {
   const counts = soa.counts || {};
   if (meta) {
-    meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} CIA risks · ${counts.pestle || 0} PESTLE(E) items · ${counts.business_processes || 0} business processes · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets`;
+    meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} CIA risks · ${counts.pestle || 0} PESTLE(E) items · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets`;
   }
   renderSwot();
   renderControls();

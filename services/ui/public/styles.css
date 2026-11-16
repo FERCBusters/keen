@@ -994,7 +994,7 @@ a.schedule-calendar-event {
   }
 }
 
-/* ISMS Application Configuration matrix */
+/* ISMS access control matrix */
 .isms-app-matrix-wrap {
   max-height: 76vh;
   overflow: auto;

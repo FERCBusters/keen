@@ -127,19 +127,6 @@ def list_clauses(
     }
 
 
-def get_clause(*, clause_id: str, db: Session):
-    from app.core.references import try_uuid as _try_uuid
-
-    cid = _try_uuid(clause_id)
-    if not cid:
-        raise DomainError(status_code=400, detail="clause_id must be a UUID")
-
-    row = db.query(FrameworkClause).filter(FrameworkClause.id == cid).one_or_none()
-    if not row:
-        raise DomainError(status_code=404, detail="Clause not found")
-    return _clause_detail(db, row)
-
-
 def _clause_detail(db: Session, clause: FrameworkClause) -> dict:
     """A clause with its linked-control count and its owners."""
     return {

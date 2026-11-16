@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 from app.db.models import KeenAgent, UeuSettings
 from app.integrations.transport import decrypt
-from app.security.agent_signatures import unb64url
+from app.security.encoding import unb64url
 from cryptography.fernet import Fernet
 
 # Imported fixture: the assembled application with an in-memory session store.

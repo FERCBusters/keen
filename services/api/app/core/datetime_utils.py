@@ -39,3 +39,13 @@ def add_months(d: date, months: int) -> date:
     month = month_idx % 12 + 1
     day = min(d.day, monthrange(year, month)[1])
     return date(year, month, day)
+
+
+def iso_or_none(value: date | datetime | None) -> str | None:
+    """A date or time as the API serialises it; nothing for a missing one."""
+    return value.isoformat() if value else None
+
+
+def iso_utc(value: datetime | None) -> str | None:
+    """A naive UTC time with the Z a browser needs to read it as UTC."""
+    return value.isoformat() + "Z" if value is not None else None

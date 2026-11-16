@@ -1,5 +1,5 @@
 // The risk wizard: one guided path through method, subject, who it affects,
-// description, rating, controls and review, creating the asset, people and
+// description, rating, controls, clauses and review, creating the asset, people and
 // vendors it needs along the way; editing an existing risk; the PESTLE(E) path; and the
 // hand-off from the Mitigator.
 import test from 'node:test';
@@ -102,6 +102,7 @@ const existingRisk = {
   treatment_due_at: '2026-12-01',
   treatment_plan: 'Restore drills',
   controls: [{ id: 'c2', ref: 'A.8.13' }],
+  clauses: [{ id: 'cl1', ref: '6.1.2' }],
 };
 
 function memoryStorage(initial = {}) {
@@ -141,8 +142,6 @@ async function wizard(t, options = {}) {
         };
       }
       if (p === '/api/v1/pestle/meta') return pestleMeta;
-      if (p === '/api/v1/pestle/business-processes')
-        return { items: [{ id: 'bp1', name: 'Payroll run' }] };
       if (p === '/api/v1/clauses') {
         if (options.clausesFail) throw new Error('Clauses offline');
         return { items: [{ id: 'cl1', ref: '6.1.2', title: 'Risk assessment' }] };
@@ -156,7 +155,6 @@ async function wizard(t, options = {}) {
     post: async (u, b) => {
       state.posted.push({ path: u.pathname, body: plain(b) });
       if (options.postFail) throw new Error('Rejected');
-      if (u.pathname === '/api/v1/pestle/business-processes') return { id: 'bp-new' };
       if (u.pathname === '/api/v1/pestle/items') return { id: 'pi-new' };
       return { id: 'new1' };
     },
@@ -204,7 +202,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
     [...ui.el('methodChoices').querySelectorAll('input')].map((i) => i.value),
     ['general', 'cia', 'pestle'],
   );
-  assert.equal(ui.el('stepHint').textContent, 'Step 1 of 7');
+  assert.equal(ui.el('stepHint').textContent, 'Step 1 of 8');
   // Risk templates only, until PESTLE(E) is chosen.
   assert.match(ui.el('templateList').textContent, /Ransomware/);
   assert.doesNotMatch(ui.el('templateList').textContent, /Privacy law change/);
@@ -298,6 +296,20 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   input(ui, 'controlSearch', 'backup');
   await tick();
   assert.equal(ui.el('controlList').querySelectorAll('[data-control]').length, 1);
+  // A register risk links controls plainly, with no relevance to choose.
+  assert.equal(ui.el('controlList').querySelector('select'), null);
+  assert.equal(
+    ui.document.querySelector('[data-links-intro="controls"]:not([hidden])').dataset.linksFor,
+    'risk',
+  );
+  next(ui);
+
+  assert.equal(visibleStep(ui), 'clauses');
+  assert.equal(ui.el('clausesFramework').textContent, 'A');
+  assert.equal(ui.el('skipStep').hidden, false);
+  assert.equal(ui.el('clauseList').querySelector('select'), null);
+  check(ui, '[data-clause="cl1"]');
+  assert.equal(ui.el('clauseCount').textContent, '1');
   next(ui);
 
   assert.equal(visibleStep(ui), 'review');
@@ -309,6 +321,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   assert.match(review, /Owner dana/);
   assert.match(review, /Treatment Mitigate \(In progress, due 2027-01-31\)/);
   assert.match(review, /Controls A\.5\.1/);
+  assert.match(review, /Clauses 6\.1\.2/);
   assert.match(review, /Notes Raised by payroll/);
   assert.equal(ui.el('reviewSummary').querySelector('b'), null);
   assert.match(ui.el('nextStep').textContent, /Create risk/);
@@ -318,7 +331,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   assert.equal(ui.el('riskTitle').value, 'HR portal credentials phished');
   ui.el('wizardSteps').querySelector('[data-goto-step="method"]').click();
   assert.equal(visibleStep(ui), 'method');
-  for (let i = 0; i < 6; i += 1) next(ui);
+  for (let i = 0; i < 7; i += 1) next(ui);
   assert.equal(visibleStep(ui), 'review');
 
   next(ui);
@@ -340,6 +353,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
       treatment_plan: 'Turn on MFA',
       treatment_due_at: '2027-01-31',
       controls: ['c1'],
+      clauses: ['cl1'],
       affected: [{ new_vendor: 'Fair Work Ombudsman' }, { person_id: 'p1' }],
       asset_name: 'HR portal',
       category_id: 'cat1',
@@ -395,6 +409,10 @@ test('a CIA risk needs at least one property, and a template fills the blanks', 
   assert.equal(visibleStep(ui), 'controls');
   assert.match(ui.el('suggestedControlsNote').textContent, /BC-1.*not enabled here/);
   ui.el('skipStep').click();
+  assert.equal(visibleStep(ui), 'clauses');
+  check(ui, '[data-clause="cl1"]');
+  // Skipping drops what was ticked.
+  ui.el('skipStep').click();
   assert.match(ui.el('reviewSummary').textContent, /Template\s*Ransomware/);
   assert.match(ui.el('reviewSummary').textContent, /Security properties\s*Integrity/);
   next(ui);
@@ -404,6 +422,7 @@ test('a CIA risk needs at least one property, and a template fills the blanks', 
   assert.equal(body.asset_id, 'a1');
   assert.equal(body.library_template_id, 'tpl1');
   assert.deepEqual(body.controls, []);
+  assert.deepEqual(body.clauses, []);
   assert.deepEqual(body.affected, []);
   await settle(() => visibleStep(ui) === 'done');
   assert.equal(ui.el('doneDetail').textContent, 'Everything is in the register.');
@@ -419,7 +438,7 @@ test('a template can be deselected, and changing method clears a template of the
   radio.checked = true;
   radio.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
   assert.equal(ui.el('templateList').querySelector('.active'), null);
-  assert.equal(ui.el('stepHint').textContent, 'Step 1 of 7');
+  assert.equal(ui.el('stepHint').textContent, 'Step 1 of 8');
   ui.el('templateList').querySelector('[data-template="tpl1"]').click();
   ui.el('templateList').querySelector('[data-template="tpl1"]').click();
   assert.equal(ui.el('templateList').querySelector('.active'), null);
@@ -430,23 +449,8 @@ test('a template can be deselected, and changing method clears a template of the
   assert.match(missing.ui.el('status').textContent, /That template no longer exists/);
 });
 
-test('the PESTLE(E) path records a factor with its processes and clauses', async (t) => {
+test('the PESTLE(E) path records a factor with the controls and clauses it bears on', async (t) => {
   const { ui, state } = await wizard(t, { query: '&method=pestle' });
-  next(ui);
-  assert.equal(visibleStep(ui), 'subject');
-  assert.equal(ui.document.querySelector('[data-subject="asset"]').hidden, true);
-  assert.equal(ui.el('skipStep').hidden, false);
-  check(ui, '[data-process="bp1"]');
-  input(ui, 'processSearch', 'Recruitment');
-  await tick();
-  ui.el('processList').querySelector('[data-add-process="Recruitment"]').click();
-  assert.match(ui.el('processList').textContent, /Recruitment\s*new/);
-  // A new process can be unticked again before saving.
-  input(ui, 'processSearch', 'Onboarding');
-  await tick();
-  ui.el('processList').querySelector('[data-add-process="Onboarding"]').click();
-  check(ui, '[data-new-process="Onboarding"]', false);
-  assert.doesNotMatch(ui.el('processList').textContent, /Onboarding/);
   next(ui);
   // A factor names who and what it affects too, a new person among them.
   assert.equal(visibleStep(ui), 'parties');
@@ -471,8 +475,24 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
   ui.el('pestleRationale').value = 'Draft bill published';
   ui.el('riskNote').value = 'Watch the consultation';
   next(ui);
-  assert.equal(visibleStep(ui), 'rate');
-  assert.equal(ui.document.querySelector('[data-method-not="pestle"]').hidden, true);
+  // A factor has no likelihood or impact; it goes straight to what it bears on.
+  assert.equal(visibleStep(ui), 'controls');
+  assert.equal(
+    ui.document.querySelector('[data-links-intro="controls"]:not([hidden])').dataset.linksFor,
+    'pestle',
+  );
+  const controlLevel = () => ui.el('controlList').querySelector('[data-control-level="c1"]');
+  assert.equal(controlLevel().disabled, true);
+  check(ui, '[data-control="c1"]');
+  // A ticked record takes the factor's overall relevance until another is chosen.
+  assert.equal(controlLevel().disabled, false);
+  assert.equal(controlLevel().value, 'low');
+  assert.deepEqual(
+    [...controlLevel().options].map((o) => o.value),
+    ['high', 'low'],
+  );
+  next(ui);
+  assert.equal(visibleStep(ui), 'clauses');
   check(ui, '[data-clause="cl1"]');
   const level = ui.el('clauseList').querySelector('[data-clause-level="cl1"]');
   assert.equal(level.disabled, false);
@@ -482,7 +502,7 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
   next(ui);
   assert.equal(visibleStep(ui), 'review');
   const review = reviewText(ui);
-  assert.match(review, /Business processes Payroll run, Recruitment \(new\)/);
+  assert.match(review, /Relevant controls A\.5\.1/);
   assert.match(review, /Affects Payroll DB, Payroll officer new/);
   assert.match(review, /Type and lens Legal · Internal/);
   assert.match(review, /Overall relevance 3 Low/);
@@ -491,7 +511,6 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
   next(ui);
   await settle(() => state.patched.length === 2);
   assert.deepEqual(state.posted, [
-    { path: '/api/v1/pestle/business-processes', body: { name: 'Recruitment' } },
     {
       path: '/api/v1/pestle/items',
       body: {
@@ -507,13 +526,8 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
   ]);
   assert.deepEqual(state.patched, [
     {
-      path: '/api/v1/pestle/items/pi-new/business-processes',
-      body: {
-        items: [
-          { business_process_id: 'bp1', relevance_code: 'low' },
-          { business_process_id: 'bp-new', relevance_code: 'low' },
-        ],
-      },
+      path: '/api/v1/pestle/items/pi-new/controls',
+      body: { items: [{ control_id: 'c1', relevance_code: 'low' }] },
     },
     {
       path: '/api/v1/pestle/items/pi-new/clauses',
@@ -521,10 +535,7 @@ test('the PESTLE(E) path records a factor with its processes and clauses', async
     },
   ]);
   assert.equal(ui.el('doneTitle').textContent, 'PESTLE(E) factor recorded');
-  assert.equal(
-    ui.el('doneDetail').textContent,
-    'Keen also added the business process “Recruitment” and 1 new person for you.',
-  );
+  assert.equal(ui.el('doneDetail').textContent, 'Keen also added 1 new person for you.');
   assert.equal(
     ui.el('doneActions').querySelector('a').getAttribute('href'),
     '/pestle_item.html?id=pi-new&tab=details&framework=A',
@@ -565,6 +576,9 @@ test('editing an existing risk starts at the subject with everything filled in a
   next(ui);
   assert.equal(ui.document.querySelector('[data-control="c2"]').checked, true);
   next(ui);
+  assert.equal(visibleStep(ui), 'clauses');
+  assert.equal(ui.document.querySelector('[data-clause="cl1"]').checked, true);
+  next(ui);
   assert.match(ui.el('nextStep').textContent, /Save changes/);
   assert.match(ui.el('reviewSummary').textContent, /Owner\s*Security lead/);
   next(ui);
@@ -578,6 +592,7 @@ test('editing an existing risk starts at the subject with everything filled in a
   assert.equal(body.risk_owner_role_id, 'role1');
   assert.equal(body.risk_owner_user_id, null);
   assert.deepEqual(body.controls, ['c2']);
+  assert.deepEqual(body.clauses, ['cl1']);
   assert.equal('library_template_id' in body, false);
   await settle(() => visibleStep(ui) === 'done');
   assert.equal(ui.el('doneTitle').textContent, 'Risk updated');
@@ -626,6 +641,7 @@ test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested control
   assert.match(ui.el('suggestedControlsNote').textContent, /The Mitigator suggested 1 control/);
   next(ui);
   next(ui);
+  next(ui);
   await settle(() => state.posted.length === 1);
   const body = state.posted[0].body;
   assert.deepEqual(body.controls, ['c1']);
@@ -653,6 +669,7 @@ test('a draft naming an unknown asset proposes it as new, with the category it s
   next(ui);
   next(ui);
   ui.el('skipStep').click();
+  ui.el('skipStep').click();
   next(ui);
   await settle(() => state.posted.length === 1);
   assert.equal(state.posted[0].body.asset_name, 'Badge system');
@@ -673,6 +690,7 @@ test('save failures keep the wizard on the review step and say why', async (t) =
   ui.el('riskTitle').value = 'Thing breaks';
   next(ui);
   next(ui);
+  ui.el('skipStep').click();
   ui.el('skipStep').click();
   next(ui);
   await settle(() => /Could not save: Rejected/.test(ui.el('status').textContent));
@@ -732,7 +750,7 @@ test('a template asset the register lacks is typed in as new, with a category of
   assert.equal(visibleStep(ui), 'subject');
   assert.match(ui.el('selectedAssetSummary').textContent, /A new asset Payroll DB/);
   assert.equal(ui.el('assetList').querySelector('[data-asset="a1"]'), null);
-  for (const step of ['parties', 'describe', 'rate', 'controls', 'review']) {
+  for (const step of ['parties', 'describe', 'rate', 'controls', 'clauses', 'review']) {
     next(ui);
     assert.equal(visibleStep(ui), step);
   }
@@ -747,36 +765,60 @@ test('a template asset the register lacks is typed in as new, with a category of
   assert.deepEqual(body.controls, ['c1']);
 });
 
-test('a PESTLE(E) clause can be unticked, and a clause list that cannot load is empty', async (t) => {
+test('a PESTLE(E) clause can be unticked, and a clause list that cannot load leaves the step out', async (t) => {
+  const describe = (ui) => {
+    next(ui);
+    ui.el('skipStep').click();
+    assert.equal(visibleStep(ui), 'describe');
+    ui.el('riskDescription').value = 'Privacy law tightens retention';
+    const legal = ui.document.querySelector('input[name="pestleType"][value="Legal"]');
+    legal.checked = true;
+    legal.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+    next(ui);
+    assert.equal(visibleStep(ui), 'controls');
+    next(ui);
+  };
   const { ui } = await wizard(t, { query: '&method=pestle' });
-  next(ui);
-  ui.el('skipStep').click();
-  ui.el('skipStep').click();
-  assert.equal(visibleStep(ui), 'describe');
-  ui.el('riskDescription').value = 'Privacy law tightens retention';
-  const legal = ui.document.querySelector('input[name="pestleType"][value="Legal"]');
-  legal.checked = true;
-  legal.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
-  next(ui);
-  assert.equal(visibleStep(ui), 'rate');
+  describe(ui);
+  assert.equal(visibleStep(ui), 'clauses');
   check(ui, '[data-clause="cl1"]');
   const level = ui.el('clauseList').querySelector('[data-clause-level="cl1"]');
   assert.equal(level.disabled, false);
   check(ui, '[data-clause="cl1"]', false);
   assert.equal(level.disabled, true);
   next(ui);
-  assert.doesNotMatch(reviewText(ui), /Relevant clauses 6\.1\.2/);
+  assert.equal(reviewText(ui).includes('Relevant clauses None yet'), true);
 
+  // Without clauses there is nothing to link: the step and its review row are left out.
   const offline = await wizard(t, { query: '&method=pestle', clausesFail: true });
-  next(offline.ui);
-  offline.ui.el('skipStep').click();
-  offline.ui.el('skipStep').click();
-  offline.ui.el('riskDescription').value = 'Privacy law tightens retention';
-  const type = offline.ui.document.querySelector('input[name="pestleType"][value="Legal"]');
-  type.checked = true;
-  type.dispatchEvent(new offline.ui.window.Event('change', { bubbles: true }));
-  next(offline.ui);
-  assert.equal(visibleStep(offline.ui), 'rate');
-  assert.equal(offline.ui.el('clauseList').querySelector('[data-clause]'), null);
-  assert.equal(offline.ui.el('status').textContent, '');
+  assert.equal(offline.ui.el('stepHint').textContent, 'Step 1 of 5');
+  describe(offline.ui);
+  assert.equal(visibleStep(offline.ui), 'review');
+  assert.doesNotMatch(reviewText(offline.ui), /Relevant clauses/);
+  assert.match(reviewText(offline.ui), /Relevant controls None yet/);
+});
+
+test('a register risk in a framework without clauses saves no clause links', async (t) => {
+  const { ui, state } = await wizard(t, { clausesFail: true });
+  assert.equal(ui.el('stepHint').textContent, 'Step 1 of 7');
+  next(ui);
+  ui.el('assetList').querySelector('[data-asset="a1"]').click();
+  next(ui);
+  ui.el('skipStep').click();
+  ui.el('riskTitle').value = 'Laptop theft';
+  next(ui);
+  next(ui);
+  ui.el('skipStep').click();
+  assert.equal(visibleStep(ui), 'review');
+  assert.doesNotMatch(reviewText(ui), /Clauses/);
+  next(ui);
+  await settle(() => state.posted.length === 1);
+  assert.equal('clauses' in state.posted[0].body, false);
+
+  // Without the clauses feature none are fetched either.
+  const off = await wizard(t, {
+    me: { is_admin: true, features: { enabled: { clauses: false } } },
+  });
+  assert.equal(off.ui.el('stepHint').textContent, 'Step 1 of 7');
+  assert.ok(!off.state.gets.some((g) => g.startsWith('/api/v1/clauses')));
 });

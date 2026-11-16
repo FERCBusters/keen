@@ -14,6 +14,8 @@ import {
   openAuditSampleModal,
   effectivenessMetricValueHtml,
   effectivenessMetricThresholdBadgeHtml,
+  loadSourceLabels,
+  metricHref,
 } from '/app.js';
 import { effectivenessControlBadges } from '/pages/isms-detail-common.js';
 
@@ -34,26 +36,9 @@ function measureHref(id) {
   );
 }
 
-function metricHref(id = metricId) {
-  return withFramework(`/isms-effectiveness-metric.html?id=${encodeURIComponent(id)}`, framework);
-}
-
 function linkOrDash(url, label) {
   if (!url) return '-';
   return `<a href="${esc(safeExternalHref(url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
-}
-
-async function loadSourceMeta() {
-  try {
-    const data = await apiGet('/api/v1/sources');
-    sourceMeta = {};
-    for (const x of data.items) {
-      const src = String(x.source).trim();
-      sourceMeta[src] = { source: src, label: x.label, color: x.color };
-    }
-  } catch {
-    sourceMeta = {};
-  }
 }
 
 function renderMetric(row) {
@@ -115,7 +100,7 @@ async function load() {
     return;
   }
   try {
-    await loadSourceMeta();
+    sourceMeta = await loadSourceLabels();
     const row = await apiGet(
       `/api/v1/isms/effectiveness-metrics/${encodeURIComponent(metricId)}?framework=${encodeURIComponent(framework)}`,
     );
@@ -132,7 +117,7 @@ $('sampleMetricAudit')?.addEventListener('click', () => {
     entityType: 'isms_effectiveness_metric',
     entityId: entry.id,
     title: entry.value_display || 'Metric entry',
-    evidenceUrl: metricHref(entry.id),
+    evidenceUrl: metricHref(entry.id, framework),
     framework,
     statusEl: status,
   });

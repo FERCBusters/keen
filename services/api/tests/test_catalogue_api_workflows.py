@@ -20,7 +20,6 @@ from app.db.models import (
     FrameworkClause,
     Mapping,
 )
-from app.security.redaction import REDACTED
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen  # noqa: F401
@@ -151,13 +150,12 @@ def test_catalogue_reads_need_a_signed_in_user(catalogue):
     control = catalogue.logging.id
     for path in (
         "/v1/clauses",
-        f"/v1/clauses/{clause}",
         f"/v1/clauses/{clause}/controls",
         f"/v1/clauses/{clause}/changelog",
         "/v1/controls",
         f"/v1/controls/{control}",
         f"/v1/controls/{control}/changelog",
-        f"/v1/controls/{control}/evidence",
+        f"/v1/controls/{control}/evidence/summary",
     ):
         refused = anonymous.get(path)
         assert (refused.status_code, refused.json()) == (
@@ -166,7 +164,7 @@ def test_catalogue_reads_need_a_signed_in_user(catalogue):
         )
     signed_in = catalogue.keen.client(catalogue.keen.user())
     assert signed_in.get(f"/v1/controls/{control}").status_code == 200
-    response = signed_in.get(f"/v1/controls/{control}/evidence")
+    response = signed_in.get(f"/v1/controls/{control}/evidence/summary")
     assert response.status_code == 403
     assert response.json()["detail"] == "events.read permission required"
 
@@ -219,15 +217,6 @@ def test_clauses_are_listed_as_a_naturally_sorted_tree(catalogue):
 def test_clause_detail_controls_and_changelog(catalogue):
     client = catalogue.keen.client(catalogue.keen.user())
     clause = catalogue.child2
-    detail = client.get(f"/v1/clauses/{clause.id}").json()
-    assert detail["ref"] == "4.2" and detail["parent_id"] == str(catalogue.root.id)
-    # The detail reports the same link count as the clause list.
-    assert detail["control_link_count"] == 2
-    assert [item["url"] for item in detail["evidence_mappings"]] == [
-        "https://docs.example/a",
-        "https://docs.example/b",
-    ]
-
     controls = client.get(f"/v1/clauses/{clause.id}/controls").json()
     assert controls["clause"]["ref"] == "4.2"
     assert controls["clause"]["control_link_count"] == 2
@@ -255,7 +244,7 @@ def test_clause_detail_controls_and_changelog(catalogue):
     changelog = client.get(f"/v1/clauses/{clause.id}/changelog").json()
     assert [item["summary"] for item in changelog["items"]] == ["Updated evidence"]
 
-    for suffix in ("", "/controls", "/changelog"):
+    for suffix in ("/controls", "/changelog"):
         refused = client.get(f"/v1/clauses/not-a-uuid{suffix}")
         assert (refused.status_code, refused.json()) == (
             400,
@@ -342,63 +331,3 @@ def _mapped_event(db, *controls, minutes=0, **kw):
         )
     db.flush()
     return event
-
-
-def test_control_evidence_is_redacted_inherited_and_deduplicated(catalogue):
-    db = catalogue.db
-    secret_url = "https://builder:hunter2@ci.example/job/1?token=abc123&page=2"
-    direct = _mapped_event(
-        db,
-        catalogue.monitoring,
-        minutes=1,
-        raw_pointer={"url": secret_url, "password": "hunter2"},
-        summary=HOSTILE,
-    )
-    inherited = _mapped_event(db, catalogue.logging, minutes=2)
-    both = _mapped_event(db, catalogue.logging, catalogue.monitoring, minutes=3)
-    _mapped_event(db, catalogue.access, minutes=4)  # not linked to B.1
-    db.commit()
-
-    client = catalogue.keen.client(catalogue.keen.user("events.read"))
-    evidence = client.get(f"/v1/controls/{catalogue.monitoring.id}/evidence").json()
-    assert evidence["total"] == 3
-    by_event = {item["event_id"]: item for item in evidence["items"]}
-    assert set(by_event) == {str(direct.id), str(inherited.id), str(both.id)}
-
-    first = by_event[str(direct.id)]
-    assert first["summary"] == HOSTILE
-    assert first["inherited"] is False and first["inherited_from"] is None
-    assert "hunter2" not in str(first) and "abc123" not in str(first)
-    assert first["raw_pointer"]["password"] == REDACTED
-    assert (
-        first["source_url"] == "https://REDACTED@ci.example/job/1?token=REDACTED&page=2"
-    )
-
-    crosswalk = by_event[str(inherited.id)]
-    assert crosswalk["inherited"] is True
-    assert crosswalk["inherited_from"] == {
-        "control_id": str(catalogue.logging.id),
-        "framework": "A",
-        "ref": "A.8.15",
-    }
-    # An event mapped directly and through the crosswalk appears once, as direct.
-    assert by_event[str(both.id)]["inherited"] is False
-    assert by_event[str(both.id)]["rationale"] == "rule B.1"
-
-    page = client.get(
-        f"/v1/controls/{catalogue.monitoring.id}/evidence",
-        params={"limit": 1, "offset": 1},
-    ).json()
-    assert page["total"] == 3 and len(page["items"]) == 1
-    newest_first = [item["event_id"] for item in evidence["items"]]
-    assert page["items"][0]["event_id"] == newest_first[1]
-    refused = client.get("/v1/controls/nope/evidence")
-    assert (refused.status_code, refused.json()) == (
-        400,
-        {"detail": "control_id must be a UUID"},
-    )
-    refused = client.get(f"/v1/controls/{uuid.uuid4()}/evidence")
-    assert (refused.status_code, refused.json()) == (
-        404,
-        {"detail": "Control not found"},
-    )

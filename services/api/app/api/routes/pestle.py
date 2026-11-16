@@ -10,10 +10,8 @@ from app.db.session import get_db
 from app.security.auth import require_authenticated
 from app.services import pestle as service
 from app.services.pestle import (
-    BusinessProcessLinksPayload,
-    BusinessProcessPayload,
-    ClauseLinksPayload,
     PestleItemPayload,
+    RelevanceLinksPayload,
     can_manage_pestle,
     can_read_pestle,
 )
@@ -104,72 +102,6 @@ def delete_pestle_item(
     return service.delete_pestle_item(item_id=item_id, user=user, db=db)
 
 
-@router.get("/v1/pestle/business-processes")
-def list_business_processes(
-    q: str = "",
-    limit: int = 5000,
-    offset: int = 0,
-    user=Depends(require_pestle_read),
-    db: Session = Depends(get_db),
-):
-    return service.list_business_processes(
-        q=q, limit=limit, offset=offset, user=user, db=db
-    )
-
-
-@router.post("/v1/pestle/business-processes")
-def create_business_process(
-    payload: BusinessProcessPayload,
-    user=Depends(require_pestle_manage),
-    db: Session = Depends(get_db),
-):
-    return service.create_business_process(payload=payload, user=user, db=db)
-
-
-@router.patch("/v1/pestle/business-processes/{process_id}")
-def update_business_process(
-    process_id: str,
-    payload: BusinessProcessPayload,
-    user=Depends(require_pestle_manage),
-    db: Session = Depends(get_db),
-):
-    return service.update_business_process(
-        process_id=process_id, payload=payload, user=user, db=db
-    )
-
-
-@router.delete("/v1/pestle/business-processes/{process_id}")
-def delete_business_process(
-    process_id: str,
-    user=Depends(require_pestle_manage),
-    db: Session = Depends(get_db),
-):
-    return service.delete_business_process(process_id=process_id, user=user, db=db)
-
-
-@router.get("/v1/pestle/items/{item_id}/business-processes")
-def get_item_business_process_relevance(
-    item_id: str,
-    user=Depends(require_pestle_read),
-    db: Session = Depends(get_db),
-):
-    return service.get_item_business_process_relevance(
-        item_id=item_id, user=user, db=db
-    )
-
-
-@router.patch("/v1/pestle/items/{item_id}/business-processes")
-def replace_item_business_process_relevance(
-    item_id: str,
-    payload: BusinessProcessLinksPayload,
-    user=Depends(require_pestle_manage),
-    db: Session = Depends(get_db),
-):
-    return service.replace_item_business_process_relevance(
-        item_id=item_id, payload=payload, user=user, db=db
-    )
-
-
 @router.get("/v1/pestle/items/{item_id}/clauses")
 def get_item_clause_relevance(
     item_id: str,
@@ -182,11 +114,32 @@ def get_item_clause_relevance(
 @router.patch("/v1/pestle/items/{item_id}/clauses")
 def replace_item_clause_relevance(
     item_id: str,
-    payload: ClauseLinksPayload,
+    payload: RelevanceLinksPayload,
     user=Depends(require_pestle_manage),
     db: Session = Depends(get_db),
 ):
     return service.replace_item_clause_relevance(
+        item_id=item_id, payload=payload, user=user, db=db
+    )
+
+
+@router.get("/v1/pestle/items/{item_id}/controls")
+def get_item_control_relevance(
+    item_id: str,
+    user=Depends(require_pestle_read),
+    db: Session = Depends(get_db),
+):
+    return service.get_item_control_relevance(item_id=item_id, user=user, db=db)
+
+
+@router.patch("/v1/pestle/items/{item_id}/controls")
+def replace_item_control_relevance(
+    item_id: str,
+    payload: RelevanceLinksPayload,
+    user=Depends(require_pestle_manage),
+    db: Session = Depends(get_db),
+):
+    return service.replace_item_control_relevance(
         item_id=item_id, payload=payload, user=user, db=db
     )
 
@@ -220,3 +173,12 @@ def clause_pestle_relevance(
     db: Session = Depends(get_db),
 ):
     return service.clause_pestle_relevance(clause_id=clause_id, user=user, db=db)
+
+
+@router.get("/v1/controls/{control_id}/pestle")
+def control_pestle_relevance(
+    control_id: str,
+    user=Depends(require_pestle_read),
+    db: Session = Depends(get_db),
+):
+    return service.control_pestle_relevance(control_id=control_id, user=user, db=db)

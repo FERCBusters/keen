@@ -14,7 +14,6 @@ const soa = () => ({
     clauses: 2,
     risks: 2,
     pestle: 1,
-    business_processes: 3,
     isms_objectives: 1,
     isms_documents: 3,
     isms_effectiveness_measures: 2,
@@ -56,8 +55,16 @@ const soa = () => ({
       residual_risk_score: 6,
       risk_owner: { username: 'dana' },
       controls: [{ id: 'c1', ref: 'A.5.1', title: 'Policies' }],
+      clauses: [{ id: 'k2', ref: '6.1', title: 'Risk treatment', framework: 'A' }],
     },
-    { id: 'r2', asset: '', threat_summary: '', risk_score: 2, residual_risk_score: 0 },
+    {
+      id: 'r2',
+      asset: '',
+      threat_summary: '',
+      risk_score: 2,
+      residual_risk_score: 0,
+      clauses: [],
+    },
   ],
   pestle_items: [
     {
@@ -67,9 +74,15 @@ const soa = () => ({
       item: HOSTILE + 'Privacy law',
       rationale: 'Fines',
       overall_relevance: { code: 'high', label: 'High' },
-      business_processes: [
-        { business_process: { name: 'Payroll' }, relevance: { label: 'Medium' } },
-        {},
+      controls: [
+        {
+          control: { id: 'c1', ref: 'A.5.1', title: HOSTILE + 'Policies', framework: 'A' },
+          relevance: { code: 'medium', label: 'Medium' },
+        },
+        {
+          control: { id: 'c2', ref: 'A.8.2', title: null, framework: 'A' },
+          relevance: { code: 'low', label: 'Low' },
+        },
       ],
       clauses: [
         { clause: { id: 'k1', ref: '4.1', title: 'Context' }, relevance: { label: 'High' } },
@@ -92,9 +105,16 @@ const soa = () => ({
       item: '',
       overall_relevance: { code: 'medium', label: 'Medium' },
       affected: [],
+      controls: [],
     },
-    { id: 'p3', item: 'Low item', overall_relevance: { code: 'low', label: 'Low' }, affected: [] },
-    { id: 'p4', item: 'Unrated', affected: [] },
+    {
+      id: 'p3',
+      item: 'Low item',
+      overall_relevance: { code: 'low', label: 'Low' },
+      affected: [],
+      controls: [],
+    },
+    { id: 'p4', item: 'Unrated', affected: [], controls: [] },
   ],
   isms_objectives: [
     {
@@ -206,7 +226,7 @@ test('the summary and control/clause matrices show applicability with safe links
   const ui = await soaPage(t);
   assert.equal(
     ui.el('soaMeta').textContent,
-    'A · 2 controls · 2 clauses · 2 CIA risks · 1 PESTLE(E) items · 3 business processes · 1 ISMS objectives · 3 ISMS documents · 2 effectiveness measures · 1 assets',
+    'A · 2 controls · 2 clauses · 2 CIA risks · 1 PESTLE(E) items · 1 ISMS objectives · 3 ISMS documents · 2 effectiveness measures · 1 assets',
   );
   assert.equal(ui.document.querySelector('main img'), null);
   assert.equal(ui.window.pwned, undefined);
@@ -267,7 +287,14 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   );
   assert.equal(r2.querySelector('td.text-end .badge').className, 'badge text-bg-success');
   assert.match(r1.textContent, /dana/);
-  assert.equal(r1.querySelector('a.badge').getAttribute('href'), '/control.html?id=c1&framework=A');
+  // A risk lists its controls, then its clauses.
+  assert.deepEqual(
+    [...r1.querySelectorAll('a.badge')].map((a) => [a.textContent, a.getAttribute('href')]),
+    [
+      ['A.5.1', '/control.html?id=c1&framework=A'],
+      ['6.1', '/clause.html?id=k2&framework=A'],
+    ],
+  );
   assert.deepEqual(
     [...r2.cells].slice(1, 4).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
     ['-', '-', '-'],
@@ -275,6 +302,8 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   filter(ui, 'risksFilter', 'databases');
   assert.equal(rowTexts(ui, 'risksRows').length, 1);
   filter(ui, 'risksFilter', 'a.5.1');
+  assert.equal(rowTexts(ui, 'risksRows').length, 1);
+  filter(ui, 'risksFilter', 'risk treatment');
   assert.equal(rowTexts(ui, 'risksRows').length, 1);
   filter(ui, 'risksFilter', 'nope');
   assert.match(ui.el('risksRows').textContent, /No risks match/);
@@ -287,7 +316,12 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   );
   assert.deepEqual(
     pestle.map((r) => r.querySelector('td:nth-child(4) .badge').className),
-    ['badge text-bg-danger', 'badge text-bg-warning', 'badge badge-soft', 'badge text-bg-light'],
+    [
+      'badge text-bg-danger',
+      'badge text-bg-warning',
+      'badge text-bg-success',
+      'badge text-bg-light border',
+    ],
   );
   assert.equal(pestle[1].querySelector('a').textContent, 'PESTLE(E) item');
   // Who a factor affects links to each record, names as text.
@@ -300,19 +334,21 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
     ],
   );
   assert.equal(pestle[1].querySelectorAll('td')[5].textContent, '-');
-  const processes = pestle[0].querySelectorAll('td')[6].querySelectorAll('.badge');
+  // Rated controls link to the control and carry the rating, as text.
+  const rated = pestle[0].querySelectorAll('td')[6].querySelectorAll('.badge');
   assert.deepEqual(
-    [...processes].map((b) => [b.textContent, b.getAttribute('title')]),
+    [...rated].map((b) => [b.textContent, b.getAttribute('title'), b.getAttribute('href')]),
     [
-      ['Payroll', 'Medium'],
-      ['Business process', '-'],
+      ['A.5.1', HOSTILE + 'Policies · Medium', '/control.html?id=c1&framework=A'],
+      ['A.8.2', ' · Low', '/control.html?id=c2&framework=A'],
     ],
   );
+  assert.equal(pestle[1].querySelectorAll('td')[6].textContent, '-');
   const clauseBadges = pestle[0].querySelectorAll('td')[7].querySelectorAll('a');
   assert.equal(clauseBadges[0].getAttribute('href'), '/clause.html?id=k1&tab=pestle&framework=A');
   assert.equal(clauseBadges[0].getAttribute('title'), 'Context · High');
   assert.equal(clauseBadges[1].textContent, 'Clause');
-  filter(ui, 'pestleFilter', 'payroll');
+  filter(ui, 'pestleFilter', 'a.5.1 ' + HOSTILE.toLowerCase() + 'policies medium');
   assert.equal(rowTexts(ui, 'pestleRows').length, 1);
   filter(ui, 'pestleFilter', 'commissioner');
   assert.equal(rowTexts(ui, 'pestleRows').length, 1);
@@ -430,9 +466,9 @@ test('sections the user cannot view explain the restriction', async (t) => {
 
 test('an empty framework shows empty states', async (t) => {
   const ui = await soaPage(t, {
-    data: { framework: 'A', can_view_isms: true, counts: { business_processes: 4 } },
+    data: { framework: 'A', can_view_isms: true, counts: {} },
   });
-  assert.match(ui.el('soaMeta').textContent, /4 business processes/);
+  assert.match(ui.el('soaMeta').textContent, /0 PESTLE\(E\) items · 0 ISMS objectives/);
   assert.match(ui.el('ismsOrgRows').textContent, /No organisation chart nodes yet/);
   assert.match(ui.el('ismsAssetsRows').textContent, /No ISMS assets yet/);
   assert.match(ui.el('swotRows').textContent, /No SWOT items mapped/);
@@ -515,6 +551,7 @@ const sparse = () => ({
       residual_risk_score: 2,
       risk_owner: null,
       controls: [{ id: 'c9', ref: 'A.9', title: null }],
+      clauses: [],
     },
   ],
   pestle_items: [],

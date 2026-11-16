@@ -20,7 +20,12 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 from app.mapping.collector import collector_pointer_filter
-from app.mapping.rules import evaluate_by_framework, parse_rules, rule_rationale
+from app.mapping.rules import (
+    evaluate_by_framework,
+    event_fields,
+    parse_rules,
+    rule_rationale,
+)
 from app.mapping.targets import resolve_targets
 from app.services.control_evidence_stats import clear_stats_caches
 from app.services.mapping_provenance import rule_owned_event_ids
@@ -164,19 +169,7 @@ def process_batch(job_id: uuid.UUID) -> bool:
         changed = False
         matched = 0
         for event in events:
-            event_data = {
-                "source": event.source,
-                "connection_id": event.connection_id,
-                "connection_name": event.connection_name,
-                "system": event.system,
-                "actor": event.actor,
-                "action": event.action,
-                "outcome": event.outcome,
-                "severity": event.severity,
-                "summary": event.summary,
-                "raw_pointer": event.raw_pointer,
-                "normalized_payload": event.normalized_payload,
-            }
+            event_data = event_fields(event)
             result = evaluate_by_framework(event_data, rule, details=True)
             if result:
                 matched += 1

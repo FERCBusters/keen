@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import iso_or_none
 from app.core.references import try_uuid
 from app.db.models import (
     Audit,
@@ -37,7 +38,6 @@ from app.services.audits.serializers import (
     coverage_source_out,
     evidence_dict,
     finding_dict,
-    iso_dt,
     usernames,
 )
 from app.services.audits.swot_scope import scope_items as swot_scope_items
@@ -384,7 +384,7 @@ def list_audits_for_event(*, event_id: str, db: Session, user: User):
                     "notes": x.notes or "",
                     "evidence_url": x.evidence_url,
                     "title": x.title,
-                    "added_at": iso_dt(x.added_at),
+                    "added_at": iso_or_none(x.added_at),
                     "added_by_user_id": (
                         str(x.added_by_user_id) if x.added_by_user_id else None
                     ),

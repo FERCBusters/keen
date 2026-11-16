@@ -14,9 +14,9 @@ from contextlib import contextmanager
 import app.services.agent_enrollment as agent_enrollment
 import fakeredis
 import pytest
-from app.agents.credentials import digest
 from app.core.config import settings
 from app.db.models import AgentEnrollmentProfile, AgentKey, KeenAgent, UeuSettings
+from app.security.encoding import digest
 from app.services.context import ChangeContext
 from app.services.errors import DomainError
 from app.services.ueu_subjects import public_subject_key

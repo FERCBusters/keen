@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import secrets
 from dataclasses import dataclass
 
 from app.core.config import settings
+from app.security.encoding import b64url, unb64url
 
 # -----------------------------------------------------------------------------
 # Password hashing and the rules a new password meets
@@ -68,15 +68,6 @@ class ParsedHash:
     digest: bytes
 
 
-def _b64u_encode(b: bytes) -> str:
-    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
-
-
-def _b64u_decode(s: str) -> bytes:
-    pad = "=" * ((4 - (len(s) % 4)) % 4)
-    return base64.urlsafe_b64decode((s + pad).encode("ascii"))
-
-
 def _pbkdf2_sha256(password: str, salt: bytes, iterations: int) -> bytes:
     return hashlib.pbkdf2_hmac(
         "sha256", password.encode("utf-8"), salt, int(iterations)
@@ -92,8 +83,8 @@ def _parse_hash(password_hash: str) -> ParsedHash | None:
         return None
     try:
         iters = int(iters_s)
-        salt = _b64u_decode(salt_s)
-        digest = _b64u_decode(digest_s)
+        salt = unb64url(salt_s)
+        digest = unb64url(digest_s)
     except Exception:
         return None
     if iters <= 0 or not salt or not digest:
@@ -146,7 +137,7 @@ def derive_password_hash(password: str) -> str:
         raise ValueError("Password is required")
     salt = secrets.token_bytes(_SALT_BYTES)
     digest = _pbkdf2_sha256(password, salt, _DEFAULT_ITERS)
-    return f"{_ALGO}${_DEFAULT_ITERS}${_b64u_encode(salt)}${_b64u_encode(digest)}"
+    return f"{_ALGO}${_DEFAULT_ITERS}${b64url(salt)}${b64url(digest)}"
 
 
 def hash_password(password: str, *, username: str = "") -> str:

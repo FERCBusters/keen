@@ -23,7 +23,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive
+from app.core.datetime_utils import iso_or_none, utc_now_naive
 from app.db.models import (
     Quiz,
     QuizAnswer,
@@ -43,7 +43,6 @@ from app.services.text import clean_text
 
 from .access import own_person
 from .audience import audience_members
-from .common import iso
 from .progress import Sitting, progress, sitting_points
 from .schemas import QuizAnswerInput, QuizPageInput, QuizSubmitInput
 from .scoring import (
@@ -219,16 +218,16 @@ def attempt_view(
         "description": quiz.description or "",
         "status": attempt.status,
         "round_status": round_.status,
-        "opens_on": iso(round_.opens_on),
-        "due_on": iso(round_.due_on),
+        "opens_on": iso_or_none(round_.opens_on),
+        "due_on": iso_or_none(round_.due_on),
         "question_count": len(layout),
         "page_size": attempt.page_size,
         "page_count": page_count(len(layout), attempt.page_size),
         "pages_saved": attempt.pages_saved,
-        "started_at": iso(attempt.started_at),
-        "saved_at": iso(attempt.saved_at),
-        "submitted_at": iso(attempt.submitted_at),
-        "completed_at": iso(attempt.completed_at),
+        "started_at": iso_or_none(attempt.started_at),
+        "saved_at": iso_or_none(attempt.saved_at),
+        "submitted_at": iso_or_none(attempt.submitted_at),
+        "completed_at": iso_or_none(attempt.completed_at),
         "score_visible": show_score,
         "review": review,
         "questions": questions,
@@ -280,8 +279,8 @@ def _item(quiz: Quiz, round_: QuizRound, attempt: QuizAttempt | None, today) -> 
         "quiz_id": str(quiz.id),
         "title": quiz.title,
         "description": quiz.description or "",
-        "opens_on": iso(round_.opens_on),
-        "due_on": iso(round_.due_on),
+        "opens_on": iso_or_none(round_.opens_on),
+        "due_on": iso_or_none(round_.due_on),
         "round_status": round_.status,
         "state": state,
         "days_left": (round_.due_on - today).days
@@ -298,7 +297,7 @@ def _item(quiz: Quiz, round_: QuizRound, attempt: QuizAttempt | None, today) -> 
             "question_count": len(layout),
             "page_count": page_count(len(layout), attempt.page_size),
             "pages_saved": attempt.pages_saved,
-            "submitted_at": iso(attempt.submitted_at),
+            "submitted_at": iso_or_none(attempt.submitted_at),
         }
         if score_visible(quiz, attempt):
             item["result"] = {
@@ -325,7 +324,9 @@ def _upcoming(db: Session, person_id: uuid.UUID, user: User, today) -> list[dict
         for day in occurrences_between(
             quiz, start=today, end=today + timedelta(days=UPCOMING_DAYS), limit=3
         ):
-            out.append({"quiz_id": str(quiz.id), "title": quiz.title, "date": iso(day)})
+            out.append(
+                {"quiz_id": str(quiz.id), "title": quiz.title, "date": iso_or_none(day)}
+            )
     return sorted(out, key=lambda entry: (entry["date"], entry["title"]))
 
 
@@ -602,7 +603,7 @@ def save_page(
     return {
         "id": str(attempt.id),
         "pages_saved": attempt.pages_saved,
-        "saved_at": iso(attempt.saved_at),
+        "saved_at": iso_or_none(attempt.saved_at),
     }
 
 

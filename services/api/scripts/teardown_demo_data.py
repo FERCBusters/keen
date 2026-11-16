@@ -74,15 +74,15 @@ from app.db.models import (  # noqa: E402
     IsmsSwotLink,
     IsmsVendor,
     Mapping,
-    PestleBusinessProcess,
-    PestleBusinessProcessRelevance,
     PestleClauseRelevance,
+    PestleControlRelevance,
     PestleItem,
     Quiz,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
     RiskCategory,
+    RiskClauseLink,
     RiskControlLink,
     Story,
     StoryComment,
@@ -190,6 +190,7 @@ class DemoTeardown:
         self.delete_event_dependents(found["events"])
         self.delete_isms_dependents(found)
         self.delete_ids(RiskControlLink, RiskControlLink.risk_id, found["risks"])
+        self.delete_ids(RiskClauseLink, RiskClauseLink.risk_id, found["risks"])
         self.delete_ids(AffectedLink, AffectedLink.risk_id, found["risks"])
         self.delete_pestle_dependents(found)
         self.delete_parents(found)
@@ -207,9 +208,6 @@ class DemoTeardown:
             ),
             "org_nodes": self.labelled_ids(IsmsOrgNode, IsmsOrgNode.name),
             "licences": self.labelled_ids(IsmsLicense, IsmsLicense.name),
-            "pestle_processes": self.labelled_ids(
-                PestleBusinessProcess, PestleBusinessProcess.name
-            ),
             "pestle_items": self.labelled_ids(PestleItem, PestleItem.item),
             "categories": self.labelled_ids(RiskCategory, RiskCategory.name),
             "people": self.labelled_ids(IsmsPerson, IsmsPerson.name),
@@ -458,14 +456,9 @@ class DemoTeardown:
             found["pestle_items"],
         )
         self.delete_ids(
-            PestleBusinessProcessRelevance,
-            PestleBusinessProcessRelevance.pestle_item_id,
+            PestleControlRelevance,
+            PestleControlRelevance.pestle_item_id,
             found["pestle_items"],
-        )
-        self.delete_ids(
-            PestleBusinessProcessRelevance,
-            PestleBusinessProcessRelevance.business_process_id,
-            found["pestle_processes"],
         )
 
     def delete_parents(self, found: dict[str, list[Any]]) -> None:
@@ -495,9 +488,6 @@ class DemoTeardown:
         self.delete_ids(RiskCategory, RiskCategory.id, found["categories"])
         self.delete_ids(IsmsLicense, IsmsLicense.id, found["licences"])
         self.delete_ids(PestleItem, PestleItem.id, found["pestle_items"])
-        self.delete_ids(
-            PestleBusinessProcess, PestleBusinessProcess.id, found["pestle_processes"]
-        )
         self.delete_ids(IsmsSwot, IsmsSwot.id, found["swot"])
         self.delete_ids(IsmsPerson, IsmsPerson.id, found["people"])
         if found["cloud"]:

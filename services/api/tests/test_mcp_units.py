@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from app.api.mcp import shaping
 from app.core.config import Settings
-from app.security import mcp_tokens
+from app.security import encoding, mcp_tokens
 from app.security.mcp_tokens import (
     ACCESS_PREFIX,
     SCOPES,
@@ -37,7 +37,7 @@ def test_secrets_are_random_prefixed_and_checked_by_shape():
     assert not well_formed(one, "krt_")
     assert not well_formed(one + "x", ACCESS_PREFIX)
     assert not well_formed(one[:-1] + "!", ACCESS_PREFIX)
-    assert mcp_tokens.digest(one) != one and len(mcp_tokens.digest(one)) == 64
+    assert encoding.digest(one) != one and len(encoding.digest(one)) == 64
 
 
 def test_scopes_never_exceed_what_the_account_can_read():

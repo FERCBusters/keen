@@ -28,6 +28,7 @@ import {
   effectivenessMetricValueHtml,
   effectivenessMetricThresholdBadgeHtml,
   lookupTab,
+  assetHref,
 } from '/app.js';
 
 import { featureEnabled, sectionFeatures } from '/pages/feature-availability.js';
@@ -774,10 +775,6 @@ function documentHref(item) {
   return withFramework(`/isms-document.html?id=${encodeURIComponent(item.id)}`, framework);
 }
 
-function assetHref(item) {
-  return withFramework(`/isms-asset.html?id=${encodeURIComponent(item.id)}`, framework);
-}
-
 function accessControlHref(item) {
   return withFramework(`/isms-access.html?id=${encodeURIComponent(item.id)}`, framework);
 }
@@ -789,7 +786,7 @@ function meetingHref(item) {
 function ismsEntityEvidenceUrl(kind, item) {
   if (kind === 'objective') return objectiveHref(item);
   if (kind === 'document') return documentHref(item);
-  if (kind === 'asset') return assetHref(item);
+  if (kind === 'asset') return assetHref(item.id, framework);
   if (kind === 'access') return accessControlHref(item);
   if (kind === 'effectiveness') return effectivenessMeasureHref(item);
   if (kind === 'meeting') return meetingHref(item);
@@ -1470,7 +1467,7 @@ function renderAssets() {
     items
       .map(
         (a) => `<tr data-isms-row="asset">
-    <td class="fw-semibold"><a href="${esc(assetHref(a))}">${esc(a.asset)}</a></td>
+    <td class="fw-semibold"><a href="${esc(assetHref(a.id, framework))}">${esc(a.asset)}</a></td>
     <td>${esc(a.category_name || '-')}</td>
     <td>${esc(a.subcategory_name || '-')}</td>
     <td>${esc(licenseLabel(a.license_name || a.license))}</td>
@@ -1573,7 +1570,7 @@ function renderAccessControlMatrix() {
     .map((group) =>
       group.rows
         .map((entry, idx) => {
-          const serviceHref = entry.service?.id ? assetHref({ id: entry.service.id }) : '';
+          const serviceHref = entry.service?.id ? assetHref(entry.service.id, framework) : '';
           const serviceCell =
             idx === 0
               ? `<td class="isms-app-group" rowspan="${group.rows.length}" data-sort="${esc(group.name)}"><span>${serviceHref ? `<a class="link-light" href="${esc(serviceHref)}">${esc(group.name)}</a>` : esc(group.name)}</span></td>`

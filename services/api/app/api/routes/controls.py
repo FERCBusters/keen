@@ -39,20 +39,6 @@ def control_changelog(
     )
 
 
-@router.get("/v1/controls/{control_id}/evidence")
-def control_evidence(
-    request: Request,
-    control_id: str,
-    limit: int = 200,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-):
-    user = require_events_read(db, request)
-    return service.control_evidence(
-        user=user, control_id=control_id, limit=limit, offset=offset, db=db
-    )
-
-
 @router.get("/v1/controls/{control_id}/evidence/summary")
 def control_evidence_summary(
     request: Request, control_id: str, db: Session = Depends(get_db)

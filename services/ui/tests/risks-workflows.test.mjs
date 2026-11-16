@@ -168,7 +168,7 @@ const pestleItems = [
     item: '<b>GDPR</b> fines rise',
     rationale: 'Regulator activity is increasing',
     overall_relevance: { code: 'high', label: '1 High' },
-    business_process_count: 2,
+    control_count: 2,
     clause_count: 1,
     affected: [],
   },

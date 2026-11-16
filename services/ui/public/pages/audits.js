@@ -23,6 +23,7 @@ import {
   syncRichTextEditors,
   userPillHtml,
   auditStatusLabel,
+  canViewAudits,
 } from '/app.js';
 import { scheduleDateFields, scheduleSummary } from '/pages/schedule-fields.js';
 import { monthRange, renderMonthCalendar, wireMonthPicker } from '/pages/schedule-calendar.js';
@@ -147,10 +148,6 @@ const scheduleDates = scheduleDateFields(
 
 initRichTextEditors(document);
 
-function canViewAudits() {
-  return Boolean(me?.can_view_audits || me?.can_manage_audits || me?.is_admin);
-}
-
 function canManageAudits() {
   return Boolean(me?.can_manage_audits || me?.can_admin_audits || me?.is_admin);
 }
@@ -160,7 +157,7 @@ function canDeleteAudits() {
 }
 
 function ensureAuditRead() {
-  if (canViewAudits()) return true;
+  if (canViewAudits(me)) return true;
   toast(status, 'audits.read permission required.', 'danger');
   return false;
 }
@@ -772,7 +769,7 @@ function renderScheduledRows(arr) {
 
 async function loadScheduledAudits() {
   if (!featureEnabled(me, 'audit_scheduling')) return;
-  if (!canViewAudits()) return;
+  if (!canViewAudits(me)) return;
   scheduledRows.innerHTML = '<tr><td colspan="5" class="p-4 small-muted">Loading</td></tr>';
   const month = document.getElementById('schedMonth').value;
   const range = monthRange(month);

@@ -1,7 +1,7 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
-import { scoreBadge } from '/pages/risk-common.js';
+import { linkedRisksTable, pestleFactorRows } from '/pages/risk-common.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
 import {
   errorText,
@@ -34,7 +34,8 @@ import {
   offsetPagerState,
   wireOffsetPagerButtons,
   loadEntityChangelog,
-  userPillHtml,
+  node,
+  applicabilityBadge,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -244,6 +245,7 @@ let clauseCatalog = { items: [], tree: [] };
 let clauseApplicabilityEditMode = false;
 // Declared before the tabs are wired: a deep-linked tab loads as the page starts.
 let risksLoaded = false;
+let pestleLoaded = false;
 let ismsLoaded = false;
 
 let state = {
@@ -359,7 +361,12 @@ function wireControlTabs() {
   });
   controlGovernanceTab?.addEventListener('shown.bs.tab', async () => {
     setControlTabQuery('governance');
-    await Promise.all([loadLinkedRisks(), loadControlIsms(), loadControlChangelog()]);
+    await Promise.all([
+      loadLinkedRisks(),
+      loadControlPestle(),
+      loadControlIsms(),
+      loadControlChangelog(),
+    ]);
   });
   activeTab = activateControlTab(qs('tab', 'requirements'));
 }
@@ -441,13 +448,6 @@ function controlScopedSourceHref(src) {
   return `/source.html?${p.toString()}`;
 }
 
-function applicabilityBadge(v) {
-  if (v === 'partially_applicable')
-    return '<span class="badge text-bg-warning">Partially applicable</span>';
-  if (v === 'applicable') return '<span class="badge badge-soft">Applicable</span>';
-  return '<span class="badge text-bg-light">Not applicable</span>';
-}
-
 function renderLinkedClauses() {
   const links = ctrl.clauses;
   clausesCard.style.display = '';
@@ -517,50 +517,42 @@ async function loadLinkedRisks({ force = false } = {}) {
         '<span class="small-muted">No risks mapped to this control for this framework.</span>';
       return;
     }
-    risksView.innerHTML = `
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Asset</th>
-              <th style="width:130px;">Category</th>
-              <th style="width:150px;">Subcategory</th>
-              <th style="width:170px;">Type</th>
-              <th class="text-end" style="width:90px;">Risk</th>
-              <th class="text-end" style="width:100px;">Residual</th>
-              <th style="width:120px;">Owner</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items
-              .map((r) => {
-                const href = withFramework(
-                  `/risk.html?id=${encodeURIComponent(r.id)}`,
-                  ctrl?.framework || framework,
-                );
-                const types = (r.risk_types || [])
-                  .map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`)
-                  .join('');
-                return `<tr>
-                <td><a class="fw-semibold" href="${esc(href)}">${esc(r.asset)}</a><div class="small-muted text-truncate" style="max-width:360px;">${esc(r.threat_summary || '')}</div></td>
-                <td>${esc(r.category?.name || '')}</td>
-                <td>${esc(r.subcategory?.name || '')}</td>
-                <td>${types || '<span class="small-muted">-</span>'}</td>
-                <td class="text-end">${scoreBadge(r.risk_score)}</td>
-                <td class="text-end">${scoreBadge(r.residual_risk_score)}</td>
-                <td>${userPillHtml(r.risk_owner)}</td>
-              </tr>`;
-              })
-              .join('')}
-          </tbody>
-        </table>
-      </div>`;
+    risksView.replaceChildren(linkedRisksTable(items, ctrl?.framework || framework));
   } catch (e) {
     // Users without risk.read should not get a noisy control page.
     risksLoaded = false;
     risksCard.style.display = 'none';
   }
 }
+// PESTLE(E) readers see the factors rated against the control, once per page.
+async function loadControlPestle() {
+  if (!id || pestleLoaded || !featureEnabled(me, 'pestle')) return;
+  if (!(me?.is_admin || me?.can_view_pestle || me?.can_manage_pestle)) return;
+  const card = document.getElementById('controlPestleCard');
+  try {
+    const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/pestle`);
+    pestleLoaded = true;
+    const rows = pestleFactorRows(data.items, ctrl?.framework || framework);
+    const body = document.getElementById('controlPestleRows');
+    if (rows.length) body.replaceChildren(...rows);
+    else
+      body.replaceChildren(
+        node(
+          'tr',
+          {},
+          node(
+            'td',
+            { colspan: '6', class: 'p-4 small-muted' },
+            'No PESTLE(E) factors are rated against this control.',
+          ),
+        ),
+      );
+    card.style.display = '';
+  } catch (e) {
+    card.style.display = 'none';
+  }
+}
+
 function flattenClauseTree(nodes, depth = 0, out = []) {
   for (const n of nodes) {
     out.push({ ...n, depth });

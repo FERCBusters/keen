@@ -83,6 +83,7 @@ function existing(overrides = {}) {
     treatment_due_at: null,
     framework: 'A',
     controls: [],
+    clauses: [],
     ...overrides,
   };
 }
@@ -133,8 +134,6 @@ async function wizard(t, options = {}) {
           residual: [],
         };
       if (p === '/api/v1/pestle/meta') return pestleMeta;
-      if (p === '/api/v1/pestle/business-processes')
-        return { items: options.processes ?? [{ id: 'bp1', name: 'Payroll run' }] };
       if (p === '/api/v1/clauses')
         return {
           items: [
@@ -241,6 +240,7 @@ test('an asset chosen and then renamed in the search is offered as a new asset i
   next(ui);
   next(ui);
   ui.el('skipStep').click();
+  ui.el('skipStep').click();
   assert.equal(reviewValue(ui, 'Asset'), 'Payroll DB replica new Information › Databases');
   next(ui);
   await settle(() => state.posted.length === 1);
@@ -265,15 +265,6 @@ test('clicking the chosen asset again clears it, and clicks beside the list or t
   message.click();
   assert.equal(message.textContent, 'No assets yet. Type a name to add the first one.');
   assert.equal(empty.ui.el('selectedAssetSummary').hidden, true);
-});
-
-test('a PESTLE(E) factor without recorded business processes explains how to add one', async (t) => {
-  const { ui } = await wizard(t, { query: '&method=pestle', processes: [] });
-  next(ui);
-  assert.equal(
-    ui.el('processList').textContent,
-    'No business processes yet. Type a name to add one.',
-  );
 });
 
 // --- Who it affects --------------------------------------------------------------------------------
@@ -332,6 +323,7 @@ test('with nobody recorded the list says so, and two records added by name are c
   next(ui);
   next(ui);
   ui.el('skipStep').click();
+  ui.el('skipStep').click();
   next(ui);
   await settle(() => visibleStep(ui) === 'done');
   assert.deepEqual(state.posted[0].body.affected, [
@@ -373,9 +365,9 @@ test('without access to the registers the step is left out and an edit keeps the
   });
   assert.deepEqual(
     [...ui.el('wizardSteps').querySelectorAll('[data-goto-step]')].map((b) => b.dataset.gotoStep),
-    ['subject', 'describe', 'rate', 'controls', 'review'],
+    ['subject', 'describe', 'rate', 'controls', 'clauses', 'review'],
   );
-  for (let i = 0; i < 4; i += 1) next(ui);
+  for (let i = 0; i < 5; i += 1) next(ui);
   assert.equal(visibleStep(ui), 'review');
   assert.equal(reviewValue(ui, 'Affects'), undefined);
   next(ui);
@@ -397,7 +389,6 @@ test('a PESTLE(E) draft from the Mitigator preselects its type and lens', async 
     },
   });
   next(ui);
-  ui.el('skipStep').click();
   // The records the Mitigator ticked are chosen for the factor.
   assert.equal(visibleStep(ui), 'parties');
   assert.equal(ui.el('affectedList').querySelector('[data-affected="vendor:v1"]').checked, true);
@@ -459,6 +450,7 @@ test('a risk owned by someone no longer listed is edited with nobody as owner', 
   assert.equal(ui.el('riskOwner').selectedIndex, 0);
   next(ui);
   ui.el('skipStep').click();
+  ui.el('skipStep').click();
   assert.equal(reviewValue(ui, 'Owner'), 'Nobody yet');
   next(ui);
   await settle(() => state.patched.length === 1);
@@ -475,6 +467,7 @@ test('a user-owned risk keeps its owner when edited', async (t) => {
   next(ui);
   assert.equal(ui.el('riskOwner').value, 'user:u1');
   next(ui);
+  ui.el('skipStep').click();
   ui.el('skipStep').click();
   assert.equal(reviewValue(ui, 'Owner'), 'dana');
   next(ui);
@@ -498,7 +491,9 @@ test('an unrated, unowned simple risk is edited from 1 × 1 with no owner or due
   assert.equal(ui.el('treatmentDue').value, '');
   next(ui);
   next(ui);
+  next(ui);
   assert.equal(reviewValue(ui, 'Kind of risk'), 'Simple risk');
+  assert.equal(reviewValue(ui, 'Clauses'), 'None yet');
   next(ui);
   await settle(() => state.patched.length === 1);
   const body = state.patched[0].body;
@@ -516,37 +511,43 @@ test('an unrated, unowned simple risk is edited from 1 × 1 with no owner or due
   assert.equal(body.treatment_due_at, null);
 });
 
-// --- Clauses and processes -------------------------------------------------------------------------
+// --- Clauses and relevance -------------------------------------------------------------------------
 
-async function pestleToClauses(t, options = {}) {
+// Describes a PESTLE(E) factor and stops on the description step.
+async function pestleDescribed(t, options = {}) {
   const { ui, state } = await wizard(t, { query: '&method=pestle', ...options });
   next(ui);
-  check(ui, '[data-process="bp1"]');
   next(ui);
-  next(ui);
+  assert.equal(visibleStep(ui), 'describe');
   ui.el('riskDescription').value = 'Privacy law tightens retention';
   check(ui, 'input[name="pestleType"][value="Legal"]');
   return { ui, state };
 }
 
 test('a clause search keeps ticked clauses ticked, and says when nothing matches', async (t) => {
-  const { ui } = await pestleToClauses(t);
+  const { ui } = await pestleDescribed(t);
   next(ui);
-  assert.equal(visibleStep(ui), 'rate');
+  next(ui);
+  assert.equal(visibleStep(ui), 'clauses');
   check(ui, '[data-clause="cl1"]');
   input(ui, 'clauseSearch', 'risk');
+  await pause();
   assert.equal(ui.el('clauseList').querySelectorAll('[data-clause]').length, 1);
   assert.equal(ui.el('clauseList').querySelector('[data-clause="cl1"]').checked, true);
   assert.equal(ui.el('clauseList').querySelector('[data-clause-level="cl1"]').disabled, false);
   input(ui, 'clauseSearch', 'zzz');
+  await pause();
   assert.equal(ui.el('clauseList').textContent, 'No clauses match.');
 });
 
-test('with an overall relevance of not applicable, linked processes are recorded as highly relevant', async (t) => {
-  const { ui, state } = await pestleToClauses(t);
+test('with an overall relevance of not applicable, links start at the first level', async (t) => {
+  const { ui, state } = await pestleDescribed(t);
   input(ui, 'pestleRelevance', 'na', 'change');
   next(ui);
-  // Clause levels start at the first level when the factor itself is not applicable.
+  // Levels start at the first one when the factor itself is not applicable.
+  check(ui, '[data-control="c2"]');
+  assert.equal(ui.el('controlList').querySelector('[data-control-level="c2"]').value, 'high');
+  next(ui);
   check(ui, '[data-clause="cl2"]');
   assert.equal(ui.el('clauseList').querySelector('[data-clause-level="cl2"]').value, 'high');
   next(ui);
@@ -555,11 +556,58 @@ test('with an overall relevance of not applicable, linked processes are recorded
   await settle(() => state.patched.length === 2);
   assert.equal(state.posted.at(-1).body.overall_relevance_code, 'na');
   assert.deepEqual(state.patched[0].body, {
-    items: [{ business_process_id: 'bp1', relevance_code: 'high' }],
+    items: [{ control_id: 'c2', relevance_code: 'high' }],
   });
   assert.deepEqual(state.patched[1].body, {
     items: [{ clause_id: 'cl2', relevance_code: 'high' }],
   });
+});
+
+test('links ticked for a register risk take the factor’s relevance when the kind changes to PESTLE(E)', async (t) => {
+  const { ui, state } = await wizard(t);
+  toRating(ui);
+  next(ui);
+  check(ui, '[data-control="c1"]');
+  next(ui);
+  check(ui, '[data-clause="cl1"]');
+  // Back to the first step to make it a factor instead.
+  ui.el('wizardSteps').querySelector('[data-goto-step="method"]').click();
+  check(ui, 'input[name="riskMethod"][value="pestle"]');
+  next(ui);
+  ui.el('skipStep').click();
+  ui.el('riskDescription').value = 'Laptops are stolen more often';
+  check(ui, 'input[name="pestleType"][value="Legal"]');
+  input(ui, 'pestleRelevance', 'low', 'change');
+  next(ui);
+  // The control is still ticked, and shows the overall relevance.
+  assert.equal(ui.el('controlList').querySelector('[data-control="c1"]').checked, true);
+  assert.equal(ui.el('controlList').querySelector('[data-control-level="c1"]').value, 'low');
+  next(ui);
+  next(ui);
+  assert.equal(visibleStep(ui), 'review');
+  next(ui);
+  await settle(() => state.patched.length === 2);
+  assert.deepEqual(state.patched, [
+    {
+      path: '/api/v1/pestle/items/pi-new/controls',
+      body: { items: [{ control_id: 'c1', relevance_code: 'low' }] },
+    },
+    {
+      path: '/api/v1/pestle/items/pi-new/clauses',
+      body: { items: [{ clause_id: 'cl1', relevance_code: 'low' }] },
+    },
+  ]);
+});
+
+test('a factor linked to nothing saves no relevance', async (t) => {
+  const { ui, state } = await pestleDescribed(t);
+  next(ui);
+  ui.el('skipStep').click();
+  ui.el('skipStep').click();
+  assert.equal(reviewValue(ui, 'Relevant controls'), 'None yet');
+  next(ui);
+  await settle(() => visibleStep(ui) === 'done');
+  assert.deepEqual(state.patched, []);
 });
 
 // --- Controls -------------------------------------------------------------------------------------
@@ -651,6 +699,7 @@ test('without the controls feature no controls are fetched, and an edited risk�
   assert.equal(ui.el('controlList').textContent, 'No controls match.');
   assert.equal(ui.el('controlCount').textContent, '1');
   next(ui);
+  next(ui);
   assert.equal(reviewValue(ui, 'Controls'), 'c2');
   next(ui);
   await settle(() => state.patched.length === 1);
@@ -672,6 +721,7 @@ test('records and controls skipped after ticking are shown unticked when the rev
   next(ui);
   check(ui, '[data-control="c1"]');
   ui.el('skipStep').click();
+  ui.el('skipStep').click();
   assert.equal(visibleStep(ui), 'review');
   assert.equal(reviewValue(ui, 'Affects'), 'None');
   assert.equal(reviewValue(ui, 'Controls'), 'None yet');
@@ -682,6 +732,7 @@ test('records and controls skipped after ticking are shown unticked when the rev
   assert.equal(visibleStep(ui), 'controls');
   assert.equal(ui.el('controlList').querySelector('[data-control="c1"]').checked, false);
   assert.equal(ui.el('controlCount').textContent, '0');
+  next(ui);
   next(ui);
   change('parties');
   assert.equal(visibleStep(ui), 'parties');

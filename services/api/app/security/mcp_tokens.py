@@ -18,7 +18,6 @@ configured redirect URIs with it.
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 import string
 from urllib.parse import urlsplit
@@ -83,7 +82,7 @@ SCOPES: dict[str, tuple[str, frozenset[str]]] = {
         frozenset({"risk.manage"}),
     ),
     "pestle.manage": (
-        "Add and update PESTLE(E) factors and business processes",
+        "Add and update PESTLE(E) factors",
         frozenset({"pestle.manage"}),
     ),
     # Mapping rules belong to administrators, whom no permission code names:
@@ -141,7 +140,6 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("GET", "/v1/isms/vendors/{vendor_id:uuid}"): None,
     ("GET", "/v1/pestle/meta"): None,
     ("GET", "/v1/pestle/items/{item_id:uuid}"): None,
-    ("GET", "/v1/pestle/business-processes"): None,
     ("GET", "/v1/risks/categories"): None,
     # Changes to ISMS records.
     ("POST", "/v1/isms/documents"): _ISMS,
@@ -175,8 +173,6 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("POST", "/v1/risks/import"): "risk.manage",
     ("POST", "/v1/pestle/items"): "pestle.manage",
     ("PATCH", "/v1/pestle/items/{item_id:uuid}"): "pestle.manage",
-    ("POST", "/v1/pestle/business-processes"): "pestle.manage",
-    ("PATCH", "/v1/pestle/business-processes/{process_id:uuid}"): "pestle.manage",
     # Mapping rules, as an administrator: what sources and fields exist, the
     # current rules, a preview against collected evidence, and a new rule.
     ("GET", "/v1/admin/evidence-event-samples"): "rules.write",
@@ -196,10 +192,6 @@ _URI_LIMIT = 2048
 
 def new_secret(prefix: str) -> str:
     return prefix + secrets.token_urlsafe(_SECRET_BYTES)
-
-
-def digest(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def well_formed(value: str, prefix: str) -> bool:

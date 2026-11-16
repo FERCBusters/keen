@@ -2,23 +2,13 @@
 // wizard, the risk detail page and the Mitigator. Other pages that list risks
 // use its score bands. Each page passes its own framework so links keep the
 // selected framework.
-import { esc, withFramework } from '/app.js';
+import { esc, node, userDisplayName, withFramework } from '/app.js';
 
 export const RISK_TYPES = ['Confidentiality', 'Integrity', 'Availability'];
-export const PESTLE_TYPES = [
-  'Political',
-  'Economical',
-  'Social',
-  'Technological',
-  'Legal',
-  'Environmental',
-  'Ethical',
-];
-export const PESTLE_LENSES = ['Internal', 'External'];
 
 // The three ways a risk can be described. The register holds "general" and
 // "cia" risks as one record type; a PESTLE(E) factor is an impact-assessment
-// item scored against business processes and clauses.
+// item scored against controls and clauses.
 export const RISK_METHODS = {
   general: {
     label: 'Simple risk',
@@ -38,7 +28,7 @@ export const RISK_METHODS = {
     label: 'PESTLE(E) factor',
     short: 'PESTLE(E)',
     description:
-      'An outside or inside influence - political, economic, social, technological, legal, environmental or ethical - scored for how relevant it is to your processes and framework clauses.',
+      'An outside or inside influence - political, economic, social, technological, legal, environmental or ethical - scored for how relevant it is to the controls and clauses of your framework.',
     icon: 'bi-globe2',
   },
 };
@@ -203,4 +193,102 @@ export function takeWizardDraft() {
   } catch {
     return null;
   }
+}
+
+// How relevant a PESTLE(E) factor is: overall, or to one clause or control.
+export function relevanceBadge(rel) {
+  const cls =
+    { high: 'text-bg-danger', medium: 'text-bg-warning', low: 'text-bg-success' }[rel?.code] ||
+    'text-bg-light border';
+  return node('span', { class: `badge ${cls}` }, rel?.label || 'N/A');
+}
+
+export function relevanceBadgeHtml(rel) {
+  return relevanceBadge(rel).outerHTML;
+}
+
+function cell(attrs, ...children) {
+  return node('td', attrs, ...children);
+}
+
+// The risks linked to one control or clause, as that record's page lists them.
+export function linkedRisksTable(items, framework) {
+  const heading = (label, attrs = {}) => node('th', attrs, label);
+  const score = (value) =>
+    cell(
+      { class: 'text-end' },
+      node('span', { class: `badge ${scoreClass(value)}` }, String(Number(value || 0))),
+    );
+  const rows = items.map((r) => {
+    const owner = userDisplayName(r.risk_owner);
+    const types = (r.risk_types || []).map((type) =>
+      node('span', { class: 'badge badge-soft me-1' }, type),
+    );
+    return node(
+      'tr',
+      {},
+      cell(
+        {},
+        node('a', { class: 'fw-semibold', href: riskHref(r.id, framework) }, r.asset),
+        node(
+          'div',
+          { class: 'small-muted text-truncate', style: 'max-width:360px;' },
+          r.threat_summary || '',
+        ),
+      ),
+      cell({}, r.category?.name || ''),
+      cell({}, r.subcategory?.name || ''),
+      cell({}, ...(types.length ? types : [node('span', { class: 'small-muted' }, '-')])),
+      score(r.risk_score),
+      score(r.residual_risk_score),
+      cell(
+        {},
+        owner
+          ? node('span', { class: 'badge badge-soft user-pill' }, owner)
+          : node('span', { class: 'small-muted' }, '-'),
+      ),
+    );
+  });
+  return node(
+    'div',
+    { class: 'table-responsive' },
+    node(
+      'table',
+      { class: 'table table-sm align-middle mb-0' },
+      node(
+        'thead',
+        {},
+        node(
+          'tr',
+          {},
+          heading('Asset'),
+          heading('Category', { style: 'width:130px;' }),
+          heading('Subcategory', { style: 'width:150px;' }),
+          heading('Type', { style: 'width:170px;' }),
+          heading('Risk', { class: 'text-end', style: 'width:90px;' }),
+          heading('Residual', { class: 'text-end', style: 'width:100px;' }),
+          heading('Owner', { style: 'width:120px;' }),
+        ),
+      ),
+      node('tbody', {}, ...rows),
+    ),
+  );
+}
+
+// Table rows for the PESTLE(E) factors rated against one clause or control:
+// type, lens, factor, relevance to that record, overall relevance, rationale.
+export function pestleFactorRows(items, framework) {
+  return items.map((row) => {
+    const it = row.pestle_item;
+    return node(
+      'tr',
+      {},
+      cell({}, it.type || ''),
+      cell({}, it.lens || ''),
+      cell({}, node('a', { class: 'fw-semibold', href: pestleHref(it.id, framework) }, it.item)),
+      cell({}, relevanceBadge(row.relevance)),
+      cell({}, relevanceBadge(it.overall_relevance)),
+      cell({ class: 'wrap small-muted' }, it.rationale || '-'),
+    );
+  });
 }
