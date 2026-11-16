@@ -16,7 +16,7 @@ Keen (Key Evidence ENgine) brings operational evidence, assurance frameworks, ri
 
 ## Positioning
 
-Self-hosted, evidence-first compliance: an organisation runs Keen itself, keeps its data, and sees exactly how each event is mapped to controls. The defensible mechanism is transparent, editable mapping rules over a broad built-in framework catalogue (94 frameworks, including 88 from Open Security Architecture) combined with wide source collection (development activity, logs, mail, webhooks, a fleet agent). Neighbouring SaaS GRC products cannot truthfully offer self-hosting with full control over credentials, data residency and mapping logic.
+Self-hosted, evidence-first compliance: an organisation runs Keen itself, keeps its data, and sees exactly how each event is mapped to controls. The defensible mechanism is transparent, editable mapping rules over a broad built-in framework catalogue (102 frameworks, including 96 from Open Security Architecture) combined with wide source collection (development activity, logs, mail, webhooks, a fleet agent). Neighbouring SaaS GRC products cannot truthfully offer self-hosting with full control over credentials, data residency and mapping logic.
 
 ## Operating Context
 

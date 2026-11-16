@@ -30,7 +30,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.5.1", "A.5.2", "A.5.4"],
             SOC2: ["CC1.1", "CC5.3"],
-            PCI: ["12.1"],
+            PCI: ["12.1.1"],
         },
         clauses=["5.1", "5.2"],
         sections=[
@@ -72,7 +72,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.5.15", "A.5.16", "A.5.18", "A.8.2"],
             SOC2: ["CC6.1", "CC6.2", "CC6.3"],
-            PCI: ["7.2", "8.2"],
+            PCI: ["7.2.1", "8.2.1"],
         },
         sections=[
             (
@@ -111,7 +111,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.5.24", "A.5.25", "A.5.26", "A.5.27", "A.5.28", "A.6.8"],
             SOC2: ["CC7.3", "CC7.4", "CC7.5"],
-            PCI: ["12.10"],
+            PCI: ["12.10.1"],
         },
         sections=[
             (
@@ -150,7 +150,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.5.19", "A.5.20", "A.5.21", "A.5.22", "A.5.23"],
             SOC2: ["CC9.2"],
-            PCI: ["12.8"],
+            PCI: ["12.8.1"],
         },
         sections=[
             (
@@ -185,7 +185,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.8.25", "A.8.27", "A.8.28", "A.8.29"],
             SOC2: ["CC8.1"],
-            PCI: ["6.2"],
+            PCI: ["6.2.1"],
         },
         sections=[
             (
@@ -219,7 +219,7 @@ DOCUMENTS = {
         linked=115,
         controls={
             ISO: ["A.5.10", "A.6.7", "A.7.7", "A.8.1"],
-            PCI: ["12.2"],
+            PCI: ["12.2.1"],
         },
         sections=[
             (
@@ -313,8 +313,8 @@ DOCUMENTS = {
         linked=75,
         controls={
             ISO: ["A.8.24"],
-            SOC2: ["CC6.1-POF8", "CC6.1-POF9"],
-            PCI: ["3.6", "3.7", "4.2"],
+            SOC2: ["CC6.1"],
+            PCI: ["3.6.1", "3.7.1", "4.2.1"],
         },
         sections=[
             (
@@ -372,7 +372,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.5.29", "A.5.30", "A.8.14"],
             SOC2: ["A1.3", "CC9.1"],
-            PCI: ["12.10"],
+            PCI: ["12.10.1"],
         },
         sections=[
             (
@@ -403,7 +403,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.8.15", "A.8.16", "A.8.17"],
             SOC2: ["CC7.2"],
-            PCI: ["10.2", "10.4", "10.6"],
+            PCI: ["10.2.1", "10.4.1", "10.6.1"],
         },
         sections=[
             (
@@ -434,7 +434,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.8.8", "A.8.19"],
             SOC2: ["CC7.1"],
-            PCI: ["6.3", "6.3.3", "11.3"],
+            PCI: ["6.3.1", "6.3.3", "11.3.1"],
         },
         sections=[
             (
@@ -469,7 +469,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.8.9", "A.8.31", "A.8.32"],
             SOC2: ["CC8.1"],
-            PCI: ["6.5"],
+            PCI: ["6.5.1"],
         },
         sections=[
             (
@@ -500,7 +500,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.8.20", "A.8.21", "A.8.22"],
             SOC2: ["CC6.6"],
-            PCI: ["1.2", "1.3", "1.4"],
+            PCI: ["1.2.1", "1.3.1", "1.4.1"],
         },
         sections=[
             (
@@ -531,7 +531,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.7.10", "A.8.1", "A.8.7"],
             SOC2: ["CC6.8"],
-            PCI: ["5.2", "5.3"],
+            PCI: ["5.2.1", "5.3.1"],
         },
         sections=[
             (
@@ -572,7 +572,7 @@ DOCUMENTS = {
                 "A.7.13",
             ],
             SOC2: ["CC6.4"],
-            PCI: ["9.1", "9.2"],
+            PCI: ["9.1.1", "9.2.1"],
         },
         sections=[
             (
@@ -607,7 +607,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.6.1", "A.6.2", "A.6.4", "A.6.5", "A.6.6"],
             SOC2: ["CC6.2"],
-            PCI: ["12.7"],
+            PCI: ["12.7.1"],
         },
         sections=[
             (
@@ -642,7 +642,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.6.3", "A.6.8"],
             SOC2: ["CC1.4", "CC2.2"],
-            PCI: ["12.6"],
+            PCI: ["12.6.1"],
         },
         clauses=["7.2", "7.3"],
         sections=[
@@ -669,7 +669,7 @@ DOCUMENTS = {
         linked=32,
         controls={
             ISO: ["A.5.34", "A.8.10", "A.8.11"],
-            SOC2: ["P1.1", "P1.6", "P1.8"],
+            SOC2: ["P1.1", "P4.3", "P5.1"],
         },
         sections=[
             (
@@ -747,8 +747,8 @@ DOCUMENTS = {
         linked=25,
         controls={
             ISO: ["A.8.5", "A.8.9", "A.8.18"],
-            SOC2: ["CC7.1-POF1"],
-            PCI: ["2.2", "8.3"],
+            SOC2: ["CC7.1"],
+            PCI: ["2.2.1", "8.3.1"],
         },
         sections=[
             (
@@ -799,7 +799,7 @@ DOCUMENTS = {
         tags=["records", "retention"],
         description="Sets retention periods and deletion methods for each record type.",
         linked=20,
-        controls={ISO: ["A.5.33", "A.8.10"], SOC2: ["C1.2", "P1.5"]},
+        controls={ISO: ["A.5.33", "A.8.10"], SOC2: ["C1.2", "P4.2"]},
         sections=[
             (
                 "Schedule",
@@ -930,7 +930,7 @@ DOCUMENTS = {
         controls={
             ISO: ["A.8.8", "A.8.29", "A.8.34"],
             SOC2: ["CC7.1"],
-            PCI: ["11.4"],
+            PCI: ["11.4.1"],
         },
         sections=[
             (

@@ -39,7 +39,7 @@ SPECS = (
         None,
         "Fictional team members have rehearsed incident roles and share practical knowledge.",
         "Maintain cross-training and review lessons after every exercise.",
-        ("A.6.3", "SAT-1", None, "CC1.4", "12.6"),
+        ("A.6.3", "SAT-1", None, "CC1.4", "12.6.1"),
     ),
     (
         "access",
@@ -50,7 +50,7 @@ SPECS = (
         None,
         "Fictional administrators use strong authentication and documented access reviews.",
         "Validate exceptions and retain review evidence each quarter.",
-        ("A.5.18", "IAC-7", "A7.16", "CC6.3", "8.4"),
+        ("A.5.18", "IAC-7", "A7.16", "CC6.3", "8.4.1"),
     ),
     (
         "manual",
@@ -72,7 +72,7 @@ SPECS = (
         None,
         "Fictional supplier reviews contain outstanding assurance and contract actions.",
         "Assign action owners and review supplier evidence before renewal.",
-        ("A.5.19", "TPM-2", None, "CC9.2", "12.8"),
+        ("A.5.19", "TPM-2", None, "CC9.2", "12.8.1"),
     ),
     (
         "technology",
@@ -83,7 +83,7 @@ SPECS = (
         None,
         "New tools may improve evidence quality and reduce repetitive assurance work.",
         "Evaluate small, measurable pilots with security and privacy review.",
-        ("A.8.8", "VPM-2", "A6.4", "CC7.1", "6.3"),
+        ("A.8.8", "VPM-2", "A6.4", "CC7.1", "6.3.1"),
     ),
     (
         "ai",
@@ -127,7 +127,7 @@ SPECS = (
         "pandemic",
         "Fictional device replacement and hosting support may be delayed by wider disruption.",
         "Review alternative suppliers and document acceptable recovery lead times.",
-        ("A.5.21", "TPM-2", None, "CC9.2", "12.8"),
+        ("A.5.21", "TPM-2", None, "CC9.2", "12.8.1"),
     ),
 )
 

@@ -1744,6 +1744,7 @@ test('an OSA control shows its NIST crosswalk as a crosswalk, apart from any des
     ],
   );
   assert.equal(block.querySelector('b'), null);
+  assert.equal(ui.el('osaSuperseded'), null);
   // The control has no description of its own, so none is shown above the crosswalk.
   assert.equal(ui.el('osaControlDescription').firstElementChild, block);
 
@@ -1755,4 +1756,21 @@ test('an OSA control shows its NIST crosswalk as a crosswalk, apart from any des
     [...partial.ui.el('osaCrosswalk').querySelectorAll('dt')].map((dt) => dt.textContent),
     ['Gaps in the mapping'],
   );
+});
+
+test('a control OSA has dropped says so and why it is still here', async (t) => {
+  const { ui } = await controlPage(t, {
+    control: baseControl({
+      metadata: {
+        source: 'https://www.opensecurityarchitecture.org/',
+        superseded: '2026-11-12',
+        gaps: 'One gap.',
+      },
+    }),
+  });
+  const note = ui.el('osaSuperseded');
+  assert.match(note.textContent, /no longer publishes this control, as of its data of 2026-11-12/);
+  assert.match(note.textContent, /records here depend on it/);
+  // The note comes before what OSA last said of the control.
+  assert.equal(note.nextElementSibling, ui.el('osaCrosswalk'));
 });

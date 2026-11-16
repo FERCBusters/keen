@@ -7,7 +7,8 @@ Licence: Creative Commons Attribution-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-sa/4.0/
 Legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
 
-Keen includes an offline OSA catalogue snapshot dated 8 October 2026.
+Keen includes an offline OSA catalogue snapshot dated 12 November 2026
+(osa-data commit 24214adf59806a060ddcef6582089283e5183d42).
 Individual records retain their upstream framework URL, licence and source
 commit. Keen adaptations include database identifiers, hierarchy, shortened
 display titles and relationships derived from shared NIST control references.

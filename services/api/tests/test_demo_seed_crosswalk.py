@@ -83,9 +83,10 @@ def catalogue_session(engine):
                 FrameworkClause(framework_slug=slug, ref=c["ref"], title=c["title"])
             )
     session.commit()
-    from tests.test_osa_catalogue import migration
+    from tests.test_osa_catalogue import current_catalogue, migration
 
     migration().seed_catalogue(session.connection())
+    current_catalogue(session.connection())
     session.commit()
     return session
 

@@ -320,6 +320,14 @@ function renderControlChrome() {
       description.append(credit);
     }
     if (ctrl.metadata?.source === 'https://www.opensecurityarchitecture.org/') {
+      if (ctrl.metadata.superseded)
+        description.append(
+          node(
+            'p',
+            { class: 'alert alert-warning py-2 mb-2', id: 'osaSuperseded' },
+            `OSA no longer publishes this control, as of its data of ${ctrl.metadata.superseded}. Keen kept it because records here depend on it: move them to a current control, then delete this one in the framework editor.`,
+          ),
+        );
       const crosswalk = osaCrosswalk(ctrl.metadata);
       if (crosswalk) description.append(crosswalk);
       const credit = document.createElement('p');

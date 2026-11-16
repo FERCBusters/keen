@@ -1,4 +1,4 @@
-// Derived from the bundled OSA 2026-10-08 catalogue jurisdiction metadata.
+// Derived from the bundled OSA 2026-11-12 catalogue jurisdiction metadata.
 // CC BY-SA 4.0; attribution and licence are in the catalogue Help and NOTICE.
 export const frameworkRegions = {
   iso_27001_2022: ['Global'],
@@ -39,12 +39,12 @@ export const frameworkRegions = {
   cbb_tm: ['Middle East'],
   qatar_nia: ['Middle East'],
   cbuae: ['Middle East'],
-  cbe_csf: ['Europe'],
+  cbe_csf: ['Africa'],
   sa_js2: ['Africa'],
   cbn_csf: ['Africa'],
   bog_cisd: ['Africa'],
   popia: ['Africa'],
-  bom_ctrm: ['Asia-Pacific'],
+  bom_ctrm: ['Africa'],
   iosco_cyber: ['Global'],
   bcbs_239: ['Global'],
   cpmi_pfmi: ['Global'],
@@ -52,7 +52,6 @@ export const frameworkRegions = {
   nydfs_500: ['Americas'],
   hipaa_sr: ['Americas'],
   ecb_croe: ['EU'],
-  eba_ict: ['EU'],
   sebi_cscrf: ['Asia-Pacific'],
   bot_cyber: ['Asia-Pacific'],
   cmmc_2: ['Americas'],
@@ -89,4 +88,13 @@ export const frameworkRegions = {
   bssc: ['Global'],
   sec_custody_digital: ['Americas'],
   dpdpa: ['Asia-Pacific'],
+  bsi_c5: ['Europe'],
+  bsi_grundschutz_pp: ['Europe'],
+  eu_ai_act: ['EU'],
+  ncsc_caf: ['Europe'],
+  nist_800_171_r3: ['Americas'],
+  nist_ai_rmf_1: ['Global'],
+  nist_ssdf: ['Global'],
+  owasp_agentic_top10_2026: ['Global'],
+  owasp_llm_top10_2026: ['Global'],
 };

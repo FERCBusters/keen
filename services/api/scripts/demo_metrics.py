@@ -102,9 +102,9 @@ LINKS = {
     },
     "pci_dss_v4": {
         "patch_sla": "6.3.3",
-        "access_review": "7.2",
-        "supplier_review": "12.8",
-        "evidence_coverage": "12.4",
+        "access_review": "7.2.1",
+        "supplier_review": "12.8.1",
+        "evidence_coverage": "12.4.1",
     },
 }
 

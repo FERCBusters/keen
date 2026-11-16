@@ -411,9 +411,11 @@ All three link to both controls and clauses:
 | Risk (simple or CIA) | `RiskControlLink` | `RiskClauseLink` |
 | PESTLE(E) item | `PestleControlRelevance` | `PestleClauseRelevance` |
 
-A risk's link either exists or does not. A PESTLE item's link carries a relevance (high, medium, low), and a rating of N/A means no link; `services/pestle.py::rated_links` filters those out.
+A risk's link either exists or does not. A PESTLE(E) item's link carries a relevance (high, medium, low), and a rating of N/A means no link; `services/pestle.py::rated_links` filters those out.
 
 The pictures follow the same rule. The Visualisations tab of the Risks dashboard draws all three kinds against controls, with a Show filter for one kind, from `GET /v1/graph/risk_control`. The risk page and the PESTLE(E) item page each have a Visualisation tab drawn by the same module, `pages/record-links-graph.js`.
+
+The record is called a PESTLE(E) item everywhere: on screen, in Help and in the code (`PestleItem`, `pestle_items`, `/v1/pestle/items`, `pestle_item.html`). Do not call it a item.
 
 ## MCP
 
@@ -573,7 +575,7 @@ Things that have caught people, each with what to do instead.
 
 **Framework scope.** Controls, clauses and PESTLE(E) items belong to one framework. Risks do not, but their links to controls and clauses do. A query that joins a risk to its controls without filtering `framework_slug` mixes catalogues.
 
-**Cached graphs.** `cached_json` keys a result by the parts you give it. If what a user may see changes the result, that has to be one of the parts. The risk graph includes PESTLE(E) items only for a reader allowed to see them, so `items` is part of its key.
+**Cached graphs.** `cached_json` keys a result by the parts you give it. If what a user may see changes the result, that has to be one of the parts. The risk graph includes PESTLE(E) items only for a reader allowed to see them, so `pestle_items` is part of its key.
 
 **JSON null in a migration.** A JSONB column can hold SQL `NULL` or the JSON value `null`, and `IS NULL` only finds the first. Migrations that read stored JSON check `jsonb_typeof`.
 
@@ -584,3 +586,5 @@ Things that have caught people, each with what to do instead.
 **The test database.** The suite rewrites its database. Point it only at a disposable one, and do not run two test runs against the same database at once: each will see the other's rows.
 
 **Help pages.** `public/help/` is hand-written HTML, and Keen's copy is the source: keen.cloud mirrors it with the portal's `scripts/sync-help.py`. The search index is built from the pages. After editing a page, run `bash build-help-index.sh`; the UI tests fail while `search-index.js` differs from what the pages produce, so never edit the index by hand.
+
+**The OSA catalogues.** 96 of the bundled frameworks come from Open Security Architecture, as a frozen snapshot in `services/api/alembic/catalogues/`. To take newer OSA data, build a snapshot with `tools/build_osa_snapshot.py` from a checkout of OSA's `osa-data` repository, then write a migration that applies it, as `0056_osa_snapshot_2026_11.py` does. That migration is the pattern to copy: it keeps every control's id and whatever the installation attached to it, never touches a framework that is not OSA's, and keeps a dropped control that is still in use, marked as superseded. Update `pages/framework-regions.js` and `OSA-NOTICE.txt` with the snapshot; a test compares the regions with it. OSA's notes about a control are a crosswalk to NIST SP 800-53, shown as one, and are never a control's description.

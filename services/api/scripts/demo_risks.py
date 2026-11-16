@@ -32,7 +32,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.5.15", "A.5.16", "A.8.2", "A.8.5", "A.8.15"],
             "soc2_tsc": ["CC6.1", "CC6.2"],
-            "pci_dss_v4": ["7.2", "8.4"],
+            "pci_dss_v4": ["7.2.1", "8.4.1"],
         },
         affects=["Customers"],
     ),
@@ -118,7 +118,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.5.17", "A.6.3", "A.6.8", "A.8.5", "A.8.7"],
             "soc2_tsc": ["CC6.1", "CC1.4"],
-            "pci_dss_v4": ["5.4", "12.6"],
+            "pci_dss_v4": ["5.4.1", "12.6.1"],
         },
         affects=["Jordan Example", "Morgan Example"],
     ),
@@ -169,7 +169,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.5.16", "A.5.18", "A.6.5", "A.8.2"],
             "soc2_tsc": ["CC6.2", "CC6.3"],
-            "pci_dss_v4": ["8.2"],
+            "pci_dss_v4": ["8.2.1"],
         },
         affects=["Customers", "Jordan Example"],
     ),
@@ -187,7 +187,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.5.7", "A.8.8", "A.8.20", "A.8.29"],
             "soc2_tsc": ["CC7.1"],
-            "pci_dss_v4": ["6.3.3", "11.3"],
+            "pci_dss_v4": ["6.3.3", "11.3.1"],
         },
         affects=["Customers"],
     ),
@@ -205,7 +205,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.5.14", "A.5.34", "A.8.11", "A.8.12"],
             "soc2_tsc": ["C1.1"],
-            "pci_dss_v4": ["3.2", "3.5", "4.2", "6.4", "11.6", "12.5"],
+            "pci_dss_v4": ["3.2.1", "3.5.1", "4.2.1", "6.4.2", "11.6.1", "12.5.1"],
         },
         affects=["Customers", "Data protection regulator", "Example Payments"],
     ),
@@ -223,7 +223,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.5.21", "A.8.4", "A.8.25", "A.8.28"],
             "soc2_tsc": ["CC8.1"],
-            "pci_dss_v4": ["6.2"],
+            "pci_dss_v4": ["6.2.1"],
         },
         affects=["Customers"],
     ),
@@ -306,7 +306,7 @@ RISKS = {
         controls={
             "iso_27001_2022": ["A.5.19", "A.5.20", "A.5.21", "A.5.22", "A.5.23"],
             "soc2_tsc": ["CC9.2"],
-            "pci_dss_v4": ["12.8"],
+            "pci_dss_v4": ["12.8.1"],
         },
         affects=["Customers", "Example Hosting"],
     ),

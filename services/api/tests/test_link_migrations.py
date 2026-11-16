@@ -28,8 +28,11 @@ LEGACY = {
 
 
 @contextmanager
-def release(revision):
-    """A connection to a scratch schema migrated to ``revision``, without seeds."""
+def release(revision, seeds=False):
+    """A connection to a scratch schema migrated to ``revision``.
+
+    The release's seed data is left out unless ``seeds`` asks for it.
+    """
     engine = create_engine(required_database_url("KEEN_RETENTION_TEST_DATABASE_URL"))
     schema = "links_" + uuid.uuid4().hex
     root = Path(__file__).resolve().parents[1]
@@ -43,7 +46,8 @@ def release(revision):
             conn.commit()
             config.attributes["connection"] = conn
             command.upgrade(config, "0001_release_schema")
-            command.stamp(config, "0002_release_seed")
+            if not seeds:
+                command.stamp(config, "0002_release_seed")
             command.upgrade(config, revision)
             conn.info["schema"] = schema
             yield conn, config

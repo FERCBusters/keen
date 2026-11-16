@@ -156,17 +156,17 @@ CATALOGUE = {
     ],
     "pci_dss_v4": [
         (
-            "11.3",
+            "11.3.1",
             "Quarterly vulnerability scans",
             "Synthetic internal and external scans of the fictional cardholder data environment show no high-risk findings outstanding.",
         ),
         (
-            "8.4",
+            "8.4.1",
             "MFA into the cardholder data environment",
             "Every fictional administrative path into the CDE requires MFA; a test sign-in without the second factor was refused.",
         ),
         (
-            "10.4",
+            "10.4.1",
             "Daily security log review",
             "Synthetic CDE security events reviewed daily; two anomalies investigated and closed.",
         ),
@@ -176,12 +176,12 @@ CATALOGUE = {
             "Synthetic critical patches installed on fictional CDE hosts within one month of release.",
         ),
         (
-            "12.6",
+            "12.6.1",
             "Security awareness for payment staff",
             "Fictional payment operations staff completed awareness training covering phishing and social engineering.",
         ),
         (
-            "3.5",
+            "3.5.1",
             "Stored PAN discovery scan",
             "A synthetic data discovery scan found no unprotected PAN outside the tokenisation vault.",
         ),

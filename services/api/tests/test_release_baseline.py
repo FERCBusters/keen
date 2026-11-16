@@ -92,7 +92,8 @@ def test_release_schema_and_final_seed_data(monkeypatch):
             conn.execute(
                 text("SELECT connection_id, connection_name FROM events LIMIT 1")
             )
-            assert conn.scalar(text("SELECT count(*) FROM frameworks")) == 94
+            # 96 from OSA and six of Keen's own.
+            assert conn.scalar(text("SELECT count(*) FROM frameworks")) == 102
             for slug, count in (("iso_9001_2015", 37), ("iso_9001_2026", 39)):
                 assert (
                     conn.scalar(
@@ -144,6 +145,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0056_osa_snapshot_2026_11",
         "0055_osa_crosswalk_notes",
         "0054_drop_unused_columns",
         "0053_risk_and_factor_links",

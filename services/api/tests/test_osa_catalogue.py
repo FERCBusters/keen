@@ -22,7 +22,7 @@ from app.services.control_inheritance import (
     inherited_control_ids,
 )
 from app.services.frameworks import FrameworkNodeInput
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from tests.crosswalk_reference import reference_rows, resolved_rows
@@ -38,6 +38,27 @@ def migration():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def current_catalogue(connection):
+    """Bring a database seeded by ``migration()`` to the catalogue Keen ships now.
+
+    The seed is the first OSA snapshot. Migration 0055 then removed its composed
+    descriptions and 0056 applied OSA's later data, so this does the same.
+    """
+    connection.execute(
+        text(
+            "UPDATE control_items SET metadata = metadata - 'description'"
+            " WHERE metadata->>'source' = 'https://www.opensecurityarchitecture.org/'"
+        )
+    )
+    spec = importlib.util.spec_from_file_location(
+        "osa_snapshot_migration",
+        ROOT / "alembic/versions/0056_osa_snapshot_2026_11.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.apply_snapshot(connection)
 
 
 @pytest.fixture
