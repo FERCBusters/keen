@@ -413,7 +413,9 @@ All three link to both controls and clauses:
 
 A risk's link either exists or does not. A factor's link carries a relevance (high, medium, low), and a rating of N/A means no link; `services/pestle.py::rated_links` filters those out.
 
-The pictures follow the same rule. The Visualisations tab of the Risks dashboard draws all three kinds against controls, with a Show filter for one kind, from `GET /v1/graph/risk_control`. The risk page and the PESTLE(E) item page each have a Visualisation tab drawn by the same module, `pages/record-links-graph.js`.
+The pictures follow the same rule. The Visualisations tab of the Risks dashboard draws all three kinds against controls, with a Show filter for one kind, from `GET /v1/graph/risk_control`. The risk page and the PESTLE(E) factor page each have a Visualisation tab drawn by the same module, `pages/record-links-graph.js`.
+
+One naming wrinkle: the application says "PESTLE(E) factor" everywhere a person reads it, while the code still says item: the `PestleItem` model, the `pestle_items` table, the `/v1/pestle/items` routes, `pestle_item.html` and the stored record type `pestle_item`.
 
 ## MCP
 
@@ -450,7 +452,7 @@ The UI has no framework and no build step. Each screen is a static HTML file and
 | `public/app.js` | Shared helpers every page imports: API calls, escaping, the navbar, dates, toasts, tabs, tables |
 | `public/pages/*-common.js` | Helpers shared by one family of pages: `risk-common.js`, `isms-detail-common.js`, `affected-common.js`, `quiz-common.js` |
 | `public/vendor/` | Bootstrap, D3 and the MOSP design system. Not first-party code; never edited here |
-| `public/help/` | The Help site. Generated, so do not edit it by hand |
+| `public/help/` | The Help site: hand-written HTML pages and a search index built from them with `bash build-help-index.sh` |
 | `services/ui/tests/` | One `*.test.mjs` per behaviour, run under Node with jsdom |
 
 ### How a page module is built
@@ -583,4 +585,4 @@ Things that have caught people, each with what to do instead.
 
 **The test database.** The suite rewrites its database. Point it only at a disposable one, and do not run two test runs against the same database at once: each will see the other's rows.
 
-**Help pages.** `public/help/` is generated: the pages, `generated-pages.json` and `search-index.js` are produced together, and no generator is in this repository. Editing one page by hand leaves the search index out of step.
+**Help pages.** `public/help/` is hand-written HTML, and Keen's copy is the source: keen.cloud mirrors it with the portal's `scripts/sync-help.py`. The search index is built from the pages. After editing a page, run `bash build-help-index.sh`; the UI tests fail while `search-index.js` differs from what the pages produce, so never edit the index by hand.
