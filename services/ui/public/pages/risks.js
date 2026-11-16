@@ -771,6 +771,7 @@ initRiskVisualisations({
   framework,
   topRisks: $('riskVizTopRisks'),
   topControls: $('riskVizTopControls'),
+  kind: $('riskVizKind'),
   graph: $('riskControlsGraph'),
   heatmap: $('riskControlsHeatmap'),
   graphMeta: $('riskControlsGraphMeta'),
@@ -780,12 +781,10 @@ initRiskVisualisations({
 $('reloadRiskVisualisations').addEventListener('click', () =>
   loadRiskVisualisations({ force: true }).catch((e) => notify(errorText(e))),
 );
-$('riskVizTopRisks').addEventListener('change', () =>
-  loadRiskVisualisations().catch((e) => notify(errorText(e))),
-);
-$('riskVizTopControls').addEventListener('change', () =>
-  loadRiskVisualisations().catch((e) => notify(errorText(e))),
-);
+for (const id of ['riskVizKind', 'riskVizTopRisks', 'riskVizTopControls'])
+  $(id).addEventListener('change', () =>
+    loadRiskVisualisations().catch((e) => notify(errorText(e))),
+  );
 for (const input of document.querySelectorAll('input[name="riskVizScoreMode"]')) {
   input.addEventListener('change', () => {
     if (input.checked) setRiskVizScoreMode(input.value);

@@ -185,6 +185,16 @@ def _require_risk_read_or_owner(db: Session, user: User, risk: Risk) -> None:
         )
 
 
+def risk_method(risk: Risk) -> str:
+    """How a register risk is described: "cia" when it names security properties.
+
+    The register holds simple and CIA risks as one record type. A PESTLE(E)
+    factor is a separate record, and callers that list both give it "pestle".
+    """
+
+    return "cia" if risk.risk_types else "general"
+
+
 def _clean_risk_types(raw: list[str] | None) -> list[str]:
     """CIA associations in canonical order; a general risk has none."""
 
@@ -645,7 +655,7 @@ def _risk_out(
         "subcategory": _subcategory_out(subcategory),
         "title": risk.title or "",
         "display": risk_display(risk),
-        "method": "cia" if risk.risk_types else "general",
+        "method": risk_method(risk),
         "risk_types": list(risk.risk_types or []),
         "affected": affected_list(list(risk.affected_links)),
         "risk_owner": risk_owner_out(risk),

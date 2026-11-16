@@ -11,7 +11,8 @@ from sqlalchemy import select
 
 from app.core.source_meta import get_source_meta
 from app.db.models import SourceConnection
-from app.ingest.connections import FIELDS, connections, deployment_settings
+from app.ingest import registry
+from app.ingest.connections import connections, deployment_settings
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
 from app.security.regex import scan_pattern
@@ -73,9 +74,10 @@ def view(row):
 
 
 def validate(payload):
-    if payload.source not in FIELDS:
+    declared = registry.find(payload.source)
+    if declared is None:
         raise DomainError(422, "Unknown source type")
-    public, secret = (set(v.split()) for v in FIELDS[payload.source])
+    public, secret = set(declared.public_fields), set(declared.secret_fields)
     if (
         set(payload.configuration) - public
         or (set(payload.credentials) | set(payload.clear_credentials)) - secret
@@ -197,10 +199,10 @@ def listing(*, db):
                 "label": get_source_meta(s).label,
                 "enabled": bool(getattr(deployment_settings, s + "_enabled", False))
                 and not (s == "imap" and deployment_settings.demo_mode),
-                "fields": public.split(),
-                "credential_fields": secret.split(),
+                "fields": list(declared.public_fields),
+                "credential_fields": list(declared.secret_fields),
             }
-            for s, (public, secret) in FIELDS.items()
+            for s, declared in ((d.name, d) for d in registry.sources())
         ],
     }
 

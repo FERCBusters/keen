@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from contextlib import AbstractContextManager
 from copy import deepcopy
+from functools import lru_cache
 from typing import Any
 from urllib.parse import urlparse
 
@@ -28,8 +29,8 @@ from app.db.models import (
     SourceConnection,
     User,
 )
+from app.ingest import registry
 from app.ingest.bookstack import book_scope
-from app.ingest.connections import FIELDS as CONNECTION_FIELDS
 from app.mapping.collector import collector_id, collector_pointer_filter
 from app.mapping.fields import observed_fields, validate_fields
 from app.mapping.rules import (
@@ -49,25 +50,12 @@ from app.security.regex import scan_pattern
 from app.services.errors import DomainError
 from app.services.rule_sources import distinct_sources, reads_source, rule_sources
 
-CONNECTORS = {
-    "jenkins": ("jenkins_config_path", "jobs", "name"),
-    "elasticsearch": ("elasticsearch_config_path", "queries", "name"),
-    "loki": ("loki_queries_path", "queries", "name"),
-    "rss": ("rss_config_path", "feeds", "name"),
-    "github": ("github_config_path", "organizations", "org"),
-    "forgejo": ("forgejo_config_path", "feeds", "url"),
-    "gitea": ("gitea_config_path", "feeds", "url"),
-    "redmine": ("redmine_config_path", "projects", "project"),
-    "riskledger": ("riskledger_config_path", "organizations", "org"),
-    "op_events": ("op_events_config_path", "streams", "stream"),
-    "bitwarden": ("bitwarden_config_path", "streams", "stream"),
-    "gitlab": ("gitlab_config_path", "groups", "group"),
-    "cloudwatch_logs": ("cloudwatch_logs_config_path", "queries", "name"),
-    "taiga": ("taiga_config_path", "projects", "id"),
-    "bookstack": ("bookstack_config_path", "page_mappings", "match"),
-    "google_workspace": ("google_workspace_config_path", "streams", "name"),
-    "webhooks": ("webhooks_path", "providers", None),
-}
+
+def connectors() -> dict[str, registry.Source]:
+    """The source types with a configuration document, by name."""
+    return {source.name: source for source in registry.configured()}
+
+
 COLLECTION_SECTIONS = {
     "jobs",
     "queries",
@@ -108,10 +96,19 @@ _CREDENTIAL_WORDS = (
     "private_key",
     "secret",
 )
-SECRET_KEYS = {
-    *_CREDENTIAL_WORDS,
-    *(name for _, secret in CONNECTION_FIELDS.values() for name in secret.split()),
-}
+
+
+@lru_cache(maxsize=1)
+def secret_keys() -> frozenset[str]:
+    """Names that hold a credential: the common words and every source's secret fields."""
+    return frozenset(
+        {
+            *_CREDENTIAL_WORDS,
+            *(name for source in registry.sources() for name in source.secret_fields),
+        }
+    )
+
+
 # Credential names that qualify a credential word, as header and field names
 # such as X-Api-Key, Private-Token, X-Auth-Token, Proxy-Authorization,
 # Ocp-Apim-Subscription-Key and X-Functions-Key do.
@@ -123,7 +120,7 @@ WITHHELD = "[withheld]"
 def credential_name(key: Any) -> bool:
     """Whether a configuration or header name holds a credential."""
     name = str(key).lower().replace("-", "_")
-    return name in SECRET_KEYS or name.endswith(SECRET_SUFFIXES)
+    return name in secret_keys() or name.endswith(SECRET_SUFFIXES)
 
 
 def withheld_inputs(source: str, section: str, entry: Any) -> Any:
@@ -222,7 +219,7 @@ def suggest_controls(*, payload: ControlSuggestionInput, db: Session):
 
 
 def get_adapter_settings(*, adapter: str, db: Session):
-    if adapter not in CONNECTORS:
+    if adapter not in connectors():
         raise DomainError(404, "Unknown adapter")
     doc = _connector_document(adapter, db)
     _safe_document(doc)
@@ -235,7 +232,7 @@ def get_adapter_settings(*, adapter: str, db: Session):
 def put_adapter_settings(
     *, adapter: str, payload: AdapterSettingsInput, user, db: Session
 ):
-    if adapter not in CONNECTORS:
+    if adapter not in connectors():
         raise DomainError(404, "Unknown adapter")
     if COLLECTION_SECTIONS.intersection(payload.settings):
         raise DomainError(400, "Edit collection items in evidence definitions")
@@ -271,8 +268,7 @@ def _safe_document(document: dict[str, Any]):
 
 
 def _connector_document(name: str, db: Session) -> dict:
-    path = getattr(settings, CONNECTORS[name][0])
-    return load_document(name, path, db=db)
+    return load_document(name, connectors()[name].config_path, db=db)
 
 
 def _version(db: Session, name: str) -> int:
@@ -353,7 +349,7 @@ def _validate_connector(name: str, document: dict):
             validate_config(document)
         except BitwardenError as exc:
             raise DomainError(400, str(exc)) from None
-    key = CONNECTORS[name][1]
+    key = connectors()[name].section
     rows = document.get(key, {} if name == "webhooks" else [])
     if name == "webhooks":
         if not isinstance(rows, dict) or any(
@@ -495,14 +491,19 @@ def _validate_connector(name: str, document: dict):
 def list_configurations(*, db: Session):
     return {
         "items": [
-            {"name": n, "section": spec[1], "key": spec[2], "version": _version(db, n)}
-            for n, spec in CONNECTORS.items()
+            {
+                "name": n,
+                "section": spec.section,
+                "key": spec.id_field,
+                "version": _version(db, n),
+            }
+            for n, spec in connectors().items()
         ]
     }
 
 
 def get_configuration(*, name: str, db: Session):
-    if name not in CONNECTORS:
+    if name not in connectors():
         raise DomainError(404, "Unknown connector")
     document = _connector_document(name, db)
     _safe_document(document)
@@ -524,7 +525,7 @@ def get_configuration(*, name: str, db: Session):
 
 
 def put_configuration(*, name: str, payload: DocumentInput, user, db: Session):
-    if name not in CONNECTORS:
+    if name not in connectors():
         raise DomainError(404, "Unknown connector")
     _validate_connector(name, payload.document)
     _check_linked_collectors(name, payload.document, db)
@@ -579,48 +580,16 @@ def _collector_key(
         return f"{entry.get('owner', '')}/{entry.get('repo', '')}"
     if adapter == "bookstack" and section == "selected_pages":
         return str(entry.get("id") or "")
-    field = {
-        "riskledger": "org",
-        "redmine": "project",
-        "op_events": "stream",
-        "bitwarden": "stream",
-        "jenkins": "name",
-        "elasticsearch": "name",
-        "loki": "name",
-        "rss": "url",
-        "github": "org",
-        "forgejo": "url",
-        "gitea": "url",
-        "gitlab": "group",
-        "cloudwatch_logs": "name",
-        "taiga": "id",
-        "google_workspace": "name",
-    }.get(adapter)
+    declared = registry.find(adapter)
+    field = declared.key_field if declared else None
     if adapter == "github" and section == "feeds":
         field = "url"
     return str(entry.get(field) or "").strip() if field else ""
 
 
 def _editable_collector(adapter: str, section: str) -> bool:
-    return adapter in CONNECTORS and section in {
-        "jenkins": {"jobs"},
-        "elasticsearch": {"queries"},
-        "loki": {"queries"},
-        "rss": {"feeds"},
-        "github": {"organizations", "repos", "feeds"},
-        "forgejo": {"feeds", "organizations", "users"},
-        "gitea": {"feeds", "organizations", "users"},
-        "gitlab": {"groups", "users"},
-        "riskledger": {"organizations"},
-        "redmine": {"projects"},
-        "op_events": {"streams"},
-        "bitwarden": {"streams"},
-        "cloudwatch_logs": {"queries"},
-        "taiga": {"projects"},
-        "google_workspace": {"streams"},
-        "webhooks": {"providers"},
-        "bookstack": {"selected_pages"},
-    }.get(adapter, set())
+    declared = connectors().get(adapter)
+    return declared is not None and section in declared.definition_sections
 
 
 def _check_linked_collectors(adapter: str, document: dict, db: Session):
@@ -743,25 +712,7 @@ def get_evidence_definitions(*, db: Session):
     """Show collection items alongside source-wide and item-specific definitions."""
     items = []
     warnings = []
-    sections = {
-        "jenkins": ["jobs"],
-        "elasticsearch": ["queries"],
-        "loki": ["queries"],
-        "rss": ["feeds"],
-        "github": ["organizations", "repos", "feeds"],
-        "forgejo": ["feeds", "organizations", "users"],
-        "gitea": ["feeds", "organizations", "users"],
-        "gitlab": ["groups", "users"],
-        "riskledger": ["organizations"],
-        "redmine": ["projects"],
-        "op_events": ["streams"],
-        "bitwarden": ["streams"],
-        "cloudwatch_logs": ["queries"],
-        "taiga": ["projects"],
-        "google_workspace": ["streams"],
-        "webhooks": ["providers"],
-        "bookstack": ["selected_pages"],
-    }
+    sections = {name: spec.definition_sections for name, spec in connectors().items()}
     for adapter, groups in sections.items():
         doc = _connector_document(adapter, db)
         try:
@@ -861,7 +812,7 @@ def source_catalogue(*, db: Session):
         .all()
     }
     items: list[dict[str, Any]] = []
-    for name in [*CONNECTORS, "imap"]:
+    for name in [*connectors(), "imap"]:
         enabled = bool(getattr(settings, f"{name}_enabled", False))
         if (
             name in ("redmine", "riskledger", "op_events", "bitwarden", "imap")
@@ -915,7 +866,9 @@ def source_catalogue(*, db: Session):
         SourceIngestionState,
     )
     from app.ingest.cloud import providers as cloud_providers
-    from app.services.ingestion_pause import PAUSABLE_SOURCES
+    from app.services.ingestion_pause import pausable_sources
+
+    pausable = pausable_sources()
 
     scopes = dict(
         db.query(CloudPostureScope.provider, func.count(CloudPostureScope.id))
@@ -924,7 +877,7 @@ def source_catalogue(*, db: Session):
         .all()
     )
     for provider in cloud_providers():
-        if provider.key in CONNECTORS:
+        if provider.key in connectors():
             continue  # Shown with the source's own collector.
         events, last_seen = observed.get(provider.key, (0, None))
         items.append(
@@ -971,7 +924,7 @@ def source_catalogue(*, db: Session):
         item.setdefault("label", get_source_meta(item["adapter"]).label)
         state = states.get(item["adapter"])
         item["paused"] = bool(state and state.paused)
-        item["can_pause"] = item["adapter"] in PAUSABLE_SOURCES
+        item["can_pause"] = item["adapter"] in pausable
         item["pause_updated_by"] = state.updated_by if state else None
         item["pause_updated_at"] = state.updated_at.isoformat() if state else None
     return {"items": items, "warnings": definition_data["warnings"]}
@@ -1867,7 +1820,7 @@ def _connection_plan(key: str, db: Session):
 
     kind, _, identity = key.partition(":")
     document = None
-    if kind == "builtin" and identity in CONNECTORS:
+    if kind == "builtin" and identity in connectors():
         name = identity
         document = _connector_document(identity, db)
         sources = [identity]
@@ -2149,9 +2102,9 @@ def set_source_ingestion_state(
     from sqlalchemy.dialects.postgresql import insert
 
     from app.db.models import SourceIngestionState
-    from app.services.ingestion_pause import PAUSABLE_SOURCES
+    from app.services.ingestion_pause import pausable_sources
 
-    if source not in PAUSABLE_SOURCES:
+    if source not in pausable_sources():
         raise DomainError(404, "Unknown ingestion source type")
     values = dict(
         source=source,

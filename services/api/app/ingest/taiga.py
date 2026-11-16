@@ -18,6 +18,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
@@ -376,3 +377,21 @@ def ingest_taiga_all(db: Session) -> list[dict[str, Any]]:
             db.rollback()
             out.append({"project_id": p.get("id"), "error": collection_error(e)})
     return out
+
+
+register(
+    Source(
+        name="taiga",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=1500.0,
+        config_setting="taiga_config_path",
+        public_fields=("base_url", "username"),
+        secret_fields=("token", "password"),
+        input_sections=("projects",),
+        section="projects",
+        id_field="id",
+        definition_sections=("projects",),
+        key_field="id",
+    )
+)

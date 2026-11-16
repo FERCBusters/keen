@@ -812,7 +812,7 @@ a.schedule-calendar-event {
   background: var(--bs-tertiary-bg);
 }
 
-/* CIA Triad risk/control visualisations */
+/* Risk/control visualisations */
 .risk-control-heatmap-wrap {
   max-height: 78vh;
 }

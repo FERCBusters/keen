@@ -18,6 +18,8 @@ from app.db.models import (
     ControlItem,
     Event,
     FrameworkClause,
+    PestleControlRelevance,
+    PestleItem,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
@@ -36,6 +38,9 @@ from app.services.event_filters import (
     run_scan,
     scan_budget,
 )
+from app.services.features import state as feature_state
+from app.services.pestle import can_read_pestle, rated_links, relevance_summary
+from app.services.risks import risk_method
 
 
 def _event_filters(start_date: Optional[date], end_date: Optional[date]):
@@ -541,6 +546,11 @@ def graph_risk_control(
     Risks are global, but their mitigating-control assignments are scoped by
     framework_slug, because a DVSTF control set and an iso_27001_2022 control set
     are different catalogues even when the underlying risk is the same.
+
+    Every kind of risk is on the left: simple and CIA register risks, each
+    with its ``method``, and the framework's PESTLE(E) factors for a reader who
+    may see them. A register risk's links carry its scores; a factor's carry
+    the relevance it was given for the control.
     """
 
     user = context.actor
@@ -549,7 +559,8 @@ def graph_risk_control(
     ):
         raise DomainError(status_code=403, detail="risk.read permission required")
 
-    cache_parts = {"framework": framework}
+    with_factors = feature_state(db).enabled("pestle") and can_read_pestle(db, user)
+    cache_parts = {"framework": framework, "factors": with_factors}
 
     def _load():
         rows = (
@@ -599,6 +610,22 @@ def graph_risk_control(
                 h = (h * 33 + ord(ch)) & 0xFFFFFFFF
             return palette[h % len(palette)]
 
+        def add_control(control: ControlItem) -> None:
+            nodes.setdefault(
+                f"control:{control.id}",
+                {
+                    "id": f"control:{control.id}",
+                    "type": "control",
+                    "node_kind": "control",
+                    "label": control.ref,
+                    "control_id": str(control.id),
+                    "ref": control.ref,
+                    "title": control.title,
+                    "in_scope": control.in_scope,
+                    "upstream_url": _control_upstream_url(control),
+                },
+            )
+
         for risk, asset, category, subcategory, control in rows:
             risk_id = f"risk:{risk.id}"
             control_id = f"control:{control.id}"
@@ -622,6 +649,7 @@ def graph_risk_control(
                     "threat_summary": risk.threat_summary or "",
                     "category": category.name if category else None,
                     "subcategory": subcategory.name if subcategory else None,
+                    "method": risk_method(risk),
                     "risk_types": list(risk.risk_types or []),
                     "risk_score": int(risk.risk_score or 0),
                     "residual_risk_score": int(risk.residual_risk_score or 0),
@@ -629,18 +657,7 @@ def graph_risk_control(
                     "link_count": 0,
                     "color": risk_colour(str(risk.id)),
                 }
-            if control_id not in nodes:
-                nodes[control_id] = {
-                    "id": control_id,
-                    "type": "control",
-                    "node_kind": "control",
-                    "label": control.ref,
-                    "control_id": str(control.id),
-                    "ref": control.ref,
-                    "title": control.title,
-                    "in_scope": control.in_scope,
-                    "upstream_url": _control_upstream_url(control),
-                }
+            add_control(control)
             links.append(
                 {
                     "source": risk_id,
@@ -648,6 +665,50 @@ def graph_risk_control(
                     "value": value,
                     "risk_score": int(risk.risk_score or 0),
                     "residual_risk_score": int(risk.residual_risk_score or 0),
+                    "link_kind": "relationship",
+                }
+            )
+
+        factor_links = (
+            db.query(PestleControlRelevance)
+            .join(PestleItem, PestleItem.id == PestleControlRelevance.pestle_item_id)
+            .join(ControlItem, ControlItem.id == PestleControlRelevance.control_item_id)
+            .filter(PestleItem.framework_slug == framework)
+            .filter(ControlItem.framework_slug == framework)
+            .all()
+            if with_factors
+            else []
+        )
+        for link in rated_links(factor_links):
+            item = link.pestle_item
+            factor_id = f"pestle:{item.id}"
+            control_id = f"control:{link.control_item_id}"
+            risk_counts[factor_id] = risk_counts.get(factor_id, 0) + 1
+            control_counts[control_id] = control_counts.get(control_id, 0) + 1
+            if factor_id not in nodes:
+                nodes[factor_id] = {
+                    "id": factor_id,
+                    "type": "source",
+                    "node_kind": "risk",
+                    "method": "pestle",
+                    "label": item.item or "",
+                    "pestle_item_id": str(item.id),
+                    "source": factor_id,
+                    "pestle_type": item.type,
+                    "lens": item.lens,
+                    "overall_relevance": relevance_summary(item.overall_relevance),
+                    "risk_types": [],
+                    "mapped_events": 0,
+                    "link_count": 0,
+                    "color": risk_colour(str(item.id)),
+                }
+            add_control(link.control)
+            links.append(
+                {
+                    "source": factor_id,
+                    "target": control_id,
+                    "value": 1,
+                    "relevance": relevance_summary(link.relevance),
                     "link_kind": "relationship",
                 }
             )
@@ -667,6 +728,7 @@ def graph_risk_control(
             "nodes": list(nodes.values()),
             "links": links,
             "graph_kind": "risk_control_relationship",
+            "includes_factors": with_factors,
         }
 
     return cached_json("graph:risk_control", cache_parts, _load)

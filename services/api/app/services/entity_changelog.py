@@ -142,7 +142,7 @@ _ENTITY_LABELS = {
     "isms_effectiveness_metric": "ISMS Effectiveness Metric",
     "control": "Control",
     "clause": "Clause",
-    "risk": "CIA triad risk",
+    "risk": "Risk",
     "pestle_item": "PESTLE(E) item",
     "story": "Story",
     "quiz": "Quiz",

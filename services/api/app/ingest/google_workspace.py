@@ -38,6 +38,7 @@ from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.security.provider_logging import suppress_provider_logs
 from app.security.redaction import utf8_bytes
@@ -578,3 +579,21 @@ def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
             )
 
     return out
+
+
+register(
+    Source(
+        name="google_workspace",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule="*/30",
+        config_setting="google_workspace_config_path",
+        public_fields=("impersonate",),
+        secret_fields=("sa_json",),
+        input_sections=("streams",),
+        section="streams",
+        id_field="name",
+        definition_sections=("streams",),
+        key_field="name",
+    )
+)

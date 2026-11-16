@@ -5,36 +5,23 @@ from functools import wraps
 from sqlalchemy import select, text
 
 from app.db.models import SourceIngestionState
+from app.ingest import registry
 from app.ingest.cloud import KEYS as CLOUD_SOURCES
 from app.services.errors import DomainError
 
-POLLING_SOURCES = frozenset(
-    (
-        "elasticsearch",
-        "loki",
-        "cloudwatch_logs",
-        "github",
-        "forgejo",
-        "gitea",
-        "gitlab",
-        "redmine",
-        "riskledger",
-        "op_events",
-        "bitwarden",
-        "jenkins",
-        "taiga",
-        "bookstack",
-        "imap",
-        "rss",
-        "google_workspace",
+
+def pausable_sources() -> frozenset[str]:
+    """Every source an administrator can pause.
+
+    Each declared source type, the cloud posture providers (pausing one pauses
+    its settings checks and its activity) and the two that are not source
+    modules: agents and custom API ingesters.
+    """
+    return (
+        frozenset(source.name for source in registry.sources())
+        | frozenset(CLOUD_SOURCES)
+        | {"keen-agent", "api-ingesters"}
     )
-)
-# Pausing a cloud posture provider pauses its settings checks and activity.
-PAUSABLE_SOURCES = (
-    POLLING_SOURCES
-    | frozenset(CLOUD_SOURCES)
-    | {"webhooks", "keen-agent", "api-ingesters"}
-)
 
 
 # Separate from operator pause flags: completing a purge must never resume a

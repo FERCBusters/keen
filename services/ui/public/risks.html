@@ -233,6 +233,13 @@
         <div class="card mb-3 no-print" data-mosp-filter-section="risk-visualisation-filters" data-mosp-filter-title="Risk visualisation filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
+              <label class="small-muted" for="riskVizKind">Show</label>
+              <select id="riskVizKind" class="form-select form-select-sm" style="width:auto;">
+                <option value="">Every kind of risk</option>
+                <option value="general">Simple risks</option>
+                <option value="cia">CIA risks</option>
+                <option value="pestle">PESTLE(E) factors</option>
+              </select>
               <label class="small-muted" for="riskVizTopRisks">Top risks</label>
               <input id="riskVizTopRisks" type="number" class="form-control form-control-sm" min="5" max="200" value="15" style="width:90px;">
               <label class="small-muted" for="riskVizTopControls">Top controls</label>
@@ -252,7 +259,7 @@
             <div class="card">
               <div class="card-header">
                 <div class="fw-bold">Risks × controls graph</div>
-                <div class="small-muted" id="riskControlsGraphMeta">Framework-specific risk/control mappings. Link thickness follows the residual risk score.</div>
+                <div class="small-muted" id="riskControlsGraphMeta">Simple risks, CIA risks and PESTLE(E) factors linked to this framework's controls. Link thickness follows the residual risk score.</div>
               </div>
               <div id="riskControlsGraph" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation</div>
             </div>
@@ -261,7 +268,7 @@
             <div class="card">
               <div class="card-header">
                 <div class="fw-bold">Risks × controls heatmap</div>
-                <div class="small-muted" id="riskControlsHeatmapMeta">Cells show framework-specific control mappings, weighted by the residual risk score.</div>
+                <div class="small-muted" id="riskControlsHeatmapMeta">Cells show the same links, weighted by the residual risk score.</div>
               </div>
               <div id="riskControlsHeatmap" class="card-body small-muted">Loading visualisation</div>
             </div>

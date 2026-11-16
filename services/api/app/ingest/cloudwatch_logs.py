@@ -23,6 +23,7 @@ from app.ingest.log_pipeline import (
     truncate,
     try_parse_json_line,
 )
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
@@ -426,3 +427,25 @@ def ingest_cloudwatch_logs_all(db: Session) -> list[dict[str, Any]]:
             db.rollback()
             out.append({"name": name, "error": collection_error(e)})
     return out
+
+
+register(
+    Source(
+        name="cloudwatch_logs",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule="*/30",
+        config_setting="cloudwatch_logs_config_path",
+        public_fields=("region",),
+        secret_fields=(
+            "aws_access_key_id",
+            "aws_secret_access_key",
+            "aws_session_token",
+        ),
+        input_sections=("queries", "streams", "log_groups", "logGroups"),
+        section="queries",
+        id_field="name",
+        definition_sections=("queries",),
+        key_field="name",
+    )
+)

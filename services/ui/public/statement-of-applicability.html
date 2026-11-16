@@ -20,7 +20,7 @@
       <div>
         <div class="small-muted mb-1"><a class="link-subtle" data-nav-fw="1" href="/">← Home</a></div>
         <h1 class="h3 mb-1">ISMS - Statement of Applicability</h1>
-        <div class="small-muted" id="soaMeta">Read-only summary of controls, clauses, CIA triad risks, PESTLE(E), effectiveness measures and ISMS entities.</div>
+        <div class="small-muted" id="soaMeta">Read-only summary of controls, clauses, risks, PESTLE(E) items, effectiveness measures and ISMS entities.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <a class="btn btn-outline-primary" data-nav-fw="1" href="/isms.html">ISMS</a>
@@ -41,7 +41,7 @@
         <button class="nav-link" id="soaClausesTab" data-bs-toggle="tab" data-bs-target="#soaClausesPane" type="button" role="tab" aria-controls="soaClausesPane" aria-selected="false">Clauses</button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="soaRisksTab" data-bs-toggle="tab" data-bs-target="#soaRisksPane" type="button" role="tab" aria-controls="soaRisksPane" aria-selected="false">CIA triad risks</button>
+        <button class="nav-link" id="soaRisksTab" data-bs-toggle="tab" data-bs-target="#soaRisksPane" type="button" role="tab" aria-controls="soaRisksPane" aria-selected="false">Risks</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="soaPestleTab" data-bs-toggle="tab" data-bs-target="#soaPestlePane" type="button" role="tab" aria-controls="soaPestlePane" aria-selected="false">PESTLE(E)</button>
@@ -113,8 +113,8 @@
         <div class="card">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div>
-              <div class="fw-bold">CIA triad risks and mapped controls</div>
-              <div class="small-muted">Confidentiality, Integrity and Availability risk scores and residual scores are shown alongside linked controls.</div>
+              <div class="fw-bold">Risks and their linked controls and clauses</div>
+              <div class="small-muted">Every risk in the register, simple or information security (CIA), with its score today, its score after controls, and the controls and clauses of this framework linked to it.</div>
             </div>
             <input id="risksFilter" class="form-control form-control-sm no-print" type="search" placeholder="Filter risks" style="max-width:320px;">
           </div>
@@ -126,7 +126,7 @@
                     <th style="width:180px;">Asset</th>
                     <th style="width:150px;">Category</th>
                     <th style="width:160px;">Subcategory</th>
-                    <th style="width:170px;">Risk types</th>
+                    <th style="width:170px;">Kind</th>
                     <th>Threat summary</th>
                     <th class="text-end" style="width:100px;">Risk score</th>
                     <th class="text-end" style="width:110px;">Residual</th>

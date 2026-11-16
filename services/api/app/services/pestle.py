@@ -14,7 +14,6 @@ from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.core.references import ref_sort_key as _ref_sort_key
 from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
-    ControlClauseLink,
     ControlItem,
     FrameworkClause,
     PestleClauseRelevance,
@@ -229,35 +228,9 @@ def relevance_summary(row: PestleRelevanceLevel | None) -> dict[str, Any]:
     }
 
 
-def _rated(links) -> list:
+def rated_links(links) -> list:
     """The links whose relevance is above "na"; saving stores no other."""
     return [link for link in links if link.relevance.code != "na"]
-
-
-def _related_controls_for_item(
-    db: Session, item_id: uuid.UUID, framework: str
-) -> list[ControlItem]:
-    rows = (
-        db.query(ControlItem)
-        .join(ControlClauseLink, ControlClauseLink.control_item_id == ControlItem.id)
-        .join(
-            PestleClauseRelevance,
-            PestleClauseRelevance.clause_id == ControlClauseLink.clause_id,
-        )
-        .join(
-            PestleRelevanceLevel,
-            PestleRelevanceLevel.id == PestleClauseRelevance.relevance_id,
-        )
-        .filter(
-            PestleClauseRelevance.pestle_item_id == item_id,
-            ControlItem.framework_slug == framework,
-            PestleRelevanceLevel.code != "na",
-        )
-        .distinct()
-        .all()
-    )
-    rows.sort(key=lambda c: (c.type, _ref_sort_key(c.ref)))
-    return rows
 
 
 def _item_out(
@@ -266,8 +239,8 @@ def _item_out(
     *,
     include_links: bool = False,
 ) -> dict[str, Any]:
-    clause_links = _rated(row.clause_links)
-    control_links = _rated(row.control_links)
+    clause_links = rated_links(row.clause_links)
+    control_links = rated_links(row.control_links)
     out: dict[str, Any] = {
         "id": str(row.id),
         "framework": row.framework_slug,
@@ -313,10 +286,6 @@ def _item_out(
                 control_links,
                 key=lambda x: (x.control.type, _ref_sort_key(x.control.ref)),
             )
-        ]
-        out["related_controls"] = [
-            control_summary(c)
-            for c in _related_controls_for_item(db, row.id, row.framework_slug)
         ]
     return out
 
@@ -723,7 +692,7 @@ def pestle_visualisations(
 
     clause_links = []
     if item_ids:
-        for link in _rated(
+        for link in rated_links(
             db.query(PestleClauseRelevance)
             .filter(PestleClauseRelevance.pestle_item_id.in_(item_ids))
             .all()

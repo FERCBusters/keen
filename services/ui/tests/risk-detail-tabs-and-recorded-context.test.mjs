@@ -3,7 +3,10 @@
 // with, whatever subset of that context an API client stored.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
+
+const d3 = await readFile(new URL('./node_modules/d3/dist/d3.min.js', import.meta.url), 'utf8');
 
 function risk(overrides = {}) {
   return {
@@ -35,14 +38,20 @@ function risk(overrides = {}) {
     mitigator_context: {},
     control_count: 0,
     controls: [],
+    clauses: [],
     ...overrides,
   };
 }
 
-async function riskPage(t, { query = '&id=r1', record = risk(), setup } = {}) {
+async function riskPage(t, { query = '&id=r1', record = risk(), setup, scripts } = {}) {
   const ui = await page(t, 'risk', {
     query,
-    setup,
+    // D3 attaches itself to the object the page already holds for it.
+    setup(window) {
+      if (scripts) window.d3 = {};
+      setup?.(window);
+    },
+    scripts,
     get: async (u) => {
       if (u.pathname === '/api/v1/risks/r1') return structuredClone(record);
       if (u.pathname === '/api/v1/risks/r1/changelog') return { items: [] };
@@ -150,4 +159,84 @@ test('Mitigator context stored with only its source, or with lists of the wrong 
     'Risk weighting: Confidentiality 0 / Integrity 70 / Availability 0 Impact prompts: safety impact Suggested controls: 0',
   );
   assert.equal(odd.el('riskMitigatorContext').querySelector('.badge'), null);
+});
+
+const linkedRisk = () =>
+  risk({
+    controls: [{ id: 'c1', ref: 'A.5.1', title: 'Policies <b>', in_scope: true }],
+    clauses: [
+      { id: 'k1', ref: '6.1', title: 'Risk treatment' },
+      { id: 'k2', ref: '8.2', title: '' },
+    ],
+  });
+const graphNodes = (ui) =>
+  [...ui.el('riskGraph').querySelectorAll('.bipartite-node')].map((g) =>
+    [...g.querySelectorAll('text')].map((text) => text.textContent),
+  );
+
+test('the Visualisation tab draws the risk with its linked controls and clauses', async (t) => {
+  const ui = await riskPage(t, { record: linkedRisk(), scripts: [d3] });
+  shown(ui, 'riskGraphTab');
+  assert.match(ui.window.location.search, /tab=visualisation/);
+  // The risk and its kind, then each control and clause; an untitled clause has no second line.
+  assert.deepEqual(graphNodes(ui), [
+    ['Payroll held to ransom', 'Simple risk'],
+    ['A.5.1', 'Policies <b>'],
+    ['6.1', 'Risk treatment'],
+    ['8.2'],
+  ]);
+  assert.deepEqual(
+    [...ui.el('riskGraph').querySelectorAll('svg > g > text')].map((text) => text.textContent),
+    ['Controls (1)', 'Clauses (2)'],
+  );
+  // Links carry no weight of their own, so each is drawn alike.
+  assert.deepEqual(
+    [...ui.el('riskGraph').querySelectorAll('path')].map((path) => [
+      path.getAttribute('stroke-width'),
+      path.getAttribute('stroke'),
+      path.querySelector('title').textContent,
+    ]),
+    [
+      ['3.5', '#2563eb', 'Payroll held to ransom × A.5.1'],
+      ['3.5', '#0f766e', 'Payroll held to ransom × 6.1'],
+      ['3.5', '#0f766e', 'Payroll held to ransom × 8.2'],
+    ],
+  );
+  assert.equal(ui.el('riskGraph').querySelector('svg').getAttribute('viewBox'), '0 0 980 320');
+  // A linked record opens its own page.
+  ui.el('riskGraph')
+    .querySelectorAll('.bipartite-node')[1]
+    .dispatchEvent(new ui.window.Event('click'));
+});
+
+test('the address opens the Visualisation tab at the width the page has', async (t) => {
+  const ui = await riskPage(t, {
+    record: linkedRisk(),
+    scripts: [d3],
+    query: '&id=r1&tab=visualisation',
+    setup(window) {
+      Object.defineProperty(window.document.getElementById('riskGraph'), 'clientWidth', {
+        value: 640,
+      });
+    },
+  });
+  await settle(() => ui.el('riskGraph').querySelector('svg'));
+  assert.equal(ui.el('riskGraph').querySelector('svg').getAttribute('viewBox'), '0 0 640 320');
+});
+
+test('a risk with no links, a page without D3 and a risk that did not load each say so', async (t) => {
+  const bare = await riskPage(t, { scripts: [d3], record: risk({ clauses: [] }) });
+  shown(bare, 'riskGraphTab');
+  assert.equal(
+    bare.el('riskGraph').textContent,
+    'This risk is not linked to any control or clause of this framework yet.',
+  );
+
+  const withoutD3 = await riskPage(t, { record: linkedRisk() });
+  shown(withoutD3, 'riskGraphTab');
+  assert.equal(withoutD3.el('riskGraph').textContent, 'D3 is not available.');
+
+  const missing = await riskPage(t, { query: '', scripts: [d3] });
+  shown(missing, 'riskGraphTab');
+  assert.equal(missing.el('riskGraph').textContent, 'Loading visualisation');
 });

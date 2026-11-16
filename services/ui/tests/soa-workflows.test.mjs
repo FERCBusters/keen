@@ -226,7 +226,7 @@ test('the summary and control/clause matrices show applicability with safe links
   const ui = await soaPage(t);
   assert.equal(
     ui.el('soaMeta').textContent,
-    'A · 2 controls · 2 clauses · 2 CIA risks · 1 PESTLE(E) items · 1 ISMS objectives · 3 ISMS documents · 2 effectiveness measures · 1 assets',
+    'A · 2 controls · 2 clauses · 2 risks · 1 PESTLE(E) items · 1 ISMS objectives · 3 ISMS documents · 2 effectiveness measures · 1 assets',
   );
   assert.equal(ui.document.querySelector('main img'), null);
   assert.equal(ui.window.pwned, undefined);
@@ -287,6 +287,10 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   );
   assert.equal(r2.querySelector('td.text-end .badge').className, 'badge text-bg-success');
   assert.match(r1.textContent, /dana/);
+  // Each risk says which kind it is; a CIA risk also names its properties.
+  assert.equal(r1.cells[3].textContent.replace(/\s+/g, ' ').trim(), 'CIAAvailability');
+  assert.equal(r1.cells[3].querySelector('.badge').title, 'Information security (CIA)');
+  assert.equal(r2.cells[3].querySelector('.badge').title, 'Simple risk');
   // A risk lists its controls, then its clauses.
   assert.deepEqual(
     [...r1.querySelectorAll('a.badge')].map((a) => [a.textContent, a.getAttribute('href')]),
@@ -297,7 +301,7 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   );
   assert.deepEqual(
     [...r2.cells].slice(1, 4).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
-    ['-', '-', '-'],
+    ['-', '-', 'Risk'],
   );
   filter(ui, 'risksFilter', 'databases');
   assert.equal(rowTexts(ui, 'risksRows').length, 1);

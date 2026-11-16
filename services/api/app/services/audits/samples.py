@@ -185,7 +185,7 @@ def audit_sample_entity_reference(
         row = db.query(Risk).filter(Risk.id == entity_id).one_or_none()
         if row:
             asset = getattr(row, "asset", None)
-            title = f"CIA Triad risk: {getattr(asset, 'name', '') or 'Asset'}"
+            title = f"Risk: {getattr(asset, 'name', '') or 'Asset'}"
             if row.threat_summary:
                 subtitle = short_text(row.threat_summary, 220)
             controls = risk_sample_controls(db, row.id, framework)

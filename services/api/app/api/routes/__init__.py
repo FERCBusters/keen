@@ -60,7 +60,7 @@ OPENAPI_TAGS = [
     {"name": "Questions", "description": "Q&A and event question endpoints."},
     {
         "name": "Risks",
-        "description": "CIA triad risk register, categories and risk/control mappings.",
+        "description": "Risk register (simple and CIA risks), categories and risk mappings to controls and clauses.",
     },
     {
         "name": "PESTLE(E)",
@@ -88,7 +88,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Statement of Applicability",
-        "description": "Read-only SoA summary across controls, clauses, CIA risks, PESTLE(E) and ISMS.",
+        "description": "Read-only SoA summary across controls, clauses, risks, PESTLE(E) and ISMS.",
     },
     {
         "name": "Quizzes",

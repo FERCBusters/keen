@@ -16,7 +16,7 @@ from app.services.errors import DomainError
 from app.services.text import clean_text
 
 AUDIT_SAMPLE_ENTITY_LABELS = {
-    "risk": "CIA Triad risk",
+    "risk": "Risk",
     "pestle_item": "PESTLE(E) item",
     "isms_swot": "SWOT item",
     "isms_objective": "ISMS objective",

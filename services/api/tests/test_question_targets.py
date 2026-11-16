@@ -305,7 +305,7 @@ def test_question_routes_accept_only_the_stored_target_names(qa, name, target):
 @pytest.mark.parametrize(
     "target,missing",
     [
-        ("risk", "CIA Triad risk not found"),
+        ("risk", "Risk not found"),
         ("pestle_item", "PESTLE(E) item not found"),
         ("isms_swot", "SWOT item not found"),
         ("event", "Event not found"),
@@ -477,9 +477,7 @@ def test_replies_come_from_admins_or_the_author_and_move_the_status(qa):
     assert client.get("/v1/me/questions/summary").json() == {"unread_count": 1}
     (item,) = client.get("/v1/me/questions").json()["items"]
     assert (item["status"], item["unread"]) == ("answered", True)
-    assert item["target_label"] == (
-        "CIA Triad risk: Payroll database - Unauthorised export"
-    )
+    assert item["target_label"] == ("Risk: Payroll database - Unauthorised export")
     assert (
         item["target_url"] == f"/risk.html?id={qa.risk.id}&thread={thread_id}#questions"
     )
@@ -563,7 +561,7 @@ def test_threads_without_a_reachable_record_refuse_replies(qa):
 
     deleted = qa.reply(client, thread_id, "Is it gone?")
     assert deleted.status_code == 404
-    assert deleted.json()["detail"] == "CIA Triad risk not found"
+    assert deleted.json()["detail"] == "Risk not found"
     untargeted = qa.reply(client, orphan.id, "Anyone?")
     assert untargeted.status_code == 404
     assert untargeted.json()["detail"] == "Question target not found"
@@ -856,7 +854,7 @@ def test_the_admin_queue_shows_open_questions_unless_asked_for_more(qa):
     }
     assert labels == {
         risk_thread: (
-            "CIA Triad risk: Payroll database - Unauthorised export",
+            "Risk: Payroll database - Unauthorised export",
             f"/risk.html?id={qa.risk.id}&thread={risk_thread}#questions",
         ),
         pestle_thread: (
@@ -1017,7 +1015,7 @@ def test_evidence_threads_that_lost_their_event_are_unreachable(qa):
     "target_type,ref,title,label",
     [
         ("story", "", "Quarterly review", "Story: Quarterly review"),
-        ("risk", "Payroll", "", "CIA Triad risk: Payroll"),
+        ("risk", "Payroll", "", "Risk: Payroll"),
         ("isms_swot", "", "", "SWOT item"),
         (None, "", "", "Evidence"),
     ],

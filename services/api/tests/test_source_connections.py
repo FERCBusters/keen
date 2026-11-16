@@ -18,6 +18,8 @@ from app.services.errors import DomainError
 from celery.exceptions import SoftTimeLimitExceeded
 from cryptography.fernet import Fernet
 
+from tests.source_types import INPUT_SECTIONS
+
 pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
 
 
@@ -497,7 +499,7 @@ def test_global_webhook_gate_includes_measurement_receipts(monkeypatch):
     assert blocked.value.status_code == 503
 
 
-@pytest.mark.parametrize("source,sections", sc.INPUT_SECTIONS.items())
+@pytest.mark.parametrize("source,sections", INPUT_SECTIONS.items())
 def test_empty_environment_defaults_are_omitted(monkeypatch, source, sections):
     monkeypatch.setattr(sc.deployment_settings, source + "_enabled", True)
     default = sc.Connection(

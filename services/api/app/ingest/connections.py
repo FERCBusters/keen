@@ -22,36 +22,10 @@ from app.core.config import settings as deployment_settings
 from app.core.managed_configuration import load_document as deployment_document
 from app.core.valkey import get_valkey
 from app.db.models import SourceConnection
+from app.ingest import registry
 from app.integrations.transport import decrypt
 from app.security.regex import scan_pattern
 
-# Public endpoint/account fields and secret fields are deliberately enumerated.
-FIELDS = {
-    "imap": (
-        "host port username folder fetch_body body_max_chars poll_interval_minutes",
-        "password",
-    ),
-    "webhooks": ("provider secret_header", "secret"),
-    "elasticsearch": ("base_url username", "password api_key"),
-    "loki": ("base_url username header_name", "password header_value"),
-    "github": ("base_url username", "token"),
-    "gitlab": ("base_url", "token"),
-    "forgejo": ("base_url username auth_mode", "token cookie"),
-    "gitea": ("base_url username auth_mode", "token cookie"),
-    "jenkins": ("base_url username", "api_token"),
-    "redmine": ("base_url", "api_key"),
-    "riskledger": ("", "api_key"),
-    "op_events": ("base_url", "token"),
-    "bitwarden": ("base_url identity_url client_id", "client_secret"),
-    "bookstack": ("base_url", "token_id token_secret"),
-    "taiga": ("base_url username", "token password"),
-    "rss": ("base_url username header_name user_agent", "password header_value"),
-    "google_workspace": ("impersonate", "sa_json"),
-    "cloudwatch_logs": (
-        "region",
-        "aws_access_key_id aws_secret_access_key aws_session_token",
-    ),
-}
 _current: ContextVar["Connection | None"] = ContextVar(
     "ingestion_connection", default=None
 )
@@ -153,8 +127,8 @@ class ScopedSettings:
             and key.startswith(connection.source + "_")
         ):
             field = key[len(connection.source) + 1 :]
-            public, secret = FIELDS[connection.source]
-            if field in (public + " " + secret).split():
+            declared = registry.get(connection.source)
+            if field in declared.public_fields + declared.secret_fields:
                 return connection.credentials.get(
                     field, connection.configuration.get(field, "")
                 )
@@ -193,7 +167,7 @@ def _secret_reference(value):
 
 
 def connections(db, source=None):
-    sources = [source] if source else list(FIELDS)
+    sources = [source] if source else [s.name for s in registry.sources()]
     result = [
         Connection(
             "env:" + s,
@@ -213,11 +187,10 @@ def connections(db, source=None):
         for entry in document.get("connections", []):
             if entry.get("source") not in sources:
                 continue
-            public, secret = (set(v.split()) for v in FIELDS[entry["source"]])
-            if (
-                set(entry.get("configuration", {})) - public
-                or set(entry.get("credentials", {})) - secret
-            ):
+            declared = registry.get(entry["source"])
+            if set(entry.get("configuration", {})) - set(declared.public_fields) or set(
+                entry.get("credentials", {})
+            ) - set(declared.secret_fields):
                 raise ValueError("Unsupported field in source connections file")
             key = str(entry.get("id", ""))
             if not scan_pattern(r"[a-zA-Z0-9_-]{1,80}").fullmatch(key):
@@ -317,35 +290,6 @@ def advisory_lock(db, number: int):
 
 
 # Credentials and tuning options alone do not select evidence to collect.
-INPUT_SECTIONS = {
-    "forgejo": ("organizations", "users", "feeds"),
-    "gitea": ("organizations", "users", "feeds"),
-    "github": ("organizations", "orgs", "repos", "feeds"),
-    "gitlab": ("groups", "users"),
-    "elasticsearch": ("queries",),
-    "loki": ("queries",),
-    "jenkins": ("jobs",),
-    "rss": ("feeds",),
-    "redmine": ("projects",),
-    "riskledger": ("organizations",),
-    "op_events": ("streams",),
-    "bitwarden": ("streams",),
-    "taiga": ("projects",),
-    "cloudwatch_logs": ("queries", "streams", "log_groups", "logGroups"),
-    "google_workspace": ("streams",),
-    "bookstack": (
-        "selected_pages",
-        "page_mappings",
-        "pages",
-        "capture_pages",
-        "book",
-        "books",
-        "book_id",
-        "book_slug",
-    ),
-}
-
-
 def environment_has_inputs(source, db):
     # BookStack also supports polling the whole account without page selectors.
     if source == "bookstack" and all(
@@ -355,11 +299,9 @@ def environment_has_inputs(source, db):
         return True
     if source == "imap":
         return False  # IMAP requires explicit named connections.
-    sections = INPUT_SECTIONS[source]
-    path_field = "loki_queries_path" if source == "loki" else source + "_config_path"
-    document = deployment_document(
-        source, getattr(deployment_settings, path_field), db=db
-    )
+    declared = registry.get(source)
+    sections = declared.input_sections
+    document = deployment_document(source, declared.config_path, db=db)
     return any(document.get(section) for section in sections)
 
 

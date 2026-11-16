@@ -18,6 +18,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.imap_support.config import configuration
+from app.ingest.registry import IMAP_QUEUE, Source, register
 from app.security.redaction import mask_mail_address_headers
 from app.services.ingestion_pause import pausable
 
@@ -221,3 +222,24 @@ def ingest_imap_all(db):
             else "Read-only mailbox polling completed",
         }
     ]
+
+
+# Mail is collected by its own worker; keen.dispatch_imap starts the runs.
+register(
+    Source(
+        name="imap",
+        module=__name__,
+        queue=IMAP_QUEUE,
+        public_fields=(
+            "host",
+            "port",
+            "username",
+            "folder",
+            "fetch_body",
+            "body_max_chars",
+            "poll_interval_minutes",
+        ),
+        secret_fields=("password",),
+        demo=False,
+    )
+)

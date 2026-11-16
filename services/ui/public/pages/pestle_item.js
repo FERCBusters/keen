@@ -1,5 +1,6 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
-import { controlHref, relevanceBadgeHtml } from '/pages/risk-common.js';
+import { controlHref, relevanceBadgeHtml, relevanceStrength } from '/pages/risk-common.js';
+import { renderRecordLinksGraph } from '/pages/record-links-graph.js';
 import {
   affectedBadges,
   affectedChoices,
@@ -54,6 +55,8 @@ const pestleEditorTitle = document.getElementById('pestleEditorTitle');
 
 const pestleDetailsTab = document.getElementById('pestleDetailsTab');
 const pestleRelevanceTab = document.getElementById('pestleRelevanceTab');
+const pestleGraphTab = document.getElementById('pestleGraphTab');
+const pestleGraph = document.getElementById('pestleGraph');
 const pestleQuestionsTab = document.getElementById('pestleQuestionsTab');
 const pestleChangelogTab = document.getElementById('pestleChangelogTab');
 
@@ -67,8 +70,6 @@ const pestleRationale = document.getElementById('pestleRationale');
 const savePestleItem = document.getElementById('savePestleItem');
 const deletePestleItem = document.getElementById('deletePestleItem');
 const samplePestleAudit = document.getElementById('samplePestleAudit');
-const relatedControlsCount = document.getElementById('relatedControlsCount');
-const relatedControls = document.getElementById('relatedControls');
 const pestleAffected = document.getElementById('pestleAffected');
 const pestleAffectedPicker = document.getElementById('pestleAffectedPicker');
 
@@ -132,6 +133,7 @@ function activateTab(tabName) {
     {
       details: pestleDetailsTab,
       relevance: pestleRelevanceTab,
+      visualisation: pestleGraphTab,
       questions: pestleQuestionsTab,
       changelog: pestleChangelogTab,
     },
@@ -147,6 +149,12 @@ function wireTabs() {
   pestleRelevanceTab?.addEventListener('shown.bs.tab', async () => {
     setTabQuery('relevance');
     if (itemId) await loadItemRelations(itemId);
+  });
+  pestleGraphTab?.addEventListener('shown.bs.tab', async () => {
+    setTabQuery('visualisation');
+    // An address that names this tab shows it before the item has loaded;
+    // start-up draws the graph then.
+    if (currentItem) await loadItemGraph(currentItem);
   });
   pestleQuestionsTab?.addEventListener('shown.bs.tab', async () => {
     setTabQuery('questions');
@@ -231,35 +239,6 @@ async function mountAffected() {
   pestleAffected.hidden = true;
 }
 
-function renderRelatedControls(item) {
-  const rows = Array.isArray(item?.related_controls) ? item.related_controls : [];
-  if (relatedControlsCount) relatedControlsCount.textContent = String(rows.length);
-  if (!item?.id) {
-    relatedControls.className = 'p-3 small-muted';
-    relatedControls.innerHTML = 'Save the item and map clauses to see related controls.';
-    return;
-  }
-  if (!rows.length) {
-    relatedControls.className = 'p-3 small-muted';
-    relatedControls.innerHTML =
-      'No controls are related through non-N/A clause relevance mappings yet.';
-    return;
-  }
-  relatedControls.className = 'table-responsive';
-  relatedControls.innerHTML = `<table class="table table-sm table-hover align-middle mb-0">
-    <thead><tr><th style="width:130px;">Control</th><th>Title</th><th style="width:120px;">Scope</th></tr></thead>
-    <tbody>${rows
-      .map(
-        (c) => `<tr>
-      <td class="fw-semibold"><a href="${esc(controlHref(c.id, framework))}">${esc(c.ref)}</a></td>
-      <td class="wrap">${esc(c.title)}</td>
-      <td>${c.in_scope ? '<span class="badge badge-soft">In scope</span>' : '<span class="badge text-bg-light">Out of scope</span>'}</td>
-    </tr>`,
-      )
-      .join('')}</tbody>
-  </table>`;
-}
-
 function renderItem(item = null) {
   currentItem = item;
   if (pestleId) pestleId.value = item?.id || '';
@@ -291,7 +270,6 @@ function renderItem(item = null) {
   }
 
   setFormReadOnly(!canManagePestle);
-  renderRelatedControls(item);
   if (!isExisting) {
     if (pestleChangelogEl)
       pestleChangelogEl.innerHTML = '<div class="p-3 small-muted">Save the item first.</div>';
@@ -361,6 +339,28 @@ async function loadItemRelations(id) {
       renderRelevance(editor);
     }),
   );
+}
+
+// The saved item with every clause and control it is rated above N/A for.
+async function loadItemGraph(item) {
+  await loadItemRelations(item.id);
+  renderRecordLinksGraph(pestleGraph, {
+    label: item.item,
+    detail: `${item.type} / ${item.lens}`,
+    empty: 'This item is not rated as relevant to any control or clause of this framework yet.',
+    groups: [...RELEVANCE_EDITORS].reverse().map((editor) => ({
+      title: `${editor.heading}s`,
+      items: editor.rows
+        .filter((row) => row.relevance.code !== 'na')
+        .map((row) => ({
+          label: row[editor.key].ref,
+          detail: `${row.relevance.label} · ${row[editor.key].title}`,
+          href: editor.href(row[editor.key].id),
+          strength: relevanceStrength(row.relevance),
+          note: `Relevance: ${row.relevance.label}`,
+        })),
+    })),
+  });
 }
 
 async function loadPestleChangelog() {
@@ -501,6 +501,7 @@ try {
     await loadItem();
     await mountAffected();
     if (itemId && requestedTab === 'relevance') await loadItemRelations(itemId);
+    if (currentItem && requestedTab === 'visualisation') await loadItemGraph(currentItem);
     if (itemId && requestedTab === 'questions') await pestleQuestions.refresh();
     if (itemId && requestedTab === 'changelog') await loadPestleChangelog();
   }

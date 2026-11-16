@@ -62,6 +62,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
+from tests.source_types import HTTP_INGEST_SOURCES, SOURCE_RUN_SECONDS
+
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
     keen,  # noqa: F401
@@ -511,12 +513,12 @@ def _runs_per_hour(schedule):
 
 
 def test_each_source_runs_within_its_own_budget_below_its_interval():
-    assert set(worker.SOURCE_RUN_SECONDS) == set(worker.HTTP_INGEST_SOURCES)
+    assert set(SOURCE_RUN_SECONDS) == set(HTTP_INGEST_SOURCES)
     beat = {
         entry["task"]: entry["schedule"]
         for entry in celery_app.conf.beat_schedule.values()
     }
-    for source, budget in worker.SOURCE_RUN_SECONDS.items():
+    for source, budget in SOURCE_RUN_SECONDS.items():
         name = f"app.worker.tasks.ingest_{source}_all_task"
         task = celery_app.tasks[name]
         assert task.soft_time_limit == min(budget, settings.collection_run_max_seconds)

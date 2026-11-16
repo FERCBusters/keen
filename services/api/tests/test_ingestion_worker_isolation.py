@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime, timedelta, timezone
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -9,11 +10,11 @@ from unittest.mock import Mock
 import pytest
 import yaml
 from app.core.config import settings
-from app.services.ingestion_pause import POLLING_SOURCES
 from app.worker import tasks
-from app.worker.celery_app import HTTP_INGEST_SOURCES, celery_app
+from app.worker.celery_app import celery_app
 from pydantic import ValidationError
 
+from tests.source_types import HTTP_INGEST_SOURCES, POLLING_SOURCES
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
 
@@ -88,7 +89,7 @@ def test_every_ingest_http_task_ends_after_its_collection_budgets():
         assert task.soft_time_limit > 2 * http.MAX_RESPONSE_SECONDS, source
 
 
-@pytest.mark.parametrize("source", sorted(set(HTTP_INGEST_SOURCES) - {"elasticsearch"}))
+@pytest.mark.parametrize("source", sorted(HTTP_INGEST_SOURCES))
 def test_admin_runner_queues_without_collecting(keen, monkeypatch, source):
     monkeypatch.setattr(settings, source + "_enabled", True)
     dispatch = Mock(return_value=SimpleNamespace(id="queued-job"))
@@ -97,7 +98,7 @@ def test_admin_runner_queues_without_collecting(keen, monkeypatch, source):
     )
     # Invoking the task on this request path must fail the test.
     monkeypatch.setattr(
-        tasks,
+        import_module(f"app.ingest.{source}"),
         f"ingest_{source}_all",
         Mock(side_effect=AssertionError("inline collection")),
     )
@@ -108,6 +109,20 @@ def test_admin_runner_queues_without_collecting(keen, monkeypatch, source):
     assert response.status_code == 202, response.text
     assert response.json()["queued"] is True
     dispatch.assert_called_once_with(expires=300)
+
+
+@pytest.mark.parametrize("source", ["nagios", "webhooks", "keen-agent", "cloud"])
+def test_the_run_route_serves_only_sources_keen_polls(keen, source):
+    # One route runs every polled source; a source that is sent to Keen, or
+    # that no module declares, has nothing to run.
+    client = keen.client(keen.user(role="admin"))
+    response = client.post(
+        f"/v1/admin/ingest/{source}/run", json={}, headers=unsafe(client)
+    )
+    assert (response.status_code, response.json()) == (
+        404,
+        {"detail": "Unknown source type"},
+    )
 
 
 # Each collection runner's queueing task: the HTTP pollers share one route,

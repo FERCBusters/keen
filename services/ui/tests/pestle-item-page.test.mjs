@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
+
+const d3 = await readFile(new URL('./node_modules/d3/dist/d3.min.js', import.meta.url), 'utf8');
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const meta = {
@@ -24,10 +27,6 @@ function item(overrides = {}) {
     rationale: 'Regulator <b>notice</b>',
     overall_relevance: { code: 'high', label: '1 High' },
     updated_at: '2026-03-01T00:00:00Z',
-    related_controls: [
-      { id: 'c1', ref: 'A1', title: '<i>Privacy</i>', in_scope: true },
-      { id: 'c2', ref: 'A2', title: 'Retention', in_scope: false },
-    ],
     affected: [
       {
         kind: 'vendor',
@@ -94,7 +93,12 @@ async function pestleItem(t, options = {}) {
     me: options.me || { is_admin: true, user: 'root' },
     globals: options.globals,
     confirm: options.confirm,
-    setup: options.setup,
+    // D3 attaches itself to the object the page already holds for it.
+    setup(window) {
+      if (options.scripts) window.d3 = {};
+      options.setup?.(window);
+    },
+    scripts: options.scripts,
     get: async (u) => {
       const p = u.pathname;
       if (p === '/api/v1/pestle/meta') {
@@ -111,7 +115,7 @@ async function pestleItem(t, options = {}) {
           items: [
             {
               control: { id: 'c1', ref: 'A1', title: 'Privacy <b>' },
-              relevance: { code: 'medium' },
+              relevance: { code: 'medium', label: '2 Medium' },
             },
             { control: { id: 'c2', ref: 'A2', title: 'Retention' }, relevance: { code: 'na' } },
           ],
@@ -119,7 +123,10 @@ async function pestleItem(t, options = {}) {
       if (p === '/api/v1/pestle/items/p1/clauses')
         return {
           items: [
-            { clause: { id: 'k1', ref: '4.1', title: 'Context' }, relevance: { code: 'low' } },
+            {
+              clause: { id: 'k1', ref: '4.1', title: 'Context' },
+              relevance: { code: 'low', label: '3 Low' },
+            },
             {
               clause: { id: 'k2', ref: '6.1', title: 'Risks and opportunities' },
               relevance: { code: 'na' },
@@ -167,7 +174,6 @@ async function pestleItem(t, options = {}) {
           ...item(),
           ...b,
           id: 'p1',
-          related_controls: [],
           affected: servedAffected(b.affected || []),
         };
         return structuredClone(state.item);
@@ -200,13 +206,6 @@ test('PESTLE item details render safely with relevance badge and related control
   assert.equal(ui.el('pestleLens').value, 'Internal');
   assert.equal(ui.el('pestleOverallRelevance').value, 'high');
   assert.equal(ui.el('pestleRationale').value, 'Regulator <b>notice</b>');
-  assert.equal(ui.el('relatedControlsCount').textContent, '2');
-  assert.equal(ui.el('relatedControls').querySelector('i'), null);
-  assert.match(ui.el('relatedControls').textContent, /In scope[\s\S]*Out of scope/);
-  assert.match(
-    ui.el('relatedControls').querySelector('a').getAttribute('href'),
-    /control\.html\?id=c1&framework=A/,
-  );
   assert.match(ui.el('pestleBreadcrumb').getAttribute('href'), /pestle\.html\?framework=A/);
   assert.match(ui.el('pestleVisualisations').getAttribute('href'), /tab=visualisations/);
   assert.equal(ui.el('deletePestleItem').style.display, '');
@@ -268,7 +267,6 @@ test('an editor who cannot list the registers keeps the records an item names', 
 test('read-only PESTLE viewers see disabled fields and no mutation controls', async (t) => {
   const { ui, state } = await pestleItem(t, {
     me: { can_view_pestle: true },
-    item: item({ related_controls: [] }),
   });
   assert.equal(ui.el('pestleEditorTitle').textContent, 'View PESTLE(E) item');
   for (const id of [
@@ -288,7 +286,6 @@ test('read-only PESTLE viewers see disabled fields and no mutation controls', as
   ])
     assert.equal(ui.el(id).style.display, 'none', id);
   assert.equal(ui.el('pestleQuestions').querySelector('[data-question-ask]').hidden, true);
-  assert.match(ui.el('relatedControls').textContent, /No controls are related/);
   tab(ui, 'pestleRelevanceTab');
   await settle(() => ui.el('controlRelevanceList').querySelector('select'));
   assert.ok([...ui.document.querySelectorAll('[data-relevance-of]')].every((s) => s.disabled));
@@ -314,7 +311,6 @@ test('new PESTLE items require text and are created before relevance can be edit
   assert.equal(ui.el('pestleItemTitle').textContent, 'New PESTLE(E) item');
   assert.equal(ui.el('pestleItemMeta').textContent, 'A · new item');
   assert.match(ui.el('pestleBadges').textContent, /unsaved/);
-  assert.match(ui.el('relatedControls').textContent, /Save the item and map clauses/);
   assert.match(ui.el('controlRelevanceList').textContent, /Save the item first/);
   assert.match(ui.el('pestleChangelog').textContent, /Save the item first/);
   assert.equal(ui.el('deletePestleItem').style.display, 'none');
@@ -603,4 +599,54 @@ test('a refused deletion is reported and the button is usable again', async (t) 
   assert.equal(ui.el('deletePestleItem').disabled, false);
   assert.deepEqual(state.removed, ['/api/v1/pestle/items/p1']);
   assert.equal(ui.el('pestleItemTitle').textContent, item().item);
+});
+
+const graphNodes = (ui) =>
+  [...ui.el('pestleGraph').querySelectorAll('.bipartite-node')].map((g) =>
+    [...g.querySelectorAll('text')].map((text) => text.textContent),
+  );
+
+test('the Visualisation tab draws the item with the controls and clauses it is relevant to', async (t) => {
+  const { ui } = await pestleItem(t, { scripts: [d3] });
+  tab(ui, 'pestleGraphTab');
+  await settle(() => ui.el('pestleGraph').querySelector('svg'));
+  assert.match(ui.window.location.search, /tab=visualisation/);
+  // The item, then each control and clause rated above N/A with its relevance.
+  assert.deepEqual(graphNodes(ui), [
+    ['<img src=x onerror=alert(1)> Newprivacy law', 'Legal / Internal'],
+    ['A1', '2 Medium · Privacy <b>'],
+    ['4.1', '3 Low · Context'],
+  ]);
+  assert.equal(ui.el('pestleGraph').querySelector('img'), null);
+  assert.deepEqual(
+    [...ui.el('pestleGraph').querySelectorAll('svg > g > text')].map((text) => text.textContent),
+    ['Controls (1)', 'Clauses (1)'],
+  );
+  // A higher relevance is a thicker line, and the tooltip names it.
+  assert.deepEqual(
+    [...ui.el('pestleGraph').querySelectorAll('path')].map((path) => [
+      path.getAttribute('stroke-width'),
+      path.querySelector('title').textContent.split('\n')[1],
+    ]),
+    [
+      ['4.5', 'Relevance: 2 Medium'],
+      ['3', 'Relevance: 3 Low'],
+    ],
+  );
+  assert.equal(
+    ui.el('pestleGraph').querySelector('svg').getAttribute('aria-label'),
+    '<img src=x onerror=alert(1)> New privacy law and what it is linked to',
+  );
+});
+
+test('the address opens the Visualisation tab, and an unsaved item has nothing to draw', async (t) => {
+  const linked = await pestleItem(t, { scripts: [d3], query: '&id=p1&tab=visualisation' });
+  await settle(() => linked.ui.el('pestleGraph').querySelector('svg'));
+  assert.equal(graphNodes(linked.ui).length, 3);
+
+  const fresh = await pestleItem(t, { scripts: [d3], query: '' });
+  tab(fresh.ui, 'pestleGraphTab');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(fresh.ui.el('pestleGraph').textContent, 'Save the item first.');
+  assert.ok(!fresh.ui.calls.some((c) => /\/controls$/.test(c.url)));
 });

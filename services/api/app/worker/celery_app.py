@@ -4,6 +4,7 @@ from celery import Celery
 from celery.schedules import crontab
 
 from app.core.config import settings
+from app.ingest.registry import HTTP_QUEUE, IMAP_QUEUE, polled
 from app.worker.sql_trace import connect_task_labels
 
 
@@ -21,35 +22,16 @@ if settings.sql_trace:
     connect_task_labels()
 
 # Internal work runs on the default queue. HTTP polling is routed to its own
-# queue for scheduled, per-connection and manual runs.
-HTTP_INGEST_SOURCES = (
-    "elasticsearch",
-    "loki",
-    "cloudwatch_logs",
-    "github",
-    "forgejo",
-    "gitea",
-    "gitlab",
-    "redmine",
-    "riskledger",
-    "op_events",
-    "bitwarden",
-    "jenkins",
-    "taiga",
-    "bookstack",
-    "rss",
-    "google_workspace",
-)
+# queue for scheduled, per-connection and manual runs. Each source type
+# declares itself in its own module (app.ingest.registry).
+POLLED = polled()
 celery_app.conf.task_routes = {
-    **{
-        f"app.worker.tasks.ingest_{source}_all_task": {"queue": "ingest-http"}
-        for source in HTTP_INGEST_SOURCES
-    },
-    "keen.ingest_source_connection": {"queue": "ingest-http"},
-    "app.worker.tasks.cloud_posture_refresh_task": {"queue": "ingest-http"},
-    "app.worker.tasks.cloud_activity_task": {"queue": "ingest-http"},
-    "app.worker.tasks.integration_run_task": {"queue": "ingest-http"},
-    "keen.ingest_imap_connection": {"queue": "imap"},
+    **{source.task_name: {"queue": source.queue} for source in POLLED},
+    "keen.ingest_source_connection": {"queue": HTTP_QUEUE},
+    "app.worker.tasks.cloud_posture_refresh_task": {"queue": HTTP_QUEUE},
+    "app.worker.tasks.cloud_activity_task": {"queue": HTTP_QUEUE},
+    "app.worker.tasks.integration_run_task": {"queue": HTTP_QUEUE},
+    "keen.ingest_imap_connection": {"queue": IMAP_QUEUE},
 }
 # The ingest-http worker runs one task at a time, so a collection that runs on
 # would hold back every other collector and custom API run, and a hostile or
@@ -66,24 +48,6 @@ celery_app.conf.task_routes = {
 # of one connection has the general cap. Cloud posture tasks and custom API
 # runs keep their own, shorter limits.
 RUN_GRACE_SECONDS = 120
-SOURCE_RUN_SECONDS = {
-    "elasticsearch": settings.elasticsearch_run_seconds,
-    "loki": settings.loki_run_seconds,
-    "cloudwatch_logs": settings.cloudwatch_logs_run_seconds,
-    "github": settings.github_run_seconds,
-    "forgejo": settings.forgejo_run_seconds,
-    "gitea": settings.gitea_run_seconds,
-    "gitlab": settings.gitlab_run_seconds,
-    "redmine": settings.redmine_run_seconds,
-    "riskledger": settings.riskledger_run_seconds,
-    "op_events": settings.op_events_run_seconds,
-    "bitwarden": settings.bitwarden_run_seconds,
-    "jenkins": settings.jenkins_run_seconds,
-    "taiga": settings.taiga_run_seconds,
-    "bookstack": settings.bookstack_run_seconds,
-    "rss": settings.rss_run_seconds,
-    "google_workspace": settings.google_workspace_run_seconds,
-}
 
 
 def run_limits(budget: int) -> dict[str, int]:
@@ -92,10 +56,7 @@ def run_limits(budget: int) -> dict[str, int]:
 
 
 celery_app.conf.task_annotations = {
-    **{
-        f"app.worker.tasks.ingest_{source}_all_task": run_limits(budget)
-        for source, budget in SOURCE_RUN_SECONDS.items()
-    },
+    **{source.task_name: run_limits(source.run_seconds) for source in POLLED},
     "keen.ingest_source_connection": run_limits(settings.collection_run_max_seconds),
 }
 # Every other task ends within an outer bound too. Socket timeouts restart with
@@ -110,71 +71,18 @@ celery_app.conf.task_time_limit = TASK_SECONDS + RUN_GRACE_SECONDS
 # Beat schedules. A crontab minute step only divides the hour: "*/110" matches
 # minute 0 alone, so an interval that is no divisor of 60 is given in seconds.
 celery_app.conf.beat_schedule = {
+    **{
+        "ingest-" + source.name.replace("_", "-"): {
+            "task": source.task_name,
+            "schedule": (
+                crontab(minute=source.schedule)
+                if isinstance(source.schedule, str)
+                else source.schedule
+            ),
+        }
+        for source in POLLED
+    },
     "dispatch-imap": {"task": "keen.dispatch_imap", "schedule": 300.0},
-    "ingest-gitea": {
-        "task": "app.worker.tasks.ingest_gitea_all_task",
-        "schedule": 5700.0,
-    },
-    "ingest-riskledger": {
-        "task": "app.worker.tasks.ingest_riskledger_all_task",
-        "schedule": float(settings.riskledger_poll_seconds),
-    },
-    "ingest-redmine": {
-        "task": "app.worker.tasks.ingest_redmine_all_task",
-        "schedule": float(settings.redmine_poll_seconds),
-    },
-    "ingest-op-events": {
-        "task": "app.worker.tasks.ingest_op_events_all_task",
-        "schedule": float(settings.op_events_poll_seconds),
-    },
-    "ingest-bitwarden": {
-        "task": "app.worker.tasks.ingest_bitwarden_all_task",
-        "schedule": float(settings.bitwarden_poll_seconds),
-    },
-    "ingest-gitlab": {
-        "task": "app.worker.tasks.ingest_gitlab_all_task",
-        "schedule": 5700.0,
-    },
-    "ingest-elasticsearch-every-30m": {
-        "task": "app.worker.tasks.ingest_elasticsearch_all_task",
-        "schedule": crontab(minute="*/30"),
-    },
-    "ingest-loki-every-30m": {
-        "task": "app.worker.tasks.ingest_loki_all_task",
-        "schedule": crontab(minute="*/30"),
-    },
-    "ingest-cloudwatch-logs-every-30m": {
-        "task": "app.worker.tasks.ingest_cloudwatch_logs_all_task",
-        "schedule": crontab(minute="*/30"),
-    },
-    "ingest-github-every-110m": {
-        "task": "app.worker.tasks.ingest_github_all_task",
-        "schedule": 6600.0,
-    },
-    "ingest-forgejo-every-95m": {
-        "task": "app.worker.tasks.ingest_forgejo_all_task",
-        "schedule": 5700.0,
-    },
-    "ingest-jenkins-every-75m": {
-        "task": "app.worker.tasks.ingest_jenkins_all_task",
-        "schedule": 4500.0,
-    },
-    "ingest-taiga-every-25m": {
-        "task": "app.worker.tasks.ingest_taiga_all_task",
-        "schedule": 1500.0,
-    },
-    "ingest-bookstack-every-61m": {
-        "task": "app.worker.tasks.ingest_bookstack_all_task",
-        "schedule": 3660.0,
-    },
-    "ingest-rss-every-45m": {
-        "task": "app.worker.tasks.ingest_rss_all_task",
-        "schedule": 2700.0,
-    },
-    "ingest-google-workspace-every-30m": {
-        "task": "app.worker.tasks.ingest_google_workspace_all_task",
-        "schedule": crontab(minute="*/30"),
-    },
     # Each provider refreshes once KEEN_CLOUD_POSTURE_POLL_SECONDS have passed.
     "cloud-posture-refresh": {
         "task": "app.worker.tasks.cloud_posture_refresh_task",

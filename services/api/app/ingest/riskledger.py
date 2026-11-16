@@ -37,6 +37,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.redaction import (
     mask_event_data_obj,
     redact_obj,
@@ -685,3 +686,22 @@ def ingest_riskledger_all(db):
                 "retry": "Next scheduled or manual run; no immediate retry loop",
             }
         ]
+
+
+register(
+    Source(
+        name="riskledger",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=float(settings.riskledger_poll_seconds),
+        config_setting="riskledger_config_path",
+        public_fields=(),
+        secret_fields=("api_key",),
+        input_sections=("organizations",),
+        section="organizations",
+        id_field="org",
+        definition_sections=("organizations",),
+        key_field="org",
+        demo=False,
+    )
+)

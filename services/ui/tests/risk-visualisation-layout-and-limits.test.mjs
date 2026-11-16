@@ -214,7 +214,7 @@ test('a narrow graph uses the compact layout with tighter columns and shorter la
   // Risk labels wrap at 28 characters and their detail is cut to one short line.
   assert.deepEqual(nodeLines(narrow, 0), [
     ['Customer records held in the', 'CRM db (1)'],
-    ['Information assets /…'],
+    ['Risk · Information assets…'],
   ]);
   // Control details are cut at 28 characters.
   assert.deepEqual(nodeLines(narrow, 1), [['A.8.13 (1)'], ['Information backup and…']]);
@@ -237,7 +237,7 @@ test('a narrow graph uses the compact layout with tighter columns and shorter la
   assert.deepEqual(nodeX(wide), ['426', '930']);
   assert.deepEqual(nodeLines(wide, 0), [
     ['Customer records held in the CRM db (1)'],
-    ['Information assets / Databases'],
+    ['Risk · Information assets / Databases'],
   ]);
   assert.deepEqual(nodeLines(wide, 1), [['A.8.13 (1)'], [title40]]);
 });
@@ -305,8 +305,8 @@ test('a risk whose controls are all beyond Top controls shows no count of shown 
     (th) => th.querySelectorAll('.small-muted')[0].textContent,
   );
   assert.deepEqual(subtitles, [
-    'Information / Databases · 5 shown control(s)',
-    'Information / Databases',
+    'Risk · Information / Databases · 5 shown control(s)',
+    'Risk · Information / Databases',
   ]);
 });
 
@@ -372,4 +372,154 @@ test('without a selected framework the meta line names the current framework', a
     '1 of 1 risks, 1 of 1 controls, 1 visible mappings for the current framework. Darker cells have higher residual risk score.',
   );
   assert.ok(ui.calls.some((c) => c.url === '/api/v1/graph/risk_control?framework='));
+});
+
+// A register of one simple risk, one CIA risk and two PESTLE(E) factors.
+function everyKind(includesFactors = true) {
+  const data = graph(
+    [
+      { id: 'r1', label: 'Laptops', risk_score: 6, residual_risk_score: 2, controls: ['c1'] },
+      {
+        id: 'r2',
+        label: 'Payroll DB',
+        risk_types: ['Availability'],
+        risk_score: 16,
+        residual_risk_score: 9,
+        controls: ['c1'],
+      },
+    ],
+    [
+      { id: 'c1', ref: 'A.5.1', title: 'Policies' },
+      { id: 'c2', ref: 'A.5.2', title: 'Roles' },
+    ],
+  );
+  data.nodes[0].method = 'general';
+  data.nodes[1].method = 'cia';
+  const factor = (id, label, links) => {
+    data.nodes.push({
+      id: `pestle:${id}`,
+      type: 'source',
+      node_kind: 'risk',
+      method: 'pestle',
+      label,
+      pestle_item_id: id,
+      pestle_type: 'Legal',
+      lens: 'External',
+      overall_relevance: { code: 'high', label: '1 High' },
+      risk_types: [],
+      link_count: links.length,
+      color: '#7c3aed',
+    });
+    for (const [target, code, relevanceLabel] of links)
+      data.links.push({
+        source: `pestle:${id}`,
+        target: `control:${target}`,
+        value: 1,
+        relevance: { code, label: relevanceLabel },
+        link_kind: 'relationship',
+      });
+  };
+  factor('p1', 'New privacy law', [['c1', 'medium', '2 Medium']]);
+  // A relevance level added later is drawn as lightly as the lowest.
+  factor('p2', 'Audit regime', [['c2', 'watch', '4 Watch']]);
+  data.nodes.find((n) => n.id === 'control:c1').link_count = 3;
+  data.nodes.find((n) => n.id === 'control:c2').link_count = 1;
+  data.includes_factors = includesFactors;
+  return data;
+}
+
+test('simple risks, CIA risks and PESTLE(E) factors are drawn together, each with its kind', async (t) => {
+  const ui = await dashboard(t, everyKind());
+  await settle(() => columns(ui).length === 2);
+  // With as many mappings each, scored risks come first and factors follow by name.
+  assert.deepEqual(rows(ui), ['Payroll DB', 'Laptops', 'Audit regime', 'New privacy law']);
+  const heads = [...ui.el('riskControlsHeatmap').querySelectorAll('tbody tr th')];
+  assert.deepEqual(
+    heads.map((th) => [...th.querySelectorAll('.small-muted')].map((d) => d.textContent)),
+    [
+      [
+        'CIA · Information / Databases · Availability · 1 shown control(s)',
+        'Risk score: 16 · Residual: 9',
+      ],
+      ['Risk · Information / Databases · 1 shown control(s)', 'Risk score: 6 · Residual: 2'],
+      ['PESTLE(E) · Legal / External · 1 shown control(s)', 'Overall relevance: 1 High'],
+      ['PESTLE(E) · Legal / External · 1 shown control(s)', 'Overall relevance: 1 High'],
+    ],
+  );
+  // A risk opens its risk page and a factor its PESTLE(E) page.
+  assert.deepEqual(
+    heads.map((th) => th.querySelector('a').getAttribute('href')),
+    [
+      '/risk.html?id=r2&framework=A',
+      '/risk.html?id=r1&framework=A',
+      '/pestle_item.html?id=p2&tab=details&framework=A',
+      '/pestle_item.html?id=p1&tab=details&framework=A',
+    ],
+  );
+  // A risk's cell holds its score; a factor's holds its relevance to the control.
+  const cells = [...ui.el('riskControlsHeatmap').querySelectorAll('td.risk-control-heatmap-cell')];
+  assert.deepEqual(
+    cells.map((td) => [td.textContent, td.title, td.style.background]),
+    [
+      [
+        '9',
+        'Payroll DB × A.5.1 - residual score 9, inherent 16, residual 9',
+        'rgba(var(--bs-primary-rgb), 0.900)',
+      ],
+      [
+        '2',
+        'Laptops × A.5.1 - residual score 2, inherent 6, residual 2',
+        'rgba(var(--bs-primary-rgb), 0.324)',
+      ],
+      ['4 Watch', 'Audit regime × A.5.2 - relevance 4 Watch', 'rgba(var(--bs-primary-rgb), 0.382)'],
+      [
+        '2 Medium',
+        'New privacy law × A.5.1 - relevance 2 Medium',
+        'rgba(var(--bs-primary-rgb), 0.604)',
+      ],
+    ],
+  );
+  const linkTitles = [...ui.el('riskControlsGraph').querySelectorAll('path title')].map(
+    (el) => el.textContent,
+  );
+  assert.ok(linkTitles.includes('New privacy law × A.5.1\nRelevance: 2 Medium'));
+  assert.ok(linkTitles.some((text) => text.startsWith('Payroll DB × A.5.1\nResidual score: 9')));
+  assert.equal(
+    ui.el('riskControlsGraphMeta').textContent,
+    '4 of 4 risks, 2 of 2 controls, 4 visible mappings for A. Link thickness follows residual risk score, or the relevance of a PESTLE(E) factor.',
+  );
+
+  // Show narrows the graph and the heatmap to one kind.
+  change(ui, 'riskVizKind', 'cia');
+  await settle(() => rows(ui).length === 1);
+  assert.deepEqual(rows(ui), ['Payroll DB']);
+  assert.equal(
+    ui.el('riskControlsHeatmapMeta').textContent,
+    '1 of 1 risks, 1 of 2 controls, 1 visible mappings for A. Darker cells have higher residual risk score.',
+  );
+  change(ui, 'riskVizKind', 'general');
+  await settle(() => rows(ui)[0] === 'Laptops');
+  assert.deepEqual(rows(ui), ['Laptops']);
+  change(ui, 'riskVizKind', 'pestle');
+  await settle(() => rows(ui).length === 2);
+  assert.deepEqual(rows(ui), ['Audit regime', 'New privacy law']);
+  assert.equal(ui.el('riskVizKind').querySelector('option[value="pestle"]').hidden, false);
+});
+
+test('a reader the graph holds no factors for is not offered them, and an empty kind says so', async (t) => {
+  const data = everyKind(false);
+  data.nodes = data.nodes.filter((n) => n.method !== 'pestle' && n.method !== 'cia');
+  data.links = data.links.filter((l) => l.source === 'risk:r1');
+  const ui = await dashboard(t, data);
+  await settle(() => columns(ui).length === 1);
+  const option = ui.el('riskVizKind').querySelector('option[value="pestle"]');
+  assert.equal(option.hidden, true);
+  assert.equal(option.disabled, true);
+  change(ui, 'riskVizKind', 'cia');
+  await settle(() => /No risks of this kind/.test(ui.el('riskControlsHeatmap').textContent));
+  for (const id of ['riskControlsGraph', 'riskControlsHeatmap'])
+    assert.equal(
+      ui.el(id).textContent,
+      'No risks of this kind are linked to controls in this framework yet.',
+    );
 });

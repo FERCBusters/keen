@@ -26,11 +26,13 @@ from app.db.models import (
 )
 from app.ingest import bookstack
 from app.ingest import connections as source_connections
-from app.ingest.connections import FIELDS as CONNECTION_FIELDS
 from app.integrations.transport import encrypt
-from app.services.managed_configurations import CONNECTORS, credential_name
+from app.services.managed_configurations import credential_name
 from app.worker import tasks
 from cryptography.fernet import Fernet
+
+from tests.source_types import CONNECTORS
+from tests.source_types import FIELDS as CONNECTION_FIELDS
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -411,9 +413,9 @@ def test_documents_holding_credentials_are_withheld_from_the_editors(defs):
     for response in (listing, catalogue, viewed):
         assert SECRET not in response.text
     warnings = [
-        "rss contains sensitive settings that require server administrator review",
         "forgejo has a feed with a credential in its URL; edit it outside the "
         "evidence definition editor",
+        "rss contains sensitive settings that require server administrator review",
     ]
     assert listing.json()["warnings"] == warnings
     assert catalogue.json()["warnings"] == warnings

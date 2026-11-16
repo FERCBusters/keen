@@ -71,7 +71,7 @@ def test_long_titles_are_shortened_and_blank_ones_are_left_empty(contract_db):
     )
     assert len(entry.entity_title) == 512
     assert entry.entity_title.endswith("…")
-    assert entry.summary == "CIA triad risk created"
+    assert entry.summary == "Risk created"
 
     blank = log.record_entity_changelog(
         contract_db,

@@ -20,6 +20,7 @@ from app.ingest.connections import (
 )
 from app.ingest.http import client as ingestion_client
 from app.ingest.http import retained_listing
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.mapping.targets import resolve_targets
 from app.security.errors import collection_error
 from app.security.redaction import utf8_bytes
@@ -1294,3 +1295,29 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
         )
 
     return runs
+
+
+register(
+    Source(
+        name="bookstack",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=3660.0,
+        config_setting="bookstack_config_path",
+        public_fields=("base_url",),
+        secret_fields=("token_id", "token_secret"),
+        input_sections=(
+            "selected_pages",
+            "page_mappings",
+            "pages",
+            "capture_pages",
+            "book",
+            "books",
+            "book_id",
+            "book_slug",
+        ),
+        section="page_mappings",
+        id_field="match",
+        definition_sections=("selected_pages",),
+    )
+)

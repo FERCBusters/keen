@@ -18,8 +18,9 @@ import yaml
 from app.core.config import settings
 from app.db.models import ControlItem, Event, Framework, Mapping, RuleBackfillJob
 from app.ingest import common
-from app.services.managed_configurations import CONNECTORS
 from app.worker import rule_backfill, tasks
+
+from tests.source_types import CONNECTORS
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (

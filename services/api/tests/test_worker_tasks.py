@@ -3,39 +3,21 @@
 import contextlib
 import uuid
 from datetime import datetime, timedelta
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from app.worker import tasks as wt
 from app.worker.celery_app import (
-    HTTP_INGEST_SOURCES,
-    SOURCE_RUN_SECONDS,
     celery_app,
 )
 from celery.schedules import crontab
 from sqlalchemy.exc import OperationalError
 
-RESULT = [{"ok": True}]
+from tests.source_types import HTTP_INGEST_SOURCES, SOURCE_RUN_SECONDS
 
-INGEST_TASKS = [
-    ("ingest_elasticsearch_all_task", "ingest_elasticsearch_all"),
-    ("ingest_loki_all_task", "ingest_loki_all"),
-    ("ingest_cloudwatch_logs_all_task", "ingest_cloudwatch_logs_all"),
-    ("ingest_github_all_task", "ingest_github_all"),
-    ("ingest_forgejo_all_task", "ingest_forgejo_all"),
-    ("ingest_jenkins_all_task", "ingest_jenkins_all"),
-    ("ingest_taiga_all_task", "ingest_taiga_all"),
-    ("ingest_bookstack_all_task", "ingest_bookstack_all"),
-    ("ingest_rss_all_task", "ingest_rss_all"),
-    ("ingest_google_workspace_all_task", "ingest_google_workspace_all"),
-    ("ingest_gitea_all_task", "ingest_gitea_all"),
-    ("ingest_gitlab_all_task", "ingest_gitlab_all"),
-    ("ingest_redmine_all_task", "ingest_redmine_all"),
-    ("ingest_riskledger_all_task", "ingest_riskledger_all"),
-    ("ingest_op_events_all_task", "ingest_op_events_all"),
-    ("ingest_bitwarden_all_task", "ingest_bitwarden_all"),
-]
+RESULT = [{"ok": True}]
 
 MATERIALISE_TASKS = [
     ("materialize_scheduled_audits_task", "materialize_due_scheduled_audits"),
@@ -183,31 +165,21 @@ def feature_gate(enabled=True):
 
 # Tasks using `with SessionLocal() as db:` close via __exit__; the rest
 # close explicitly in a finally block.
-WITH_BLOCK_TASKS = {
-    "ingest_elasticsearch_all_task",
-    "ingest_gitea_all_task",
-    "ingest_gitlab_all_task",
-    "ingest_redmine_all_task",
-    "ingest_riskledger_all_task",
-    "ingest_op_events_all_task",
-    "ingest_bitwarden_all_task",
-}
-
-
-@pytest.mark.parametrize("task_name,fn_name", INGEST_TASKS)
-def test_ingest_tasks_bound_sessions(task_name, fn_name):
+@pytest.mark.parametrize("source", HTTP_INGEST_SOURCES)
+def test_ingest_tasks_bound_sessions(source):
+    # Each polled source has one collection task, which opens a session for
+    # the collector its own module declares and closes it afterwards.
+    module = import_module(f"app.ingest.{source}")
     with (
         running_session([]) as sessions,
-        patch.object(wt, fn_name, return_value=RESULT) as ingest,
+        patch.object(module, f"ingest_{source}_all", return_value=RESULT) as ingest,
     ):
-        task = getattr(wt, task_name)
+        task = getattr(wt, f"ingest_{source}_all_task")
+        assert task is wt.COLLECTION_TASKS[source]
         output = task()
     assert output == RESULT
     ingest.assert_called_once_with(sessions[0])
-    if task_name in WITH_BLOCK_TASKS:
-        assert sessions[0].__exit__.call_count == 1
-    else:
-        sessions[0].close.assert_called_once()
+    assert sessions[0].__exit__.call_count == 1
 
 
 @pytest.mark.parametrize("task_name,fn_name", MATERIALISE_TASKS)
@@ -965,12 +937,12 @@ def test_every_scheduled_interval_is_the_interval_its_schedule_names():
             for text, size in ((schedule._orig_minute, 60), (schedule._orig_hour, 24)):
                 if step(text) is not None:
                     assert size % step(text) == 0, name
-    assert entries["ingest-github-every-110m"]["schedule"] == 110 * 60
-    assert entries["ingest-forgejo-every-95m"]["schedule"] == 95 * 60
-    assert entries["ingest-jenkins-every-75m"]["schedule"] == 75 * 60
-    assert entries["ingest-bookstack-every-61m"]["schedule"] == 61 * 60
-    assert entries["ingest-rss-every-45m"]["schedule"] == 45 * 60
-    assert entries["ingest-taiga-every-25m"]["schedule"] == 25 * 60
+    assert entries["ingest-github"]["schedule"] == 110 * 60
+    assert entries["ingest-forgejo"]["schedule"] == 95 * 60
+    assert entries["ingest-jenkins"]["schedule"] == 75 * 60
+    assert entries["ingest-bookstack"]["schedule"] == 61 * 60
+    assert entries["ingest-rss"]["schedule"] == 45 * 60
+    assert entries["ingest-taiga"]["schedule"] == 25 * 60
     # A source's run budget sits below the interval between its runs.
     for source in HTTP_INGEST_SOURCES:
         task = f"app.worker.tasks.ingest_{source}_all_task"

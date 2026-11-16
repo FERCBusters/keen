@@ -16,6 +16,8 @@ from app.ingest import redmine, riskledger
 from sqlalchemy import event, text
 from sqlalchemy.exc import DataError, OperationalError
 
+from tests.source_types import INPUT_SECTIONS
+
 INGEST = Path(sc.__file__).resolve().parent
 
 
@@ -203,4 +205,4 @@ def test_every_fanned_out_source_declares_its_input_sections():
         for name in re.findall(r'@connection_runs\("([a-z_]+)"\)', path.read_text())
     }
     assert "loki" in decorated and "imap" in decorated
-    assert decorated - {"imap"} <= set(sc.INPUT_SECTIONS)
+    assert decorated - {"imap"} <= set(INPUT_SECTIONS)

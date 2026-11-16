@@ -405,7 +405,7 @@ def delete_asset(
     if in_use:
         raise DomainError(
             status_code=400,
-            detail="Cannot delete an asset referenced by CIA Triad risks",
+            detail="Cannot delete an asset referenced by risks",
         )
     before = _asset_out(db, row, fw)
     _record(db, "asset", row, "deleted", before, None, user, context)

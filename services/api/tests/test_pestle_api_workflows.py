@@ -433,8 +433,7 @@ def test_items_link_clauses_and_controls_by_relevance(pestle):
     assert [
         (c["control"]["ref"], c["relevance"]["code"]) for c in detail["controls"]
     ] == [("A.10", "high")]
-    # Related controls come through clauses with a relevance other than N/A.
-    assert [c["ref"] for c in detail["related_controls"]] == ["A.2", "A.10"]
+    assert "related_controls" not in detail
     assert (detail["clause_count"], detail["control_count"]) == (2, 1)
 
     clause_view = pestle.read("GET", f"/v1/clauses/{pestle.context.id}/pestle")

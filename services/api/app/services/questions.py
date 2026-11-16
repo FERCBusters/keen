@@ -101,7 +101,7 @@ def _risk_question_target(
 ) -> tuple[str, str, str]:
     row = db.query(Risk).filter(Risk.id == entity_id).one_or_none()
     if not row:
-        raise DomainError(status_code=404, detail="CIA Triad risk not found")
+        raise DomainError(status_code=404, detail="Risk not found")
     from app.services.risks import _is_risk_owner
 
     is_owner = _is_risk_owner(user, row)
@@ -114,7 +114,7 @@ def _risk_question_target(
         raise DomainError(
             status_code=403, detail="risk.read permission or risk ownership required"
         )
-    asset = getattr(row.asset, "name", None) or "CIA Triad risk"
+    asset = getattr(row.asset, "name", None) or "Risk"
     title = (row.threat_summary or "").strip() or asset
     return (asset[:128], title[:512], f"/risk.html?id={row.id}#questions")
 
@@ -195,7 +195,7 @@ def _question_target_label(thread: EventQuestionThread) -> str:
     elif typ == "story":
         prefix = "Story"
     elif typ == "risk":
-        prefix = "CIA Triad risk"
+        prefix = "Risk"
     elif typ == "pestle_item":
         prefix = "PESTLE(E) item"
     else:

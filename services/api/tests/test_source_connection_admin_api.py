@@ -476,9 +476,9 @@ def test_no_source_type_is_a_key_that_redaction_takes_for_a_secret():
     # A source's name is a key of its event provenance and of its run results.
     # One that reads as a secret's name would be replaced there, and with it
     # the collection item a mapping rule selects.
-    from app.ingest.connections import FIELDS
     from app.security.redaction import redact_obj
-    from app.services.ingestion_pause import PAUSABLE_SOURCES
+
+    from tests.source_types import FIELDS, PAUSABLE_SOURCES
 
     for source in sorted(set(FIELDS) | set(PAUSABLE_SOURCES)):
         pointer = {source: {"section": "streams", "stream": "events"}}

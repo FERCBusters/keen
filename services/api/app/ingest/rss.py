@@ -27,6 +27,7 @@ from app.db.models import IngestionCursor
 from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
 from app.security.regex import scan_pattern
@@ -538,3 +539,21 @@ def ingest_rss_all(db: Session) -> list[dict[str, Any]]:
                 }
             )
     return out
+
+
+register(
+    Source(
+        name="rss",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=2700.0,
+        config_setting="rss_config_path",
+        public_fields=("base_url", "username", "header_name", "user_agent"),
+        secret_fields=("password", "header_value"),
+        input_sections=("feeds",),
+        section="feeds",
+        id_field="name",
+        definition_sections=("feeds",),
+        key_field="url",
+    )
+)

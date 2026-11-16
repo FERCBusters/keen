@@ -18,6 +18,7 @@ from app.db.models import IngestionCursor
 from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
@@ -459,3 +460,21 @@ def ingest_elasticsearch_all(db):
                     }
                 )
     return results
+
+
+register(
+    Source(
+        name="elasticsearch",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule="*/30",
+        config_setting="elasticsearch_config_path",
+        public_fields=("base_url", "username"),
+        secret_fields=("password", "api_key"),
+        input_sections=("queries",),
+        section="queries",
+        id_field="name",
+        definition_sections=("queries",),
+        key_field="name",
+    )
+)

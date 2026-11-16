@@ -31,6 +31,7 @@ from app.ingest.event_api import (
     timestamp,
 )
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
@@ -309,3 +310,22 @@ def ingest_op_events_all(db):
                     }
                 )
     return results
+
+
+register(
+    Source(
+        name="op_events",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=float(settings.op_events_poll_seconds),
+        config_setting="op_events_config_path",
+        public_fields=("base_url",),
+        secret_fields=("token",),
+        input_sections=("streams",),
+        section="streams",
+        id_field="stream",
+        definition_sections=("streams",),
+        key_field="stream",
+        demo=False,
+    )
+)

@@ -13,6 +13,7 @@ from app.db.models import IngestionCursor, utcnow
 from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
 
@@ -181,3 +182,21 @@ def ingest_jenkins_all(db: Session) -> list[dict[str, Any]]:
             db.rollback()
             out.append({"job": j.get("name"), "error": collection_error(e)})
     return out
+
+
+register(
+    Source(
+        name="jenkins",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=4500.0,
+        config_setting="jenkins_config_path",
+        public_fields=("base_url", "username"),
+        secret_fields=("api_token",),
+        input_sections=("jobs",),
+        section="jobs",
+        id_field="name",
+        definition_sections=("jobs",),
+        key_field="name",
+    )
+)

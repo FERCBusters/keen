@@ -28,6 +28,7 @@ from app.ingest.event_api import (
     timestamp,
 )
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
@@ -387,3 +388,22 @@ def ingest_bitwarden_all(db):
                 else collection_error(exc),
             }
         ]
+
+
+register(
+    Source(
+        name="bitwarden",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=float(settings.bitwarden_poll_seconds),
+        config_setting="bitwarden_config_path",
+        public_fields=("base_url", "identity_url", "client_id"),
+        secret_fields=("client_secret",),
+        input_sections=("streams",),
+        section="streams",
+        id_field="stream",
+        definition_sections=("streams",),
+        key_field="stream",
+        demo=False,
+    )
+)

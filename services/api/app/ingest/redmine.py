@@ -20,6 +20,7 @@ from app.ingest.connections import (
     settings,
 )
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -446,3 +447,22 @@ def ingest_redmine_all(db):
     return results or [
         {"skipped": True, "reason": "No accessible projects returned by Redmine"}
     ]
+
+
+register(
+    Source(
+        name="redmine",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=float(settings.redmine_poll_seconds),
+        config_setting="redmine_config_path",
+        public_fields=("base_url",),
+        secret_fields=("api_key",),
+        input_sections=("projects",),
+        section="projects",
+        id_field="project",
+        definition_sections=("projects",),
+        key_field="project",
+        demo=False,
+    )
+)

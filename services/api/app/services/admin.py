@@ -32,6 +32,7 @@ from app.db.models import (
     user_groups,
 )
 from app.db.session import track_unpublished_object
+from app.ingest import registry
 from app.ingest.bookstack import apply_bookstack_config_mappings
 from app.ingest.cloud import providers as cloud_providers
 from app.ingest.cloud.runner import enabled as cloud_enabled
@@ -593,29 +594,28 @@ def admin_run_imap_ingest(*, user, db: Session):
     }
 
 
-def _queue_http_ingest(source, db):
+def admin_run_ingest(*, source: str, user, db: Session):
+    """Queue a collection of every connection of one source type."""
     from app.services.ingestion_pause import is_paused
     from app.worker import tasks
 
-    if not getattr(settings, source + "_enabled", False):
+    if source == "imap":
+        return admin_run_imap_ingest(user=user, db=db)
+    declared = registry.find(source)
+    if declared is None or not declared.polled:
+        raise DomainError(404, "Unknown source type")
+    if not getattr(settings, source + "_enabled"):
         raise DomainError(409, "Source type is disabled")
-    if (
-        source in ("redmine", "riskledger", "op_events", "bitwarden")
-        and settings.demo_mode
-    ):
+    if settings.demo_mode and not declared.demo:
         raise DomainError(409, "Source type is unavailable in demo mode")
     if is_paused(db, source):
         raise DomainError(409, "Ingestion is paused")
-    task = getattr(tasks, f"ingest_{source}_all_task").apply_async(expires=300)
+    task = tasks.COLLECTION_TASKS[source].apply_async(expires=300)
     return {
         "queued": True,
         "task_id": task.id,
         "note": "Collection queued on the HTTP ingestion worker; completion is asynchronous.",
     }
-
-
-def admin_run_loki_ingest(*, user, db: Session):
-    return _queue_http_ingest("loki", db)
 
 
 def admin_reset_loki_cursors(
@@ -703,38 +703,6 @@ def admin_reset_loki_cursors(
     }
 
 
-def admin_run_cloudwatch_logs_ingest(*, user, db: Session):
-    return _queue_http_ingest("cloudwatch_logs", db)
-
-
-def admin_run_github_ingest(*, user, db: Session):
-    return _queue_http_ingest("github", db)
-
-
-def admin_run_forgejo_ingest(*, user, db: Session):
-    return _queue_http_ingest("forgejo", db)
-
-
-def admin_run_jenkins_ingest(*, user, db: Session):
-    return _queue_http_ingest("jenkins", db)
-
-
-def admin_run_taiga_ingest(*, user, db: Session):
-    return _queue_http_ingest("taiga", db)
-
-
-def admin_run_bookstack_ingest(*, user, db: Session):
-    return _queue_http_ingest("bookstack", db)
-
-
-def admin_run_rss_ingest(*, user, db: Session):
-    return _queue_http_ingest("rss", db)
-
-
-def admin_run_google_workspace_ingest(*, user, db: Session):
-    return _queue_http_ingest("google_workspace", db)
-
-
 def admin_ingest_status(*, user):
     """Return runtime enablement for ingestion plugins.
 
@@ -742,25 +710,7 @@ def admin_ingest_status(*, user):
     """
 
     return {
-        "enabled": {
-            "elasticsearch": settings.elasticsearch_enabled,
-            "loki": settings.loki_enabled,
-            "cloudwatch_logs": settings.cloudwatch_logs_enabled,
-            "github": settings.github_enabled,
-            "google_workspace": settings.google_workspace_enabled,
-            "forgejo": settings.forgejo_enabled,
-            "redmine": settings.redmine_enabled and not settings.demo_mode,
-            "riskledger": settings.riskledger_enabled and not settings.demo_mode,
-            "op_events": settings.op_events_enabled and not settings.demo_mode,
-            "bitwarden": settings.bitwarden_enabled and not settings.demo_mode,
-            "gitlab": settings.gitlab_enabled,
-            "gitea": settings.gitea_enabled,
-            "jenkins": settings.jenkins_enabled,
-            "taiga": settings.taiga_enabled,
-            "bookstack": settings.bookstack_enabled,
-            "imap": settings.imap_enabled and not settings.demo_mode,
-            "rss": settings.rss_enabled,
-        },
+        "enabled": {source.name: source.enabled for source in registry.collected()},
         # Cloud vendor posture providers, keyed apart from the ingesters:
         # Google Workspace is both.
         "cloud": {p.key: cloud_enabled(p) for p in cloud_providers()},
@@ -1302,30 +1252,6 @@ def admin_entity_changelog(
         limit=limit,
         offset=offset,
     )
-
-
-def admin_run_gitea_ingest(*, user, db: Session):
-    return _queue_http_ingest("gitea", db)
-
-
-def admin_run_gitlab_ingest(*, user, db: Session):
-    return _queue_http_ingest("gitlab", db)
-
-
-def admin_run_redmine_ingest(*, user, db: Session):
-    return _queue_http_ingest("redmine", db)
-
-
-def admin_run_riskledger_ingest(*, user, db: Session):
-    return _queue_http_ingest("riskledger", db)
-
-
-def admin_run_op_events_ingest(*, user, db: Session):
-    return _queue_http_ingest("op_events", db)
-
-
-def admin_run_bitwarden_ingest(*, user, db: Session):
-    return _queue_http_ingest("bitwarden", db)
 
 
 def _diary_controls(

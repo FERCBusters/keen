@@ -14,6 +14,7 @@ from app.ingest.common import fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.ingest.http import retained_listing
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.integrations.schema import has_dot_segment
 from app.security.errors import collection_error
 from app.security.redaction import redact_url
@@ -1003,3 +1004,21 @@ def ingest_github_all(db: Session) -> list[dict[str, Any]]:
                 }
             )
     return out
+
+
+register(
+    Source(
+        name="github",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=6600.0,
+        config_setting="github_config_path",
+        public_fields=("base_url", "username"),
+        secret_fields=("token",),
+        input_sections=("organizations", "orgs", "repos", "feeds"),
+        section="organizations",
+        id_field="org",
+        definition_sections=("organizations", "repos", "feeds"),
+        key_field="org",
+    )
+)

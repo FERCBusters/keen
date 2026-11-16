@@ -37,7 +37,6 @@ const item = {
   clause_count: 0,
   controls: [],
   clauses: [],
-  related_controls: [],
   affected: [],
 };
 // What /api/v1/affected/options sends when nothing is recorded yet.

@@ -154,7 +154,7 @@ def test_sampling_the_same_record_again_updates_its_one_sample(aud):
     first = aud.call(aud.client, "POST", "/evidence", json=target)
     assert first.status_code == 200, first.text
     # A record sample is titled and linked from the record itself.
-    assert first.json()["title"] == "CIA Triad risk: Payroll"
+    assert first.json()["title"] == "Risk: Payroll"
     assert first.json()["evidence_url"].startswith(f"/risk.html?id={aud.risk.id}")
 
     again = aud.call(

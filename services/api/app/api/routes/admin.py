@@ -144,12 +144,11 @@ def admin_update_clause_controls(
     )
 
 
-@router.post("/v1/admin/ingest/loki/run", status_code=202)
-def admin_run_loki_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
+@router.post("/v1/admin/ingest/{source}/run", status_code=202)
+def admin_run_ingest(
+    source: str, user=Depends(require_admin), db: Session = Depends(get_db)
 ):
-    return service.admin_run_loki_ingest(user=user, db=db)
+    return service.admin_run_ingest(source=source, user=user, db=db)
 
 
 @router.post("/v1/admin/ingest/loki/reset")
@@ -163,78 +162,6 @@ def admin_reset_loki_cursors(
     return service.admin_reset_loki_cursors(
         query_name=query_name, connection_id=connection_id, user=user, db=db
     )
-
-
-@router.post("/v1/admin/ingest/cloudwatch_logs/run", status_code=202)
-def admin_run_cloudwatch_logs_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_cloudwatch_logs_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/github/run", status_code=202)
-def admin_run_github_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_github_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/forgejo/run", status_code=202)
-def admin_run_forgejo_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_forgejo_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/jenkins/run", status_code=202)
-def admin_run_jenkins_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_jenkins_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/taiga/run", status_code=202)
-def admin_run_taiga_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_taiga_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/bookstack/run", status_code=202)
-def admin_run_bookstack_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_bookstack_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/imap/run", status_code=202)
-def admin_run_imap_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_imap_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/rss/run", status_code=202)
-def admin_run_rss_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_rss_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/google_workspace/run", status_code=202)
-def admin_run_google_workspace_ingest(
-    user=Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    return service.admin_run_google_workspace_ingest(user=user, db=db)
 
 
 @router.post("/v1/admin/ingest/cloud/{provider}/run", status_code=202)
@@ -531,41 +458,3 @@ def admin_entity_changelog(
         user=user,
         db=db,
     )
-
-
-@router.post("/v1/admin/ingest/gitea/run", status_code=202)
-def admin_run_gitea_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
-    return service.admin_run_gitea_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/gitlab/run", status_code=202)
-def admin_run_gitlab_ingest(user=Depends(require_admin), db: Session = Depends(get_db)):
-    return service.admin_run_gitlab_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/redmine/run", status_code=202)
-def admin_run_redmine_ingest(
-    user=Depends(require_admin), db: Session = Depends(get_db)
-):
-    return service.admin_run_redmine_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/riskledger/run", status_code=202)
-def admin_run_riskledger_ingest(
-    user=Depends(require_admin), db: Session = Depends(get_db)
-):
-    return service.admin_run_riskledger_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/op_events/run", status_code=202)
-def admin_run_op_events_ingest(
-    user=Depends(require_admin), db: Session = Depends(get_db)
-):
-    return service.admin_run_op_events_ingest(user=user, db=db)
-
-
-@router.post("/v1/admin/ingest/bitwarden/run", status_code=202)
-def admin_run_bitwarden_ingest(
-    user=Depends(require_admin), db: Session = Depends(get_db)
-):
-    return service.admin_run_bitwarden_ingest(user=user, db=db)

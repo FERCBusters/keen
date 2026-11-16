@@ -1,7 +1,16 @@
 """The Statement of Applicability shows each control's clauses and each
 clause's controls with their applicability, within the chosen framework."""
 
-from app.db.models import ControlClauseLink, ControlItem, Framework, FrameworkClause
+from app.db.models import (
+    ControlClauseLink,
+    ControlItem,
+    Framework,
+    FrameworkClause,
+    Risk,
+    RiskAsset,
+    RiskAssetSubcategory,
+    RiskCategory,
+)
 
 from tests.test_assembled_authority_regressions import keen as keen
 
@@ -69,3 +78,37 @@ def test_the_statement_shows_clause_links_and_their_applicability(keen):
         401,
         {"detail": "Not authenticated"},
     )
+
+
+def test_the_statement_lists_every_register_risk_with_its_kind(keen):
+    """Simple and CIA risks share the register, so the statement names each."""
+    db = keen.db
+    db.add(Framework(slug=FW))
+    category = RiskCategory(name="Data")
+    db.add(category)
+    db.flush()
+    subcategory = RiskAssetSubcategory(category_id=category.id, name="Databases")
+    db.add(subcategory)
+    db.flush()
+    asset = RiskAsset(
+        name="Payroll", category_id=category.id, subcategory_id=subcategory.id
+    )
+    db.add(asset)
+    db.flush()
+    db.add_all(
+        [
+            Risk(asset_id=asset.id, threat_summary="Flood", risk_types=[]),
+            Risk(
+                asset_id=asset.id,
+                threat_summary="Ransomware",
+                risk_types=["Availability"],
+            ),
+        ]
+    )
+    db.commit()
+    reader = keen.client(keen.user("risk.read"))
+    body = reader.get("/v1/statement-of-applicability", params={"framework": FW}).json()
+    assert {
+        row["threat_summary"]: (row["method"], row["risk_types"])
+        for row in body["risks"]
+    } == {"Flood": ("general", []), "Ransomware": ("cia", ["Availability"])}

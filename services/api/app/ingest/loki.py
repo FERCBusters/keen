@@ -24,6 +24,7 @@ from app.ingest.log_pipeline import (
     truncate,
     try_parse_json_line,
 )
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
 
@@ -507,3 +508,21 @@ def ingest_loki_all(db: Session) -> list[dict[str, Any]]:
             db.rollback()
             out.append({"query_name": name, "error": collection_error(e)})
     return out
+
+
+register(
+    Source(
+        name="loki",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule="*/30",
+        config_setting="loki_queries_path",
+        public_fields=("base_url", "username", "header_name"),
+        secret_fields=("password", "header_value"),
+        input_sections=("queries",),
+        section="queries",
+        id_field="name",
+        definition_sections=("queries",),
+        key_field="name",
+    )
+)

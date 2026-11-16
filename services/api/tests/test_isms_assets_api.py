@@ -477,7 +477,7 @@ def test_an_asset_with_risks_cannot_be_deleted(reg):
     refused = reg.manage("DELETE", f"assets/{held['id']}", status=400)
     deleted = reg.manage("DELETE", f"assets/{free['id']}")
 
-    assert refused["detail"] == "Cannot delete an asset referenced by CIA Triad risks"
+    assert refused["detail"] == "Cannot delete an asset referenced by risks"
     assert deleted == {"ok": True}
     assert names(reg.call(reg.reader, "GET", "assets")["items"]) == ["Payroll database"]
     assert reg.call(reg.reader, "GET", f"assets/{held['id']}")["risk_count"] == 1

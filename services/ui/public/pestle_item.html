@@ -39,6 +39,9 @@
         <button class="nav-link" id="pestleRelevanceTab" data-bs-toggle="tab" data-bs-target="#pestleRelevancePane" type="button" role="tab" aria-controls="pestleRelevancePane" aria-selected="false">Relevance mappings</button>
       </li>
       <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pestleGraphTab" data-feature="visualisations" data-bs-toggle="tab" data-bs-target="#pestleGraphPane" type="button" role="tab" aria-controls="pestleGraphPane" aria-selected="false">Visualisation</button>
+      </li>
+      <li class="nav-item" role="presentation">
         <button class="nav-link" id="pestleQuestionsTab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#pestleQuestionsPane" type="button" role="tab" aria-controls="pestleQuestionsPane" aria-selected="false">Questions</button>
       </li>
       <li class="nav-item" role="presentation">
@@ -95,19 +98,6 @@
               </form>
             </div>
           </div>
-
-          <div class="card">
-            <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-              <div>
-                <div class="fw-bold">Related controls</div>
-                <div class="small-muted">Controls related through non-N/A clause relevance mappings for the selected framework.</div>
-              </div>
-              <span id="relatedControlsCount" class="badge text-bg-light">0</span>
-            </div>
-            <div class="card-body p-0">
-              <div id="relatedControls" class="p-3 small-muted">Save the item and map clauses to see related controls.</div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -160,6 +150,16 @@
         </div>
       </section>
 
+      <section class="tab-pane fade" id="pestleGraphPane" role="tabpanel" aria-labelledby="pestleGraphTab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Controls and clauses this item is relevant to</div>
+            <div class="small-muted">Every control and clause of the selected framework rated above N/A. A thicker line is a higher relevance.</div>
+          </div>
+          <div id="pestleGraph" class="card-body pestle-viz-box small-muted">Save the item first.</div>
+        </div>
+      </section>
+
       <section class="tab-pane fade" id="pestleChangelogPane" role="tabpanel" aria-labelledby="pestleChangelogTab" tabindex="0">
         <div class="card mb-3">
           <div class="card-header">
@@ -173,6 +173,7 @@
   </main>
 
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
   <script type="module" src="/pages/pestle_item.js"></script>
 </body>
 </html>

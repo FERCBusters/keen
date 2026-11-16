@@ -14,9 +14,11 @@ import {
   withFramework,
   loadEntityChangelog,
   canSampleIntoAudit,
+  lookupTab,
   openAuditSampleModal,
 } from '/app.js';
 import {
+  RISK_METHODS,
   methodBadgeHtml,
   methodOf,
   treatmentLabel,
@@ -26,6 +28,9 @@ import {
   scoreClass,
 } from '/pages/risk-common.js';
 import { affectedBadgesHtml } from '/pages/affected-common.js';
+import { renderRecordLinksGraph } from '/pages/record-links-graph.js';
+import { mountSwotRelated } from '/pages/swot-related.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -55,6 +60,8 @@ const riskMitigatorContext = document.getElementById('riskMitigatorContext');
 const controlsCount = document.getElementById('controlsCount');
 const linkedControls = document.getElementById('linkedControls');
 const riskDetailsTab = document.getElementById('riskDetailsTab');
+const riskGraphTab = document.getElementById('riskGraphTab');
+const riskGraph = document.getElementById('riskGraph');
 const riskQuestionsTab = document.getElementById('riskQuestionsTab');
 const riskChangelogTab = document.getElementById('riskChangelogTab');
 const riskChangelogEl = document.getElementById('riskChangelog');
@@ -75,12 +82,16 @@ function setRiskTabQuery(tabName) {
 }
 
 function activateRiskTab(tabName) {
-  const tab =
-    tabName === 'changelog'
-      ? riskChangelogTab
-      : tabName === 'questions'
-        ? riskQuestionsTab
-        : riskDetailsTab;
+  const tab = lookupTab(
+    {
+      details: riskDetailsTab,
+      visualisation: riskGraphTab,
+      questions: riskQuestionsTab,
+      changelog: riskChangelogTab,
+    },
+    tabName,
+    riskDetailsTab,
+  );
   if (!tab || !window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
@@ -95,8 +106,28 @@ async function loadRiskChangelog() {
   });
 }
 
+// The risk with the controls and clauses it is linked to in this framework.
+function renderRiskGraph(risk) {
+  const targets = (linked) =>
+    risk[linked.key].map((item) => ({
+      label: item.ref,
+      detail: item.title,
+      href: withFramework(`${linked.page}?id=${encodeURIComponent(item.id)}`, risk.framework),
+    }));
+  renderRecordLinksGraph(riskGraph, {
+    label: riskDisplayTitle(risk),
+    detail: RISK_METHODS[methodOf(risk)].label,
+    empty: 'This risk is not linked to any control or clause of this framework yet.',
+    groups: LINKED.map((linked) => ({ title: `${linked.heading}s`, items: targets(linked) })),
+  });
+}
+
 function wireRiskTabs() {
   riskDetailsTab?.addEventListener('shown.bs.tab', () => setRiskTabQuery('details'));
+  riskGraphTab?.addEventListener('shown.bs.tab', () => {
+    setRiskTabQuery('visualisation');
+    if (currentRisk) renderRiskGraph(currentRisk);
+  });
   riskQuestionsTab?.addEventListener('shown.bs.tab', () => {
     setRiskTabQuery('questions');
     riskQuestions.refresh();
@@ -318,6 +349,7 @@ async function loadRisk() {
     if (framework) u.searchParams.set('framework', framework);
     const risk = await apiGet(u.pathname + u.search);
     renderRisk(risk);
+    if (qs('tab') === 'visualisation') renderRiskGraph(risk);
     if (qs('tab') === 'changelog') await loadRiskChangelog();
     if (qs('tab') === 'questions') await riskQuestions.refresh();
   } catch (e) {
@@ -329,7 +361,5 @@ async function loadRisk() {
 
 await loadRisk();
 
-import { mountSwotRelated } from '/pages/swot-related.js';
-import { mountStoryRelated } from '/pages/story-related.js';
 mountSwotRelated('risk', new URLSearchParams(location.search).get('id'));
 mountStoryRelated({ me, kind: 'risk', id: new URLSearchParams(location.search).get('id') });

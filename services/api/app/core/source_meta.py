@@ -8,6 +8,7 @@ from functools import lru_cache
 
 from app.core.config import settings
 from app.core.managed_configuration import load_documents
+from app.ingest import registry
 from app.security.regex import scan_pattern
 
 
@@ -160,22 +161,7 @@ def _configured_source_meta(refresh_bucket: int) -> dict[str, dict[str, str]]:
 
     # Plugin configs (poll + other ingestion providers)
     plugin_cfgs: dict[str, str] = {
-        "elasticsearch": settings.elasticsearch_config_path,
-        "loki": settings.loki_queries_path,
-        "cloudwatch_logs": settings.cloudwatch_logs_config_path,
-        "github": settings.github_config_path,
-        "forgejo": settings.forgejo_config_path,
-        "gitea": settings.gitea_config_path,
-        "redmine": settings.redmine_config_path,
-        "riskledger": settings.riskledger_config_path,
-        "op_events": settings.op_events_config_path,
-        "bitwarden": settings.bitwarden_config_path,
-        "gitlab": settings.gitlab_config_path,
-        "jenkins": settings.jenkins_config_path,
-        "taiga": settings.taiga_config_path,
-        "bookstack": settings.bookstack_config_path,
-        "rss": settings.rss_config_path,
-        "google_workspace": settings.google_workspace_config_path,
+        source.name: source.config_path for source in registry.polled()
     }
 
     # One session reads every document, the webhooks included.

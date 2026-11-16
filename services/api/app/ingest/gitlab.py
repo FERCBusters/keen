@@ -11,6 +11,7 @@ from app.ingest.common import is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.git_activity import _parse_iso_ts
 from app.ingest.http import client as ingestion_client
+from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
 from app.services.ingestion_pause import pausable
 
@@ -229,3 +230,21 @@ def ingest_gitlab_all(db):
     return results or [
         {"skipped": True, "reason": "No GitLab groups or users configured"}
     ]
+
+
+register(
+    Source(
+        name="gitlab",
+        module=__name__,
+        queue=HTTP_QUEUE,
+        schedule=5700.0,
+        config_setting="gitlab_config_path",
+        public_fields=("base_url",),
+        secret_fields=("token",),
+        input_sections=("groups", "users"),
+        section="groups",
+        id_field="group",
+        definition_sections=("groups", "users"),
+        key_field="group",
+    )
+)

@@ -618,7 +618,7 @@ def test_risks_are_recorded_against_checks_and_subjects(keen, cloud):
 def test_source_catalogue_lists_the_provider_and_it_can_be_paused(
     keen, cloud, monkeypatch, tmp_path
 ):
-    from app.services.managed_configurations import CONNECTORS
+    from tests.source_types import CONNECTORS
 
     for name, (setting, _, _) in CONNECTORS.items():
         (tmp_path / f"{name}.yml").write_text("{}")

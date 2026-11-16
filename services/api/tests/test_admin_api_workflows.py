@@ -32,6 +32,7 @@ from app.db.models import (
     User,
     user_groups,
 )
+from app.ingest import registry
 from app.services import admin as admin_service
 
 # Imported fixture: the assembled application with an in-memory session store.
@@ -694,25 +695,11 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
             queued.append((self.name, kwargs))
             return SimpleNamespace(id="task-" + self.name)
 
-    sources = [
-        "loki",
-        "cloudwatch_logs",
-        "github",
-        "forgejo",
-        "jenkins",
-        "taiga",
-        "bookstack",
-        "rss",
-        "google_workspace",
-        "gitea",
-        "gitlab",
-        "redmine",
-        "riskledger",
-        "op_events",
-        "bitwarden",
-    ]
+    # Every polled source type has the one run route, whatever declares it.
+    sources = [source.name for source in registry.polled()]
+    assert {"loki", "github", "elasticsearch", "bitwarden"} <= set(sources)
     for source in sources:
-        monkeypatch.setattr(tasks, f"ingest_{source}_all_task", Task(source))
+        monkeypatch.setitem(tasks.COLLECTION_TASKS, source, Task(source))
         monkeypatch.setattr(settings, f"{source}_enabled", True)
     monkeypatch.setattr(tasks, "dispatch_imap_task", Task("imap"))
     monkeypatch.setattr(settings, "imap_enabled", True)

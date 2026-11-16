@@ -195,6 +195,14 @@ export function takeWizardDraft() {
   }
 }
 
+// How heavily a visualisation draws a factor's link for each relevance it can
+// be given, from 0 to 1. A level it does not know is drawn as the lowest.
+const RELEVANCE_STRENGTH = { high: 1, medium: 0.6, low: 0.3 };
+
+export function relevanceStrength(rel) {
+  return RELEVANCE_STRENGTH[rel.code] ?? RELEVANCE_STRENGTH.low;
+}
+
 // How relevant a PESTLE(E) factor is: overall, or to one clause or control.
 export function relevanceBadge(rel) {
   const cls =

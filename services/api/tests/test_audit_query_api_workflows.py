@@ -656,7 +656,7 @@ def test_sampled_records_are_described_with_their_controls(audits):
         return pair
 
     risk_entity, risk_controls = one("risk")
-    assert risk_entity["title"] == "CIA Triad risk: Payroll"
+    assert risk_entity["title"] == "Risk: Payroll"
     assert risk_entity["subtitle"].endswith("…") and len(risk_entity["subtitle"]) == 220
     assert risk_entity["href"] == f"/risk.html?id={risk.id}&framework=A"
     assert [c["ref"] for c in risk_controls] == ["A.5.1"]

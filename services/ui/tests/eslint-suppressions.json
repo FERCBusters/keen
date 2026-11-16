@@ -215,7 +215,7 @@
   },
   "services/ui/public/pages/pestle_item.js": {
     "no-unsanitized/property": {
-      "count": 6
+      "count": 5
     }
   },
   "services/ui/public/pages/planning-views.js": {

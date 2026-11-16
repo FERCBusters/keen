@@ -43,22 +43,19 @@ from app.services.isms.serializers import (
     _objective_out,
 )
 from app.services.isms.swot import summary as swot_summary
-from app.services.pestle import can_read_pestle, relevance_summary
+from app.services.pestle import can_read_pestle, rated_links, relevance_summary
 from app.services.risks import (
     _risk_clauses,
     _risk_controls,
     can_read_risks,
+    risk_method,
     risk_owner_out,
 )
 
 
 def _pestle_summary(item: PestleItem) -> dict[str, Any]:
     clause_links = sorted(
-        [
-            link
-            for link in list(item.clause_links or [])
-            if getattr(getattr(link, "relevance", None), "code", None) != "na"
-        ],
+        rated_links(item.clause_links),
         key=lambda link: (
             int(link.clause.sort_order or 0),
             _ref_sort_key(link.clause.ref),
@@ -85,7 +82,7 @@ def _pestle_summary(item: PestleItem) -> dict[str, Any]:
                 "relevance": relevance_summary(link.relevance),
             }
             for link in sorted(
-                (link for link in item.control_links if link.relevance.code != "na"),
+                rated_links(item.control_links),
                 key=lambda link: (link.control.type, _ref_sort_key(link.control.ref)),
             )
         ],
@@ -109,6 +106,7 @@ def _risk_summary(db: Session, risk: Risk, framework: str) -> dict[str, Any]:
             "id": str(subcategory.id) if subcategory else None,
             "name": subcategory.name if subcategory else None,
         },
+        "method": risk_method(risk),
         "risk_types": list(risk.risk_types or []),
         "risk_owner": risk_owner_out(risk),
         "threat_summary": risk.threat_summary or "",

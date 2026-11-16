@@ -21,22 +21,8 @@ from app.db.models import (
     User,
 )
 from app.db.session import SessionLocal
-from app.ingest.bitwarden import ingest_bitwarden_all
-from app.ingest.bookstack import ingest_bookstack_all
-from app.ingest.cloudwatch_logs import ingest_cloudwatch_logs_all
-from app.ingest.elasticsearch import ingest_elasticsearch_all
-from app.ingest.forgejo import ingest_forgejo_all
-from app.ingest.gitea import ingest_gitea_all
-from app.ingest.github import ingest_github_all
-from app.ingest.gitlab import ingest_gitlab_all
-from app.ingest.google_workspace import ingest_google_workspace_all
-from app.ingest.jenkins import ingest_jenkins_all
-from app.ingest.loki import ingest_loki_all
-from app.ingest.op_events import ingest_op_events_all
-from app.ingest.redmine import ingest_redmine_all
-from app.ingest.riskledger import ingest_riskledger_all
-from app.ingest.rss import ingest_rss_all
-from app.ingest.taiga import ingest_taiga_all
+from app.ingest.registry import Source, polled
+from app.ingest.registry import find as find_source
 from app.outbound.question_webhooks import (
     OutboundWebhookConfig,
     build_generic_payload,
@@ -68,91 +54,24 @@ log = logging.getLogger(__name__)
 _LOST_LOCK = frozenset({"40P01", LOCK_NOT_AVAILABLE})
 
 
-@celery_app.task(name="app.worker.tasks.ingest_elasticsearch_all_task")
-def ingest_elasticsearch_all_task():
-    with SessionLocal() as db:
-        return ingest_elasticsearch_all(db)
+def _collection_task(source: Source):
+    """The scheduled task that collects every connection of one source type."""
+
+    @celery_app.task(name=source.task_name)
+    def collect_all():
+        with SessionLocal() as db:
+            return source.collect(db)
+
+    return collect_all
 
 
-@celery_app.task(name="app.worker.tasks.ingest_loki_all_task")
-def ingest_loki_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_loki_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_cloudwatch_logs_all_task")
-def ingest_cloudwatch_logs_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_cloudwatch_logs_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_github_all_task")
-def ingest_github_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_github_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_forgejo_all_task")
-def ingest_forgejo_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_forgejo_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_jenkins_all_task")
-def ingest_jenkins_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_jenkins_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_taiga_all_task")
-def ingest_taiga_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_taiga_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_bookstack_all_task")
-def ingest_bookstack_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_bookstack_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_rss_all_task")
-def ingest_rss_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_rss_all(db)
-    finally:
-        db.close()
-
-
-@celery_app.task(name="app.worker.tasks.ingest_google_workspace_all_task")
-def ingest_google_workspace_all_task() -> list[dict]:
-    db: Session = SessionLocal()
-    try:
-        return ingest_google_workspace_all(db)
-    finally:
-        db.close()
+# One task per polled source, named ingest_<source>_all_task as beat and the
+# manual run route expect.
+COLLECTION_TASKS = {source.name: _collection_task(source) for source in polled()}
+# Each is also reachable by its name, as any other task of this module is.
+globals().update(
+    {f"ingest_{name}_all_task": task for name, task in COLLECTION_TASKS.items()}
+)
 
 
 # A provider read covers every configured scope; these bound a stuck vendor.
@@ -514,36 +433,6 @@ def integration_tick_task():
     tick()
 
 
-@celery_app.task(name="app.worker.tasks.ingest_gitea_all_task")
-def ingest_gitea_all_task():
-    with SessionLocal() as db:
-        return ingest_gitea_all(db)
-
-
-@celery_app.task(name="app.worker.tasks.ingest_gitlab_all_task")
-def ingest_gitlab_all_task():
-    with SessionLocal() as db:
-        return ingest_gitlab_all(db)
-
-
-@celery_app.task(name="app.worker.tasks.ingest_redmine_all_task")
-def ingest_redmine_all_task():
-    with SessionLocal() as db:
-        return ingest_redmine_all(db)
-
-
-@celery_app.task(name="app.worker.tasks.ingest_op_events_all_task")
-def ingest_op_events_all_task():
-    with SessionLocal() as db:
-        return ingest_op_events_all(db)
-
-
-@celery_app.task(name="app.worker.tasks.ingest_bitwarden_all_task")
-def ingest_bitwarden_all_task():
-    with SessionLocal() as db:
-        return ingest_bitwarden_all(db)
-
-
 @celery_app.task(name="app.worker.tasks.evidence_retention_task")
 def evidence_retention_task():
     from app.services.evidence_retention import run_retention
@@ -568,26 +457,16 @@ def security_notifications_task():
     return deliver_pending()
 
 
-@celery_app.task(name="app.worker.tasks.ingest_riskledger_all_task")
-def ingest_riskledger_all_task():
-    with SessionLocal() as db:
-        return ingest_riskledger_all(db)
-
-
 @celery_app.task(name="keen.ingest_source_connection")
 def ingest_source_connection_task(source: str, connection_id: str):
     """Use the same entry point and global gates as scheduled polling."""
-    from importlib import import_module
-
-    from app.services.ingestion_pause import POLLING_SOURCES
-
     if source == "imap":
         return {"task_id": ingest_imap_connection_task.delay(connection_id).id}
-    if source not in POLLING_SOURCES:
+    declared = find_source(source)
+    if declared is None or not declared.polled:
         raise ValueError("Unknown polling source")
-    ingest = getattr(import_module("app.ingest." + source), "ingest_" + source + "_all")
     with SessionLocal() as db:
-        return ingest(db, connection_id=connection_id)
+        return declared.collect(db, connection_id=connection_id)
 
 
 @celery_app.task(name="keen.dispatch_imap")

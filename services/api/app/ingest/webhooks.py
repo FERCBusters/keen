@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.valkey import get_valkey
 from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import current_connection, load_document, namespace
+from app.ingest.registry import Source, register
 from app.security.placeholders import is_placeholder
 
 # The providers defined in the webhooks.yml Keen ships. Each has its own
@@ -221,3 +222,17 @@ def _store_webhook_event(
         captured_by=f"keen:webhook:{provider}",
     )
     return res
+
+
+# Webhooks are sent to Keen, so no collector, queue or schedule.
+register(
+    Source(
+        name="webhooks",
+        module=__name__,
+        config_setting="webhooks_path",
+        public_fields=("provider", "secret_header"),
+        secret_fields=("secret",),
+        section="providers",
+        definition_sections=("providers",),
+    )
+)

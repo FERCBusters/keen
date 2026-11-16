@@ -19,6 +19,9 @@ from app.db.models import (
     FrameworkClause,
     ManagedConfiguration,
     Mapping,
+    PestleControlRelevance,
+    PestleItem,
+    PestleRelevanceLevel,
     Risk,
     RiskAsset,
     RiskAssetSubcategory,
@@ -175,7 +178,12 @@ def test_graphs_follow_their_permission_rules(graph):
     answer = manager.get("/v1/graph/risk_control", params={"framework": "A"})
     assert (answer.status_code, answer.json()) == (
         200,
-        {"nodes": [], "links": [], "graph_kind": "risk_control_relationship"},
+        {
+            "nodes": [],
+            "links": [],
+            "graph_kind": "risk_control_relationship",
+            "includes_factors": True,
+        },
     )
 
 
@@ -526,6 +534,10 @@ def test_risk_control_graph_weights_links_by_risk_score(graph):
         nodes[severe_id]["residual_risk_score"],
     ) == (20, 4)
     assert nodes[severe_id]["category"] == "Data"
+    assert (nodes[severe_id]["method"], nodes[severe_id]["risk_types"]) == (
+        "cia",
+        ["Confidentiality"],
+    )
     assert nodes[severe_id]["subcategory"] == "Databases"
     assert (nodes[severe_id]["link_count"], nodes[change]["link_count"]) == (2, 2)
     assert nodes[severe_id]["color"] == nodes[severe_id]["color"].lower()
@@ -540,3 +552,136 @@ def test_risk_control_graph_weights_links_by_risk_score(graph):
         f"risk:{unlinked.id}",
         f"control:{graph.inherited.id}",
     }
+
+
+def test_risk_control_graph_draws_every_kind_of_risk(graph):
+    """Simple risks, CIA risks and PESTLE(E) factors share the graph, each named."""
+    from app.services.pestle import _relevance_levels
+
+    db = graph.db
+    category = RiskCategory(name="Data")
+    db.add(category)
+    db.flush()
+    subcategory = RiskAssetSubcategory(category_id=category.id, name="Databases")
+    db.add(subcategory)
+    db.flush()
+    asset = RiskAsset(
+        name="Payroll", category_id=category.id, subcategory_id=subcategory.id
+    )
+    db.add(asset)
+    db.flush()
+    simple = Risk(asset_id=asset.id, risk_types=[], risk_score=6)
+    cia = Risk(asset_id=asset.id, risk_types=["Integrity"], risk_score=12)
+    db.add_all([simple, cia])
+    db.flush()
+    level = {row.code: row for row in _relevance_levels(db)}
+    assert set(level) == {"na", "high", "medium", "low"}
+    assert db.query(PestleRelevanceLevel).count() == 4
+    factor = PestleItem(
+        framework_slug="A",
+        type="Legal",
+        lens="External",
+        item=HOSTILE,
+        overall_relevance_id=level["high"].id,
+    )
+    unrated = PestleItem(
+        framework_slug="A",
+        type="Social",
+        lens="Internal",
+        item="Rated N/A for its only control",
+        overall_relevance_id=level["low"].id,
+    )
+    elsewhere = PestleItem(
+        framework_slug="B",
+        type="Legal",
+        lens="External",
+        item="Another framework's factor",
+        overall_relevance_id=level["high"].id,
+    )
+    db.add_all([factor, unrated, elsewhere])
+    db.flush()
+    db.add_all(
+        [
+            RiskControlLink(
+                risk_id=simple.id, framework_slug="A", control_item_id=graph.logging.id
+            ),
+            RiskControlLink(
+                risk_id=cia.id, framework_slug="A", control_item_id=graph.logging.id
+            ),
+            PestleControlRelevance(
+                pestle_item_id=factor.id,
+                control_item_id=graph.logging.id,
+                relevance_id=level["medium"].id,
+            ),
+            PestleControlRelevance(
+                pestle_item_id=factor.id,
+                control_item_id=graph.change.id,
+                relevance_id=level["high"].id,
+            ),
+            PestleControlRelevance(
+                pestle_item_id=unrated.id,
+                control_item_id=graph.change.id,
+                relevance_id=level["na"].id,
+            ),
+            PestleControlRelevance(
+                pestle_item_id=elsewhere.id,
+                control_item_id=graph.inherited.id,
+                relevance_id=level["high"].id,
+            ),
+        ]
+    )
+    db.commit()
+
+    client = graph.keen.client(graph.keen.user("risk.read"))
+    payload = client.get("/v1/graph/risk_control", params={"framework": "A"}).json()
+    assert payload["includes_factors"] is True
+    nodes = _nodes(payload)
+    factor_id = f"pestle:{factor.id}"
+    logging = f"control:{graph.logging.id}"
+    change = f"control:{graph.change.id}"
+    assert {nid: node["method"] for nid, node in nodes.items() if "method" in node} == {
+        f"risk:{simple.id}": "general",
+        f"risk:{cia.id}": "cia",
+        factor_id: "pestle",
+    }
+    # A factor is a node on the risk side, reached only through a control it
+    # is rated above N/A for; one control is in the graph for the factor alone.
+    assert set(nodes) == {
+        f"risk:{simple.id}",
+        f"risk:{cia.id}",
+        factor_id,
+        logging,
+        change,
+    }
+    shown = nodes[factor_id]
+    assert (shown["node_kind"], shown["label"], shown["pestle_item_id"]) == (
+        "risk",
+        HOSTILE,
+        str(factor.id),
+    )
+    assert (shown["pestle_type"], shown["lens"], shown["link_count"]) == (
+        "Legal",
+        "External",
+        2,
+    )
+    assert shown["overall_relevance"]["code"] == "high"
+    assert (nodes[logging]["link_count"], nodes[change]["link_count"]) == (3, 1)
+    # A factor's links carry its relevance to the control instead of a score.
+    relevance = {
+        link["target"]: link["relevance"]["code"]
+        for link in payload["links"]
+        if link["source"] == factor_id
+    }
+    assert relevance == {logging: "medium", change: "high"}
+    assert all(
+        "risk_score" not in link
+        for link in payload["links"]
+        if link["source"] == factor_id
+    )
+
+    # With PESTLE(E) switched off the graph holds register risks alone.
+    db.add(ManagedConfiguration(name="features", version=1, document={"pestle": False}))
+    db.commit()
+    without = client.get("/v1/graph/risk_control", params={"framework": "A"}).json()
+    assert without["includes_factors"] is False
+    assert set(_nodes(without)) == {f"risk:{simple.id}", f"risk:{cia.id}", logging}

@@ -21,7 +21,7 @@ DEFINITIONS = (
     ("visualisations", "Visualisations", None),
     ("explorer", "Connections explorer", None),
     ("risks", "Risk management", None),
-    ("risk_cia", "CIA risk assessments", "risks"),
+    ("risk_cia", "Risk assessments", "risks"),
     ("risk_register", "Risk register", "risk_cia"),
     ("mitigator", "Mitigator", "risk_cia"),
     ("pestle", "PESTLE(E)", "risks"),

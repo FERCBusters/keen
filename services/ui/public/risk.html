@@ -37,6 +37,9 @@
         <button class="nav-link active" id="riskDetailsTab" data-bs-toggle="tab" data-bs-target="#riskDetailsPane" type="button" role="tab" aria-controls="riskDetailsPane" aria-selected="true">Details</button>
       </li>
       <li class="nav-item" role="presentation">
+        <button class="nav-link" id="riskGraphTab" data-feature="visualisations" data-bs-toggle="tab" data-bs-target="#riskGraphPane" type="button" role="tab" aria-controls="riskGraphPane" aria-selected="false">Visualisation</button>
+      </li>
+      <li class="nav-item" role="presentation">
         <button class="nav-link" id="riskQuestionsTab" data-feature="questions" data-bs-toggle="tab" data-bs-target="#riskQuestionsPane" type="button" role="tab" aria-controls="riskQuestionsPane" aria-selected="false">Questions</button>
       </li>
       <li class="nav-item" role="presentation">
@@ -145,6 +148,16 @@
         </div>
       </section>
 
+      <section class="tab-pane fade" id="riskGraphPane" role="tabpanel" aria-labelledby="riskGraphTab" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="fw-bold">Controls and clauses linked to this risk</div>
+            <div class="small-muted">Every control and clause of the selected framework this risk is linked to.</div>
+          </div>
+          <div id="riskGraph" class="card-body pestle-viz-box small-muted">Loading visualisation</div>
+        </div>
+      </section>
+
       <section class="tab-pane fade" id="riskChangelogPane" role="tabpanel" aria-labelledby="riskChangelogTab" tabindex="0">
         <div class="card mb-3">
           <div class="card-header">
@@ -158,6 +171,7 @@
   </main>
 
   <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
   <script type="module" src="/pages/risk.js"></script>
 </body>
 </html>
