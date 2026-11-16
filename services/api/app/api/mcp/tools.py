@@ -473,7 +473,7 @@ async def list_pestle_items(
     offset: Offset = 0,
 ) -> dict:
     """List PESTLE(E) items: political, economic, social, technological, legal
-    and environmental factors and their relevance."""
+    and environmental items and their relevance."""
     _needs("pestle.read")
     answer = await _get(
         "/v1/pestle/items",

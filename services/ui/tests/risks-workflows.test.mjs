@@ -572,7 +572,7 @@ test('the CIA tab asks for CIA risks only and filters by type', async (t) => {
   assert.equal(state.riskQueries.at(-1).risk_type, 'Integrity');
 });
 
-test('the PESTLE(E) tab lists factors with safe text and links to the wizard and workspace', async (t) => {
+test('the PESTLE(E) tab lists items with safe text and links to the wizard and workspace', async (t) => {
   const asset = {
     kind: 'asset',
     id: 'a1',
@@ -807,12 +807,12 @@ test('CIA, PESTLE(E), library and category load failures are reported on their t
 
   const pestle = await dashboard(t, { query: '&tab=pestle', pestleFail: true });
   await settle(() =>
-    /Failed to load PESTLE\(E\) factors\./.test(pestle.ui.el('pestleRows').textContent),
+    /Failed to load PESTLE\(E\) items\./.test(pestle.ui.el('pestleRows').textContent),
   );
   assert.equal(pestle.ui.el('pestleRows').querySelector('td').getAttribute('colspan'), '8');
   assert.equal(
     pestle.ui.el('status').textContent,
-    'Failed to load PESTLE(E) factors: Factors offline',
+    'Failed to load PESTLE(E) items: Factors offline',
   );
 
   const library = await dashboard(t, { query: '&tab=library', libraryFail: true });
@@ -846,7 +846,7 @@ test('a refused template deletion and a refused CSV import are reported', async 
   assert.equal(state.posted.at(-1).path, '/api/v1/risks/register/import.csv');
 });
 
-test('risks with the same score sort by name, and factor badges follow their relevance', async (t) => {
+test('risks with the same score sort by name, and item badges follow their relevance', async (t) => {
   const tied = riskRows.map((r) => ({ ...r, risk_score: 9 }));
   const { ui } = await dashboard(t, {
     risks: tied,

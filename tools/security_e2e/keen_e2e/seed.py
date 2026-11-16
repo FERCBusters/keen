@@ -49,7 +49,7 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
         "/api/v1/isms/org-nodes",
         "/isms.html?tab=org",
     )
-    # A third party the risk and PESTLE(E) factor name as affected.
+    # A third party the risk and PESTLE(E) item name as affected.
     create(
         "vendor",
         "/api/v1/isms/vendors",

@@ -7,7 +7,7 @@ import { esc, node, userDisplayName, withFramework } from '/app.js';
 export const RISK_TYPES = ['Confidentiality', 'Integrity', 'Availability'];
 
 // The three ways a risk can be described. The register holds "general" and
-// "cia" risks as one record type; a PESTLE(E) factor is an impact-assessment
+// "cia" risks as one record type; a PESTLE(E) item is an impact-assessment
 // item scored against controls and clauses.
 export const RISK_METHODS = {
   general: {
@@ -25,7 +25,7 @@ export const RISK_METHODS = {
     icon: 'bi-shield-lock',
   },
   pestle: {
-    label: 'PESTLE(E) factor',
+    label: 'PESTLE(E) item',
     short: 'PESTLE(E)',
     description:
       'An outside or inside influence - political, economic, social, technological, legal, environmental or ethical - scored for how relevant it is to the controls and clauses of your framework.',
@@ -195,7 +195,7 @@ export function takeWizardDraft() {
   }
 }
 
-// How heavily a visualisation draws a factor's link for each relevance it can
+// How heavily a visualisation draws an item's link for each relevance it can
 // be given, from 0 to 1. A level it does not know is drawn as the lowest.
 const RELEVANCE_STRENGTH = { high: 1, medium: 0.6, low: 0.3 };
 
@@ -203,7 +203,7 @@ export function relevanceStrength(rel) {
   return RELEVANCE_STRENGTH[rel.code] ?? RELEVANCE_STRENGTH.low;
 }
 
-// How relevant a PESTLE(E) factor is: overall, or to one clause or control.
+// How relevant a PESTLE(E) item is: overall, or to one clause or control.
 export function relevanceBadge(rel) {
   const cls =
     { high: 'text-bg-danger', medium: 'text-bg-warning', low: 'text-bg-success' }[rel?.code] ||
@@ -283,9 +283,9 @@ export function linkedRisksTable(items, framework) {
   );
 }
 
-// Table rows for the PESTLE(E) factors rated against one clause or control:
-// type, lens, factor, relevance to that record, overall relevance, rationale.
-export function pestleFactorRows(items, framework) {
+// Table rows for the PESTLE(E) items rated against one clause or control:
+// type, lens, item, relevance to that record, overall relevance, rationale.
+export function pestleItemRows(items, framework) {
   return items.map((row) => {
     const it = row.pestle_item;
     return node(

@@ -95,7 +95,7 @@ class PestleItemPayload(BaseModel):
     overall_relevance_id: uuid.UUID | None = None
     overall_relevance_code: str | None = Field(default="na", max_length=32)
     rationale: str | None = Field(default="", max_length=20000)
-    # The people, vendors and assets the factor affects; omit to keep them.
+    # The people, vendors and assets the item affects; omit to keep them.
     affected: list[AffectedRef] | None = Field(default=None, max_length=MAX_AFFECTED)
 
 
@@ -107,7 +107,7 @@ class RelevanceLinkPayload(BaseModel):
 
 
 class RelevanceLinksPayload(BaseModel):
-    """The clauses, or the controls, a factor is relevant to, and how strongly."""
+    """The clauses, or the controls, an item is relevant to, and how strongly."""
 
     items: list[RelevanceLinkPayload] = Field(default_factory=list, max_length=5000)
 
@@ -115,7 +115,7 @@ class RelevanceLinksPayload(BaseModel):
 def _replace_affected(
     db: Session, item: PestleItem, refs: list[AffectedRef], *, user: User
 ) -> None:
-    """Replace the people, vendors and assets the factor affects."""
+    """Replace the people, vendors and assets the item affects."""
 
     item.affected_links = replace_affected_links(
         db,
@@ -135,7 +135,7 @@ def can_read_pestle(db: Session, user: User | None) -> bool:
 
 
 def can_manage_pestle(db: Session, user: User | None) -> bool:
-    # Risk managers also manage PESTLE(E) factors.
+    # Risk managers also manage PESTLE(E) items.
     return has_permission(db, user, PESTLE_MANAGE_PERMISSION) or has_shared_permission(
         db, user, RISK_MANAGE_PERMISSION
     )
@@ -506,7 +506,7 @@ def _control_or_404(db: Session, control_id: uuid.UUID, framework: str) -> Contr
 def _relevance_rows(
     db: Session, row: PestleItem, targets: list, links: list, key: str, summary
 ) -> dict[str, Any]:
-    """Every clause, or control, of the factor's framework with its relevance."""
+    """Every clause, or control, of the item's framework with its relevance."""
     by_target = {getattr(link, key + "_id"): link for link in links}
     default = _default_relevance(db)
     items = []
@@ -535,7 +535,7 @@ def _replace_relevance(
     user,
     request_path: str,
 ) -> None:
-    """Replace the factor's clause, or control, relevance with the payload's.
+    """Replace the item's clause, or control, relevance with the payload's.
 
     ``field`` names the payload member that carries the target's id and ``key``
     the link column it is stored in. A relevance of "na" stores no link.

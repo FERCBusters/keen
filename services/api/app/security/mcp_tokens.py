@@ -82,7 +82,7 @@ SCOPES: dict[str, tuple[str, frozenset[str]]] = {
         frozenset({"risk.manage"}),
     ),
     "pestle.manage": (
-        "Add and update PESTLE(E) factors",
+        "Add and update PESTLE(E) items",
         frozenset({"pestle.manage"}),
     ),
     # Mapping rules belong to administrators, whom no permission code names:
@@ -167,7 +167,7 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("PATCH", "/v1/isms/people/{person_id:uuid}"): _ISMS,
     ("POST", "/v1/isms/vendors"): _ISMS,
     ("PATCH", "/v1/isms/vendors/{vendor_id:uuid}"): _ISMS,
-    # Changes to risks and PESTLE(E) factors.
+    # Changes to risks and PESTLE(E) items.
     ("POST", "/v1/risks"): "risk.manage",
     ("PATCH", "/v1/risks/{risk_id:uuid}"): "risk.manage",
     ("POST", "/v1/risks/import"): "risk.manage",

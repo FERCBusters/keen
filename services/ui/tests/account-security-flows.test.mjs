@@ -28,7 +28,7 @@ async function securityPanel(t, { mfa, start } = {}) {
 }
 const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
 
-test('account security summarises enabled factors and the administrator requirement', async (t) => {
+test('account security summarises enabled items and the administrator requirement', async (t) => {
   const { el, requests } = await securityPanel(t, {
     mfa: () =>
       json(200, {
@@ -64,7 +64,7 @@ test('account security explains disabled password sign-in and load failures', as
   assert.equal(failed.el('securityForm').hidden, true);
 });
 
-test('factor management reauthenticates with the password in the request body and clears it', async (t) => {
+test('item management reauthenticates with the password in the request body and clears it', async (t) => {
   let attempt = 0;
   const { ui, el, requests, navigations } = await securityPanel(t, {
     mfa: () => json(200, { local_enabled: true, enabled: false, credentials: [] }),

@@ -73,7 +73,7 @@ const samplePestleAudit = document.getElementById('samplePestleAudit');
 const pestleAffected = document.getElementById('pestleAffected');
 const pestleAffectedPicker = document.getElementById('pestleAffectedPicker');
 
-// The factor is rated against clauses and against controls in the same way:
+// The item is rated against clauses and against controls in the same way:
 // one editor each, differing in the record it lists and the path it saves to.
 const RELEVANCE_EDITORS = [
   {

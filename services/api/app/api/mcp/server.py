@@ -41,7 +41,7 @@ INSTRUCTIONS = (
 # Instead of the read-only sentence, while connections may make changes.
 WRITE_INSTRUCTIONS = (
     "A connection the person allowed to make changes can also add and update "
-    "ISMS records, risks, PESTLE(E) factors and policies and processes, import "
+    "ISMS records, risks, PESTLE(E) items and policies and processes, import "
     "risks and SWOT items, and, for administrators, add mapping rules, within "
     "the scopes the person approved and their own permissions; keen_overview "
     "says which. Nothing can be deleted, and accounts, permissions, settings, "

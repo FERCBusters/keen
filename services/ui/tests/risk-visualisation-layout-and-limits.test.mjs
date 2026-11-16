@@ -374,8 +374,8 @@ test('without a selected framework the meta line names the current framework', a
   assert.ok(ui.calls.some((c) => c.url === '/api/v1/graph/risk_control?framework='));
 });
 
-// A register of one simple risk, one CIA risk and two PESTLE(E) factors.
-function everyKind(includesFactors = true) {
+// A register of one simple risk, one CIA risk and two PESTLE(E) items.
+function everyKind(includesPestleItems = true) {
   const data = graph(
     [
       { id: 'r1', label: 'Laptops', risk_score: 6, residual_risk_score: 2, controls: ['c1'] },
@@ -424,11 +424,11 @@ function everyKind(includesFactors = true) {
   factor('p2', 'Audit regime', [['c2', 'watch', '4 Watch']]);
   data.nodes.find((n) => n.id === 'control:c1').link_count = 3;
   data.nodes.find((n) => n.id === 'control:c2').link_count = 1;
-  data.includes_factors = includesFactors;
+  data.includes_pestle_items = includesPestleItems;
   return data;
 }
 
-test('simple risks, CIA risks and PESTLE(E) factors are drawn together, each with its kind', async (t) => {
+test('simple risks, CIA risks and PESTLE(E) items are drawn together, each with its kind', async (t) => {
   const ui = await dashboard(t, everyKind());
   await settle(() => columns(ui).length === 2);
   // With as many mappings each, scored risks come first and factors follow by name.
@@ -486,7 +486,7 @@ test('simple risks, CIA risks and PESTLE(E) factors are drawn together, each wit
   assert.ok(linkTitles.some((text) => text.startsWith('Payroll DB × A.5.1\nResidual score: 9')));
   assert.equal(
     ui.el('riskControlsGraphMeta').textContent,
-    '4 of 4 risks, 2 of 2 controls, 4 visible mappings for A. Link thickness follows residual risk score, or the relevance of a PESTLE(E) factor.',
+    '4 of 4 risks, 2 of 2 controls, 4 visible mappings for A. Link thickness follows residual risk score, or the relevance of a PESTLE(E) item.',
   );
 
   // Show narrows the graph and the heatmap to one kind.
@@ -506,7 +506,7 @@ test('simple risks, CIA risks and PESTLE(E) factors are drawn together, each wit
   assert.equal(ui.el('riskVizKind').querySelector('option[value="pestle"]').hidden, false);
 });
 
-test('a reader the graph holds no factors for is not offered them, and an empty kind says so', async (t) => {
+test('a reader the graph holds no items for is not offered them, and an empty kind says so', async (t) => {
   const data = everyKind(false);
   data.nodes = data.nodes.filter((n) => n.method !== 'pestle' && n.method !== 'cia');
   data.links = data.links.filter((l) => l.source === 'risk:r1');

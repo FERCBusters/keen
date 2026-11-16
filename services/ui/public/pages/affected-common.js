@@ -1,4 +1,4 @@
-// Who and what a risk or a PESTLE(E) factor affects: the people, vendors /
+// Who and what a risk or a PESTLE(E) item affects: the people, vendors /
 // third parties and assets it names. The risk wizard, the risk and PESTLE(E)
 // pages, the registers and the Statement of Applicability show and pick them
 // the same way.

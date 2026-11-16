@@ -177,7 +177,7 @@ test('a signed-in visitor is never sent off-site by a dot-segment next value', a
   }
 });
 
-test('password sign-in, the second factor and SSO keep a dot-segment next value on Keen', async (t) => {
+test('password sign-in, the second item and SSO keep a dot-segment next value on Keen', async (t) => {
   const reply = (body) => () => ({ ok: true, status: 200, json: async () => body });
   for (const next of dotSegmentNext) {
     let signedIn = false;
@@ -250,7 +250,7 @@ test('a provider start address that resolves off-site is never followed', async 
   assert.deepEqual(ui.navigated, [['assign', '/api/v1/auth/sso/github/start?next=%2F']]);
 });
 
-test('sign-in continues to the second factor or the landing page', async (t) => {
+test('sign-in continues to the second item or the landing page', async (t) => {
   const reply = (body) => () => ({ ok: true, status: 200, json: async () => body });
   const mfa = await login(t, {
     methods: { local_enabled: true },

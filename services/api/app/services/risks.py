@@ -189,7 +189,7 @@ def risk_method(risk: Risk) -> str:
     """How a register risk is described: "cia" when it names security properties.
 
     The register holds simple and CIA risks as one record type. A PESTLE(E)
-    factor is a separate record, and callers that list both give it "pestle".
+    item is a separate record, and callers that list both give it "pestle".
     """
 
     return "cia" if risk.risk_types else "general"

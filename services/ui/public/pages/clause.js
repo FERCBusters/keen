@@ -1,6 +1,6 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
-import { linkedRisksTable, pestleFactorRows } from '/pages/risk-common.js';
+import { linkedRisksTable, pestleItemRows } from '/pages/risk-common.js';
 import {
   fmtTs,
   errorText,
@@ -117,7 +117,7 @@ async function loadClausePestle() {
         '<tr><td colspan="6" class="p-4 small-muted">No PESTLE(E) items are currently linked to this clause.</td></tr>';
       return;
     }
-    clausePestleRows.replaceChildren(...pestleFactorRows(items, clause?.framework || framework));
+    clausePestleRows.replaceChildren(...pestleItemRows(items, clause?.framework || framework));
   } catch (e) {
     clausePestleRows.innerHTML =
       '<tr><td colspan="6" class="p-4 text-danger">Failed to load PESTLE(E) relevance.</td></tr>';

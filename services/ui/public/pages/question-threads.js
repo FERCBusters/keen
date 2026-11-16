@@ -54,10 +54,13 @@ export function questionTitle(item) {
   return item?.target_label || item?.event_summary || '(no summary)';
 }
 
+// Record types whose stored name is not what the application calls them.
+const TARGET_KINDS = { pestle_item: 'PESTLE(E) item', isms_swot: 'SWOT item' };
+
 export function questionSubline(item) {
   const kind =
     item?.target_type && item.target_type !== 'event'
-      ? String(item.target_type).replaceAll('_', ' ')
+      ? TARGET_KINDS[item.target_type] || String(item.target_type).replaceAll('_', ' ')
       : item?.event_source || '';
   const when = item?.event_timestamp ? fmtTs(item.event_timestamp) : item?.target_ref || '-';
   return [kind, when].filter(Boolean).join(' · ');

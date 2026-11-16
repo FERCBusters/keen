@@ -296,7 +296,7 @@ const manageState = (overrides = {}) => ({
   ...overrides,
 });
 
-test('factor management lists authenticators as text and removes one after confirmation', async (t) => {
+test('item management lists authenticators as text and removes one after confirmation', async (t) => {
   const confirmations = [];
   let current = manageState();
   const ui = await mfaPage(t, {
@@ -320,7 +320,7 @@ test('factor management lists authenticators as text and removes one after confi
   await settle(() => ui.el('addTotp').hidden === false);
 });
 
-test('declining factor removal sends nothing', async (t) => {
+test('declining item removal sends nothing', async (t) => {
   const ui = await mfaPage(t, { states: [manageState()], confirm: false });
   ui.el('factors').querySelector('button').click();
   await new Promise((r) => setTimeout(r, 10));
@@ -378,7 +378,7 @@ test('authenticator app enrolment shows the setup key, then requires saving reco
   assert.deepEqual(ui.navigations, [['replace', '/account.html#security']]);
 });
 
-test('managing factors returns to account security by default', async (t) => {
+test('managing items returns to account security by default', async (t) => {
   const ui = await mfaPage(t, { states: [manageState()], handlers: { finish: () => ({}) } });
   ui.el('finish').click();
   await settle(() => ui.navigations.length);

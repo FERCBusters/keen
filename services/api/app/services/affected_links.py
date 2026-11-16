@@ -1,4 +1,4 @@
-"""Change who or what a risk or a PESTLE(E) factor affects.
+"""Change who or what a risk or a PESTLE(E) item affects.
 
 Naming a record requires read access to the People, Vendors and asset
 registers, and the record's feature to be on. A person or vendor can be added
@@ -120,7 +120,7 @@ def replace_affected_links(
 
 
 def affected_options(*, q: str = "", user: User, db: Session) -> dict[str, Any]:
-    """The people, vendors and assets a risk or PESTLE(E) factor can name.
+    """The people, vendors and assets a risk or PESTLE(E) item can name.
 
     Each kind is listed while its feature is on. ``can_add`` says whether the
     caller may add a person or vendor by name.

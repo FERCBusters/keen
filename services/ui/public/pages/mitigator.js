@@ -206,7 +206,7 @@ function existingSection(data) {
     .map(
       (p) => `<div class="mitigator-suggestion-card d-flex flex-wrap justify-content-between gap-2">
       <div style="min-width:0">
-        <div class="fw-semibold">${methodBadgeHtml('pestle')} ${esc(p.item || 'PESTLE(E) factor')}</div>
+        <div class="fw-semibold">${methodBadgeHtml('pestle')} ${esc(p.item || 'PESTLE(E) item')}</div>
         <div class="small-muted">${esc(p.type)} · ${esc(p.lens)}${
           p.clauses.length
             ? ` · clauses ${esc(
@@ -219,7 +219,7 @@ function existingSection(data) {
         } ${confidenceBadge(p.confidence)}</div>
         ${termBadges(p.matched_terms) ? `<div class="d-flex flex-wrap gap-1 mt-1">${termBadges(p.matched_terms)}</div>` : ''}
       </div>
-      <a class="btn btn-sm btn-outline-primary align-self-start" href="${esc(pestleHref(p.id, framework))}">Open this factor</a>
+      <a class="btn btn-sm btn-outline-primary align-self-start" href="${esc(pestleHref(p.id, framework))}">Open this item</a>
     </div>`,
     )
     .join('');
@@ -228,8 +228,8 @@ function existingSection(data) {
     1,
     any ? 'Is it already covered?' : 'Nothing like this exists yet',
     any
-      ? 'These existing risks and factors use similar words. If one of them is the same thing, open it and update it instead of creating a duplicate.'
-      : 'No existing risk or PESTLE(E) factor matched your description, so a new one is likely needed.',
+      ? 'These existing risks and items use similar words. If one of them is the same thing, open it and update it instead of creating a duplicate.'
+      : 'No existing risk or PESTLE(E) item matched your description, so a new one is likely needed.',
     `${riskCards}${pestleCards}` || '',
     { tone: any ? 'border-warning-subtle' : '' },
   );
@@ -297,7 +297,7 @@ function newRiskSection(data) {
   const actions = canManageRisks
     ? `<div class="d-flex flex-wrap gap-2 mt-3">
         <button class="btn btn-primary" type="button" id="mitigatorToWizard"><i class="bi bi-magic me-1" aria-hidden="true"></i>Create a new risk in the wizard</button>
-        ${draftPestle && canManagePestle ? `<button class="btn btn-outline-primary" type="button" id="mitigatorToPestleWizard"><i class="bi bi-globe2 me-1" aria-hidden="true"></i>Record it as a PESTLE(E) factor instead</button>` : ''}
+        ${draftPestle && canManagePestle ? `<button class="btn btn-outline-primary" type="button" id="mitigatorToPestleWizard"><i class="bi bi-globe2 me-1" aria-hidden="true"></i>Record it as a PESTLE(E) item instead</button>` : ''}
       </div>
       <div class="small-muted mt-2">The wizard opens with your description, the asset, the CIA types, and the ticked controls, people, vendors and assets filled in. Nothing is saved until you reach the last step.</div>`
     : '<div class="small-muted mt-3">You need risk.manage permission to create risks.</div>';
@@ -307,7 +307,7 @@ function newRiskSection(data) {
       <div class="small-muted mb-2">Each of these is a framework control that would reduce the risk. Untick any that do not apply; you can change them again in the wizard.</div>
       ${controlRows ? `<div class="vstack gap-2">${controlRows}</div>` : '<div class="alert alert-warning mb-0">No controls matched strongly enough. Add more detail or select more impact prompts, or choose controls in the wizard.</div>'}
     </div>
-    ${affectedRows ? `<div class="mb-2"><div class="fw-semibold">Who and what it might affect</div><div class="small-muted mb-2">People, vendors / 3rd parties and assets already in Keen that your description points to. Ticked ones are named on the new risk or factor.</div>${affectedRows}</div>` : ''}
+    ${affectedRows ? `<div class="mb-2"><div class="fw-semibold">Who and what it might affect</div><div class="small-muted mb-2">People, vendors / 3rd parties and assets already in Keen that your description points to. Ticked ones are named on the new risk or item.</div>${affectedRows}</div>` : ''}
     ${pestleHits ? `<div class="small mt-2">This also reads like a PESTLE(E) influence: ${pestleHits}</div>` : ''}
     ${actions}`;
   return sectionHtml(

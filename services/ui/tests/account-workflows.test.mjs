@@ -238,7 +238,7 @@ test('my questions show status badges, safe links and deletion for administrator
   assert.equal(ui.el('myQuestionsTbody').querySelector('img'), null);
   assert.equal(ui.window.pwned, undefined);
   assert.equal(rows[0].querySelector('.fw-semibold').textContent, HOSTILE + 'Policy review');
-  assert.match(rows[0].textContent, /pestle item · PESTLE-1/);
+  assert.match(rows[0].textContent, /PESTLE\(E\) item · PESTLE-1/);
   assert.equal(
     rows[0].querySelector('a').getAttribute('href'),
     '/pestle_item.html?id=p1&framework=A#questions',

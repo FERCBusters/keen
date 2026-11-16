@@ -438,7 +438,7 @@ def test_risk_register_holds_cia_risks_scored_like_the_register(seeded):
     assert {f for (f,) in db.query(RiskControlLink.framework_slug).distinct()} == set(
         SHOWCASE
     )
-    # Risks and PESTLE(E) factors name the people, third parties and assets
+    # Risks and PESTLE(E) items name the people, third parties and assets
     # they affect.
     affected = db.query(AffectedLink).all()
     assert any(link.risk_id and link.person_id for link in affected)

@@ -300,7 +300,7 @@ test('the wizard receives the ticked controls and affected records as a draft', 
   });
 });
 
-test('a template or a PESTLE(E) factor can be chosen instead', async (t) => {
+test('a template or a PESTLE(E) item can be chosen instead', async (t) => {
   const { ui, state, storage, location } = await mitigator(t);
   await analyse(ui, state);
   ui.document.querySelector('[data-use-template="tpl1"]').click();
@@ -464,7 +464,7 @@ test('one existing risk without types or a residual score, one control and a bar
   assert.match(template.textContent, /A laptop is lost in transit\s*Shares the word laptop\./);
 });
 
-test('an unnamed PESTLE(E) factor without clauses or matched words, and controls past the eighth unticked', async (t) => {
+test('an unnamed PESTLE(E) item without clauses or matched words, and controls past the eighth unticked', async (t) => {
   const controls = Array.from({ length: 9 }, (_, i) => ({
     control: { id: `c${i}`, ref: `A.${i}`, title: `Control ${i}`, in_scope: true },
     score: 9 - i,
@@ -494,7 +494,7 @@ test('an unnamed PESTLE(E) factor without clauses or matched words, and controls
   const { ui, state } = await mitigator(t, { analysis });
   await analyse(ui, state, 'Supplier prices rise.');
   const factor = ui.el('mitigatorSuggestions').querySelector('section .mitigator-suggestion-card');
-  assert.match(factor.querySelector('.fw-semibold').textContent, /PESTLE\(E\) factor$/);
+  assert.match(factor.querySelector('.fw-semibold').textContent, /PESTLE\(E\) item$/);
   assert.equal(
     factor.querySelector('.small-muted').textContent.replace(/\s+/g, ' ').trim(),
     'Economic · External Weak match',

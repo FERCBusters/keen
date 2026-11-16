@@ -1,5 +1,5 @@
 // The Risks dashboard: every risk with its 5×5 heatmap and rating card, CIA
-// risks, PESTLE(E) factors, the reusable library, risk/control visualisations
+// risks, PESTLE(E) items, the reusable library, risk/control visualisations
 // and the controls that no risk mentions yet. Creating and editing happens in
 // the risk wizard; rating and treatment can also be adjusted in place.
 import { featureEnabled } from '/pages/feature-availability.js';
@@ -408,7 +408,7 @@ function closeRating() {
 
 async function loadPestle() {
   if (!canViewPestle || !featureEnabled(me, 'pestle')) return;
-  showTableLoading($('pestleRows'), 8, 'Loading PESTLE(E) factors');
+  showTableLoading($('pestleRows'), 8, 'Loading PESTLE(E) items');
   try {
     if (!pestleMeta) {
       pestleMeta = await apiGet('/api/v1/pestle/meta');
@@ -442,14 +442,14 @@ async function loadPestle() {
       </tr>`,
           )
           .join('')
-      : '<tr><td colspan="8" class="p-4 text-center small-muted">No PESTLE(E) factors yet. Use “Add a PESTLE(E) factor” to record one.</td></tr>';
+      : '<tr><td colspan="8" class="p-4 text-center small-muted">No PESTLE(E) items yet. Use “Add a PESTLE(E) item” to record one.</td></tr>';
     $('pestleMeta').textContent =
-      `${pestleItems.length} factor${pestleItems.length === 1 ? '' : 's'} for ${data.framework}. Open a factor to score its relevance to controls and clauses.`;
+      `${pestleItems.length} item${pestleItems.length === 1 ? '' : 's'} for ${data.framework}. Open an item to score its relevance to controls and clauses.`;
     loaded.pestle = true;
   } catch (e) {
     $('pestleRows').innerHTML =
-      '<tr><td colspan="8" class="p-4 text-center text-danger">Failed to load PESTLE(E) factors.</td></tr>';
-    notify(`Failed to load PESTLE(E) factors: ${errorText(e)}`);
+      '<tr><td colspan="8" class="p-4 text-center text-danger">Failed to load PESTLE(E) items.</td></tr>';
+    notify(`Failed to load PESTLE(E) items: ${errorText(e)}`);
   }
 }
 

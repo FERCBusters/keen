@@ -194,10 +194,10 @@ test('the PESTLE(E) tab filters by lens, explains an empty list and shows ration
   assert.equal('lens' in state.pestleQueries[0], false);
 
   const empty = await dashboard(t, { query: '&tab=pestle', factors: [] });
-  await settle(() => /factors? for/.test(empty.ui.el('pestleMeta').textContent));
+  await settle(() => /items? for/.test(empty.ui.el('pestleMeta').textContent));
   assert.equal(
     empty.ui.el('pestleRows').textContent.trim(),
-    'No PESTLE(E) factors yet. Use “Add a PESTLE(E) factor” to record one.',
+    'No PESTLE(E) items yet. Use “Add a PESTLE(E) item” to record one.',
   );
 });
 

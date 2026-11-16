@@ -182,7 +182,7 @@ def test_graphs_follow_their_permission_rules(graph):
             "nodes": [],
             "links": [],
             "graph_kind": "risk_control_relationship",
-            "includes_factors": True,
+            "includes_pestle_items": True,
         },
     )
 
@@ -555,7 +555,7 @@ def test_risk_control_graph_weights_links_by_risk_score(graph):
 
 
 def test_risk_control_graph_draws_every_kind_of_risk(graph):
-    """Simple risks, CIA risks and PESTLE(E) factors share the graph, each named."""
+    """Simple risks, CIA risks and PESTLE(E) items share the graph, each named."""
     from app.services.pestle import _relevance_levels
 
     db = graph.db
@@ -634,7 +634,7 @@ def test_risk_control_graph_draws_every_kind_of_risk(graph):
 
     client = graph.keen.client(graph.keen.user("risk.read"))
     payload = client.get("/v1/graph/risk_control", params={"framework": "A"}).json()
-    assert payload["includes_factors"] is True
+    assert payload["includes_pestle_items"] is True
     nodes = _nodes(payload)
     factor_id = f"pestle:{factor.id}"
     logging = f"control:{graph.logging.id}"
@@ -683,5 +683,5 @@ def test_risk_control_graph_draws_every_kind_of_risk(graph):
     db.add(ManagedConfiguration(name="features", version=1, document={"pestle": False}))
     db.commit()
     without = client.get("/v1/graph/risk_control", params={"framework": "A"}).json()
-    assert without["includes_factors"] is False
+    assert without["includes_pestle_items"] is False
     assert set(_nodes(without)) == {f"risk:{simple.id}", f"risk:{cia.id}", logging}

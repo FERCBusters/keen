@@ -74,7 +74,7 @@ test('administrators see the question queue with safe titles and target links', 
   assert.equal(ui.el('queueBody').querySelector('img'), null);
   assert.match(rows[0].textContent, /<img src=x onerror=alert\(1\)> Login/);
   assert.match(rows[0].textContent, /auth · 2026-01-01T00:00:00Z/);
-  assert.match(rows[1].textContent, /pestle item · P-1/);
+  assert.match(rows[1].textContent, /PESTLE\(E\) item · P-1/);
   assert.deepEqual(
     [...rows[2].cells].slice(1, 4).map((c) => c.textContent.replace(/\s+/g, ' ').trim()),
     ['-', '(no summary) -', '-'],
@@ -177,4 +177,21 @@ test('a question opens only a path on Keen, whatever address the server sends', 
     hrefs.slice(1),
     hostile.map(() => '#'),
   );
+});
+
+test('a question names the kind of record it is about in the application’s own words', async (t) => {
+  const about = (target_type) => ({
+    thread_id: 't-' + target_type,
+    target_type,
+    target_label: 'Record',
+    target_ref: 'R-1',
+  });
+  const { ui } = await questionsPage(t, 'questions', {
+    items: [about('pestle_item'), about('isms_swot'), about('risk')],
+  });
+  await settle(() => ui.el('queueBody').querySelectorAll('tr').length === 3);
+  const sublines = [...ui.el('queueBody').querySelectorAll('tr')].map((row) =>
+    row.textContent.match(/([^\n]+) · R-1/)[1].trim(),
+  );
+  assert.deepEqual(sublines, ['PESTLE(E) item', 'SWOT item', 'risk']);
 });

@@ -548,8 +548,8 @@ def graph_risk_control(
     are different catalogues even when the underlying risk is the same.
 
     Every kind of risk is on the left: simple and CIA register risks, each
-    with its ``method``, and the framework's PESTLE(E) factors for a reader who
-    may see them. A register risk's links carry its scores; a factor's carry
+    with its ``method``, and the framework's PESTLE(E) items for a reader who
+    may see them. A register risk's links carry its scores; an item's carry
     the relevance it was given for the control.
     """
 
@@ -559,8 +559,10 @@ def graph_risk_control(
     ):
         raise DomainError(status_code=403, detail="risk.read permission required")
 
-    with_factors = feature_state(db).enabled("pestle") and can_read_pestle(db, user)
-    cache_parts = {"framework": framework, "factors": with_factors}
+    with_pestle_items = feature_state(db).enabled("pestle") and can_read_pestle(
+        db, user
+    )
+    cache_parts = {"framework": framework, "pestle_items": with_pestle_items}
 
     def _load():
         rows = (
@@ -669,31 +671,31 @@ def graph_risk_control(
                 }
             )
 
-        factor_links = (
+        pestle_links = (
             db.query(PestleControlRelevance)
             .join(PestleItem, PestleItem.id == PestleControlRelevance.pestle_item_id)
             .join(ControlItem, ControlItem.id == PestleControlRelevance.control_item_id)
             .filter(PestleItem.framework_slug == framework)
             .filter(ControlItem.framework_slug == framework)
             .all()
-            if with_factors
+            if with_pestle_items
             else []
         )
-        for link in rated_links(factor_links):
+        for link in rated_links(pestle_links):
             item = link.pestle_item
-            factor_id = f"pestle:{item.id}"
+            pestle_id = f"pestle:{item.id}"
             control_id = f"control:{link.control_item_id}"
-            risk_counts[factor_id] = risk_counts.get(factor_id, 0) + 1
+            risk_counts[pestle_id] = risk_counts.get(pestle_id, 0) + 1
             control_counts[control_id] = control_counts.get(control_id, 0) + 1
-            if factor_id not in nodes:
-                nodes[factor_id] = {
-                    "id": factor_id,
+            if pestle_id not in nodes:
+                nodes[pestle_id] = {
+                    "id": pestle_id,
                     "type": "source",
                     "node_kind": "risk",
                     "method": "pestle",
                     "label": item.item or "",
                     "pestle_item_id": str(item.id),
-                    "source": factor_id,
+                    "source": pestle_id,
                     "pestle_type": item.type,
                     "lens": item.lens,
                     "overall_relevance": relevance_summary(item.overall_relevance),
@@ -705,7 +707,7 @@ def graph_risk_control(
             add_control(link.control)
             links.append(
                 {
-                    "source": factor_id,
+                    "source": pestle_id,
                     "target": control_id,
                     "value": 1,
                     "relevance": relevance_summary(link.relevance),
@@ -728,7 +730,7 @@ def graph_risk_control(
             "nodes": list(nodes.values()),
             "links": links,
             "graph_kind": "risk_control_relationship",
-            "includes_factors": with_factors,
+            "includes_pestle_items": with_pestle_items,
         }
 
     return cached_json("graph:risk_control", cache_parts, _load)

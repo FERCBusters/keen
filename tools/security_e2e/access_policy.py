@@ -641,7 +641,7 @@ POLICY = {
     "DELETE /v1/isms/vendors/{vendor_id}": ISMS_MANAGE,
     "PATCH /v1/isms/vendors/{vendor_id}": ISMS_MANAGE,
     "GET /v1/isms/{entity_type}/{entity_id}/changelog": ISMS_READ,
-    # --- Who and what risks and PESTLE(E) factors affect ---------------------------
+    # --- Who and what risks and PESTLE(E) items affect ---------------------------
     "GET /v1/affected/options": ISMS_READ,
     # --- PESTLE(E) -----------------------------------------------------------------
     "GET /v1/pestle/items": PESTLE_READ,

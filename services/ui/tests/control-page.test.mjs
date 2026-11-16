@@ -354,6 +354,9 @@ test('control page renders details, linked records and evidence with untrusted t
   assert.equal(description.querySelector('script'), null);
   assert.match(description.textContent, /Line one\n<script>alert\(1\)<\/script>/);
   assert.match(description.textContent, /Open Security Architecture/);
+  // With nothing recorded for the crosswalk, there is no crosswalk block.
+  assert.equal(ui.el('osaCrosswalk'), null);
+  assert.doesNotMatch(description.textContent, /null/);
   assert.equal(ui.el('ctrlLinks').querySelector('a').href, 'https://guidance.example/a51');
   assert.match(ui.el('controlsBreadcrumb').getAttribute('href'), /controls\.html\?framework=A/);
 
@@ -1646,7 +1649,7 @@ test('saving the justification while the clause catalogue loads reports the save
 const governance = (ui) =>
   ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
 
-test('PESTLE(E) readers see the factors rated against the control on the Governance tab', async (t) => {
+test('PESTLE(E) readers see the items rated against the control on the Governance tab', async (t) => {
   const { ui } = await controlPage(t, {
     pestle: [
       {
@@ -1687,13 +1690,13 @@ test('PESTLE(E) readers see the factors rated against the control on the Governa
   assert.equal(requests(), 1);
 });
 
-test('a control with no rated factors says so, and the card stays hidden when they cannot be read', async (t) => {
+test('a control with no rated items says so, and the card stays hidden when they cannot be read', async (t) => {
   const none = await controlPage(t);
   governance(none.ui);
   await settle(() => none.ui.el('controlPestleCard').style.display === '');
   assert.equal(
     none.ui.el('controlPestleRows').textContent,
-    'No PESTLE(E) factors are rated against this control.',
+    'No PESTLE(E) items are rated against this control.',
   );
 
   const failed = await controlPage(t, { fail: { pestle: true } });
@@ -1714,4 +1717,42 @@ test('a control with no rated factors says so, and the card stays hidden when th
       false,
     );
   }
+});
+
+test('an OSA control shows its NIST crosswalk as a crosswalk, apart from any description', async (t) => {
+  const source = 'https://www.opensecurityarchitecture.org/';
+  const { ui } = await controlPage(t, {
+    control: baseControl({
+      metadata: {
+        source,
+        osa_nist_controls: ['SA-04', 'SA-09'],
+        rationale: 'SA-04 <b>acquisition</b> requirements.',
+        gaps: 'ISO emphasizes ongoing review.',
+        coverage_pct: 0,
+      },
+    }),
+  });
+  const block = ui.el('osaCrosswalk');
+  assert.equal(block.querySelector('div').textContent, 'Crosswalk to NIST SP 800-53');
+  assert.deepEqual(
+    [...block.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextSibling.textContent]),
+    [
+      ['Related NIST SP 800-53 controls', 'SA-04, SA-09'],
+      ['Mapping note', 'SA-04 <b>acquisition</b> requirements.'],
+      ['Gaps in the mapping', 'ISO emphasizes ongoing review.'],
+      ['Estimated coverage', '0%'],
+    ],
+  );
+  assert.equal(block.querySelector('b'), null);
+  // The control has no description of its own, so none is shown above the crosswalk.
+  assert.equal(ui.el('osaControlDescription').firstElementChild, block);
+
+  const partial = await controlPage(t, {
+    control: baseControl({ metadata: { source, description: 'Ours.', gaps: 'One gap.' } }),
+  });
+  assert.equal(partial.ui.el('osaControlDescription').firstElementChild.textContent, 'Ours.');
+  assert.deepEqual(
+    [...partial.ui.el('osaCrosswalk').querySelectorAll('dt')].map((dt) => dt.textContent),
+    ['Gaps in the mapping'],
+  );
 });

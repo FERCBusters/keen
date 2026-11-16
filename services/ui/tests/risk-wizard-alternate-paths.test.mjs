@@ -1,7 +1,7 @@
 // The risk wizard on the paths its main workflow tests leave out: templates
 // without CIA properties or an example asset, an asset chosen and then renamed,
 // empty registers of processes, people, vendors, users and controls, a Mitigator draft
-// for a PESTLE(E) factor, editing an unrated, unowned or no-longer-owned risk,
+// for a PESTLE(E) item, editing an unrated, unowned or no-longer-owned risk,
 // clause searches, the controls feature switched off, and clicks that land
 // beside the controls they are meant for.
 import test from 'node:test';
@@ -513,7 +513,7 @@ test('an unrated, unowned simple risk is edited from 1 × 1 with no owner or due
 
 // --- Clauses and relevance -------------------------------------------------------------------------
 
-// Describes a PESTLE(E) factor and stops on the description step.
+// Describes a PESTLE(E) item and stops on the description step.
 async function pestleDescribed(t, options = {}) {
   const { ui, state } = await wizard(t, { query: '&method=pestle', ...options });
   next(ui);
@@ -563,7 +563,7 @@ test('with an overall relevance of not applicable, links start at the first leve
   });
 });
 
-test('links ticked for a register risk take the factor’s relevance when the kind changes to PESTLE(E)', async (t) => {
+test('links ticked for a register risk take the item’s relevance when the kind changes to PESTLE(E)', async (t) => {
   const { ui, state } = await wizard(t);
   toRating(ui);
   next(ui);
@@ -599,7 +599,7 @@ test('links ticked for a register risk take the factor’s relevance when the ki
   ]);
 });
 
-test('a factor linked to nothing saves no relevance', async (t) => {
+test('an item linked to nothing saves no relevance', async (t) => {
   const { ui, state } = await pestleDescribed(t);
   next(ui);
   ui.el('skipStep').click();

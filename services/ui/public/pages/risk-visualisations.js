@@ -1,7 +1,7 @@
 // Risk → control visualisations for the Risks dashboard: a bipartite graph and
 // a heatmap built from the framework's risk/control mappings. Every kind of
 // risk is drawn: simple and CIA risks, weighted by the inherent or residual
-// score, and PESTLE(E) factors, weighted by their relevance to each control.
+// score, and PESTLE(E) items, weighted by their relevance to each control.
 // The page wires its own controls through init().
 import { apiGet, debounce, esc } from '/app.js';
 import {
@@ -86,7 +86,7 @@ function riskVizScoreValue(item, mode = riskVizScoreMode) {
     : item.residual_risk_score;
 }
 
-function isFactor(node) {
+function isPestleItem(node) {
   return node.method === 'pestle';
 }
 
@@ -97,10 +97,10 @@ function chosenKind() {
 
 function riskVizNodeHref(node) {
   if (node.node_kind === 'control') return controlHref(node.control_id);
-  return isFactor(node) ? pestleHref(node.pestle_item_id, framework) : riskHref(node.risk_id);
+  return isPestleItem(node) ? pestleHref(node.pestle_item_id, framework) : riskHref(node.risk_id);
 }
 
-// A link's weight from 0 to 1: a factor's relevance to the control, or a
+// A link's weight from 0 to 1: an item's relevance to the control, or a
 // risk's score against the highest score shown.
 function linkStrength(link, scoreMode, maxScore) {
   if (link.relevance) return relevanceStrength(link.relevance);
@@ -127,7 +127,7 @@ function riskVizPrimaryLabel(node) {
 function riskVizSecondaryLabel(node) {
   if (node.node_kind === 'control') return node.title;
   const kind = RISK_METHODS[methodOf(node)].short;
-  if (isFactor(node)) return `${kind} · ${node.pestle_type} / ${node.lens}`;
+  if (isPestleItem(node)) return `${kind} · ${node.pestle_type} / ${node.lens}`;
   const parts = [node.category, node.subcategory].filter(Boolean).join(' / ');
   const types = (node.risk_types || []).join(', ');
   return [kind, parts, types].filter(Boolean).join(' · ');
@@ -380,7 +380,7 @@ function renderRiskControlsHeatmap() {
                 <th class="matrix-sticky-col matrix-row-label">
                   <a class="fw-semibold" href="${esc(riskVizNodeHref(risk))}">${esc(truncateRiskVizText(riskVizPrimaryLabel(risk), 92))}</a>
                   <div class="small-muted">${esc(subtitle)}${linkedCount ? ` · ${linkedCount} shown control(s)` : ''}</div>
-                  <div class="small-muted">${esc(isFactor(risk) ? `Overall relevance: ${risk.overall_relevance.label}` : `Risk score: ${risk.risk_score} · Residual: ${risk.residual_risk_score}`)}</div>
+                  <div class="small-muted">${esc(isPestleItem(risk) ? `Overall relevance: ${risk.overall_relevance.label}` : `Risk score: ${risk.risk_score} · Residual: ${risk.residual_risk_score}`)}</div>
                 </th>
                 ${visibleCols
                   .map((control) => {
@@ -425,11 +425,11 @@ export function renderRiskVisualisations() {
   ).length;
   const meta = `${risks.length} of ${totalRisks} risks, ${controlNodes.length} of ${totalControls} controls, ${links.length} visible mappings for ${framework || 'the current framework'}.`;
   const scoreLabel = riskVizScoreLabel();
-  const factors = risks.some(isFactor) ? ', or the relevance of a PESTLE(E) factor' : '';
+  const pestleNote = risks.some(isPestleItem) ? ', or the relevance of a PESTLE(E) item' : '';
   if (riskControlsGraphMeta)
-    riskControlsGraphMeta.textContent = `${meta} Link thickness follows ${scoreLabel}${factors}.`;
+    riskControlsGraphMeta.textContent = `${meta} Link thickness follows ${scoreLabel}${pestleNote}.`;
   if (riskControlsHeatmapMeta)
-    riskControlsHeatmapMeta.textContent = `${meta} Darker cells have higher ${scoreLabel}${factors}.`;
+    riskControlsHeatmapMeta.textContent = `${meta} Darker cells have higher ${scoreLabel}${pestleNote}.`;
 }
 
 export async function loadRiskVisualisations(opts = {}) {
@@ -443,9 +443,9 @@ export async function loadRiskVisualisations(opts = {}) {
     riskControlGraphData = await apiGet(
       `/api/v1/graph/risk_control?framework=${encodeURIComponent(framework)}`,
     );
-    // Factors are offered as a kind only to a reader the graph includes them for.
-    const factorOption = riskVizKind.querySelector('option[value="pestle"]');
-    factorOption.hidden = factorOption.disabled = !riskControlGraphData.includes_factors;
+    // Items are offered as a kind only to a reader the graph includes them for.
+    const pestleOption = riskVizKind.querySelector('option[value="pestle"]');
+    pestleOption.hidden = pestleOption.disabled = !riskControlGraphData.includes_pestle_items;
   }
   renderRiskVisualisations();
   riskVisualisationsLoaded = true;

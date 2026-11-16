@@ -68,7 +68,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Affected records",
-        "description": "People, vendors and assets a risk or PESTLE(E) factor can name as affected.",
+        "description": "People, vendors and assets a risk or PESTLE(E) item can name as affected.",
     },
     {
         "name": "Artifacts",

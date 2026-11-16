@@ -1,7 +1,7 @@
 import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
-import { linkedRisksTable, pestleFactorRows } from '/pages/risk-common.js';
+import { linkedRisksTable, pestleItemRows } from '/pages/risk-common.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
 import {
   errorText,
@@ -260,6 +260,32 @@ let state = {
 if (![25, 50, 100, 200].includes(state.limit)) state.limit = 50;
 if (state.offset < 0) state.offset = 0;
 
+// What Open Security Architecture records of how NIST SP 800-53 maps to a
+// control it publishes: a crosswalk note, shown as one and never as the
+// control's description.
+function osaCrosswalk(meta) {
+  const rows = [
+    ['Related NIST SP 800-53 controls', (meta.osa_nist_controls || []).join(', ')],
+    ['Mapping note', meta.rationale],
+    ['Gaps in the mapping', meta.gaps],
+    ['Estimated coverage', meta.coverage_pct === undefined ? '' : `${meta.coverage_pct}%`],
+  ].filter(([, value]) => value);
+  if (!rows.length) return null;
+  return node(
+    'div',
+    { class: 'border rounded p-3 mb-2', id: 'osaCrosswalk' },
+    node('div', { class: 'fw-semibold mb-2' }, 'Crosswalk to NIST SP 800-53'),
+    node(
+      'dl',
+      { class: 'row mb-0 small' },
+      ...rows.flatMap(([term, value]) => [
+        node('dt', { class: 'col-sm-3' }, term),
+        node('dd', { class: 'col-sm-9' }, value),
+      ]),
+    ),
+  );
+}
+
 function renderControlChrome() {
   const titleEl = document.getElementById('ctrlTitle');
   const metaEl = document.getElementById('ctrlMeta');
@@ -294,10 +320,12 @@ function renderControlChrome() {
       description.append(credit);
     }
     if (ctrl.metadata?.source === 'https://www.opensecurityarchitecture.org/') {
+      const crosswalk = osaCrosswalk(ctrl.metadata);
+      if (crosswalk) description.append(crosswalk);
       const credit = document.createElement('p');
       credit.className = 'small-muted';
       credit.innerHTML =
-        'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="/licenses/OSA-LICENSE.txt" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Copyright Open Security Architecture and contributors. <a href="/licenses/OSA-NOTICE.txt" target="_blank" rel="noopener">Attribution and Keen adaptations</a>. Shared NIST controls identify related evidence; coverage estimates do not certify compliance.';
+        'Adapted from <a href="https://www.opensecurityarchitecture.org/" target="_blank" rel="noopener">Open Security Architecture</a> · <a href="/licenses/OSA-LICENSE.txt" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Copyright Open Security Architecture and contributors. <a href="/licenses/OSA-NOTICE.txt" target="_blank" rel="noopener">Attribution and Keen adaptations</a>. The crosswalk is OSA\'s assessment: shared NIST controls identify related evidence, and coverage estimates do not certify compliance. Consult the framework\'s own text for what the control requires.';
       description.append(credit);
     }
   }
@@ -524,7 +552,7 @@ async function loadLinkedRisks({ force = false } = {}) {
     risksCard.style.display = 'none';
   }
 }
-// PESTLE(E) readers see the factors rated against the control, once per page.
+// PESTLE(E) readers see the items rated against the control, once per page.
 async function loadControlPestle() {
   if (!id || pestleLoaded || !featureEnabled(me, 'pestle')) return;
   if (!(me?.is_admin || me?.can_view_pestle || me?.can_manage_pestle)) return;
@@ -532,7 +560,7 @@ async function loadControlPestle() {
   try {
     const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/pestle`);
     pestleLoaded = true;
-    const rows = pestleFactorRows(data.items, ctrl?.framework || framework);
+    const rows = pestleItemRows(data.items, ctrl?.framework || framework);
     const body = document.getElementById('controlPestleRows');
     if (rows.length) body.replaceChildren(...rows);
     else
@@ -543,7 +571,7 @@ async function loadControlPestle() {
           node(
             'td',
             { colspan: '6', class: 'p-4 small-muted' },
-            'No PESTLE(E) factors are rated against this control.',
+            'No PESTLE(E) items are rated against this control.',
           ),
         ),
       );

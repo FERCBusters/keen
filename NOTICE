@@ -25,8 +25,10 @@ Legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
 Keen includes an offline OSA catalogue snapshot dated 8 October 2026.
 Individual records retain their upstream framework URL, licence and source
 commit. Keen adaptations include database identifiers, hierarchy, shortened
-display titles, combined descriptions and relationships derived from shared
-NIST control references. Original source fields remain in record metadata.
+display titles and relationships derived from shared NIST control references.
+Keen shows OSA's mapping note, gaps and coverage estimate for a control as a
+crosswalk to NIST SP 800-53, apart from the control's description. Original
+source fields remain in record metadata.
 
 The OSA-derived catalogue data and Keen's adaptations are distributed under
 CC BY-SA 4.0. When sharing them, retain attribution, identify modifications,

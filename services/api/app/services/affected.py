@@ -1,4 +1,4 @@
-"""Who or what a risk or a PESTLE(E) factor affects: the shared link shape.
+"""Who or what a risk or a PESTLE(E) item affects: the shared link shape.
 
 A risk and a PESTLE(E) item name the people, vendors (third parties) and
 assets they affect through one kind of link (``AffectedLink``), so every page,
@@ -33,7 +33,7 @@ _PAGES = {
 
 
 class AffectedRef(BaseModel):
-    """One record a risk or PESTLE(E) factor affects.
+    """One record a risk or PESTLE(E) item affects.
 
     Name an existing person, vendor or asset by its ID, or a new person or
     vendor by name; a name already recorded is reused.

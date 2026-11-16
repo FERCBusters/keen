@@ -1,4 +1,4 @@
-"""HTTP adapters for the records a risk or PESTLE(E) factor can name as affected."""
+"""HTTP adapters for the records a risk or PESTLE(E) item can name as affected."""
 
 from __future__ import annotations
 
@@ -19,5 +19,5 @@ def list_affected_options(
     user=Depends(require_isms_read),
     db: Session = Depends(get_db),
 ):
-    "People, vendors and assets a risk or PESTLE(E) factor can name as affected."
+    "People, vendors and assets a risk or PESTLE(E) item can name as affected."
     return service.affected_options(q=q, user=user, db=db)

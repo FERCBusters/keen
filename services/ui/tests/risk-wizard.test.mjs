@@ -449,7 +449,7 @@ test('a template can be deselected, and changing method clears a template of the
   assert.match(missing.ui.el('status').textContent, /That template no longer exists/);
 });
 
-test('the PESTLE(E) path records a factor with the controls and clauses it bears on', async (t) => {
+test('the PESTLE(E) path records an item with the controls and clauses it bears on', async (t) => {
   const { ui, state } = await wizard(t, { query: '&method=pestle' });
   next(ui);
   // A factor names who and what it affects too, a new person among them.
@@ -462,7 +462,7 @@ test('the PESTLE(E) path records a factor with the controls and clauses it bears
   assert.equal(visibleStep(ui), 'describe');
   assert.equal(ui.el('riskTitle').closest('.col-12').hidden, true);
   next(ui);
-  assert.match(ui.el('status').textContent, /Describe the factor/);
+  assert.match(ui.el('status').textContent, /Describe the item/);
   ui.el('riskDescription').value = 'Privacy law tightens retention';
   next(ui);
   assert.match(ui.el('status').textContent, /Choose which kind of influence/);
@@ -507,7 +507,7 @@ test('the PESTLE(E) path records a factor with the controls and clauses it bears
   assert.match(review, /Type and lens Legal · Internal/);
   assert.match(review, /Overall relevance 3 Low/);
   assert.match(review, /Relevant clauses 6\.1\.2/);
-  assert.match(ui.el('nextStep').textContent, /Create PESTLE\(E\) factor/);
+  assert.match(ui.el('nextStep').textContent, /Create PESTLE\(E\) item/);
   next(ui);
   await settle(() => state.patched.length === 2);
   assert.deepEqual(state.posted, [
@@ -534,7 +534,7 @@ test('the PESTLE(E) path records a factor with the controls and clauses it bears
       body: { items: [{ clause_id: 'cl1', relevance_code: 'high' }] },
     },
   ]);
-  assert.equal(ui.el('doneTitle').textContent, 'PESTLE(E) factor recorded');
+  assert.equal(ui.el('doneTitle').textContent, 'PESTLE(E) item recorded');
   assert.equal(ui.el('doneDetail').textContent, 'Keen also added 1 new person for you.');
   assert.equal(
     ui.el('doneActions').querySelector('a').getAttribute('href'),

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { classicPage } from './support/classic-page.mjs';
+import { buildHelpIndex } from './support/help-search-index.mjs';
 
 const helpRoot = new URL('../public/help/', import.meta.url);
 const read = (name) => readFile(new URL(name, helpRoot), 'utf8');
@@ -300,4 +301,14 @@ test('the saved theme applies only a known palette, and dark mode only with one'
       ui.close();
     }
   }
+});
+
+test('the search index is what the Help pages produce', async () => {
+  const ui = await classicPage({ scripts: ['help/search-index.js'] });
+  const onDisk = JSON.parse(JSON.stringify(ui.window.KEEN_DOC_INDEX));
+  ui.close();
+  // After editing a Help page, run: bash build-help-index.sh
+  assert.deepEqual(onDisk, await buildHelpIndex());
+  // Page furniture is not a section's text.
+  assert.ok(onDisk.every((entry) => !/Handbook contents|Open full-size diagram/.test(entry.text)));
 });

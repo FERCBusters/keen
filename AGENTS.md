@@ -44,6 +44,7 @@
 
 ## Validation
 
+- Help is hand-written HTML in `services/ui/public/help`, and Keen's copy is the source that keen.cloud mirrors. After editing a Help page run `bash build-help-index.sh`, which rebuilds `search-index.js` from the pages; `help-site.test.mjs` fails while the two differ. Never edit `search-index.js` by hand.
 - Use `.github/workflows/tests.yml` and `tests.sh` as the authoritative test workflow. Run against a disposable PostgreSQL database and Valkey; the suite changes database contents. Never point tests at an operational installation.
 - For focused local work, run the affected backend tests against the same disposable PostgreSQL database, as `TESTING.md` shows, and `bash tests-ui.sh`. Keen supports PostgreSQL only; the database contracts fail without one.
 - Measure every time budget in a test with `tests.timing.measured`, which keeps collection of the rest of the test process out of the budget; `tests/test_time_budgets.py` refuses a bare clock.

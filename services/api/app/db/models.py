@@ -1264,7 +1264,7 @@ class RiskRegisterSettings(Base):
 
 
 class AffectedLink(Base):
-    """Who or what a risk or a PESTLE(E) factor affects.
+    """Who or what a risk or a PESTLE(E) item affects.
 
     A link has exactly one owner (a risk or a PESTLE(E) item) and exactly one
     target (a person, a vendor or an asset); it disappears with either.
@@ -1338,7 +1338,7 @@ class RiskLibraryEntry(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
     threat_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # "risk" templates seed register entries (with or without CIA types);
-    # "pestle" templates seed PESTLE(E) impact-assessment items.
+    # "pestle" templates seed PESTLE(E) items.
     method: Mapped[str] = mapped_column(
         String(16), nullable=False, default="risk", server_default="risk"
     )
@@ -1509,7 +1509,7 @@ class PestleClauseRelevance(Base):
 
 
 class PestleControlRelevance(Base):
-    """How relevant a factor is to one control, as PestleClauseRelevance is for a clause."""
+    """How relevant an item is to one control, as PestleClauseRelevance is for a clause."""
 
     __tablename__ = "pestle_control_relevance"
 

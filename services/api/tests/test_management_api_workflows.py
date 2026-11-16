@@ -528,7 +528,11 @@ def test_scheduled_audit_template_roundtrip(api, recurrence):
         ),
         ("isms/meetings", "Meeting id must be a UUID", "Meeting not found"),
         ("risks", "risk_id must be a UUID", "Risk not found"),
-        ("pestle/items", "pestle item id must be a UUID", "PESTLE(E) item not found"),
+        (
+            "pestle/items",
+            "pestle item id must be a UUID",
+            "PESTLE(E) item not found",
+        ),
         ("audits", "audit_id must be a UUID", "Audit not found"),
     ],
 )

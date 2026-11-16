@@ -19,7 +19,7 @@
     <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
       <div>
         <h1 class="h3 mb-1">Risks</h1>
-        <div class="small-muted">Manage the risk register, information-security (CIA) risks, PESTLE(E) factors and the reusable risk library.</div>
+        <div class="small-muted">Manage the risk register, information-security (CIA) risks, PESTLE(E) items and the reusable risk library.</div>
       </div>
       <div class="d-flex flex-wrap gap-2 no-print">
         <a class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" id="mitigatorLink" data-nav-fw="1" href="/mitigator.html" data-feature="mitigator"><img src="/keen-mitigator-64.png" alt="" class="keen-mitigator-icon-sm"> Ask the Mitigator</a>
@@ -187,23 +187,23 @@
         <div class="card mb-3 no-print" data-mosp-filter-section="pestle-filters" data-mosp-filter-title="PESTLE(E) filters">
           <div class="card-body" data-mosp-filter-body>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-              <input id="pestleQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search factors or rationale">
+              <input id="pestleQ" class="form-control form-control-sm" style="min-width:240px;" type="search" placeholder="Search items or rationale">
               <select id="pestleTypeFilter" class="form-select form-select-sm" style="min-width:170px;"><option value="">All types</option></select>
               <select id="pestleLensFilter" class="form-select form-select-sm" style="min-width:150px;"><option value="">All lenses</option></select>
-              <a class="btn btn-sm btn-outline-primary" id="newPestleRisk" data-nav-fw="1" href="/risk-wizard.html?method=pestle"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a PESTLE(E) factor</a>
+              <a class="btn btn-sm btn-outline-primary" id="newPestleRisk" data-nav-fw="1" href="/risk-wizard.html?method=pestle"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a PESTLE(E) item</a>
               <a class="btn btn-sm btn-outline-secondary" id="pestleWorkspaceLink" data-nav-fw="1" href="/pestle.html">Visualisations</a>
             </div>
           </div>
         </div>
         <div class="card">
           <div class="card-header">
-            <div class="fw-bold">PESTLE(E) factors</div>
+            <div class="fw-bold">PESTLE(E) items</div>
             <div class="small-muted" id="pestleMeta">Political, economic, social, technological, legal, environmental and ethical influences, scored for relevance to your controls and clauses.</div>
           </div>
           <div class="card-body p-0">
             <div class="table-responsive">
               <table class="table table-hover align-middle mb-0" data-sortable>
-                <thead><tr><th style="width:140px;">Type</th><th style="width:110px;">Lens</th><th>Factor</th><th style="width:130px;">Relevance</th><th style="width:170px;">Affects</th><th style="width:140px;">Controls</th><th style="width:120px;">Clauses</th><th style="width:120px;" class="no-print">Actions</th></tr></thead>
+                <thead><tr><th style="width:140px;">Type</th><th style="width:110px;">Lens</th><th>Item</th><th style="width:130px;">Relevance</th><th style="width:170px;">Affects</th><th style="width:140px;">Controls</th><th style="width:120px;">Clauses</th><th style="width:120px;" class="no-print">Actions</th></tr></thead>
                 <tbody id="pestleRows"></tbody>
               </table>
             </div>
@@ -220,7 +220,7 @@
               <div class="small-muted">Templates for any kind of risk. A template fills in the wizard; you still review and rate the risk for your organisation.</div>
             </div>
             <div class="d-flex gap-2 align-items-center no-print">
-              <select id="libraryMethodFilter" class="form-select form-select-sm" aria-label="Kind of template"><option value="">All kinds</option><option value="risk">Risks</option><option value="pestle">PESTLE(E) factors</option></select>
+              <select id="libraryMethodFilter" class="form-select form-select-sm" aria-label="Kind of template"><option value="">All kinds</option><option value="risk">Risks</option><option value="pestle">PESTLE(E) items</option></select>
               <input id="librarySearch" class="form-control form-control-sm" type="search" placeholder="Search templates" style="min-width:220px;" aria-label="Search templates">
             </div>
           </div>
@@ -238,7 +238,7 @@
                 <option value="">Every kind of risk</option>
                 <option value="general">Simple risks</option>
                 <option value="cia">CIA risks</option>
-                <option value="pestle">PESTLE(E) factors</option>
+                <option value="pestle">PESTLE(E) items</option>
               </select>
               <label class="small-muted" for="riskVizTopRisks">Top risks</label>
               <input id="riskVizTopRisks" type="number" class="form-control form-control-sm" min="5" max="200" value="15" style="width:90px;">
@@ -259,7 +259,7 @@
             <div class="card">
               <div class="card-header">
                 <div class="fw-bold">Risks × controls graph</div>
-                <div class="small-muted" id="riskControlsGraphMeta">Simple risks, CIA risks and PESTLE(E) factors linked to this framework's controls. Link thickness follows the residual risk score.</div>
+                <div class="small-muted" id="riskControlsGraphMeta">Simple risks, CIA risks and PESTLE(E) items linked to this framework's controls. Link thickness follows the residual risk score.</div>
               </div>
               <div id="riskControlsGraph" class="card-body pestle-viz-box pestle-viz-box-lg small-muted">Loading visualisation</div>
             </div>

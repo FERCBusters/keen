@@ -78,7 +78,7 @@ const state = {
   residual: { likelihood: 1, impact: 1 },
   owner: '',
   treatment: { strategy: '', status: 'open', due: '', plan: '' },
-  // The controls and clauses it is linked to, by id. A PESTLE(E) factor rates
+  // The controls and clauses it is linked to, by id. A PESTLE(E) item rates
   // each with a relevance code; a register risk links them plainly ('').
   controls: new Map(),
   clauses: new Map(),
@@ -124,7 +124,7 @@ function isPestle() {
 // Steps that do not apply to the chosen method are skipped in both directions.
 function stepApplies(step) {
   if (step === 'parties') return affectedOptions !== null;
-  // A factor belongs to no asset and has no likelihood or impact.
+  // An item belongs to no asset and has no likelihood or impact.
   if (step === 'subject' || step === 'rate') return !isPestle();
   // Most frameworks have controls and no clauses.
   if (step === 'clauses') return clauses.length > 0;
@@ -158,7 +158,7 @@ function showStep(step) {
   const last = stepIndex >= steps.length - 1;
   $('backStep').hidden = stepIndex === 0 || step === 'done';
   $('nextStep').innerHTML = last
-    ? `<i class="bi bi-check2 me-1" aria-hidden="true"></i>${editingId ? 'Save changes' : isPestle() ? 'Create PESTLE(E) factor' : 'Create risk'}`
+    ? `<i class="bi bi-check2 me-1" aria-hidden="true"></i>${editingId ? 'Save changes' : isPestle() ? 'Create PESTLE(E) item' : 'Create risk'}`
     : 'Next<i class="bi bi-arrow-right ms-1" aria-hidden="true"></i>';
   $('skipStep').hidden = !['parties', 'controls', 'clauses'].includes(step);
   $('wizardFooter').hidden = step === 'done';
@@ -185,7 +185,7 @@ function stepHintFor(step) {
     case 'controls':
     case 'clauses':
       return isPestle()
-        ? `Relevance to ${step} is optional, and can be set later on the factor's page.`
+        ? `Relevance to ${step} is optional, and can be set later on the item's page.`
         : `You can link ${step} later, by editing the risk.`;
     default:
       return '';
@@ -509,7 +509,7 @@ function updateRating(kind, field, value) {
 
 // --- Steps 6 and 7: controls and clauses --------------------------------------------------
 
-// Each step lists one kind of record to tick. A PESTLE(E) factor also says how
+// Each step lists one kind of record to tick. A PESTLE(E) item also says how
 // relevant each ticked record is.
 const LINKS = {
   controls: {
@@ -612,7 +612,7 @@ function renderReview() {
   if (state.template) rows.push(reviewRow('Template', esc(state.template.name), 'method'));
   if (isPestle()) {
     if (affectedOptions) rows.push(reviewRow('Affects', affectedSummary(), 'parties'));
-    rows.push(reviewRow('Factor', esc(state.description), 'describe'));
+    rows.push(reviewRow('Item', esc(state.description), 'describe'));
     rows.push(reviewRow('Type and lens', esc(`${state.pestleType} · ${state.lens}`), 'describe'));
     const level = pestleMeta.relevance_levels.find((l) => l.code === state.relevance);
     rows.push(reviewRow('Overall relevance', esc(level.label), 'describe'));
@@ -692,7 +692,7 @@ function collectStep(step) {
       state.lens = $('pestleLens').value;
       state.relevance = $('pestleRelevance').value;
       state.rationale = $('pestleRationale').value.trim();
-      if (!state.description) return 'Describe the factor in a sentence or two.';
+      if (!state.description) return 'Describe the item in a sentence or two.';
       if (!state.pestleType) return 'Choose which kind of influence it is.';
       return '';
     }
@@ -809,7 +809,7 @@ function showDone({ saved, created }) {
   $('doneTitle').textContent = editingId
     ? 'Risk updated'
     : isPestle()
-      ? 'PESTLE(E) factor recorded'
+      ? 'PESTLE(E) item recorded'
       : 'Risk recorded';
   $('doneDetail').textContent = created.length
     ? `Keen also added ${created.join(' and ')} for you.`
