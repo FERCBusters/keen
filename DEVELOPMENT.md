@@ -14,7 +14,7 @@ Everything Keen collects becomes an **Event**. An Event is one thing that happen
 
 **Mapping rules** then attach Events to **controls** in a compliance **framework** such as ISO 27001. A `Mapping` row is that attachment. A control with recent mapped Events has evidence; one without has a gap.
 
-Nearly every screen is a view over those four things, plus the records people write by hand and link to the same controls: risks, PESTLE(E) factors, policies, objectives, audits.
+Nearly every screen is a view over those four things, plus the records people write by hand and link to the same controls: risks, PESTLE(E) items, policies, objectives, audits.
 
 ### Three rules that shape the code
 
@@ -210,7 +210,7 @@ Every table is a SQLAlchemy model in the single file `app/db/models.py`, and eve
 | `FrameworkClause`, `ControlClauseLink` | A clause of a framework (ISO management clauses), and how far a control applies to it. |
 | `Event`, `Artifact`, `Mapping` | One collected occurrence, its original bytes, and its link to a control. |
 | `Risk`, `RiskAsset`, `RiskControlLink`, `RiskClauseLink` | A risk, the asset it concerns, and its links to controls and clauses. |
-| `PestleItem`, `PestleClauseRelevance`, `PestleControlRelevance` | A PESTLE(E) factor and how relevant it is to each clause and control. |
+| `PestleItem`, `PestleClauseRelevance`, `PestleControlRelevance` | A PESTLE(E) item and how relevant it is to each clause and control. |
 | `Isms*` | The ISMS registers: objectives, documents, organisation chart, people, vendors, access matrix, measures, meetings, SWOT. |
 | `IsmsEntityControlLink`, `IsmsEntityClauseLink` | One generic pair of link tables that ties any ISMS record to controls and clauses. |
 | `EntityChangelog` | One recorded change to any record, with the state before and after as JSON. |
@@ -400,7 +400,7 @@ Risks are the area where the vocabulary matters most, because three things are c
 | --- | --- | --- |
 | Simple risk | A `Risk` row | `risk_types` is empty; `method` is `general` |
 | CIA risk | A `Risk` row | `risk_types` names Confidentiality, Integrity or Availability; `method` is `cia` |
-| PESTLE(E) factor | A `PestleItem` row | A separate record, scoped to one framework; `method` is `pestle` where the two are listed together |
+| PESTLE(E) item | A `PestleItem` row | A separate record, scoped to one framework; `method` is `pestle` where the two are listed together |
 
 Simple and CIA risks are one record type, the register. Use `services/risks.py::risk_method(risk)` on the backend and `methodOf(risk)` from `pages/risk-common.js` in the UI to name the kind; do not test `risk_types` yourself. Any screen that lists register risks lists both kinds and labels each with `methodBadgeHtml`. A screen that shows only CIA risks says so and filters for them, as the CIA risks tab of the Risks dashboard does.
 
@@ -409,13 +409,11 @@ All three link to both controls and clauses:
 | Record | To controls | To clauses |
 | --- | --- | --- |
 | Risk (simple or CIA) | `RiskControlLink` | `RiskClauseLink` |
-| PESTLE(E) factor | `PestleControlRelevance` | `PestleClauseRelevance` |
+| PESTLE(E) item | `PestleControlRelevance` | `PestleClauseRelevance` |
 
-A risk's link either exists or does not. A factor's link carries a relevance (high, medium, low), and a rating of N/A means no link; `services/pestle.py::rated_links` filters those out.
+A risk's link either exists or does not. A PESTLE item's link carries a relevance (high, medium, low), and a rating of N/A means no link; `services/pestle.py::rated_links` filters those out.
 
-The pictures follow the same rule. The Visualisations tab of the Risks dashboard draws all three kinds against controls, with a Show filter for one kind, from `GET /v1/graph/risk_control`. The risk page and the PESTLE(E) factor page each have a Visualisation tab drawn by the same module, `pages/record-links-graph.js`.
-
-One naming wrinkle: the application says "PESTLE(E) factor" everywhere a person reads it, while the code still says item: the `PestleItem` model, the `pestle_items` table, the `/v1/pestle/items` routes, `pestle_item.html` and the stored record type `pestle_item`.
+The pictures follow the same rule. The Visualisations tab of the Risks dashboard draws all three kinds against controls, with a Show filter for one kind, from `GET /v1/graph/risk_control`. The risk page and the PESTLE(E) item page each have a Visualisation tab drawn by the same module, `pages/record-links-graph.js`.
 
 ## MCP
 
@@ -573,9 +571,9 @@ Things that have caught people, each with what to do instead.
 
 **A new feature that is always on.** A route under a switchable feature needs its entry in `security/feature_policy.py`, or switching the feature off hides the page and leaves the API open.
 
-**Framework scope.** Controls, clauses and PESTLE(E) factors belong to one framework. Risks do not, but their links to controls and clauses do. A query that joins a risk to its controls without filtering `framework_slug` mixes catalogues.
+**Framework scope.** Controls, clauses and PESTLE(E) items belong to one framework. Risks do not, but their links to controls and clauses do. A query that joins a risk to its controls without filtering `framework_slug` mixes catalogues.
 
-**Cached graphs.** `cached_json` keys a result by the parts you give it. If what a user may see changes the result, that has to be one of the parts. The risk graph includes PESTLE(E) factors only for a reader allowed to see them, so `factors` is part of its key.
+**Cached graphs.** `cached_json` keys a result by the parts you give it. If what a user may see changes the result, that has to be one of the parts. The risk graph includes PESTLE(E) items only for a reader allowed to see them, so `items` is part of its key.
 
 **JSON null in a migration.** A JSONB column can hold SQL `NULL` or the JSON value `null`, and `IS NULL` only finds the first. Migrations that read stored JSON check `jsonb_typeof`.
 
