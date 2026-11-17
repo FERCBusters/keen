@@ -131,6 +131,7 @@ const layouts = {
   redmine: { projects: ['project', 'label'] },
   op_events: { streams: ['stream', 'label'] },
   bitwarden: { streams: ['stream', 'label'] },
+  mosyle: { streams: ['stream', 'label'] },
   gitlab: { groups: ['group', 'label'], users: ['user', 'label'] },
   cloudwatch_logs: {
     queries: [
@@ -195,6 +196,7 @@ const definitionAdapters = [
   'riskledger',
   'op_events',
   'bitwarden',
+  'mosyle',
   'cloudwatch_logs',
   'taiga',
   'google_workspace',
@@ -286,7 +288,8 @@ function definitionKey(adapter, section, entry) {
   if (adapter === 'github' && section === 'repos')
     return `${entry.owner || ''}/${entry.repo || ''}`;
   if (adapter === 'redmine') return String(entry.project || '').trim();
-  if (adapter === 'op_events' || adapter === 'bitwarden') return String(entry.stream || '').trim();
+  if (adapter === 'op_events' || adapter === 'bitwarden' || adapter === 'mosyle')
+    return String(entry.stream || '').trim();
   const field =
     section === 'groups'
       ? 'group'
@@ -777,17 +780,19 @@ function fieldNode(name, value, kind = 'text') {
           ? 'One of auditevents, itemusages or signinattempts. The token must be allowed to read that event type.'
           : name === 'stream' && $('definition-adapter').value === 'bitwarden'
             ? 'Enter events: the organisation event log is the one stream Bitwarden offers.'
-            : name === 'kind' && $('definition-adapter').value === 'jenkins'
-              ? 'Action assigned to Jenkins events from this job, such as build or deployment. Match it with the Action field below.'
-              : name === 'label' && $('definition-adapter').value === 'jenkins'
-                ? 'System assigned to Jenkins events from this job. Match it with the System field below.'
-                : name === 'logql'
-                  ? 'Loki query selecting log lines to collect. A separate match below narrows the resulting events.'
-                  : name === 'event.action'
-                    ? 'Activity name this collection assigns to incoming events. For example, login. The matching Activity field below can select this exact value.'
-                    : name === 'event.outcome'
-                      ? 'Result this collection assigns to incoming events. Use success only when the query actually selects successful events. Use info when it makes no result claim.'
-                      : '';
+            : name === 'stream' && $('definition-adapter').value === 'mosyle'
+              ? 'Enter adminlogs: the administrator action log is the one stream Mosyle offers.'
+              : name === 'kind' && $('definition-adapter').value === 'jenkins'
+                ? 'Action assigned to Jenkins events from this job, such as build or deployment. Match it with the Action field below.'
+                : name === 'label' && $('definition-adapter').value === 'jenkins'
+                  ? 'System assigned to Jenkins events from this job. Match it with the System field below.'
+                  : name === 'logql'
+                    ? 'Loki query selecting log lines to collect. A separate match below narrows the resulting events.'
+                    : name === 'event.action'
+                      ? 'Activity name this collection assigns to incoming events. For example, login. The matching Activity field below can select this exact value.'
+                      : name === 'event.outcome'
+                        ? 'Result this collection assigns to incoming events. Use success only when the query actually selects successful events. Use info when it makes no result claim.'
+                        : '';
   if (helpText) {
     const help = document.createElement('div');
     help.className = 'form-text';

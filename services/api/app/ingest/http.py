@@ -17,6 +17,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 from threading import Lock
 from urllib.parse import urlsplit
 
@@ -295,6 +296,17 @@ class IngestionTransport(httpx.BaseTransport):
     def close(self):
         for transport in self.transports.values():
             transport.close()
+
+
+def no_cookies() -> CookieJar:
+    """A cookie jar for a client that keeps no cookie an upstream sets.
+
+    A client keeps the cookies its responses set and sends them back to every
+    host they name, which a sign-in on one host can make every host of its
+    parent domain. A collector whose requests carry their own credentials
+    passes this as ``cookies``.
+    """
+    return CookieJar(DefaultCookiePolicy(allowed_domains=()))
 
 
 def client(**kwargs):

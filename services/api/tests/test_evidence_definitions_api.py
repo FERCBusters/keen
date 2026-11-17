@@ -1589,6 +1589,7 @@ def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
         "riskledger_enabled",
         "op_events_enabled",
         "bitwarden_enabled",
+        "mosyle_enabled",
         "imap_enabled",
     ):
         monkeypatch.setattr(settings, name, True)
@@ -1603,8 +1604,15 @@ def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
     enabled = {item["adapter"]: item["enabled"] for item in catalogue.json()["items"]}
     assert [
         enabled[name]
-        for name in ("redmine", "riskledger", "op_events", "bitwarden", "imap")
-    ] == [False] * 5
+        for name in (
+            "redmine",
+            "riskledger",
+            "op_events",
+            "bitwarden",
+            "mosyle",
+            "imap",
+        )
+    ] == [False] * 6
     assert (enabled["keen-agent"], enabled["api-ingesters"]) == (False, False)
     # Every source is listed under the name people know it by, never its ID
     # alone where it has one.

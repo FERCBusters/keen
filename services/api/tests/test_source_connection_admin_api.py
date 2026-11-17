@@ -64,6 +64,19 @@ def _bitwarden(credentials=None, **configuration):
     }
 
 
+def _mosyle(credentials=None, **configuration):
+    return {
+        "source": "mosyle",
+        "name": "Fleet",
+        "configuration": {"email": "auditor@example.org", **configuration},
+        "credentials": credentials
+        or {
+            "password": "synthetic pass-phrase",
+            "access_token": "synthetic-api-token",
+        },
+    }
+
+
 ENDPOINT = "Use an endpoint URL without embedded credentials, query or fragment"
 ONE_PASSWORD_SERVERS = (
     "Choose a 1Password Events API server: https://events.1password.com, "
@@ -197,6 +210,27 @@ REFUSED = [
     (
         "bitwarden-foreign-credential",
         _bitwarden(credentials={"token": "t"}),
+        "Unsupported connection field",
+    ),
+    (
+        "mosyle-two-mailboxes",
+        _mosyle(email="one@example.org, two@example.org"),
+        "Enter the email address of one Mosyle administrator",
+    ),
+    (
+        "mosyle-display-name",
+        _mosyle(email="Auditor <auditor@example.org>"),
+        "Enter the email address of one Mosyle administrator",
+    ),
+    (
+        # The servers are Mosyle's own: a connection names no endpoint.
+        "mosyle-endpoint",
+        _mosyle(base_url="https://businessapi.mosyle.com.attacker.example/v1"),
+        "Unsupported connection field",
+    ),
+    (
+        "mosyle-foreign-credential",
+        _mosyle(credentials={"token": "t"}),
         "Unsupported connection field",
     ),
     (
@@ -383,6 +417,37 @@ def test_a_demo_lists_connections_but_cannot_change_or_run_them(admin, monkeypat
     deleted = admin.send("DELETE", f"{ROOT}/{row['id']}", version=row["version"])
     assert (deleted.status_code, deleted.json()["detail"]) == (403, message)
     assert [c["name"] for c in admin.saved()] == ["Production logs"]
+
+
+# --- Mosyle --------------------------------------------------------------------
+
+
+def test_a_mosyle_connection_saves_its_sign_in_and_stream(admin):
+    body = {
+        **_mosyle(),
+        "inputs": {"streams": [{"stream": "adminlogs", "label": "Fleet"}]},
+    }
+
+    created = admin.send("POST", ROOT, body)
+
+    assert created.status_code == 200, created.text
+    row = created.json()
+    assert row["configuration"] == {"email": "auditor@example.org"}
+    # The password and the access token are write-only.
+    assert row["has_credentials"] is True and "synthetic" not in created.text
+    assert row["inputs"] == body["inputs"]
+    # A connection may be saved before its administrator is chosen.
+    blank = admin.send("POST", ROOT, {**_mosyle(email=""), "name": "Later"})
+    assert blank.status_code == 200, blank.text
+
+    refused = admin.send(
+        "POST", ROOT, {**_mosyle(), "inputs": {"streams": [{"stream": "devices"}]}}
+    )
+    assert (refused.status_code, refused.json()["detail"]) == (
+        400,
+        "Mosyle collects one stream: adminlogs",
+    )
+    assert [c["name"] for c in admin.saved()] == ["Fleet", "Later"]
 
 
 # --- Password manager event logs ---------------------------------------------

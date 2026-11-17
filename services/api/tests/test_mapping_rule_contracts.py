@@ -425,6 +425,7 @@ def test_confidence_defaults_and_whole_numbers_are_read_as_fractions():
         ("google_workspace", "streams", "login", {"stream": "login"}),
         ("op_events", "streams", "signinattempts", {"stream": "signinattempts"}),
         ("bitwarden", "streams", "events", {"stream": "events"}),
+        ("mosyle", "streams", "adminlogs", {"stream": "adminlogs"}),
         ("bookstack", "selected_pages", 12, {"page_id": 12}),
         (
             "github",

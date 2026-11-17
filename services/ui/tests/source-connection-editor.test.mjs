@@ -295,6 +295,40 @@ test("a new password manager source starts from the vendor's own endpoints", asy
   assert.equal(value(saved, 'identity_url'), 'https://vault.example/identity');
 });
 
+test('a Mosyle source groups its sign-in beside its access token, and fills none in', async (t) => {
+  const ui = await loadUi('pages/source-connection-editor.js', {
+    setup(w) {
+      w.HTMLDialogElement.prototype.showModal = function () {};
+    },
+  });
+  t.after(ui.close);
+  const types = [
+    {
+      source: 'mosyle',
+      label: 'Mosyle',
+      enabled: true,
+      fields: ['email'],
+      credential_fields: ['access_token', 'password'],
+    },
+  ];
+  const created = ui.api.editSourceConnection({ types, onSaved: async () => {} });
+  const field = (key) => created.querySelector(`[data-key="${key}"]`);
+  const legend = (key) => field(key).closest('fieldset').querySelector('legend').textContent;
+  const label = (key) => field(key).closest('label').textContent;
+  for (const key of ['email', 'password', 'access_token']) assert.equal(field(key).value, '', key);
+  assert.equal(legend('email'), 'Administrator sign-in');
+  assert.equal(legend('password'), 'Administrator sign-in');
+  assert.equal(field('access_token').closest('fieldset'), null);
+  assert.equal(label('email'), 'Email address');
+  assert.equal(label('access_token'), 'API access token');
+  // The servers are Mosyle's own: the editor offers no endpoint to change.
+  assert.equal(field('base_url'), null);
+  // The password and tokens are entered as secrets; the address is not.
+  assert.equal(field('password').type, 'password');
+  assert.equal(field('access_token').type, 'password');
+  assert.notEqual(field('email').type, 'password');
+});
+
 test('IMAP defaults to headers only and reveals a 4000 character body limit on request', async (t) => {
   let saved;
   const ui = await loadUi('pages/source-connection-editor.js', {

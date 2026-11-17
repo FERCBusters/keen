@@ -94,6 +94,7 @@ test('each kind of collection input is named by its own field before Next', asyn
     ['redmine', 'projects', 'ops', { project: 'ops', label: 'Operations' }, 'project'],
     ['op_events', 'streams', 'auditevents', { stream: 'auditevents', label: 'Vault' }, 'stream'],
     ['bitwarden', 'streams', 'events', { stream: 'events', label: 'Vault' }, 'stream'],
+    ['mosyle', 'streams', 'adminlogs', { stream: 'adminlogs', label: 'Fleet' }, 'stream'],
   ];
   const ui = await editor(t, {
     sources: [
@@ -103,6 +104,7 @@ test('each kind of collection input is named by its own field before Next', asyn
       'redmine',
       'op_events',
       'bitwarden',
+      'mosyle',
       'github',
       'keen-agent',
     ],
@@ -135,12 +137,13 @@ test('each kind of collection input is named by its own field before Next', asyn
 
 test('Risk Ledger, Redmine, password manager and Jenkins inputs explain their identifying fields', async (t) => {
   const ui = await editor(t, {
-    sources: ['riskledger', 'redmine', 'op_events', 'bitwarden', 'jenkins', 'keen-agent'],
+    sources: ['riskledger', 'redmine', 'op_events', 'bitwarden', 'mosyle', 'jenkins', 'keen-agent'],
     collectors: [
       collection('riskledger', 'organizations', '*', { org: '*' }),
       collection('redmine', 'projects', 'ops', { project: 'ops' }),
       collection('op_events', 'streams', 'itemusages', { stream: 'itemusages' }),
       collection('bitwarden', 'streams', 'events', { stream: 'events' }),
+      collection('mosyle', 'streams', 'adminlogs', { stream: 'adminlogs' }),
       collection('jenkins', 'jobs', 'deploy', { name: 'deploy', label: 'web', kind: 'deploy' }),
     ],
   });
@@ -178,6 +181,15 @@ test('Risk Ledger, Redmine, password manager and Jenkins inputs explain their id
     collectorId('bitwarden', 'streams', 'events'),
   );
   assert.match(help('stream'), /^Enter events: the organisation event log is the one stream/);
+  await ui.click('close-editor');
+  await ui.openInput(
+    'mosyle',
+    'env:mosyle',
+    'streams',
+    collectorId('mosyle', 'streams', 'adminlogs'),
+  );
+  assert.match(help('stream'), /^Enter adminlogs: the administrator action log is the one stream/);
+  assert.equal(help('label'), undefined);
   await ui.click('close-editor');
   await ui.openInput('jenkins', 'env:jenkins', 'jobs', collectorId('jenkins', 'jobs', 'deploy'));
   assert.match(help('kind'), /^Action assigned to Jenkins events from this job/);

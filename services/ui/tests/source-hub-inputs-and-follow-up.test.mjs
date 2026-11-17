@@ -197,12 +197,14 @@ test('Risk Ledger, Redmine and password manager inputs explain their identifiers
         type('redmine', 'Redmine'),
         type('op_events', '1Password'),
         type('bitwarden', 'Bitwarden'),
+        type('mosyle', 'Mosyle'),
       ],
       connections: [
         connection({ id: 'rl', source: 'riskledger', name: 'Vendors', inputs: {} }),
         connection({ id: 'rm', source: 'redmine', name: 'Tracker', inputs: {} }),
         connection({ id: 'op', source: 'op_events', name: 'Company vault', inputs: {} }),
         connection({ id: 'bw', source: 'bitwarden', name: 'Team vault', inputs: {} }),
+        connection({ id: 'mo', source: 'mosyle', name: 'Fleet', inputs: {} }),
       ],
     },
   });
@@ -219,6 +221,8 @@ test('Risk Ledger, Redmine and password manager inputs explain their identifiers
   assert.deepEqual(labels(), ['Stream: auditevents, itemusages or signinattempts', 'Label']);
   await ui.button(ui.card('Team vault'), 'Add input').onclick();
   assert.deepEqual(labels(), ['Stream: events', 'Label']);
+  await ui.button(ui.card('Fleet'), 'Add input').onclick();
+  assert.deepEqual(labels(), ['Stream: adminlogs', 'Label']);
 });
 
 test('clearing the additional settings saves just the entered fields', async (t) => {

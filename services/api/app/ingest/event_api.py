@@ -1,4 +1,4 @@
-"""Shared reading of vendor event-log APIs (1Password, Bitwarden).
+"""Shared reading of vendor event-log APIs (1Password, Bitwarden, Mosyle).
 
 Each response is read as it arrives, within a byte limit, and parsed only when
 it answered 200. Failures carry fixed messages: never a response body, a URL,
@@ -50,8 +50,11 @@ def safe_base(value: Any) -> str | None:
     return base if is_safe_url(base) else None
 
 
-def read_json(client, method: str, url: str, *, product: str, **request) -> dict:
-    """One JSON object from ``url``, or an EventApiError naming what failed."""
+def read_response(
+    client, method: str, url: str, *, product: str, **request
+) -> tuple[dict, httpx.Headers]:
+    """One JSON object from ``url`` and the headers it came with, or an
+    EventApiError naming what failed."""
     try:
         with client.stream(method, url, **request) as response:
             status = response.status_code
@@ -70,6 +73,7 @@ def read_json(client, method: str, url: str, *, product: str, **request) -> dict
                 body.extend(chunk)
                 if len(body) > MAX_JSON_BYTES:
                     raise EventApiError(f"{product} response exceeds the 8 MiB limit")
+            headers = response.headers
         data = json.loads(body)
     except httpx.HTTPError:
         raise EventApiError(
@@ -79,7 +83,12 @@ def read_json(client, method: str, url: str, *, product: str, **request) -> dict
         raise EventApiError(f"{product} returned invalid JSON") from None
     if not isinstance(data, dict):
         raise EventApiError(f"{product} returned an invalid JSON object")
-    return data
+    return data, headers
+
+
+def read_json(client, method: str, url: str, *, product: str, **request) -> dict:
+    """One JSON object from ``url``, or an EventApiError naming what failed."""
+    return read_response(client, method, url, product=product, **request)[0]
 
 
 def records(rows: Any, limit: int, product: str) -> tuple[list[dict], int]:

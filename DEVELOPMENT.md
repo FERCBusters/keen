@@ -268,7 +268,7 @@ Evidence reaches Keen five ways, and every one of them ends in the same function
 
 | Way in | Code | What starts it |
 | --- | --- | --- |
-| Built-in collectors (GitHub, Loki, Jenkins and 13 more) | `app/ingest/<source>.py` | Celery beat, or an administrator's Run button |
+| Built-in collectors (GitHub, Loki, Jenkins and 14 more) | `app/ingest/<source>.py` | Celery beat, or an administrator's Run button |
 | Mail | `app/ingest/imap.py` and `imap_support/` | `keen.dispatch_imap`, every five minutes, on its own worker |
 | Webhooks and signed metric submissions | `ingest/webhooks.py`, `services/webhooks.py` | An inbound HTTP request |
 | Custom API ingesters | `app/integrations/` | `integration_tick_task`, every minute |

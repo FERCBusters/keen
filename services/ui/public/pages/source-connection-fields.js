@@ -13,6 +13,8 @@ const labels = {
   client_secret: 'Client secret',
   username: 'Username',
   password: 'Password',
+  email: 'Email address',
+  access_token: 'API access token',
   header_name: 'Header name',
   header_value: 'Header value',
   user_agent: 'User agent',
@@ -44,6 +46,7 @@ const groups = [
     label: 'AWS credentials',
     keys: ['aws_access_key_id', 'aws_secret_access_key', 'aws_session_token'],
   },
+  { label: 'Administrator sign-in', keys: ['email', 'password'] },
 ];
 
 // The vendor's own endpoints, offered when a new source is set up.

@@ -238,6 +238,7 @@ const layouts = {
   redmine: { projects: ['project', 'label'] },
   op_events: { streams: ['stream', 'label'] },
   bitwarden: { streams: ['stream', 'label'] },
+  mosyle: { streams: ['stream', 'label'] },
   forgejo: { organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label'] },
   gitea: { organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label'] },
   gitlab: { groups: ['group', 'label'], users: ['user', 'label'] },
@@ -301,17 +302,19 @@ async function editCollection(adapter, existing = null, connection = null) {
               ? 'Stream: auditevents, itemusages or signinattempts'
               : adapter === 'bitwarden' && name === 'stream'
                 ? 'Stream: events'
-                : {
-                    name: 'Name',
-                    index_pattern: 'Index pattern',
-                    query: 'Message filter (optional)',
-                    timestamp_field: 'Timestamp field',
-                    message_field: 'Message field',
-                    system_field: 'System field',
-                    actor_field: 'Actor field',
-                    action_field: 'Action field',
-                    outcome_field: 'Outcome field',
-                  }[name] || name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
+                : adapter === 'mosyle' && name === 'stream'
+                  ? 'Stream: adminlogs'
+                  : {
+                      name: 'Name',
+                      index_pattern: 'Index pattern',
+                      query: 'Message filter (optional)',
+                      timestamp_field: 'Timestamp field',
+                      message_field: 'Message field',
+                      system_field: 'System field',
+                      actor_field: 'Actor field',
+                      action_field: 'Action field',
+                      outcome_field: 'Outcome field',
+                    }[name] || name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
       const input = document.createElement('input');
       input.className = 'form-control';
       input.dataset.field = name;

@@ -156,6 +156,11 @@ REFUSED = [
         "Bitwarden collects one stream: events",
     ),
     (
+        "mosyle",
+        {"streams": [{"stream": "devices"}]},
+        "Mosyle collects one stream: adminlogs",
+    ),
+    (
         "elasticsearch",
         {"queries": [{"name": "audit"}]},
         "Enter an index, alias or data stream pattern",
@@ -203,6 +208,10 @@ def test_settings_that_cannot_run_are_refused(defs, name, document, detail):  # 
         ("redmine", {"projects": [{"project": "infra"}]}),
         ("op_events", {"streams": [{"stream": "signinattempts", "label": "Vault"}]}),
         ("bitwarden", {"streams": [{"stream": "events"}]}),
+        (
+            "mosyle",
+            {"streams": [{"stream": "adminlogs", "label": "Fleet"}]},
+        ),
         ("taiga", {"projects": [{"id": 12}]}),
         ("bookstack", {"selected_pages": [{"id": 4, "book_id": 2}]}),
         (

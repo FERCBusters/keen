@@ -513,6 +513,7 @@ class Settings(BaseSettings):
     redmine_run_seconds: int = Field(default=480, ge=300, le=86400)
     op_events_run_seconds: int = Field(default=600, ge=300, le=86400)
     bitwarden_run_seconds: int = Field(default=600, ge=300, le=86400)
+    mosyle_run_seconds: int = Field(default=600, ge=300, le=86400)
     riskledger_run_seconds: int = Field(default=2100, ge=1980, le=86400)
     rss_run_seconds: int = Field(default=600, ge=300, le=86400)
 
@@ -640,6 +641,15 @@ class Settings(BaseSettings):
     bitwarden_client_secret: str = ""
     bitwarden_config_path: str = "/app/config/bitwarden.yml"
     bitwarden_poll_seconds: int = Field(default=900, ge=60, le=86400)
+
+    # Mosyle Business administrator action logs, read from the Mosyle API as
+    # one administrator.
+    mosyle_enabled: bool = False
+    mosyle_access_token: str = ""
+    mosyle_email: str = ""
+    mosyle_password: str = ""
+    mosyle_config_path: str = "/app/config/mosyle.yml"
+    mosyle_poll_seconds: int = Field(default=900, ge=60, le=86400)
 
     gitlab_enabled: bool = False
     gitlab_base_url: str = "https://gitlab.com"

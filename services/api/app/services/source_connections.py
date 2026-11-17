@@ -9,6 +9,7 @@ from cryptography.fernet import InvalidToken
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
+from app.core.email_address import single_mailbox
 from app.core.source_meta import get_source_meta
 from app.db.models import SourceConnection
 from app.ingest import registry
@@ -145,6 +146,13 @@ def validate(payload):
         for name in ("base_url", "identity_url")
     ):
         raise DomainError(422, "Bitwarden requires HTTPS API and identity URLs")
+    if payload.source == "mosyle":
+        # The administrator Keen signs in to Mosyle as is one mailbox.
+        email = payload.configuration.get("email")
+        if email and single_mailbox(email) is None:
+            raise DomainError(
+                422, "Enter the email address of one Mosyle administrator"
+            )
     if payload.configuration.get("auth_mode", "token") not in (
         "",
         "token",

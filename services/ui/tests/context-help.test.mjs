@@ -128,6 +128,7 @@ test('every supported source help link resolves to a published guide', async (t)
     'riskledger',
     'op_events',
     'bitwarden',
+    'mosyle',
     'google_workspace',
     'cloudwatch_logs',
     'aws',

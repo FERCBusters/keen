@@ -64,6 +64,7 @@ SOURCE_LABELS = {
     "riskledger": "Risk Ledger",
     "op_events": "1Password",
     "bitwarden": "Bitwarden",
+    "mosyle": "Mosyle",
     "bookstack": "BookStack",
     "taiga": "Taiga",
     "google_workspace": "Google Workspace",

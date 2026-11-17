@@ -349,6 +349,13 @@ def _validate_connector(name: str, document: dict):
             validate_config(document)
         except BitwardenError as exc:
             raise DomainError(400, str(exc)) from None
+    if name == "mosyle":
+        from app.ingest.mosyle import MosyleError, validate_config
+
+        try:
+            validate_config(document)
+        except MosyleError as exc:
+            raise DomainError(400, str(exc)) from None
     key = connectors()[name].section
     rows = document.get(key, {} if name == "webhooks" else [])
     if name == "webhooks":
@@ -815,7 +822,8 @@ def source_catalogue(*, db: Session):
     for name in [*connectors(), "imap"]:
         enabled = bool(getattr(settings, f"{name}_enabled", False))
         if (
-            name in ("redmine", "riskledger", "op_events", "bitwarden", "imap")
+            name
+            in ("redmine", "riskledger", "op_events", "bitwarden", "mosyle", "imap")
             and settings.demo_mode
         ):
             enabled = False
