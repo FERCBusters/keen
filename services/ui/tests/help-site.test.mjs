@@ -312,3 +312,17 @@ test('the search index is what the Help pages produce', async () => {
   // Page furniture is not a section's text.
   assert.ok(onDisk.every((entry) => !/Handbook contents|Open full-size diagram/.test(entry.text)));
 });
+
+test('every link within a Help page lands on something in that page', async () => {
+  const pages = (await readdir(helpRoot)).filter((name) => name.endsWith('.html'));
+  const broken = [];
+  for (const name of pages) {
+    const { document } = new JSDOM(await read(name)).window;
+    for (const link of document.querySelectorAll('a[href^="#"]')) {
+      const id = decodeURIComponent(link.getAttribute('href').slice(1));
+      if (!document.getElementById(id)) broken.push(`${name} #${id}`);
+    }
+  }
+  // A chapter copied from another keeps that chapter's contents list until it is rewritten.
+  assert.deepEqual(broken, []);
+});
