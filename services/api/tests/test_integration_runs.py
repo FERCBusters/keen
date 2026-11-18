@@ -532,3 +532,49 @@ def test_an_unusable_record_is_left_out_of_a_stored_run(
     collector = db.get(Collector, "collector")
     assert collector.cursor == "2026-01-01T12:10:00+00:00"
     assert collector.failures == 0 and collector.enabled
+
+
+def test_a_record_that_cannot_be_read_is_skipped_and_the_rest_stored(
+    database,  # noqa: F811 - fixture imported above
+    monkeypatch,
+):
+    db, _ = database
+    run_id = published(db)
+    page = [
+        {"id": n, "created_at": f"2026-01-01T12:0{n}:00Z", "title": f"Record {n}"}
+        for n in (1, 2, 3)
+    ]
+    monkeypatch.setattr(
+        runtime, "collect", partial(engine.collect, fetch=lambda *a, **k: (page, {}))
+    )
+    import app.ingest.common as common
+
+    monkeypatch.setattr(
+        common,
+        "put_bytes",
+        lambda **stored: SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=50
+        ),
+    )
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
+    real_external_id = runtime.external_id
+
+    def external_id(collector_id, record_id):
+        if record_id == "2":
+            raise ValueError("unreadable identifier")
+        return real_external_id(collector_id, record_id)
+
+    monkeypatch.setattr(runtime, "external_id", external_id)
+    collector = db.get(Collector, "collector")
+    collector.cursor = "2025-12-31T00:00:00+00:00"
+    db.commit()
+
+    runtime.run_job(run_id)
+
+    assert outcome(db, run_id) == (
+        "succeeded",
+        "2 new records; 0 duplicates. 1 record skipped: Keen could not read the "
+        "record (1).",
+    )
+    assert {e.summary for e in db.query(Event).all()} == {"Record 1", "Record 3"}
+    assert db.get(Run, run_id).result["skipped"]["count"] == 1

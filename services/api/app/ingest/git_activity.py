@@ -17,8 +17,9 @@ from app.core.datetime_utils import to_utc_naive
 from app.security.xml import parse_untrusted_xml
 
 
-def _parse_iso_ts(value: str | None) -> datetime | None:
-    if not value:
+def _parse_iso_ts(value: object) -> datetime | None:
+    # Upstream records choose this value; anything other than text has no time.
+    if not isinstance(value, str) or not value:
         return None
     v = value.strip()
     try:
@@ -28,8 +29,8 @@ def _parse_iso_ts(value: str | None) -> datetime | None:
         return None
 
 
-def _parse_rfc822_ts(value: str | None) -> datetime | None:
-    if not value:
+def _parse_rfc822_ts(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
         return None
     try:
         dt = parsedate_to_datetime(value.strip())

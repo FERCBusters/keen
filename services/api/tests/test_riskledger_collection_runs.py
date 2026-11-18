@@ -349,8 +349,6 @@ def page(kind, rows, offset=0, total=None, limit=1):
         (page("risks", [], total=True), "inconsistent page offset/total"),
         (page("risks", [{"id": RID}], offset=5), "inconsistent page offset/total"),
         (page("risks", [], total=3), "stopped before the reported total"),
-        (page("risks", ["not a record"]), "invalid record"),
-        (page("risks", [{"id": "not-a-uuid"}]), "valid UUID identifier"),
     ],
     ids=[
         "rows-object",
@@ -360,13 +358,19 @@ def page(kind, rows, offset=0, total=None, limit=1):
         "boolean-total",
         "wrong-offset",
         "early-end",
-        "non-object-row",
-        "bad-identifier",
     ],
 )
 def test_inconsistent_pages_stop_collection(reply, message):
     with pytest.raises(rl.RiskLedgerError, match=message):
         list(answering(reply).pages("risks", {"page_size": 1}))
+
+
+def test_a_record_the_listing_cannot_identify_is_handed_on_to_be_read():
+    # The record itself is read and counted by the collector, so the records
+    # after it are still collected.
+    rows = ["not a record", {"id": "not-a-uuid"}, {"id": RID}]
+    reply = page("risks", rows, limit=3)
+    assert list(answering(reply).pages("risks", {"page_size": 3})) == rows
 
 
 @pytest.mark.parametrize(

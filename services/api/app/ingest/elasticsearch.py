@@ -15,11 +15,12 @@ from urllib.parse import quote, urlsplit
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
@@ -163,10 +164,6 @@ def _text(value, limit):
     return str(value)[:limit] if isinstance(value, (str, int, float, bool)) else None
 
 
-class _UnusableDocument(Exception):
-    """One document cannot be stored; the documents around it still are."""
-
-
 def _timestamp(value):
     # Elasticsearch date docvalues are requested in strict ISO format.
     if not isinstance(value, str) or len(value) > 64:
@@ -196,7 +193,11 @@ def _complete_response(data):
         )
 
 
-def _store_hit(db, hit, entry):
+def _hit_shape(hit):
+    """Refuse a page whose hits lack identifiers or _source: the index or the
+    query is not one an input can collect, so the window fails."""
+    if not isinstance(hit, dict):
+        return
     doc = hit.get("_source")
     index, doc_id = hit.get("_index"), hit.get("_id")
     if not isinstance(doc, dict) or not all(
@@ -205,22 +206,26 @@ def _store_hit(db, hit, entry):
         raise ElasticsearchInputError(
             "Elasticsearch must return document IDs, index names and enabled _source data"
         )
-    # Any field of a document can hold an array, a missing value or other
-    # text, and whoever writes into a collected index chooses it. Such a
-    # document is left out and counted; refusing the window for it would stop
-    # the input at that document on every run.
+
+
+def _read_hit(hit, entry):
+    """What is stored for one document.
+
+    Any field of a document can hold an array, a missing value or other text,
+    and whoever writes into a collected index chooses it. A document Keen
+    cannot read is left out and counted; refusing the window for it would stop
+    the input at that document on every run.
+    """
+    doc = hit["_source"]
+    index, doc_id = hit["_index"], hit["_id"]
     dates = (hit.get("fields") or {}).get(entry["timestamp_field"])
     if not isinstance(dates, list) or len(dates) != 1:
-        raise _UnusableDocument
-    try:
-        ts = _timestamp(dates[0])
-    except ElasticsearchInputError:
-        raise _UnusableDocument from None
+        raise TypeError("The timestamp field must hold one date")
+    ts = _timestamp(dates[0])
     external_id = hashlib.sha256(
         json.dumps([index, doc_id], separators=(",", ":")).encode()
     ).hexdigest()
-    return store_event_with_artifact(
-        db,
+    return dict(
         timestamp=ts,
         source="elasticsearch",
         system=_text(_field(doc, entry["system_field"]), 128),
@@ -250,14 +255,15 @@ def _store_hit(db, hit, entry):
 def _window(db, client, entry, start, end, deadline):
     """Read a complete snapshot; never retain PIT-local sort values as a cursor."""
     pit = None
-    created = skipped = 0
+    created = 0
+    reader = RecordReader()
     try:
         response = client.post(
             quote(entry["index_pattern"], safe="*,-._") + "/_pit",
             params={"keep_alive": "2m", "allow_partial_search_results": "false"},
         )
         response.raise_for_status()
-        data = response.json()
+        data = decode_json(response.content)
         pit = data.get("id")
         if not isinstance(pit, str) or not pit or len(pit) > 65536:
             raise ElasticsearchInputError(
@@ -311,7 +317,7 @@ def _window(db, client, entry, start, end, deadline):
                 "_search", params={"allow_partial_search_results": "false"}, json=body
             )
             response.raise_for_status()
-            data = response.json()
+            data = decode_json(response.content)
             updated_pit = data.get("pit_id", pit)
             if (
                 not isinstance(updated_pit, str)
@@ -329,6 +335,8 @@ def _window(db, client, entry, start, end, deadline):
                     "Elasticsearch returned an invalid search page"
                 )
             for hit in hits:
+                _hit_shape(hit)
+            for event in reader.each(hits, lambda hit: _read_hit(hit, entry)):
                 if time.monotonic() >= deadline:
                     raise ElasticsearchInputError(
                         "Collection reached its time budget; reduce the input window or narrow the query"
@@ -336,14 +344,10 @@ def _window(db, client, entry, start, end, deadline):
                 # Each hit commits by itself, so a control's evidence-count
                 # row is held for one event and a retried window finds the
                 # hits already stored by their external IDs.
-                try:
-                    result = _store_hit(db, hit, entry)
-                except _UnusableDocument:
-                    skipped += 1
-                    continue
+                result = store_event_with_artifact(db, **event)
                 created += not result.get("deduped", False)
             if len(hits) < entry["page_size"]:
-                return created, skipped
+                return created, reader.invalid
             next_after = hits[-1].get("sort")
             if (
                 not isinstance(next_after, list)
@@ -418,8 +422,9 @@ def ingest_elasticsearch_once(db, client, entry, deadline):
     return {
         "query_name": entry["name"],
         "created_events": created,
-        # Documents whose timestamp field held no single valid date.
-        "skipped_documents": skipped,
+        # Documents Keen could not read, such as one whose timestamp field
+        # held no single valid date.
+        "invalid_records": skipped,
         "windows_completed": windows,
         "caught_up": start >= now,
         "cursor_last_ts": cursor.last_ts.isoformat() if cursor.last_ts else None,

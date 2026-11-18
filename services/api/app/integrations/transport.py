@@ -16,6 +16,7 @@ import time
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from app.ingest.http import budget, budgeted, remaining
+from app.security.json_shape import decode_json
 from cryptography.fernet import Fernet
 
 from .errors import IntegrationError
@@ -191,7 +192,7 @@ def request(
                 data.extend(chunk)
                 if len(data) > MAX_BYTES:
                     raise IntegrationError("Response exceeds 4 MiB; reduce page size")
-        return json.loads(data), dict(response.getheaders())
+        return decode_json(data), dict(response.getheaders())
     finally:
         conn.close()
 

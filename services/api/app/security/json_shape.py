@@ -5,7 +5,10 @@ validating it costs time for each value. A document is measured here, without
 recursion, before anything recurses into it or validates it.
 """
 
+import json
 from typing import Any
+
+from app.security.regex import scan_pattern
 
 # The deepest nesting of objects and arrays a request body may have, and the
 # deepest a collected structure is walked. Evidence nested more deeply keeps
@@ -37,3 +40,62 @@ def json_depth(
             children = item.values() if isinstance(item, dict) else item
             pending.extend((child, depth + 1) for child in children)
     return deepest
+
+
+# Characters that open, close or quote JSON structure, and the string escape.
+_STRUCTURE = scan_pattern(r'[\[\]{}"\\]')
+_MARKER = json.dumps(NESTED_TOO_DEEPLY)
+
+
+def decode_json(data: str | bytes | bytearray) -> Any:
+    """``json.loads`` for a document from outside Keen, however deeply it nests.
+
+    The interpreter's parser recurses for each level and stops with
+    RecursionError at a depth the interpreter sets, so one value nested deeply
+    enough would leave the whole document, such as every record on a page,
+    unreadable. Such a document is read again with each object or array nested
+    more than MAX_DEPTH deep replaced by NESTED_TOO_DEEPLY, as storing replaces
+    it anyway. Text that is not JSON still raises json.JSONDecodeError.
+    """
+    try:
+        return json.loads(data)
+    except RecursionError:
+        pass
+    if not isinstance(data, str):
+        data = bytes(data).decode(json.detect_encoding(data), "surrogatepass")
+    try:
+        return json.loads(_shallow(data))
+    except RecursionError:
+        # Only containers left open to the end are still too deep.
+        raise json.JSONDecodeError("Unterminated nesting", data, len(data)) from None
+
+
+def _shallow(text: str) -> str:
+    """The JSON text with each container nested more than MAX_DEPTH deep
+    replaced by NESTED_TOO_DEEPLY, read in one pass without recursion."""
+    pieces, depth, copied, cut = [], 0, 0, None
+    in_string, escaped = False, -1
+    for match in _STRUCTURE.finditer(text):
+        at, char = match.start(), match.group()
+        if at == escaped:
+            continue
+        if in_string:
+            if char == "\\":
+                escaped = at + 1
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_DEPTH and cut is None:
+                pieces.append(text[copied:at])
+                cut, copied = depth, at
+        elif char in "]}":
+            if depth == cut:
+                pieces.append(_MARKER)
+                cut, copied = None, at + 1
+            depth -= 1
+    # Text left unbalanced stays as it was, so the parser reports it.
+    pieces.append(text[copied:])
+    return "".join(pieces)

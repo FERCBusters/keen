@@ -16,7 +16,7 @@ import httpx2 as httpx
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (
     EventApiError,
@@ -192,8 +192,8 @@ def _access_token(client, identity, client_id, secret):
     return token
 
 
-def _store(db, base, entry, item, collected):
-    """Store one event; 1 if it was new."""
+def _read(base, entry, item, collected):
+    """What is stored for one event."""
     code = item.get("type")
     known = EVENT_TYPES.get(code) if type(code) is int else None
     if known:
@@ -211,8 +211,7 @@ def _store(db, base, entry, item, collected):
     # Bitwarden gives an event no identifier, so its content tells it apart
     # and a window read again stores nothing twice.
     digest = hashlib.sha256(base.encode() + b"\n" + content).hexdigest()
-    result = store_event_with_artifact(
-        db,
+    return dict(
         # An event without a readable date is kept, dated when it was collected.
         timestamp=timestamp(item.get("date")) or collected,
         source="bitwarden",
@@ -237,7 +236,6 @@ def _store(db, base, entry, item, collected):
         artifact_key=f"bitwarden/events/{digest}.json",
         captured_by="keen:bitwarden",
     )
-    return int(not result.get("deduped", False))
 
 
 def _collect(db, client, base, headers, entry, config):
@@ -266,6 +264,7 @@ def _collect(db, client, base, headers, entry, config):
         until = token = None
     resumed = token is not None
     created = dropped = pages = 0
+    reader = RecordReader()
     seen = set()
     while pages < config.get("max_pages", 100):
         if until is None:
@@ -299,8 +298,9 @@ def _collect(db, client, base, headers, entry, config):
         following = paging_token(data.get("continuationToken"), PRODUCT)
         if following and (following == token or following in seen):
             raise BitwardenError("Bitwarden repeated a page; cursor retained")
-        for item in items:
-            created += _store(db, base, entry, item, started)
+        for event in reader.each(items, lambda item: _read(base, entry, item, started)):
+            result = store_event_with_artifact(db, **event)
+            created += int(not result.get("deduped", False))
         dropped += invalid
         pages += 1
         if following:
@@ -320,7 +320,7 @@ def _collect(db, client, base, headers, entry, config):
         "stream": "events",
         "pages": pages,
         "created_events": created,
-        "invalid_records": dropped,
+        "invalid_records": dropped + reader.invalid,
         # More remains when the page limit ended the run; the next continues.
         "more": until is not None or start < started,
         "cursor": start.isoformat() + "Z",

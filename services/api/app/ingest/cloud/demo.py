@@ -9,6 +9,7 @@ IDs, so repeated reads record each one once.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from functools import partial
 
 from app.core.datetime_utils import utc_now_naive
 from app.ingest.cloud import provider as cloud_provider
@@ -792,6 +793,7 @@ def seed(db, days: int = 3) -> int:
     from app.core.config import settings
     from app.db.models import IngestionCursor
     from app.ingest.cloud import KEYS, runner
+    from app.ingest.common import RecordReader, store_event_with_artifact
     from app.ingest.connections import connection_scope, namespace
 
     if not settings.demo_mode:
@@ -805,8 +807,9 @@ def seed(db, days: int = 3) -> int:
         until = now - provider.activity_lag
         with connection_scope(runner.connection(provider)):
             entries, _ = activity(key, until - timedelta(days=days), until)
-            for entry in entries:
-                runner.record_activity(db, provider, entry)
+            reader = RecordReader()
+            for event in reader.each(entries, partial(runner.activity_event, provider)):
+                store_event_with_artifact(db, **event)
             name = namespace("cloud-activity:" + key)
             cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
             if cursor is None:

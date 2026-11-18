@@ -308,6 +308,35 @@ def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):
     assert db.commit.call_count == 2
 
 
+def test_one_unreadable_event_neither_stops_nor_freezes_the_query(db):
+    stored = []
+    pages = [
+        {
+            "events": [
+                "not an event",
+                {"timestamp": "soon", "eventId": "text-time", "message": "x"},
+                {"timestamp": 10**30, "eventId": "far", "message": "x"},
+                {"timestamp": MS, "eventId": "ev1", "message": "kept"},
+            ],
+        }
+    ]
+    fake = fake_boto_client()
+    fake["client"].filter_log_events.side_effect = pages
+    set_cursor(db, MagicMock(last_ts=None))
+    with (
+        configured(
+            stored=lambda event: (
+                stored.append(event) or {"deduped": False, "mappings": 0}
+            )
+        ),
+        fake["factory"],
+    ):
+        result = cl.ingest_cloudwatch_logs_once(db, "name", {"log_group": "g"}, {})
+    assert (result["created_events"], result["invalid_records"]) == (1, 3)
+    assert [event["external_id"] for event in stored] == ["ev1"]
+    assert result["cursor_last_ts"] == "2025-10-09T08:53:20+00:00"
+
+
 def test_once_repeated_token_stops(db):
     page = {"events": [], "nextToken": "tok-2"}
     fake = fake_boto_client()

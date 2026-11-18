@@ -315,14 +315,8 @@ def test_settings_are_checked_before_collection(cfg, message):
             httpx.Response(200, json={"issues": [], "offset": 0, "total_count": 3}),
             "incomplete page",
         ),
-        (
-            httpx.Response(
-                200, json={"issues": [{"id": "7"}], "offset": 0, "total_count": 1}
-            ),
-            "invalid numeric ID",
-        ),
     ],
-    ids=["array", "unreachable", "rows", "offset", "incomplete", "string-id"],
+    ids=["array", "unreachable", "rows", "offset", "incomplete"],
 )
 def test_unusable_listings_stop_collection(reply, message):
     def handler(request):
@@ -340,12 +334,9 @@ def test_unusable_listings_stop_collection(reply, message):
     [
         ({"issue": issue(issue_id=8)}, "inconsistent issue detail", []),
         ({"issue": "missing"}, "inconsistent issue detail", []),
-        ({"issue": issue(updated_on="yesterday")}, "invalid timestamp", []),
-        # The issue snapshot is stored before its journals are read.
-        ({"issue": issue(journals={"id": 1})}, "invalid journals", ["issue.snapshot"]),
-        ({"issue": issue(journals=["note"])}, "invalid journals", ["issue.snapshot"]),
+        ({"issue": issue(project={"id": 3})}, "moved project", []),
     ],
-    ids=["other-issue", "not-an-object", "time", "journals-object", "journal-text"],
+    ids=["other-issue", "not-an-object", "moved"],
 )
 def test_inconsistent_issue_details_keep_the_project_cursor(
     tracker, detail, message, kept
@@ -364,6 +355,92 @@ def test_inconsistent_issue_details_keep_the_project_cursor(
     # The next run reads the project again.
     assert tracker.cursor() is None
     assert [e.action for e in tracker.events()] == kept
+
+
+@pytest.mark.parametrize(
+    "unreadable,invalid,kept",
+    [
+        # The snapshot has no time; its journal is still collected.
+        (issue(updated_on="yesterday"), 1, ["issue.comment"]),
+        (issue(journals={"id": 1}), 1, ["issue.snapshot"]),
+        (issue(journals=["note", None, {"id": 71}]), 3, ["issue.snapshot"]),
+        (
+            issue(journals=[{"id": "70", "created_on": "2026-09-02T00:00:00Z"}]),
+            1,
+            ["issue.snapshot"],
+        ),
+    ],
+    ids=["time", "journals-object", "journal-entries", "journal-id"],
+)
+def test_one_unreadable_record_neither_stops_nor_freezes_the_project(
+    tracker, unreadable, invalid, kept
+):
+    # Issue 7 holds the unreadable record; issue 9, listed after it, is whole.
+    tracker.api.issues = {7: unreadable, 9: issue(issue_id=9)}
+    for run in range(2):
+        (result,) = tracker.run()
+        assert "error" not in result
+        assert result["invalid_records"] == invalid
+        assert result["examined_issues"] == 2
+        assert tracker.cursor() is not None
+    stored = [
+        (e.raw_pointer["redmine"]["issue_id"], e.action) for e in tracker.events()
+    ]
+    assert sorted(stored) == sorted(
+        [(7, action) for action in kept] + [(9, "issue.snapshot"), (9, "issue.comment")]
+    )
+
+
+def test_a_listed_project_without_a_numeric_id_is_reported_and_the_rest_read(
+    tracker,
+):
+    tracker.api.projects = {
+        "odd": {"id": "two", "identifier": "odd"},
+        **{"infra": PROJECT},
+    }
+    tracker.inputs["projects"] = [{"project": "*"}]
+    results = tracker.run()
+    assert {
+        "collection": "*",
+        "invalid_records": 1,
+        "error": "Redmine listed projects without a valid numeric ID",
+    }.items() <= next(r for r in results if "collection" in r).items()
+    assert any(r.get("project_id") == 2 and "error" not in r for r in results)
+
+
+def test_pages_whose_rows_lack_ids_are_told_apart_by_their_content():
+    rows = iter([[{"id": "a"}], [{"id": "b"}], []])
+    replies = {"total_count": 2}
+
+    def reply(client, base, resource, params):
+        name = resource.removesuffix(".json")
+        return {name: next(rows), "offset": params["offset"], **replies}
+
+    with patch.object(redmine, "_json", reply):
+        listed = list(redmine._pages(None, "https://h", "issues"))
+    assert listed == [{"id": "a"}, {"id": "b"}]
+    deep: list = []
+    for _ in range(100_000):
+        deep = [deep]
+    assert redmine._row_digest({"id": "a", "deep": deep}) is None
+
+
+def test_a_listed_issue_without_a_numeric_id_is_counted(tracker):
+    original = Redmine.__call__
+
+    def reply(api, request):
+        if request.url.path.endswith("/issues.json"):
+            rows = [{"id": "7"}, {"id": 9}]
+            return httpx.Response(
+                200, json={"issues": rows, "offset": 0, "total_count": 2}
+            )
+        return original(api, request)
+
+    tracker.api.issues = {9: issue(issue_id=9)}
+    with patch.object(Redmine, "__call__", reply):
+        (result,) = tracker.run()
+    assert (result["invalid_records"], result["examined_issues"]) == (1, 1)
+    assert tracker.cursor() is not None
 
 
 def test_custom_fields_and_journal_changes_become_searchable_fields(tracker):

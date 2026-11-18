@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import fingerprint, store_event_with_artifact
+from app.ingest.common import RecordReader, fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
@@ -405,10 +405,10 @@ def ingest_google_workspace_stream(
     created = 0
     newest_ts: datetime | None = cursor_last
 
-    for a in items_sorted:
+    def read(a):
         ts = _ts(a)
         if floor_ts and ts < floor_ts:
-            continue
+            return None
 
         actor = None
         if isinstance(a.get("actor"), dict):
@@ -475,8 +475,7 @@ def ingest_google_workspace_stream(
 
         key = f"google_workspace/{_sanitize_hint(name) or application}/{ts.date().isoformat()}/{ext_id}.json"
 
-        res = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=ts,
             source="google_workspace",
             system=system,
@@ -507,11 +506,15 @@ def ingest_google_workspace_stream(
             artifact_key=key,
             captured_by="keen:google_workspace",
         )
+
+    reader = RecordReader()
+    for event in reader.each(items_sorted, read):
+        res = store_event_with_artifact(db, **event)
         if not res.get("deduped"):
             created += 1
 
-        if newest_ts is None or ts > newest_ts:
-            newest_ts = ts
+        if newest_ts is None or event["timestamp"] > newest_ts:
+            newest_ts = event["timestamp"]
 
     if newest_ts:
         cur.last_ts = newest_ts
@@ -525,6 +528,7 @@ def ingest_google_workspace_stream(
         "application": application,
         "system": system,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
         "start_time": start_time,
         "fetched_items": len(items_sorted),

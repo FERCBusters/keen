@@ -10,11 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import to_utc_naive, utc_from_timestamp_naive
 from app.db.models import IngestionCursor, utcnow
-from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
+from app.ingest.common import (
+    RecordReader,
+    fingerprint,
+    is_safe_url,
+    store_event_with_artifact,
+)
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.services.ingestion_pause import pausable
 
 
@@ -79,27 +85,28 @@ def ingest_jenkins_job(
     with _client() as c:
         r = c.get(_job_api_path(job_name), params={"tree": tree})
         r.raise_for_status()
-        job = r.json() or {}
+        job = decode_json(r.content) or {}
 
     # A response or build listing of another shape holds no builds, and a
     # build other than an object is skipped.
     builds = job.get("builds") if isinstance(job, dict) else None
     builds = builds if isinstance(builds, list) else []
     created = 0
-    newest_ts = to_utc_naive(cur.last_ts) if cur.last_ts else None
+    cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
+    newest_ts = cursor_last
 
-    # builds are newest-first; process oldest-first
-    for b in reversed(builds[:50]):
+    def read(b: Any) -> dict[str, Any] | None:
         if not isinstance(b, dict):
-            continue
+            return None
         ts_ms = b.get("timestamp")
         if not ts_ms:
-            continue
+            return None
+        if isinstance(ts_ms, bool) or not isinstance(ts_ms, (int, float)):
+            raise TypeError("Jenkins build timestamp is not a number")
         # Jenkins gives epoch milliseconds. Store as naive UTC to match DB.
         ts = utc_from_timestamp_naive(ts_ms / 1000.0)
-        last_ts = to_utc_naive(cur.last_ts) if cur.last_ts else None
-        if last_ts and ts <= last_ts:
-            continue
+        if cursor_last and ts <= cursor_last:
+            return None
 
         result = b.get("result") or ("RUNNING" if b.get("building") else None)
         outcome = (
@@ -116,12 +123,9 @@ def ingest_jenkins_job(
             {"job": job_name, "build": b}, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
         ext_id = fingerprint(
-            [cursor_name, str(b.get("number")), result or ""], payload_bytes
+            [cursor_name, str(b.get("number")), str(result or "")], payload_bytes
         )
-
-        key = f"jenkins/{job_name}/{ts.date().isoformat()}/{ext_id}.json"
-        res = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=ts,
             source="jenkins",
             # Use the caller-provided label (prod/dev/qa/etc.) as the "system"
@@ -149,14 +153,19 @@ def ingest_jenkins_job(
             artifact_kind="jenkins_build",
             artifact_bytes=payload_bytes,
             artifact_content_type="application/json",
-            artifact_key=key,
+            artifact_key=f"jenkins/{job_name}/{ts.date().isoformat()}/{ext_id}.json",
             captured_by="keen:jenkins",
         )
+
+    reader = RecordReader()
+    # builds are newest-first; process oldest-first
+    for event in reader.each(reversed(builds[:50]), read):
+        res = store_event_with_artifact(db, **event)
         if not res.get("deduped"):
             created += 1
 
-        if (newest_ts is None) or (ts > newest_ts):
-            newest_ts = ts
+        if (newest_ts is None) or (event["timestamp"] > newest_ts):
+            newest_ts = event["timestamp"]
 
     cur.last_ts = newest_ts or cur.last_ts
     cur.updated_at = utcnow()
@@ -166,6 +175,7 @@ def ingest_jenkins_job(
     return {
         "job": job_name,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
     }
 

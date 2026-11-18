@@ -18,7 +18,7 @@ import httpx2 as httpx
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (
     EventApiError,
@@ -134,8 +134,8 @@ _DESCRIBE = {
 }
 
 
-def _store(db, base, entry, item, collected):
-    """Store one event; its time, and 1 if it was new."""
+def _read(base, entry, item, collected):
+    """What is stored for one event."""
     stream = entry["stream"]
     actor, action, outcome, summary = _DESCRIBE[stream](item)
     # An event without a readable time is kept, dated when it was collected.
@@ -150,8 +150,7 @@ def _store(db, base, entry, item, collected):
     digest = hashlib.sha256(
         utf8_bytes(json.dumps([base, stream, identity], ensure_ascii=False))
     ).hexdigest()
-    result = store_event_with_artifact(
-        db,
+    return dict(
         timestamp=when,
         source="op_events",
         system=entry.get("label") or PRODUCT,
@@ -175,7 +174,6 @@ def _store(db, base, entry, item, collected):
         artifact_key=f"op_events/{stream}/{digest}.json",
         captured_by="keen:op_events",
     )
-    return when, int(not result.get("deduped", False))
 
 
 def _restart(cursor, started, limit, config):
@@ -227,6 +225,7 @@ def _stream(db, client, base, entry, config):
     body = {"cursor": position} if isinstance(position, str) else restart()
     url = f"{base}/api/v2/{stream}"
     created = dropped = pages = 0
+    reader = RecordReader()
     seen = set()
     more = True
     while more and pages < config.get("max_pages", 100):
@@ -240,9 +239,10 @@ def _stream(db, client, base, entry, config):
             raise OnePasswordError("1Password repeated a page; cursor retained")
         seen.add(position)
         newest = cursor.last_ts
-        for item in items:
-            when, stored = _store(db, base, entry, item, started)
-            created += stored
+        for event in reader.each(items, lambda item: _read(base, entry, item, started)):
+            result = store_event_with_artifact(db, **event)
+            created += int(not result.get("deduped", False))
+            when = event["timestamp"]
             newest = max(newest, when) if newest else when
         dropped += invalid
         pages += 1
@@ -259,7 +259,7 @@ def _stream(db, client, base, entry, config):
         "stream": stream,
         "pages": pages,
         "created_events": created,
-        "invalid_records": dropped,
+        "invalid_records": dropped + reader.invalid,
         # More remains when the page limit ended the run; the next continues.
         "more": more,
     }

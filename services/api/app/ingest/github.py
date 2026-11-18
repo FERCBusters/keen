@@ -10,13 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import fingerprint, store_event_with_artifact
+from app.ingest.common import RecordReader, fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.ingest.http import retained_listing
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.integrations.schema import has_dot_segment
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.security.redaction import redact_url
 from app.security.xml import parse_untrusted_xml
 from app.services.ingestion_pause import pausable
@@ -123,7 +124,7 @@ def _fetch_pages(
         for page in range(1, max_pages + 1):
             r = c.get(path, params={"per_page": str(per_page), "page": str(page)})
             r.raise_for_status()
-            batch = r.json() or []
+            batch = decode_json(r.content) or []
             if not isinstance(batch, list) or not batch:
                 break
             if len(batch) > per_page:
@@ -266,19 +267,18 @@ def ingest_github_repo(
     cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
 
-    # GitHub returns newest-first; process oldest-first for cursor stability
-    for e in reversed(events):
+    def read(e):
         # created_at is ISO string
         created_at = e.get("created_at")
         if not created_at:
-            continue
+            return None
         ts = _parse_iso_ts(created_at)
         if not ts:
-            continue
+            return None
         # Use < (not <=) to avoid edge misses when multiple events share the
         # same timestamp; de-dupe handles repeats safely.
         if cursor_last and ts < cursor_last:
-            continue
+            return None
 
         etype = e.get("type") or None
         actor = (e.get("actor") or {}).get("login")
@@ -294,8 +294,7 @@ def ingest_github_repo(
         ext_id = _event_external_id(cursor_name, e, payload_bytes)
 
         key = f"github/repo-events/{owner}/{repo}/{ts.date().isoformat()}/{ext_id}.json"
-        res = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=ts,
             source="github",
             system=label or f"{owner}/{repo}",
@@ -323,11 +322,16 @@ def ingest_github_repo(
             artifact_key=key,
             captured_by="keen:github",
         )
+
+    reader = RecordReader()
+    # GitHub returns newest-first; process oldest-first for cursor stability
+    for event in reader.each(reversed(events), read):
+        res = store_event_with_artifact(db, **event)
         if not res.get("deduped"):
             created += 1
 
-        if (newest_ts is None) or (ts > newest_ts):
-            newest_ts = ts
+        if (newest_ts is None) or (event["timestamp"] > newest_ts):
+            newest_ts = event["timestamp"]
 
     # advance cursor
     cur.last_ts = newest_ts or cur.last_ts
@@ -338,6 +342,7 @@ def ingest_github_repo(
     return {
         "repo": f"{owner}/{repo}",
         "created_events": created,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
     }
 
@@ -347,7 +352,7 @@ def _detect_username(c: httpx.Client) -> str | None:
     try:
         r = c.get("/user")
         r.raise_for_status()
-        login = (r.json() or {}).get("login")
+        login = (decode_json(r.content) or {}).get("login")
         if isinstance(login, str) and login.strip():
             return login.strip()
     except Exception:
@@ -408,12 +413,12 @@ def ingest_github_org_events(
     cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
 
-    for e in reversed(events):
+    def read(e):
         ts = _parse_iso_ts(e.get("created_at"))
         if not ts:
-            continue
+            return None
         if cursor_last and ts < cursor_last:
-            continue
+            return None
 
         repo = ((e.get("repo") or {}).get("name") or "").strip() or None
         actor = (e.get("actor") or {}).get("login")
@@ -429,8 +434,7 @@ def ingest_github_org_events(
         ext_id = _event_external_id(cursor_name, e, payload_bytes)
         key = f"github/org-events/{org}/{ts.date().isoformat()}/{ext_id}.json"
 
-        res = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=ts,
             source="github",
             system=repo or (label or f"org:{org}"),
@@ -458,11 +462,15 @@ def ingest_github_org_events(
             artifact_key=key,
             captured_by="keen:github",
         )
+
+    reader = RecordReader()
+    for event in reader.each(reversed(events), read):
+        res = store_event_with_artifact(db, **event)
         if not res.get("deduped"):
             created += 1
 
-        if (newest_ts is None) or (ts > newest_ts):
-            newest_ts = ts
+        if (newest_ts is None) or (event["timestamp"] > newest_ts):
+            newest_ts = event["timestamp"]
 
     cur.last_ts = newest_ts or cur.last_ts
     cur.meta = {**(cur.meta or {}), "mode": chosen_mode}
@@ -474,6 +482,7 @@ def ingest_github_org_events(
         "org": org,
         "mode": chosen_mode,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "events_seen": len(events),
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
     }
@@ -507,7 +516,7 @@ def _list_org_repos(
             },
         )
         r.raise_for_status()
-        batch = r.json() or []
+        batch = decode_json(r.content) or []
         if not isinstance(batch, list) or not batch:
             break
         if len(batch) > per_page:
@@ -616,6 +625,7 @@ def ingest_github_org_auditlog(
     created = 0
     seen = 0
     pages = 0
+    reader = RecordReader()
     cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
 
@@ -631,21 +641,22 @@ def ingest_github_org_auditlog(
             r = c.get(url, params=params)
             r.raise_for_status()
             pages += 1
-            entries = r.json() or []
+            entries = decode_json(r.content) or []
             if not isinstance(entries, list):
                 raise ValueError("GitHub audit log response is not a list")
 
-            for e in entries:
+            def read(e):
+                nonlocal seen
                 if not isinstance(e, dict):
-                    continue
+                    return None
                 ts = _audit_ts(e)
                 if not ts:
-                    continue
+                    return None
                 seen += 1
                 # Entries at the cursor's instant are fetched again; the
                 # external ID de-duplicates the ones already stored.
                 if cursor_last and ts < cursor_last:
-                    continue
+                    return None
 
                 actor = e.get("actor") or e.get("user")
                 action = e.get("action") or "audit"
@@ -673,8 +684,7 @@ def ingest_github_org_auditlog(
                 )
                 key = f"github/audit/{org}/{ts.date().isoformat()}/{ext_id}.json"
 
-                res = store_event_with_artifact(
-                    db,
+                return dict(
                     timestamp=ts,
                     source="github",
                     system=label or f"org:{org}",
@@ -699,11 +709,14 @@ def ingest_github_org_auditlog(
                     artifact_key=key,
                     captured_by="keen:github",
                 )
+
+            for event in reader.each(entries, read):
+                res = store_event_with_artifact(db, **event)
                 if not res.get("deduped"):
                     created += 1
 
-                if (newest_ts is None) or (ts > newest_ts):
-                    newest_ts = ts
+                if (newest_ts is None) or (event["timestamp"] > newest_ts):
+                    newest_ts = event["timestamp"]
 
             # Keep each completed page, so a later failure loses nothing.
             cur.last_ts = newest_ts or cur.last_ts
@@ -720,6 +733,7 @@ def ingest_github_org_auditlog(
         "org": org,
         "created_events": created,
         "entries_seen": seen,
+        "invalid_records": reader.invalid,
         "pages": pages,
         "more": bool(url),
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
@@ -809,20 +823,20 @@ def ingest_github_atom_feed(
             return f"{parts[0]}/{parts[1]}"
         return None
 
-    # Atom feeds are usually newest-first.
-    for entry in reversed(entries):
+    def read(entry):
+        nonlocal newest_in_feed
         updated = entry.findtext("a:updated", default=None, namespaces=ns)
         ts = _parse_iso_ts(updated)
         if not ts:
-            continue
+            return None
 
         if (newest_in_feed is None) or (ts > newest_in_feed):
             newest_in_feed = ts
 
         if ts < since:
-            continue
+            return None
         if cursor_last and ts <= cursor_last:
-            continue
+            return None
 
         title = (entry.findtext("a:title", default="", namespaces=ns) or "").strip()
         link = None
@@ -859,8 +873,7 @@ def ingest_github_atom_feed(
         ext_id = fingerprint([cursor_name, eid or title], payload_bytes)
         key = f"github/feeds/{ts.date().isoformat()}/{ext_id}.json"
 
-        res = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=ts,
             source="github",
             system=repo or (label or "feed"),
@@ -887,11 +900,16 @@ def ingest_github_atom_feed(
             artifact_key=key,
             captured_by="keen:github",
         )
+
+    reader = RecordReader()
+    # Atom feeds are usually newest-first.
+    for event in reader.each(reversed(entries), read):
+        res = store_event_with_artifact(db, **event)
         if not res.get("deduped"):
             created += 1
 
-        if (newest_ts is None) or (ts > newest_ts):
-            newest_ts = ts
+        if (newest_ts is None) or (event["timestamp"] > newest_ts):
+            newest_ts = event["timestamp"]
 
     cur.last_ts = newest_ts or cur.last_ts
     cur.updated_at = utc_now_naive()
@@ -901,6 +919,7 @@ def ingest_github_atom_feed(
     return {
         "feed": feed_url,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
         "entries_seen": len(entries),
         "newest_in_feed_ts": newest_in_feed.isoformat() if newest_in_feed else None,

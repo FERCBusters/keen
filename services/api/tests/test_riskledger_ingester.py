@@ -113,6 +113,53 @@ class FakeAPI:
         yield copy.deepcopy(self.records["supplier" if kind == "suppliers" else "risk"])
 
 
+def test_unreadable_records_are_counted_and_the_rest_imported(db, records):
+    class Listing(FakeAPI):
+        def pages(self, kind, cfg):
+            good = super().pages(kind, cfg)
+            yield from ["not a record", {"id": "not-a-uuid", "name": "Bad"}]
+            yield from good
+
+        def one(self, kind, ident):
+            row = super().one(kind, ident)
+            if kind == "control":
+                row["domainID"] = "not-a-uuid"
+            return row
+
+    result = rl._collect(db, Listing(records), {"organizations": [{"org": "*"}]})
+    # Two unreadable suppliers, two unreadable risks and the control whose
+    # domain cannot be identified; the readable supplier and risk are stored,
+    # the risk without its control.
+    assert result["invalid_records"] == 5
+    assert db.query(IsmsVendor).count() == 1 and db.query(Risk).count() == 1
+    assert db.query(RiskControlLink).count() == 0
+    assert result["examined"] == 2
+
+
+def test_an_unreadable_domain_leaves_its_controls_out_once(db, records):
+    other_risk = {**records["risk"], "id": "00000000-0000-4000-8000-000000000009"}
+
+    class Listing(FakeAPI):
+        def pages(self, kind, cfg):
+            yield from super().pages(kind, cfg)
+            if kind == "risks":
+                yield copy.deepcopy(other_risk)
+
+        def one(self, kind, ident):
+            row = super().one(kind, ident)
+            if kind == "domain":
+                row["id"] = "not-a-uuid"
+            return row
+
+    result = rl._collect(db, Listing(records), {"organizations": [{"org": "*"}]})
+    # The domain is read and counted once; the control filed under it, and
+    # both risks' links to that control, are left out without reading again.
+    assert result["invalid_records"] == 1
+    assert (result["domains_discovered"], result["controls_discovered"]) == (0, 0)
+    assert db.query(IsmsVendor).count() == 1 and db.query(Risk).count() == 2
+    assert db.query(RiskControlLink).count() == 0
+
+
 def test_import_repeat_preserve_edits_and_snapshot_changes(db, records):
     cfg = {"organizations": [{"org": "*"}]}
     client = FakeAPI(records)

@@ -16,7 +16,7 @@ from app.db.models import IntegrationRun as Run
 from app.db.models import IsmsEffectivenessMeasure as Measure
 from app.db.models import IsmsEffectivenessMetricEntry as Metric
 from app.db.session import SessionLocal
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import Connection as SourceOrigin
 from app.ingest.connections import connection_scope
 from app.mapping.rules import evaluate_by_framework, load_rules
@@ -188,15 +188,25 @@ def run_job(run_id):
         source = "integration:" + c.id
         rules = load_rules(settings.rules_path, db=db) if run.preview else []
         samples = []
-        for index, item in enumerate(records):
+        # Values read once, so reading a record touches no database row.
+        collector_id, connection_key, connection_name = (
+            c.id,
+            "api:" + str(conn.id),
+            conn.name,
+        )
+        preview, revision = run.preview, run.revision
+        secrets = (credential, auth.get("secret"))
+
+        def read(numbered):
+            index, item = numbered
             # Remove the actual credential even if a service echoes it under an unexpected key.
-            item = scrub(item, (credential, auth.get("secret")))
+            item = scrub(item, secrets)
             f = item["fields"]
             pointer = {
                 source: {
-                    "collector_id": c.id,
-                    "revision": run.revision,
-                    "run_id": run.id,
+                    "collector_id": collector_id,
+                    "revision": revision,
+                    "run_id": run_id,
                     "record_id": f["id"],
                     "url": f.get("url"),
                 }
@@ -213,53 +223,72 @@ def run_job(run_id):
                 # without passing through event storage.
                 normalized_payload=storable(redact_obj(item["record"])),
             )
-            if run.preview:
-                samples.append(
-                    {
-                        "evidence": storable(
-                            redact_obj(
-                                {
-                                    **event,
-                                    "timestamp": f["timestamp"],
-                                    "connection_id": "api:" + str(conn.id),
-                                    "connection_name": conn.name,
-                                }
-                            )
-                        ),
-                        "matches": evaluate_by_framework(
-                            {**event, "connection_id": "api:" + str(conn.id)},
-                            rules,
-                            details=True,
-                        ),
-                        "measurement": {
-                            k: f.get(k) for k in ("value", "period_start", "period_end")
-                        }
-                        if measure
-                        else None,
+            if preview:
+                sample = {
+                    "evidence": storable(
+                        redact_obj(
+                            {
+                                **event,
+                                "timestamp": f["timestamp"],
+                                "connection_id": connection_key,
+                                "connection_name": connection_name,
+                            }
+                        )
+                    ),
+                    "matches": evaluate_by_framework(
+                        {**event, "connection_id": connection_key},
+                        rules,
+                        details=True,
+                    ),
+                    "measurement": {
+                        k: f.get(k) for k in ("value", "period_start", "period_end")
                     }
-                )
-                continue
-            eid = external_id(c.id, f["id"])
-            origin = SourceOrigin("api:" + str(conn.id), source, conn.name, {}, {}, {})
-            with connection_scope(origin):
-                result = store_event_with_artifact(
-                    db,
-                    timestamp=timestamp(f["timestamp"]).replace(tzinfo=None),
-                    **event,
-                    external_id=eid,
-                    artifact_kind="integration_json",
-                    artifact_bytes=json.dumps(item["record"]).encode(),
-                    artifact_content_type="application/json",
-                    artifact_key=f"integrations/{c.id}/{eid}.json",
-                    captured_by="integration:" + run.id,
-                )
+                    if measure
+                    else None,
+                }
+                return index, sample, None, None
+            eid = external_id(collector_id, f["id"])
+            recorded_at = timestamp(f["timestamp"]).replace(tzinfo=None)
+            stored = dict(
+                timestamp=recorded_at,
+                **event,
+                external_id=eid,
+                artifact_kind="integration_json",
+                artifact_bytes=json.dumps(item["record"]).encode(),
+                artifact_content_type="application/json",
+                artifact_key=f"integrations/{collector_id}/{eid}.json",
+                captured_by="integration:" + run_id,
+            )
+            metric = None
             if measure:
-                ref = f"integration:{c.id}:{eid}"
+                metric = dict(
+                    ref=f"integration:{collector_id}:{eid}",
+                    recorded_at=recorded_at,
+                    period_start=date.fromisoformat(f["period_start"]),
+                    period_end=date.fromisoformat(f["period_end"]),
+                    metric_value=f["value"],
+                    source_url=storable(redact_url(f["url"]))[:MAX_LINK_CHARS]
+                    if f.get("url")
+                    else None,
+                    raw_payload=event["normalized_payload"],
+                )
+            return index, None, stored, metric
+
+        reader = RecordReader()
+        for index, sample, stored, metric in reader.each(enumerate(records), read):
+            if sample is not None:
+                samples.append(sample)
+                continue
+            origin = SourceOrigin(connection_key, source, connection_name, {}, {}, {})
+            with connection_scope(origin):
+                result = store_event_with_artifact(db, **stored)
+            if measure and metric:
                 # A retried evidence commit can still complete its measurement without duplicating it.
                 existing = (
                     db.query(Metric)
                     .filter(
-                        Metric.measure_id == measure.id, Metric.source_reference == ref
+                        Metric.measure_id == measure.id,
+                        Metric.source_reference == metric["ref"],
                     )
                     .first()
                 )
@@ -267,18 +296,16 @@ def run_job(run_id):
                     db.add(
                         Metric(
                             measure_id=measure.id,
-                            recorded_at=timestamp(f["timestamp"]).replace(tzinfo=None),
-                            period_start=date.fromisoformat(f["period_start"]),
-                            period_end=date.fromisoformat(f["period_end"]),
-                            metric_value=f["value"],
+                            recorded_at=metric["recorded_at"],
+                            period_start=metric["period_start"],
+                            period_end=metric["period_end"],
+                            metric_value=metric["metric_value"],
                             metric_unit=d.unit,
                             source_type="event",
-                            source_reference=ref,
+                            source_reference=metric["ref"],
                             source_event_id=uuid.UUID(result["event_id"]),
-                            source_url=storable(redact_url(f["url"]))[:MAX_LINK_CHARS]
-                            if f.get("url")
-                            else None,
-                            raw_payload=event["normalized_payload"],
+                            source_url=metric["source_url"],
+                            raw_payload=metric["raw_payload"],
                             notes=f"Collected by {c.name}; revision {run.revision}; run {run.id}",
                         )
                     )
@@ -296,6 +323,17 @@ def run_job(run_id):
                 f"Storing evidence: {index + 1} of {len(records)} records processed."
             )
             db.commit()
+        if reader.invalid:
+            skipped = {
+                "count": skipped["count"] + reader.invalid,
+                "reasons": [
+                    *skipped["reasons"],
+                    {
+                        "reason": "Keen could not read the record",
+                        "count": reader.invalid,
+                    },
+                ],
+            }
         run.status, run.finished_at = "succeeded", utc_now_naive()
         run.result = {
             "pages": pages,

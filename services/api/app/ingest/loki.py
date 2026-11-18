@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import is_safe_url, store_event_with_artifact
+from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact
 from app.ingest.connections import (
     connection_runs,
     load_document,
@@ -26,6 +26,7 @@ from app.ingest.log_pipeline import (
 )
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.services.ingestion_pause import pausable
 
 
@@ -140,6 +141,22 @@ def _summarize_json(
 
     # Default: keep line but truncate to keep UI usable
     return truncate(line, 340), extracted
+
+
+def _stream_values(stream: dict[str, Any]) -> list[Any]:
+    """A stream's lines; values of another shape are one line Keen cannot read."""
+    values = stream.get("values", []) or []
+    return values if isinstance(values, list) else [values]
+
+
+def _line_order(value: Any) -> tuple[int, int]:
+    """A line's place among those a server returned past the limit: by time,
+    with a line whose time cannot be read last, so it never takes the place of
+    one that can be stored."""
+    try:
+        return (0, int(value[0]))
+    except (TypeError, ValueError, IndexError, KeyError):
+        return (1, 0)
 
 
 def _setting_from_query(
@@ -308,6 +325,12 @@ def ingest_loki_once(
             "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
         }
 
+    severity = (
+        int(event_defaults.get("severity", 3))
+        if event_defaults.get("severity") is not None
+        else None
+    )
+    reader = RecordReader()
     created_events = 0
     created_artifacts = 0
     created_mappings = 0
@@ -336,7 +359,7 @@ def ingest_loki_once(
 
             resp = client.get("/loki/api/v1/query_range", params=params)
             resp.raise_for_status()
-            data = resp.json()
+            data = decode_json(resp.content)
 
             results = (data.get("data", {}) or {}).get("result", []) or []
             chunk_created_events = 0
@@ -344,20 +367,27 @@ def ingest_loki_once(
             chunk_created_mappings = 0
             chunk_max_seen_ts: datetime | None = None
 
+            # Each line is read by itself: a line whose value Keen cannot
+            # read is counted, and the lines around it are still collected.
             entries = [
-                (stream.get("stream", {}) or {}, ts_ns, line)
+                (stream.get("stream", {}) or {}, value)
                 for stream in results
                 if isinstance(stream, dict)
-                for ts_ns, line in stream.get("values", []) or []
+                for value in _stream_values(stream)
             ]
             chunk_returned_values = len(entries)
             if chunk_returned_values > limit:
                 # A server that returns more lines than the query asked for
                 # has its oldest stored; the cursor stops at the newest of
                 # those, so the next run asks for the rest.
-                entries = sorted(entries, key=lambda entry: int(entry[1]))[:limit]
+                entries = sorted(entries, key=lambda entry: _line_order(entry[1]))[
+                    :limit
+                ]
 
-            for labels, ts_ns, line in entries:
+            def read(entry):
+                labels, (ts_ns, line) = entry
+                if not isinstance(ts_ns, str) or not isinstance(line, str):
+                    raise TypeError("Loki returned a line other than text")
                 # Loki timestamps are strings; keep for fingerprint
                 external_id = make_fingerprint(
                     ts_ns, json.dumps(labels, sort_keys=True), line
@@ -381,28 +411,8 @@ def ingest_loki_once(
                     # Keep plain-text lines readable too
                     summary = truncate(line, 340)
 
-                raw_pointer = {
-                    "loki": {
-                        "query_name": query_name,
-                        "logql": logql,
-                        "labels": labels,
-                        "ts_ns": ts_ns,
-                    }
-                }
-
-                severity = (
-                    int(event_defaults.get("severity", 3))
-                    if event_defaults.get("severity") is not None
-                    else None
-                )
                 ext = "json" if parsed is not None else "log"
-                ctype = (
-                    "application/json"
-                    if parsed is not None
-                    else "text/plain; charset=utf-8"
-                )
-                stored = store_event_with_artifact(
-                    db,
+                return dict(
                     timestamp=ts.replace(tzinfo=None),
                     source="loki",
                     system=event_defaults.get("system"),
@@ -411,21 +421,35 @@ def ingest_loki_once(
                     outcome=event_defaults.get("outcome"),
                     severity=severity,
                     summary=summary,
-                    raw_pointer=raw_pointer,
+                    raw_pointer={
+                        "loki": {
+                            "query_name": query_name,
+                            "logql": logql,
+                            "labels": labels,
+                            "ts_ns": ts_ns,
+                        }
+                    },
                     normalized_payload=normalized,
                     external_id=external_id,
                     artifact_kind="log_line",
                     artifact_bytes=line.encode("utf-8", errors="replace"),
-                    artifact_content_type=ctype,
+                    artifact_content_type=(
+                        "application/json"
+                        if parsed is not None
+                        else "text/plain; charset=utf-8"
+                    ),
                     artifact_key=(
                         f"loki/{query_name}/{ts.date().isoformat()}/{external_id}.{ext}"
                     ),
                     captured_by="keen:loki",
-                    # Each line commits by itself, so the rows and locks a
-                    # mapping takes are held for one line, never for a
-                    # chunk. A chunk that ends early is read again, and
-                    # the lines already stored are recognised.
                 )
+
+            for event in reader.each(entries, read):
+                # Each line commits by itself, so the rows and locks a mapping
+                # takes are held for one line, never for a chunk. A chunk that
+                # ends early is read again, and the lines already stored are
+                # recognised.
+                stored = store_event_with_artifact(db, **event)
                 if not stored.get("deduped"):
                     created_events += 1
                     chunk_created_events += 1
@@ -434,6 +458,7 @@ def ingest_loki_once(
                     created_mappings += stored["mappings"]
                     chunk_created_mappings += stored["mappings"]
 
+                ts = event["timestamp"].replace(tzinfo=timezone.utc)
                 if (chunk_max_seen_ts is None) or (ts > chunk_max_seen_ts):
                     chunk_max_seen_ts = ts
 
@@ -482,6 +507,7 @@ def ingest_loki_once(
         "created_events": created_events,
         "created_artifacts": created_artifacts,
         "created_mappings": created_mappings,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
         "strategy": overlong_strategy,
         "caught_up": caught_up,

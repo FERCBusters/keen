@@ -198,7 +198,9 @@ def test_a_document_utf8_and_jsonb_cannot_hold_as_written_is_stored(
         }
     )
     with scoped():
-        result = es._store_hit(contract_db, odd, input_config())
+        result = common.store_event_with_artifact(
+            contract_db, **es._read_hit(odd, input_config())
+        )
         contract_db.commit()
 
     assert "deduped" not in result
@@ -424,10 +426,28 @@ def test_a_document_without_one_valid_date_is_left_out_and_the_rest_stored(
             input_config(initial_lookback_minutes=1),
             time.monotonic() + 120,
         )
-    assert (result["created_events"], result["skipped_documents"]) == (2, 1)
+    assert (result["created_events"], result["invalid_records"]) == (2, 1)
     assert result["windows_completed"] == 1
     assert sorted(e.summary for e in contract_db.query(Event)) == ["After", "Before"]
     assert contract_db.query(IngestionCursor).one().last_ts is not None
+
+
+def test_a_hit_other_than_an_object_is_left_out_and_the_rest_stored(
+    contract_db, storage
+):
+    hits = [
+        hit(_id="before", _source={"message": "Before"}),
+        "not a hit",
+        hit(_id="after", _source={"message": "After"}),
+    ]
+    with scoped(), mock_client([page(hits)], []) as client:
+        result = es.ingest_elasticsearch_once(
+            contract_db,
+            client,
+            input_config(initial_lookback_minutes=1),
+            time.monotonic() + 120,
+        )
+    assert (result["created_events"], result["invalid_records"]) == (2, 1)
 
 
 def test_each_document_is_committed_before_the_next_is_stored(

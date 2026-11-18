@@ -663,6 +663,75 @@ def test_a_result_other_than_a_stream_is_skipped_and_the_run_continues(lk, odd):
     assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW
 
 
+@pytest.mark.parametrize(
+    "odd",
+    [
+        ["not-a-number", "bad time"],
+        [str(10**30), "far future"],
+        [str(_ns(NOW - timedelta(minutes=4))), {"line": "not text"}],
+        [123, "time not text"],
+        ["only one member"],
+        "not a pair",
+    ],
+    ids=["time", "overflow", "line", "numeric-time", "short", "text"],
+)
+def test_one_unreadable_line_neither_stops_nor_freezes_the_query(lk, odd):
+    values = [
+        _line(NOW - timedelta(minutes=6), "before"),
+        odd,
+        _line(NOW - timedelta(minutes=3), "after"),
+    ]
+    lk.upstream.replies.append([{"stream": {"app": "sshd"}, "values": values}])
+    (result,) = lk.run()
+    assert "error" not in result, result
+    assert (result["created_events"], result["invalid_records"]) == (2, 1)
+    assert sorted(e.normalized_payload["line"] for e in lk.events()) == [
+        "after",
+        "before",
+    ]
+    # The cursor moves past the window, so later runs continue after it.
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW
+
+
+def test_values_of_another_shape_are_one_unreadable_line(lk):
+    lk.upstream.replies.append(
+        [
+            {"stream": {"app": "a"}, "values": "not a list"},
+            {
+                "stream": {"app": "b"},
+                "values": [_line(NOW - timedelta(minutes=5), "kept")],
+            },
+        ]
+    )
+    (result,) = lk.run()
+    assert (result["created_events"], result["invalid_records"]) == (1, 1)
+
+
+def test_lines_without_a_readable_time_never_take_the_place_of_stored_ones(lk):
+    # A server returning more lines than the limit has the oldest readable
+    # ones stored. A line whose time cannot be read sorts after them, so it
+    # cannot push a storable line out, and the cursor stops at the newest
+    # stored line so the next run asks for the rest.
+    lk.configure(lk.query(limit=2))
+    lines = [
+        _line(NOW - timedelta(minutes=3), "newest"),
+        ["not-a-number", "unreadable"],
+        ["also-not-a-number", "unreadable"],
+        _line(NOW - timedelta(minutes=9), "oldest"),
+        _line(NOW - timedelta(minutes=6), "middle"),
+    ]
+    lk.upstream.replies.append([{"stream": {"app": "sshd"}, "values": lines}])
+    (result,) = lk.run()
+    assert (result["created_events"], result["invalid_records"]) == (2, 0)
+    assert sorted(e.normalized_payload["line"] for e in lk.events()) == [
+        "middle",
+        "oldest",
+    ]
+    assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW - timedelta(
+        minutes=6
+    )
+
+
 def _failed_login(user):
     # An OSSEC-style line; `srcuser` is whatever a client typed as its username.
     return json.dumps(

@@ -139,12 +139,12 @@ class RedmineTests(unittest.TestCase):
 
     def test_journal_dedup_fields_and_edited_versions(self):
         stored = []
-        with patch.object(
-            r,
-            "store_event_with_artifact",
-            side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
-        ):
-            r._store(
+
+        def read(_db, *args):
+            stored.append(r._read(*args))
+
+        if True:
+            read(
                 None,
                 "https://host",
                 {"project": "*"},
@@ -155,7 +155,7 @@ class RedmineTests(unittest.TestCase):
             modified = copy.deepcopy(ISSUE)
             modified["status"]["name"] = "Closed"
             modified["updated_on"] = "2026-10-02T10:00:00Z"
-            r._store(
+            read(
                 None,
                 "https://host",
                 {"project": "*"},
@@ -164,7 +164,7 @@ class RedmineTests(unittest.TestCase):
                 modified["journals"][0],
             )
             modified["journals"][0]["notes"] = "Edited comment"
-            r._store(
+            read(
                 None,
                 "https://host",
                 {"project": "*"},
@@ -172,7 +172,7 @@ class RedmineTests(unittest.TestCase):
                 modified,
                 modified["journals"][0],
             )
-            r._store(None, "https://host", {"project": "*"}, PROJECT, ISSUE)
+            read(None, "https://host", {"project": "*"}, PROJECT, ISSUE)
         self.assertEqual(stored[0]["external_id"], stored[1]["external_id"])
         self.assertNotEqual(stored[1]["external_id"], stored[2]["external_id"])
         self.assertEqual(stored[0]["action"], "issue.comment")

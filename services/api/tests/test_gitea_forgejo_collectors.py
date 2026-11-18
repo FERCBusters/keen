@@ -514,35 +514,39 @@ def test_discover_repositories_requires_safe_base_url(collector):
 def test_discover_repositories_response_validation(collector):
     label = collector.label
 
-    def non_dict_row(request):
+    # A row Keen cannot use is left out and counted, and the repositories
+    # after it are still discovered. A repository listed under another owner
+    # is never collected under this account.
+    def unusable_rows(request):
+        if request.url.params["page"] != "1":
+            return httpx.Response(200, json=[])
         return httpx.Response(
             200,
-            json=[{"name": "repo-1", "owner": {"login": "team"}}, "not-a-dict"],
+            json=[
+                "not-a-dict",
+                {"name": "repo", "owner": {"login": "someone-else"}},
+                {"name": "../escape", "owner": {"login": "team"}},
+                {"name": 5, "owner": {"login": "team"}},
+                {"name": "repo-1", "owner": {"login": "team"}},
+            ],
         )
 
-    with serving(collector, non_dict_row):
-        with pytest.raises(ValueError, match=f"^Invalid {label} repository response$"):
-            collector._discover_repositories("https://host.example", "users", "team")
+    reader = gc.RecordReader()
+    with serving(collector, unusable_rows):
+        assert collector._discover_repositories(
+            "https://host.example", "users", "team", reader
+        ) == [{"owner": {"login": "team"}, "name": "repo-1"}]
+    assert reader.invalid == 4
 
-    def other_owner(request):
+    def repeats_refused_rows(request):
         return httpx.Response(
             200, json=[{"name": "repo", "owner": {"login": "someone-else"}}]
         )
 
-    with serving(collector, other_owner):
+    with serving(collector, repeats_refused_rows):
         with pytest.raises(
-            ValueError,
-            match=f"^{label} returned a repository outside the requested owner$",
+            ValueError, match=f"^{label} repeated a repository page; discovery stopped$"
         ):
-            collector._discover_repositories("https://host.example", "users", "team")
-
-    def invalid_name(request):
-        return httpx.Response(
-            200, json=[{"name": "../escape", "owner": {"login": "team"}}]
-        )
-
-    with serving(collector, invalid_name):
-        with pytest.raises(ValueError, match=f"^Invalid {label} repository name$"):
             collector._discover_repositories("https://host.example", "users", "team")
 
     def repeats_page(request):

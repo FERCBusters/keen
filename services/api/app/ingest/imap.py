@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import (
     connection_runs,
     current_connection,
@@ -166,7 +166,8 @@ def ingest_imap_all(db):
             }
         ]
     created = 0
-    for item in result["items"]:
+
+    def read(item):
         item["headers"] = mask_mail_address_headers(item["headers"])
         key = f"{identity}:{result['uidvalidity']}:{item['uid']}"
         digest = hashlib.sha256(key.encode()).hexdigest()
@@ -177,8 +178,7 @@ def ingest_imap_all(db):
         }
         artifact = json.dumps(payload, ensure_ascii=True).encode()
         # Worker redacts before character truncation; the shared persistence path also redacts.
-        stored = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=now,
             source="imap",
             system=config["host"],
@@ -203,6 +203,10 @@ def ingest_imap_all(db):
             captured_by="keen:imap",
             commit=False,
         )
+
+    reader = RecordReader()
+    for event in reader.each(result["items"], read):
+        stored = store_event_with_artifact(db, **event)
         created += not stored.get("deduped", False)
     cursor.meta = {
         "uidvalidity": result["uidvalidity"],
@@ -216,6 +220,7 @@ def ingest_imap_all(db):
         {
             "ok": True,
             "created_events": created,
+            "invalid_records": reader.invalid,
             "initialised": result.get("initialised", False),
             "note": "First run starts from current mailbox position; earlier mail is not imported"
             if result.get("initialised")

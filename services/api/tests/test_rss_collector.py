@@ -125,6 +125,7 @@ def test_entries_become_evidence_once_and_move_the_cursor(feeds):
         "label": "Advisories",
         "system": "Advisories",
         "created_events": 3,
+        "invalid_records": 0,
         "cursor_last_ts": "2026-01-08T00:00:00",
         "feed_type": "rss",
     }

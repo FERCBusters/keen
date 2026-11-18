@@ -37,6 +37,7 @@ from app.ingest.cloud.base import (
     text_field,
     unknown,
 )
+from app.security.json_shape import decode_json
 from app.security.regex import scan_pattern
 
 LOGIN = "https://login.microsoftonline.com"
@@ -157,7 +158,7 @@ AZURE_ROLES = ("Reader", "Security Reader")
 
 def _error(response: httpx.Response) -> tuple[str, str]:
     try:
-        body = response.json()
+        body = decode_json(response.content)
     except ValueError:
         return "", ""
     error = body.get("error") if isinstance(body, dict) else None
@@ -220,7 +221,7 @@ class Azure:
         if response.status_code != 200:
             raise Unavailable("unavailable")
         try:
-            token = response.json().get("access_token")
+            token = decode_json(response.content).get("access_token")
         except (ValueError, AttributeError):
             token = None
         if not isinstance(token, str) or not token:

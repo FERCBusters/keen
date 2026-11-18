@@ -7,12 +7,13 @@ from urllib.parse import quote
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import is_safe_url, store_event_with_artifact
+from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.git_activity import _parse_iso_ts
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.services.ingestion_pause import pausable
 
 
@@ -31,7 +32,7 @@ def _page_rows(client, base, path, params=None):
             raise RuntimeError(
                 f"GitLab API HTTP {response.status_code}; check token permissions and configured account"
             )
-        data = response.json()
+        data = decode_json(response.content)
         if not isinstance(data, list):
             raise ValueError("GitLab API returned an invalid list")
         if not data:
@@ -97,22 +98,19 @@ def _project_events(db, client, base, section, key, project, label):
         f"projects/{project_id}/events",
         {"after": (since - timedelta(days=1)).date().isoformat(), "sort": "asc"},
     )
+
+    def read(event):
+        return _read_project_event(
+            event, since, digest, label, project, project_id, section, key
+        )
+
     advanced = False
+    reader = RecordReader()
     for events in pages:
-        for event in events:
-            newest, stored = _store_project_event(
-                db,
-                event,
-                since,
-                newest,
-                digest,
-                label,
-                project,
-                project_id,
-                section,
-                key,
-            )
-            count += stored
+        for activity in reader.each(events, read):
+            result = store_event_with_artifact(db, **activity)
+            newest = max(newest, activity["timestamp"])
+            count += int(not result.get("deduped", False))
         advance()
         advanced = True
     if not advanced:
@@ -120,22 +118,20 @@ def _project_events(db, client, base, section, key, project, label):
     return {
         "project": project.get("path_with_namespace", project_id),
         "created_events": count,
+        "invalid_records": reader.invalid,
     }
 
 
-def _store_project_event(
-    db, event, since, newest, digest, label, project, project_id, section, key
-):
-    """Store one event; the newest timestamp so far, and 1 if it was new."""
+def _read_project_event(event, since, digest, label, project, project_id, section, key):
+    """What is stored for one activity, or None when it is older than ``since``."""
     timestamp = _parse_iso_ts(event.get("created_at"))
     if not timestamp or timestamp < since:
-        return newest, 0
+        return None
     if event.get("id") is None:
         raise ValueError("GitLab activity lacks a stable event ID")
     external_id = hashlib.sha256(f"{digest}:{event['id']}".encode()).hexdigest()
     payload = json.dumps(event, sort_keys=True).encode()
-    result = store_event_with_artifact(
-        db,
+    return dict(
         timestamp=timestamp,
         source="gitlab",
         system=label or project.get("path_with_namespace") or str(project_id),
@@ -156,7 +152,6 @@ def _store_project_event(
         artifact_key=f"gitlab/{digest}/{external_id}.json",
         captured_by="keen:gitlab",
     )
-    return max(newest, timestamp), int(not result.get("deduped", False))
 
 
 @pausable("gitlab")

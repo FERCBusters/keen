@@ -23,7 +23,13 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
+from app.ingest.common import (
+    RecordReader,
+    UnusableRecord,
+    fingerprint,
+    is_safe_url,
+    store_event_with_artifact,
+)
 from app.ingest.connections import load_document, namespace, settings
 from app.ingest.git_activity import (
     _classify_from_title,
@@ -37,6 +43,7 @@ from app.ingest.git_activity import (
 from app.ingest.http import ListingTooLarge, require_origin, retained_listing
 from app.ingest.http import client as ingestion_client
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.security.redaction import redact_url
 from app.security.regex import scan_pattern
 
@@ -204,7 +211,7 @@ class GiteaCompatibleCollector:
                 status_error = _response_status_error(r)
                 if status_error:
                     raise RuntimeError(status_error)
-                data = r.json() or []
+                data = decode_json(r.content) or []
                 if not isinstance(data, list) or not data:
                     break
                 if len(data) > limit:
@@ -241,15 +248,14 @@ class GiteaCompatibleCollector:
         created = 0
         newest_ts = cursor_last
 
-        # The API returns newest-first; process oldest-first for cursor stability.
-        for a in reversed(all_items):
+        def read(a):
             ts = _activity_time(a)
             if not ts:
-                continue
+                return None
             if ts < since:
-                continue
+                return None
             if cursor_last and ts <= cursor_last:
-                continue
+                return None
 
             act_user = a.get("act_user") or a.get("user") or {}
             actor = None
@@ -282,8 +288,7 @@ class GiteaCompatibleCollector:
             ext_id = fingerprint([cursor_name, a_id, op], payload_bytes)
             key = f"{self.name}/api/{host}/{owner}/{repo}/{ts.date().isoformat()}/{ext_id}.json"
 
-            res = store_event_with_artifact(
-                db,
+            return dict(
                 timestamp=ts,
                 source=self.name,
                 system=label or f"{host}/{owner}/{repo}",
@@ -309,11 +314,16 @@ class GiteaCompatibleCollector:
                 artifact_key=key,
                 captured_by=f"keen:{self.name}",
             )
+
+        reader = RecordReader()
+        # The API returns newest-first; process oldest-first for cursor stability.
+        for event in reader.each(reversed(all_items), read):
+            res = store_event_with_artifact(db, **event)
             if not res.get("deduped"):
                 created += 1
 
-            if (newest_ts is None) or (ts > newest_ts):
-                newest_ts = ts
+            if (newest_ts is None) or (event["timestamp"] > newest_ts):
+                newest_ts = event["timestamp"]
 
         cur.last_ts = newest_ts or cur.last_ts
         cur.updated_at = utc_now_naive()
@@ -323,6 +333,7 @@ class GiteaCompatibleCollector:
         return {
             "feed": feed_url,
             "created_events": created,
+            "invalid_records": reader.invalid,
             "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
             "mode": mode,
         }
@@ -510,15 +521,14 @@ class GiteaCompatibleCollector:
             created = 0
             newest_ts = cursor_last
 
-            # RSS is usually newest-first
-            for it in reversed(items):
+            def read(it):
                 ts = _parse_rfc822_ts(it.get("pubDate"))
                 if not ts:
-                    continue
+                    return None
                 if ts < since:
-                    continue
+                    return None
                 if cursor_last and ts <= cursor_last:
-                    continue
+                    return None
 
                 title = it.get("title") or ""
                 action, outcome, severity = _classify_from_title(title)
@@ -547,8 +557,7 @@ class GiteaCompatibleCollector:
                 ext_id = fingerprint([cursor_name, str(guid)], payload_bytes)
                 key = f"{self.name}/feeds/{host}/{owner or 'unknown'}/{repo or 'unknown'}/{ts.date().isoformat()}/{ext_id}.json"
 
-                res = store_event_with_artifact(
-                    db,
+                return dict(
                     timestamp=ts,
                     source=self.name,
                     system=label
@@ -576,11 +585,16 @@ class GiteaCompatibleCollector:
                     artifact_key=key,
                     captured_by=f"keen:{self.name}",
                 )
+
+            reader = RecordReader()
+            # RSS is usually newest-first
+            for event in reader.each(reversed(items), read):
+                res = store_event_with_artifact(db, **event)
                 if not res.get("deduped"):
                     created += 1
 
-                if (newest_ts is None) or (ts > newest_ts):
-                    newest_ts = ts
+                if (newest_ts is None) or (event["timestamp"] > newest_ts):
+                    newest_ts = event["timestamp"]
 
             cur.last_ts = newest_ts or cur.last_ts
             cur.updated_at = utc_now_naive()
@@ -589,6 +603,7 @@ class GiteaCompatibleCollector:
             return {
                 "feed": feed_url,
                 "created_events": created,
+                "invalid_records": reader.invalid,
                 "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
                 "mode": "rss_fallback",
                 # The fallback runs only after the API attempt has failed.
@@ -609,9 +624,15 @@ class GiteaCompatibleCollector:
         }
 
     def _discover_repositories(
-        self, base_url: str, section: str, name: str
+        self,
+        base_url: str,
+        section: str,
+        name: str,
+        reader: RecordReader | None = None,
     ) -> list[dict]:
-        """Enumerate accessible repositories owned by one account, without following URLs from responses."""
+        """Enumerate accessible repositories owned by one account, without
+        following URLs from responses. ``reader`` counts listed repositories
+        that are not collected."""
         if (
             section not in ("organizations", "users")
             or not _ACCOUNT_NAME.fullmatch(name)
@@ -628,6 +649,32 @@ class GiteaCompatibleCollector:
         auth = self._basic_auth() if self._auth_mode() == "basic" else None
         repos: list[dict[str, Any]] = []
         seen: set[tuple[str, str]] = set()
+        # Rows refused so far, by the names they gave, so a page that only
+        # repeats refused rows is still recognised as a repeat.
+        refused: set[tuple[str, str]] = set()
+        fresh = [0]
+
+        def read(repo):
+            owner = (repo.get("owner") or {}).get("login")
+            repo_name = repo.get("name")
+            usable = (
+                isinstance(owner, str)
+                and owner.lower() == name.lower()
+                and isinstance(repo_name, str)
+                and bool(_ACCOUNT_NAME.fullmatch(repo_name))
+                and repo_name not in (".", "..")
+            )
+            if usable:
+                return owner, repo_name
+            # A repository listed outside the requested owner is never
+            # collected under this account, and neither is an unusable name.
+            if isinstance(owner, str) and isinstance(repo_name, str):
+                if (owner, repo_name) not in refused:
+                    refused.add((owner, repo_name))
+                    fresh[0] += 1
+            raise UnusableRecord(f"{self.label} listed an unusable repository")
+
+        reader = reader or RecordReader()
         with ingestion_client(
             timeout=30.0,
             follow_redirects=False,
@@ -641,36 +688,20 @@ class GiteaCompatibleCollector:
                 error = _response_status_error(response)
                 if error:
                     raise RuntimeError(error)
-                rows = response.json()
+                rows = decode_json(response.content)
                 if not isinstance(rows, list):
                     raise ValueError(f"{self.label} repository response must be a list")
                 if not rows:
                     return repos
-                added = 0
-                for repo in rows:
-                    if not isinstance(repo, dict):
-                        raise ValueError(f"Invalid {self.label} repository response")
-                    owner = (repo.get("owner") or {}).get("login")
-                    repo_name = repo.get("name")
-                    if not isinstance(owner, str) or owner.lower() != name.lower():
-                        raise ValueError(
-                            f"{self.label} returned a repository outside the "
-                            "requested owner"
-                        )
-                    if (
-                        not isinstance(repo_name, str)
-                        or not _ACCOUNT_NAME.fullmatch(repo_name)
-                        or repo_name in (".", "..")
-                    ):
-                        raise ValueError(f"Invalid {self.label} repository name")
-                    key = (owner, repo_name)
+                added = fresh[0] = 0
+                for key in reader.each(rows, read):
                     if key not in seen:
                         seen.add(key)
                         # Only the names reach the caller, so the list held
                         # while feeds are collected stays small.
-                        repos.append({"owner": {"login": owner}, "name": repo_name})
+                        repos.append({"owner": {"login": key[0]}, "name": key[1]})
                         added += 1
-                if not added:
+                if not added and not fresh[0]:
                     raise ValueError(
                         f"{self.label} repeated a repository page; discovery stopped"
                     )
@@ -686,12 +717,14 @@ class GiteaCompatibleCollector:
             for entry in cfg.get(section, []) or []:
                 name = str(entry.get(field) or "").strip()
                 try:
-                    repos = self._discover_repositories(base, section, name)
+                    reader = RecordReader()
+                    repos = self._discover_repositories(base, section, name, reader)
                     out.append(
                         {
                             "scope": section,
                             "account": name,
                             "discovered_repositories": len(repos),
+                            "invalid_records": reader.invalid,
                         }
                     )
                     for repo in repos:

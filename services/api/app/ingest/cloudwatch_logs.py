@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import (
     connection_runs,
     load_document,
@@ -143,6 +143,17 @@ def _summarize_json(parsed: Any, line: str) -> tuple[str, dict[str, Any]]:
     return truncate(line, 340), extracted
 
 
+def _event_order(event: Any) -> tuple[int, str]:
+    """An event's place in a page; one without a readable time sorts first."""
+    if not isinstance(event, dict):
+        return (0, "")
+    try:
+        timestamp = int(event.get("timestamp") or 0)
+    except (TypeError, ValueError, OverflowError):
+        timestamp = 0
+    return (timestamp, str(event.get("eventId") or ""))
+
+
 def ingest_cloudwatch_logs_once(
     db: Session, name: str, q: dict[str, Any], defaults: dict[str, Any]
 ) -> dict[str, Any]:
@@ -220,6 +231,12 @@ def ingest_cloudwatch_logs_once(
 
     client = _cloudwatch_client(region)
 
+    severity = (
+        int(event_defaults.get("severity", 3))
+        if event_defaults.get("severity") is not None
+        else None
+    )
+    reader = RecordReader()
     created_events = 0
     created_artifacts = 0
     created_mappings = 0
@@ -238,18 +255,12 @@ def ingest_cloudwatch_logs_once(
         resp = client.filter_log_events(**params)
         events = resp.get("events") or []
         # Sort for stable cursor advancement.
-        events_sorted = sorted(
-            events,
-            key=lambda e: (
-                int(e.get("timestamp") or 0),
-                str(e.get("eventId") or ""),
-            ),
-        )
+        events_sorted = sorted(events, key=_event_order)
 
-        for e in events_sorted:
+        def read(e):
             ts_ms = int(e.get("timestamp") or 0)
             if ts_ms <= 0:
-                continue
+                return None
             ts = datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc)
             msg = str(e.get("message") or "")
             event_id = str(e.get("eventId") or "")
@@ -304,19 +315,13 @@ def ingest_cloudwatch_logs_once(
                 }
             }
 
-            severity = (
-                int(event_defaults.get("severity", 3))
-                if event_defaults.get("severity") is not None
-                else None
-            )
             ext = "json" if parsed is not None else "log"
             ctype = (
                 "application/json"
                 if parsed is not None
                 else "text/plain; charset=utf-8"
             )
-            stored = store_event_with_artifact(
-                db,
+            return dict(
                 timestamp=ts.replace(tzinfo=None),
                 source="cloudwatch_logs",
                 system=event_defaults.get("system") or name,
@@ -337,16 +342,20 @@ def ingest_cloudwatch_logs_once(
                     f"{make_fingerprint(ext_id)}.{ext}"
                 ),
                 captured_by="keen:cloudwatch_logs",
-                # Each event commits by itself, so the rows and locks a mapping
-                # takes are held for one event, never across a page or a
-                # request to AWS.
             )
+
+        for event in reader.each(events_sorted, read):
+            # Each event commits by itself, so the rows and locks a mapping
+            # takes are held for one event, never across a page or a request
+            # to AWS.
+            stored = store_event_with_artifact(db, **event)
             if not stored.get("deduped"):
                 created_events += 1
                 created_artifacts += 1
                 created_mappings += stored["mappings"]
 
             # Advance max_seen_ts even for deduped events.
+            ts = event["timestamp"].replace(tzinfo=timezone.utc)
             if (max_seen_ts is None) or (ts > max_seen_ts):
                 max_seen_ts = ts
 
@@ -386,6 +395,7 @@ def ingest_cloudwatch_logs_once(
         "created_events": created_events,
         "created_artifacts": created_artifacts,
         "created_mappings": created_mappings,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
         "pages": page,
     }

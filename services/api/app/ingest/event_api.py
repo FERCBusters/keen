@@ -16,6 +16,7 @@ import httpx2 as httpx
 
 from app.core.datetime_utils import to_utc_naive
 from app.ingest.common import is_safe_url
+from app.security.json_shape import decode_json
 from app.security.redaction import storable
 from app.security.regex import scan_pattern
 
@@ -74,7 +75,7 @@ def read_response(
                 if len(body) > MAX_JSON_BYTES:
                     raise EventApiError(f"{product} response exceeds the 8 MiB limit")
             headers = response.headers
-        data = json.loads(body)
+        data = decode_json(body)
     except httpx.HTTPError:
         raise EventApiError(
             f"{product} network or TLS failure; cursor retained"

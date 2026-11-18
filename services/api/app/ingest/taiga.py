@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import fingerprint, is_safe_url, store_event_with_artifact
+from app.ingest.common import (
+    RecordReader,
+    fingerprint,
+    is_safe_url,
+    store_event_with_artifact,
+)
 from app.ingest.connections import (
     connection_cache,
     connection_runs,
@@ -20,6 +25,7 @@ from app.ingest.connections import (
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -79,7 +85,7 @@ def _login_and_get_token() -> str:
             },
         )
         resp.raise_for_status()
-        data = resp.json() or {}
+        data = decode_json(resp.content) or {}
         token = data.get("auth_token") or data.get("token") or data.get("access_token")
         if not token:
             raise RuntimeError(
@@ -264,7 +270,7 @@ def ingest_taiga_project_timeline(
             client = _taiga_client()
             r = client.get(f"/api/v1/timeline/project/{project_id}")
         r.raise_for_status()
-        entries = r.json() or []
+        entries = decode_json(r.content) or []
     finally:
         try:
             client.close()
@@ -297,9 +303,12 @@ def ingest_taiga_project_timeline(
     parsed_entries = [(t, e) for (t, e) in stamped_entries if t is not None]
     parsed_entries.sort(key=lambda x: x[0])
 
-    for ts, e in parsed_entries:
-        if cur.last_ts and ts <= cur.last_ts:
-            continue
+    cursor_last = cur.last_ts
+
+    def read(entry):
+        ts, e = entry
+        if cursor_last and ts <= cursor_last:
+            return None
 
         summary, actor, action, extracted = _build_summary(e, project_id, label)
 
@@ -320,8 +329,7 @@ def ingest_taiga_project_timeline(
         ui_url = _taiga_ui_url(settings.taiga_base_url, _data(e))
 
         key = f"taiga/project/{project_id}/{ts.date().isoformat()}/{ext_id}.json"
-        res = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=ts,
             source="taiga",
             system=label or extracted.get("project_name") or f"project:{project_id}",
@@ -346,11 +354,15 @@ def ingest_taiga_project_timeline(
             artifact_key=key,
             captured_by="keen:taiga",
         )
+
+    reader = RecordReader()
+    for event in reader.each(parsed_entries, read):
+        res = store_event_with_artifact(db, **event)
         if not res.get("deduped"):
             created += 1
 
         # Entries are read oldest first, each after the cursor.
-        newest_ts = ts
+        newest_ts = event["timestamp"]
 
     cur.last_ts = newest_ts or cur.last_ts
     # updated_at is stored as a naive UTC timestamp in DB.
@@ -361,6 +373,7 @@ def ingest_taiga_project_timeline(
     return {
         "project_id": project_id,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
     }
 

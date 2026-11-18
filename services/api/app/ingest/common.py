@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime
-from typing import Any, NamedTuple, Optional, cast
+from typing import Any, NamedTuple, Optional, TypeVar, cast
 
 from sqlalchemy import String, text
 from sqlalchemy.exc import IntegrityError
@@ -39,6 +40,64 @@ def is_safe_url(url: str) -> bool:
         return True
     except (ValueError, OSError):
         return False
+
+
+class UnusableRecord(ValueError):
+    """One collected record cannot be read; the records around it still are."""
+
+
+# What reading a record raises when the upstream chose a shape or value the
+# collector cannot use: a member of another type, a missing member, a number
+# out of range, or nesting deeper than the interpreter recurses.
+_UNREADABLE = (
+    AttributeError,
+    IndexError,
+    KeyError,
+    OverflowError,
+    RecursionError,
+    TypeError,
+    ValueError,
+)
+
+T = TypeVar("T")
+R = TypeVar("R")
+
+
+class RecordReader:
+    """Reads a collection's records one at a time, so that one record cannot
+    stop the run.
+
+    Every loop that stores collected records iterates ``each``, and
+    ``tests/test_record_containment.py`` refuses one that does not. ``read``
+    turns one upstream record into what is stored for it, or None for a
+    record that is passed over, such as one at or before the cursor. It works
+    on data already fetched and does no network or database work, so nothing
+    needs undoing when it fails. A record it cannot read is counted in
+    ``invalid`` and the next is read; the collector reports the count as its
+    result's ``invalid_records``. Storing a record, and every upstream or
+    storage failure, stays in the loop body, where it fails the input with
+    its cursor retained, as before. So does a time limit, which ends the run.
+    """
+
+    def __init__(self) -> None:
+        self.invalid = 0
+
+    def read(self, read_one: Callable[[T], R | None], record: T) -> R | None:
+        """``read_one(record)``, or None counted as invalid when it cannot be read."""
+        try:
+            return read_one(record)
+        except _UNREADABLE:
+            self.invalid += 1
+            return None
+
+    def each(
+        self, records: Iterable[T], read_one: Callable[[T], R | None]
+    ) -> Iterator[R]:
+        """What ``read_one`` makes of each record it can read, in order."""
+        for record in records:
+            value = self.read(read_one, record)
+            if value is not None:
+                yield value
 
 
 def fingerprint(parts: list[str], payload: bytes) -> str:

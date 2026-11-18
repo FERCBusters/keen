@@ -339,10 +339,29 @@ def ingest_jenkins_all(db: Session) -> list[dict[str, Any]]: ...
 
 Collectors keep a cursor per input (`IngestionCursor`) and commit as they go, so a run stopped at its time limit loses nothing and the next run resumes.
 
+Each record goes through `ingest/common.py::RecordReader`, so one record Keen cannot read never stops the records after it:
+
+```python
+reader = RecordReader()
+
+def read(build):
+    # Turn one upstream record into what is stored, or None to pass over it.
+    # No network or database work happens here.
+    ts = utc_from_timestamp_naive(build["timestamp"] / 1000.0)
+    return dict(timestamp=ts, source="jenkins", ...)
+
+for event in reader.each(builds, read):
+    store_event_with_artifact(db, **event)
+
+return {"created_events": created, "invalid_records": reader.invalid}
+```
+
+A record whose shape or values `read` cannot handle (a missing member, a value of another type, a number out of range, nesting deeper than Python recurses) is counted in `reader.invalid` and the next record is read. A storage or upstream failure is raised from the loop body, so the input fails with its cursor kept, as before. Decode an upstream response with `security/json_shape.decode_json(response.content)`, never `response.json()` or `json.loads`: a value nested past the interpreter's recursion limit would otherwise make the whole page unreadable, while `decode_json` keeps the page and stores that value's deeper parts as `[nested too deeply]`. `tests/test_record_containment.py` scans the whole application and fails on any loop that writes events without going through `RecordReader.each`, and on an ingester that decodes upstream JSON any other way. The Keen Agent receivers are the only exception: an agent keeps its evidence queued until Keen accepts it, so they store a request whole or refuse it.
+
 ### Recipe: add a polled source
 
 1. Add settings to `core/config.py`: `<source>_enabled`, `<source>_run_seconds`, `<source>_config_path`, and its base URL and credentials.
-2. Create `app/ingest/<source>.py` with `ingest_<source>_all(db)` under the two decorators, calling `store_event_with_artifact` for each event.
+2. Create `app/ingest/<source>.py` with `ingest_<source>_all(db)` under the two decorators, reading each record through `RecordReader.each` and calling `store_event_with_artifact` for each event it yields, and reporting `reader.invalid` as `invalid_records`.
 3. Declare it with `register(Source(...))` at the bottom of that module.
 4. Add `config/<source>.yml` with shipped defaults, and document the settings in `.env.example`.
 5. Teach `mapping/collector.py::event_collector` how to read the source's `raw_pointer`, so rules can target one collection item.

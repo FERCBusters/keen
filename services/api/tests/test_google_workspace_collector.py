@@ -520,6 +520,24 @@ def _service(*pages):
     return service
 
 
+def test_one_unreadable_activity_neither_stops_nor_freezes_the_stream(db):
+    db.query.return_value.filter.return_value.one_or_none.return_value = None
+    unreadable = {
+        **ACTIVITY,
+        "id": {**ACTIVITY["id"], "uniqueQualifier": "uq-2"},
+        "ipAddress": {"v4": "192.0.2.1"},
+    }
+    service = _service([unreadable, ACTIVITY])
+    with patch.object(
+        gws, "store_event_with_artifact", return_value={"deduped": False}
+    ) as store:
+        result = gws.ingest_google_workspace_stream(
+            db, service, {"application": "login"}, {}
+        )
+    assert (result["created_events"], result["invalid_records"]) == (1, 1)
+    assert store.call_count == 1
+
+
 def test_naive_timestamps_pass_through_unchanged():
     naive = datetime(2026, 10, 9, 12)
     assert to_utc_naive(naive) is naive

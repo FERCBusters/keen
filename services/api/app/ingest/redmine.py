@@ -11,7 +11,7 @@ from urllib.parse import quote, urlsplit
 import httpx2 as httpx
 
 from app.db.models import IngestionCursor
-from app.ingest.common import is_safe_url, store_event_with_artifact
+from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact
 from app.ingest.connections import (
     advisory_lock,
     connection_runs,
@@ -21,6 +21,7 @@ from app.ingest.connections import (
 )
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
+from app.security.json_shape import decode_json
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -100,7 +101,7 @@ def _json(client, base, path, params=None):
                 body.extend(chunk)
                 if len(body) > 8 * 1024 * 1024:
                     raise RedmineError("Redmine response exceeds the 8 MiB limit")
-        data = json.loads(body)
+        data = decode_json(body)
         if not isinstance(data, dict):
             raise RedmineError("Redmine returned an invalid JSON object")
         return data
@@ -108,6 +109,14 @@ def _json(client, base, path, params=None):
         raise RedmineError("Redmine network/TLS failure; cursor retained") from None
     except (json.JSONDecodeError, UnicodeDecodeError):
         raise RedmineError("Redmine returned invalid JSON") from None
+
+
+def _row_digest(row) -> str | None:
+    try:
+        text = json.dumps(row, sort_keys=True)
+    except RecursionError:
+        return None
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def _pages(client, base, resource, params=None, max_pages=1000):
@@ -131,7 +140,13 @@ def _pages(client, base, resource, params=None, max_pages=1000):
                     "Redmine returned an incomplete page; cursor retained"
                 )
             return
-        signature = tuple(_id(row.get("id")) for row in rows)
+        # A row's ID is read with the row, so an unusable ID is that row's
+        # failure alone. Such a row is known by its content instead, so the
+        # page is still recognised if it repeats and not otherwise.
+        signature = tuple(
+            value if type(value) is int else _row_digest(row)
+            for value, row in ((row.get("id"), row) for row in rows)
+        )
         if signature in seen:
             raise RedmineError("Redmine repeated a page; cursor retained")
         seen.add(signature)
@@ -177,7 +192,8 @@ def _fields(issue, project):
     return fields
 
 
-def _store(db, base, collection, project, issue, journal=None):
+def _read(base, collection, project, issue, journal=None):
+    """What is stored for an issue snapshot, or for one of its journals."""
     issue_id = _id(issue["id"])
     fields = _fields(issue, project)
     snapshot = {key: value for key, value in issue.items() if key != "journals"}
@@ -225,8 +241,7 @@ def _store(db, base, collection, project, issue, journal=None):
     url = f"{base}/issues/{issue_id}"
     if journal is not None:
         url += f"#change-{journal['id']}"
-    result = store_event_with_artifact(
-        db,
+    return dict(
         timestamp=timestamp,
         source="redmine",
         system=collection.get("label")
@@ -254,7 +269,6 @@ def _store(db, base, collection, project, issue, journal=None):
         artifact_key=f"redmine/{digest}.json",
         captured_by="keen:redmine",
     )
-    return int(not result.get("deduped", False))
 
 
 def _project(db, client, base, selection, project, config):
@@ -292,8 +306,9 @@ def _project(db, client, base, selection, project, config):
             + "Z"
         )
     created, examined = 0, 0
-    for stub in _pages(client, base, "issues", params, config.get("max_pages", 1000)):
-        issue_id = _id(stub.get("id"))
+    reader = RecordReader()
+    stubs = _pages(client, base, "issues", params, config.get("max_pages", 1000))
+    for issue_id in reader.each(stubs, lambda stub: _id(stub.get("id"))):
         detail = _json(
             client,
             base,
@@ -305,15 +320,26 @@ def _project(db, client, base, selection, project, config):
             raise RedmineError("Redmine returned an inconsistent issue detail")
         if (issue.get("project") or {}).get("id") != pid:
             raise RedmineError("Issue moved project during collection; retry required")
-        created += _store(db, base, selection, project, issue)
-        journals = issue.get("journals", [])
+        # The issue snapshot, then each journal, each read by itself.
+        records: list = [None]
         if config.get("include_journals", True):
-            if not isinstance(journals, list) or any(
-                not isinstance(j, dict) for j in journals
-            ):
-                raise RedmineError("Redmine returned invalid journals")
-            for journal in journals:
-                created += _store(db, base, selection, project, issue, journal)
+            journals = issue.get("journals", [])
+            records += [
+                {"journal": journal}
+                for journal in (journals if isinstance(journals, list) else [journals])
+            ]
+
+        def read(record, issue=issue):
+            if record is None:
+                return _read(base, selection, project, issue)
+            journal = record["journal"]
+            if not isinstance(journal, dict):
+                raise TypeError("Redmine journal is not an object")
+            return _read(base, selection, project, issue, journal)
+
+        for event in reader.each(records, read):
+            result = store_event_with_artifact(db, **event)
+            created += int(not result.get("deduped", False))
         examined += 1
     if cursor is None:
         cursor = IngestionCursor(name=name, meta={})
@@ -332,6 +358,7 @@ def _project(db, client, base, selection, project, config):
         "project": project.get("identifier", str(pid)),
         "examined_issues": examined,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "cursor": started.isoformat() + "Z",
     }
 
@@ -415,8 +442,10 @@ def ingest_redmine_all(db):
                             ]
                         ]
                     )
-                    for project in projects:
-                        pid = _id(project["id"])
+                    reader = RecordReader()
+                    for project, pid in reader.each(
+                        projects, lambda project: (project, _id(project["id"]))
+                    ):
                         if pid in seen:
                             continue
                         seen.add(pid)
@@ -434,6 +463,14 @@ def ingest_redmine_all(db):
                                     else "Collection/storage failed; project cursor retained",
                                 }
                             )
+                    if reader.invalid:
+                        results.append(
+                            {
+                                "collection": key,
+                                "invalid_records": reader.invalid,
+                                "error": "Redmine listed projects without a valid numeric ID",
+                            }
+                        )
                 except Exception as exc:
                     db.rollback()
                     results.append(

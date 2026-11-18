@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import time
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
@@ -43,6 +42,7 @@ from app.ingest.cloud.base import (
     text_field,
     unknown,
 )
+from app.security.json_shape import decode_json
 from app.security.regex import scan_pattern
 
 ROLE_ARN = scan_pattern(
@@ -354,7 +354,7 @@ def password_policy(iam) -> dict | None:
 def _document(value) -> dict:
     if isinstance(value, str):
         try:
-            value = json.loads(unquote(value))
+            value = decode_json(unquote(value))
         except ValueError:
             return {}
     return value if isinstance(value, dict) else {}
@@ -1026,7 +1026,7 @@ def _trail_detail(raw) -> dict:
     if not isinstance(raw, str) or len(raw) > MAX_TRAIL_RECORD:
         return {}
     try:
-        value = json.loads(raw)
+        value = decode_json(raw)
     except ValueError:
         return {}
     return value if isinstance(value, dict) else {}

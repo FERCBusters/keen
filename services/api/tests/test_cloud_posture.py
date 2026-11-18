@@ -104,7 +104,11 @@ def posture_events(db):
 
 def test_refresh_keeps_the_latest_result_and_records_changes(keen, cloud, monkeypatch):
     db = keen.db
-    assert runner.refresh(db, "aws") == {"provider": "aws", "scopes": 1}
+    assert runner.refresh(db, "aws") == {
+        "provider": "aws",
+        "scopes": 1,
+        "invalid_records": 0,
+    }
     row = db.get(CloudProvider, "aws")
     vendor = db.get(IsmsVendor, row.vendor_id)
     assert vendor.name == "Amazon Web Services"
@@ -193,7 +197,11 @@ def test_a_scope_asset_added_meanwhile_leaves_the_run_whole(keen, cloud, monkeyp
         lambda model, key, **kw: None if model is RiskAsset else real(model, key, **kw),
     )
     cloud["results"] = [scope(detail="MFA off for 2 of 2 console users")]
-    assert runner.refresh(db, "aws") == {"provider": "aws", "scopes": 1}
+    assert runner.refresh(db, "aws") == {
+        "provider": "aws",
+        "scopes": 1,
+        "invalid_records": 0,
+    }
     stored = db.query(CloudPostureScope).one()
     mfa = next(c for c in stored.checks if c["key"] == "identity.mfa")
     assert mfa["detail"] == "MFA off for 2 of 2 console users"
@@ -321,6 +329,7 @@ def test_activity_is_read_from_the_cursor_and_recorded_once(keen, cloud):
     assert runner.collect_activity(db, "aws") == {
         "provider": "aws",
         "records": 1,
+        "invalid_records": 0,
         "complete": True,
     }
     since, until = cloud["windows"][0]
@@ -765,7 +774,7 @@ def test_runs_held_elsewhere_or_paused_meanwhile_are_skipped(keen, cloud, monkey
         raise DomainError(409, "Ingestion is paused")
 
     monkeypatch.setattr(runner, "store", purging)
-    monkeypatch.setattr(runner, "record_activity", purging)
+    monkeypatch.setattr(runner, "store_event_with_artifact", purging)
     monkeypatch.setattr(
         aws,
         "PROVIDER",

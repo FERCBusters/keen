@@ -1,3 +1,4 @@
+import json
 import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
@@ -20,6 +21,11 @@ from fastapi import HTTPException
 pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
 
 
+def _reply(payload):
+    """A 200 response whose body is the JSON for payload."""
+    return Mock(status_code=200, content=json.dumps(payload).encode())
+
+
 class GitDiscoveryTests(unittest.TestCase):
     def test_discovery_paginates_short_server_pages(self):
         for module in (forgejo, gitea):
@@ -30,15 +36,9 @@ class GitDiscoveryTests(unittest.TestCase):
             ):
                 client = factory.return_value.__enter__.return_value
                 client.get.side_effect = [
-                    Mock(
-                        status_code=200,
-                        json=lambda: [{"owner": {"login": "mig5"}, "name": "one"}],
-                    ),
-                    Mock(
-                        status_code=200,
-                        json=lambda: [{"owner": {"login": "mig5"}, "name": "two"}],
-                    ),
-                    Mock(status_code=200, json=lambda: []),
+                    _reply([{"owner": {"login": "mig5"}, "name": "one"}]),
+                    _reply([{"owner": {"login": "mig5"}, "name": "two"}]),
+                    _reply([]),
                 ]
                 self.assertEqual(
                     len(
@@ -58,9 +58,8 @@ class GitDiscoveryTests(unittest.TestCase):
             patch.object(gitea_compatible, "is_safe_url", return_value=True),
             patch.object(gitea_compatible, "ingestion_client") as factory,
         ):
-            factory.return_value.__enter__.return_value.get.return_value = Mock(
-                status_code=200,
-                json=lambda: [{"owner": {"login": "mig5"}, "name": "one"}],
+            factory.return_value.__enter__.return_value.get.return_value = _reply(
+                [{"owner": {"login": "mig5"}, "name": "one"}]
             )
             with self.assertRaisesRegex(ValueError, "repeated"):
                 forgejo.collector._discover_repositories(
@@ -74,21 +73,34 @@ class GitDiscoveryTests(unittest.TestCase):
         ):
             client = factory.return_value.__enter__.return_value
             client.get.side_effect = [
-                Mock(
-                    status_code=200,
-                    json=lambda: [
+                _reply(
+                    [
                         {
                             "owner": {"login": "someone-else"},
                             "name": "one",
                             "html_url": "https://attacker.test",
-                        }
-                    ],
-                )
+                        },
+                        {
+                            "owner": {"login": "mig5"},
+                            "name": "two",
+                            "html_url": "https://attacker.test",
+                        },
+                    ]
+                ),
+                _reply([]),
             ]
-            with self.assertRaisesRegex(ValueError, "outside"):
-                forgejo.collector._discover_repositories(
-                    "https://git.example.org", "users", "mig5"
-                )
+            reader = gitea_compatible.RecordReader()
+            repos = forgejo.collector._discover_repositories(
+                "https://git.example.org", "users", "mig5", reader
+            )
+            # The listed URL is never used, and the repository outside the
+            # requested owner is left out and counted.
+            self.assertEqual(repos, [{"owner": {"login": "mig5"}, "name": "two"}])
+            self.assertEqual(reader.invalid, 1)
+            self.assertEqual(
+                [call.args[0] for call in client.get.call_args_list],
+                ["https://git.example.org/api/v1/users/mig5/repos"] * 2,
+            )
 
     def test_scope_identity_matches_and_does_not_cross_sources(self):
         for source in ("forgejo", "gitea"):
@@ -138,8 +150,8 @@ class GitDiscoveryTests(unittest.TestCase):
     def test_gitlab_pagination_and_error(self):
         client = Mock()
         client.get.side_effect = [
-            Mock(status_code=200, json=lambda: [{"id": 1}]),
-            Mock(status_code=200, json=lambda: []),
+            _reply([{"id": 1}]),
+            _reply([]),
         ]
         self.assertEqual(
             gitlab._pages(
@@ -250,7 +262,7 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
     BASE = "https://gitlab.example.org"
 
     def _page(self, payload):
-        return Mock(status_code=200, json=lambda: payload)
+        return _reply(payload)
 
     def test_pages_refuse_a_body_that_is_no_list(self):
         client = Mock()
@@ -323,28 +335,40 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
             result = gitlab._project_events(
                 db, Mock(), self.BASE, "users", "mig5", {"id": 9}, None
             )
-        self.assertEqual(result, {"project": 9, "created_events": 1})
+        self.assertEqual(
+            result, {"project": 9, "created_events": 1, "invalid_records": 0}
+        )
         self.assertEqual(store.call_count, 1)
         self.assertEqual(store.call_args.kwargs["system"], "9")
         cursor = db.add.call_args.args[0]
         self.assertEqual(cursor.last_ts, datetime(2026, 10, 6, 0, 0, 0))
 
-    def test_activity_without_a_stable_id_is_refused(self):
+    def test_activity_without_a_stable_id_is_counted_and_the_rest_stored(self):
         db = self._db()
-        events = [{"created_at": "2026-10-06T00:00:00Z", "action_name": "pushed"}]
+        events = [
+            {"created_at": "2026-10-06T00:00:00Z", "action_name": "pushed"},
+            {"id": 4, "created_at": {"at": "now"}, "action_name": "pushed"},
+            "not an activity",
+            {"id": 5, "created_at": "2026-10-06T01:00:00Z", "action_name": "pushed"},
+        ]
         with (
             patch.object(
                 gitlab, "utc_now_naive", return_value=datetime(2026, 10, 7, 12, 0, 0)
             ),
             patch.object(gitlab, "_page_rows", return_value=[events]),
-            patch.object(gitlab, "store_event_with_artifact") as store,
+            patch.object(
+                gitlab, "store_event_with_artifact", return_value={"deduped": False}
+            ) as store,
         ):
-            with self.assertRaisesRegex(ValueError, "stable event ID"):
-                gitlab._project_events(
-                    db, Mock(), self.BASE, "users", "mig5", {"id": 9}, "label"
-                )
-        store.assert_not_called()
-        db.commit.assert_not_called()
+            result = gitlab._project_events(
+                db, Mock(), self.BASE, "users", "mig5", {"id": 9}, "label"
+            )
+        # The activity without an ID and the one that is not an object are
+        # counted; one whose time is not text has no time and is passed over.
+        self.assertEqual(result["invalid_records"], 2)
+        self.assertEqual(store.call_count, 1)
+        cursor = db.add.call_args.args[0]
+        self.assertEqual(cursor.last_ts, datetime(2026, 10, 6, 1, 0, 0))
 
     def _run(self, db, config, pages, safe=True):
         # Discovery and project activity draw their replies in turn.
@@ -394,6 +418,7 @@ class GitLabCollectionBoundaryTests(unittest.TestCase):
                 {
                     "project": "team/a",
                     "created_events": 0,
+                    "invalid_records": 0,
                     "connection_id": "env:gitlab",
                     "connection_name": "Environment default",
                 }

@@ -149,6 +149,7 @@ def test_org_events_store_new_events_once_in_order_with_provenance(gh):
         "org": "acme",
         "mode": "org",
         "created_events": 2,
+        "invalid_records": 0,
         "events_seen": 4,
         "cursor_last_ts": "2026-03-03T09:00:00",
     }

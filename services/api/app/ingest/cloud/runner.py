@@ -30,7 +30,7 @@ from app.db.models import (
 )
 from app.ingest.cloud import base
 from app.ingest.cloud import provider as cloud_provider
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import Connection, connection_scope, namespace, run_lock
 from app.services.errors import DomainError
 from app.services.ingestion_pause import is_paused
@@ -201,7 +201,8 @@ def _add_scope_asset(db, provider, scope: CloudPostureScope, vendor_id) -> None:
         log.info("Cloud scope asset for %s added elsewhere", provider.key)
 
 
-def _record_check(db, provider, scope, check: dict, now: datetime) -> str:
+def _check_event(provider, scope, check: dict, now: datetime) -> dict:
+    """What is stored for one check's changed result."""
     payload = {
         "provider": provider.key,
         "scope": scope.key,
@@ -211,8 +212,7 @@ def _record_check(db, provider, scope, check: dict, now: datetime) -> str:
         "subjects_total": check["subjects_total"],
     }
     stamp = now.isoformat()
-    stored = store_event_with_artifact(
-        db,
+    return dict(
         timestamp=now,
         source=provider.key,
         system=f"{provider.key}:{scope.key}",
@@ -238,15 +238,15 @@ def _record_check(db, provider, scope, check: dict, now: datetime) -> str:
         captured_by="keen-cloud-posture",
         commit=False,
     )
-    return stored["event_id"]
 
 
-def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
+def store(db, provider, results: list[base.ScopeResult], now: datetime) -> int:
     """Keep each scope's latest result and record changed results as events;
     scopes the provider no longer returns are removed, and so are checks that
     found nothing to examine, such as Kubernetes checks in an account with no
     clusters. Each scope has its asset; one that a provider stops returning
-    keeps it."""
+    keeps it. Returns how many checks could not be read."""
+    reader = RecordReader()
     row = provider_row(db, provider)
     vendor_id = link_vendor(db, provider, row)
     today = now.date().isoformat()
@@ -264,9 +264,10 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
         before = {c.get("key"): c for c in (current.checks if current else [])}
         read_at = current.checked_at if current else None
         checks = []
-        for check in scope.checks:
+
+        def read(check, before=before, read_at=read_at, scope=scope):
             if check.key not in provider.checks or check.examined == 0:
-                continue
+                return None
             item = check.as_dict()
             old = before.get(item["key"]) or {}
             item["attention"] = base.attention_record(
@@ -289,7 +290,12 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
                     old["observed_at"],
                 )
             else:
-                item["event_id"] = _record_check(db, provider, scope, item, now)
+                return item, _check_event(provider, scope, item, now)
+            return item, None
+
+        for item, event in reader.each(scope.checks, read):
+            if event is not None:
+                item["event_id"] = store_event_with_artifact(db, **event)["event_id"]
                 item["observed_at"] = now.isoformat()
             checks.append(item)
         identities = [i.as_dict() for i in scope.identities[: base.MAX_IDENTITIES]]
@@ -310,6 +316,7 @@ def store(db, provider, results: list[base.ScopeResult], now: datetime) -> None:
     stale.delete(synchronize_session=False)
     row.attempted_at = row.checked_at = now
     row.error = ""
+    return reader.invalid
 
 
 def _ready(db, provider, *, force: bool) -> str:
@@ -362,13 +369,13 @@ def refresh(db, key: str, *, force: bool = False) -> dict:
                 db.commit()
                 return {"provider": key, "error": failure}
             try:
-                store(db, provider, results, utc_now_naive())
+                invalid = store(db, provider, results, utc_now_naive())
                 db.commit()
             except DomainError:
                 # Ingestion paused for an evidence purge; the next run stores.
                 db.rollback()
                 return {"provider": key, "skipped": True, "reason": "paused"}
-    return {"provider": key, "scopes": len(results)}
+    return {"provider": key, "scopes": len(results), "invalid_records": invalid}
 
 
 def _activity(provider, since, until):
@@ -379,11 +386,11 @@ def _activity(provider, since, until):
     return provider.activity(since, until)
 
 
-def record_activity(db, provider, entry: base.Activity) -> None:
+def activity_event(provider, entry: base.Activity) -> dict:
+    """What is stored for one activity entry."""
     when = entry.at.replace(tzinfo=None)
     detail = {k: v for k, v in (entry.detail or {}).items() if isinstance(k, str)}
-    store_event_with_artifact(
-        db,
+    return dict(
         timestamp=when,
         source=provider.key,
         system=f"{provider.key}:{base.clip(entry.scope, 128)}",
@@ -448,9 +455,13 @@ def collect_activity(db, key: str, *, force: bool = False) -> dict:
                 row.activity_error = failure
                 db.commit()
                 return {"provider": key, "error": failure}
+            reader = RecordReader()
             try:
-                for entry in entries[: base.MAX_ACTIVITY]:
-                    record_activity(db, provider, entry)
+                for event in reader.each(
+                    entries[: base.MAX_ACTIVITY],
+                    lambda entry: activity_event(provider, entry),
+                ):
+                    store_event_with_artifact(db, **event)
                 cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
                 if cursor is None:
                     cursor = IngestionCursor(name=name, meta={})
@@ -466,7 +477,12 @@ def collect_activity(db, key: str, *, force: bool = False) -> dict:
             except DomainError:
                 db.rollback()
                 return {"provider": key, "skipped": True, "reason": "paused"}
-    return {"provider": key, "records": len(entries), "complete": complete}
+    return {
+        "provider": key,
+        "records": len(entries),
+        "invalid_records": reader.invalid,
+        "complete": complete,
+    }
 
 
 def purge_stale(db, now: datetime | None = None) -> int:

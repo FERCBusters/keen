@@ -36,7 +36,11 @@ from app.db.models import (
     User,
 )
 from app.db.session import track_unpublished_object
-from app.ingest.common import normalise_ingested_fields, store_event_with_artifact
+from app.ingest.common import (
+    RecordReader,
+    normalise_ingested_fields,
+    store_event_with_artifact,
+)
 from app.ingest.connections import outside_connection
 from app.security.diary_visibility import (
     DIARY_SOURCE,
@@ -419,8 +423,20 @@ def deferred_link_diary(db: Session):
 def write_deferred_link_diary(
     db: Session, pending: list[tuple[str, uuid.UUID, User | None, str | None]]
 ) -> None:
-    """Make the diary writes deferred_link_diary collected, each record once."""
-    for entity_type, entity_id, user, actor in dict.fromkeys(pending):
+    """Make the diary writes deferred_link_diary collected, each record once.
+
+    Each pending write is read through RecordReader, as every loop that writes
+    events is, so one Keen cannot read is left out and the rest are written.
+    """
+    reader = RecordReader()
+
+    def read(entry):
+        entity_type, entity_id, user, actor = entry
+        return _record_type(entity_type), uuid.UUID(str(entity_id)), user, actor
+
+    for entity_type, entity_id, user, actor in reader.each(
+        dict.fromkeys(pending), read
+    ):
         sync_entity_link_diary(db, entity_type, entity_id, user, actor=actor)
 
 

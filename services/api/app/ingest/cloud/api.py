@@ -16,6 +16,7 @@ import httpx2 as httpx
 
 from app.ingest import http
 from app.ingest.cloud.base import Unavailable
+from app.security.json_shape import decode_json
 
 TIMEOUT = 30.0
 # A throttled request waits at most this long, once, before the read stops.
@@ -85,7 +86,7 @@ class JsonApi:
         if response.status_code != 200:
             raise Unavailable(self._explain(response))
         try:
-            found = response.json()
+            found = decode_json(response.content)
         except ValueError:
             raise Unavailable("unavailable") from None
         if not isinstance(found, dict):

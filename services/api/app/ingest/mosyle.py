@@ -20,7 +20,7 @@ import httpx2 as httpx
 from app.core.datetime_utils import utc_now_naive
 from app.core.email_address import single_mailbox
 from app.db.models import IngestionCursor
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (
     EventApiError,
@@ -197,8 +197,8 @@ def _short(value) -> str | None:
     return found.strip()[:200] if found else None
 
 
-def _store(db, entry, item, collected):
-    """Store one log; 1 if it was new."""
+def _read(entry, item, collected):
+    """What is stored for one log."""
     actor = _short(item.get("username"))
     summary = "Mosyle admin: " + (_short(item.get("action")) or "action")
     payload = {"stream": STREAM, "event": item}
@@ -206,8 +206,7 @@ def _store(db, entry, item, collected):
         json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     )
     digest = hashlib.sha256(API.encode() + b"\n" + content).hexdigest()
-    result = store_event_with_artifact(
-        db,
+    return dict(
         # Mosyle writes a log's time without a time zone; it is read as UTC.
         # A log without a readable time is kept, dated when it was collected.
         timestamp=timestamp(item.get("action_date")) or collected,
@@ -227,7 +226,6 @@ def _store(db, entry, item, collected):
         artifact_key=f"mosyle/{STREAM}/{digest}.json",
         captured_by="keen:mosyle",
     )
-    return int(not result.get("deduped", False))
 
 
 def _epoch(when: datetime) -> str:
@@ -261,6 +259,7 @@ def _collect(db, session, entry, config):
     if not (until and number > 1 and start < until <= min(start + window, started)):
         until = None
     created = dropped = pages = 0
+    reader = RecordReader()
     while pages < config.get("max_pages", 100):
         if until is None:
             if start >= started:
@@ -276,7 +275,9 @@ def _collect(db, session, entry, config):
             }
         )
         items, invalid = records(listing["logs"], PAGE_ROWS, PRODUCT)
-        created += sum(_store(db, entry, item, started) for item in items)
+        for event in reader.each(items, lambda item: _read(entry, item, started)):
+            result = store_event_with_artifact(db, **event)
+            created += int(not result.get("deduped", False))
         dropped += invalid
         pages += 1
         if _last(listing, number):
@@ -299,7 +300,7 @@ def _collect(db, session, entry, config):
         "stream": STREAM,
         "pages": pages,
         "created_events": created,
-        "invalid_records": dropped,
+        "invalid_records": dropped + reader.invalid,
         # More remains when the page limit ended the run; the next continues.
         "more": until is not None or start < started,
         "cursor": start.isoformat() + "Z",

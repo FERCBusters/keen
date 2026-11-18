@@ -28,7 +28,7 @@ from app.db.models import (
     RiskCategory,
     RiskControlLink,
 )
-from app.ingest.common import store_event_with_artifact
+from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import (
     advisory_lock,
     connection_runs,
@@ -38,6 +38,7 @@ from app.ingest.connections import (
 )
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
+from app.security.json_shape import decode_json
 from app.security.redaction import (
     mask_event_data_obj,
     redact_obj,
@@ -63,6 +64,14 @@ def _id(value):
         return str(uuid.UUID(value))
     except (ValueError, TypeError, AttributeError):
         raise RiskLedgerError("Risk Ledger requires a valid UUID identifier") from None
+
+
+def _listed_id(row):
+    """A listed record's identifier, or None when it has none Keen can read."""
+    try:
+        return _id(row.get("id"))
+    except (RiskLedgerError, AttributeError):
+        return None
 
 
 def validate_config(config):
@@ -135,7 +144,7 @@ class Client:
                         raise RiskLedgerError(
                             "Risk Ledger response exceeded the 8 MiB limit"
                         )
-            result = json.loads(data)
+            result = decode_json(data)
             if not isinstance(result, dict):
                 raise RiskLedgerError("Risk Ledger returned an invalid JSON object")
             return result
@@ -159,6 +168,8 @@ class Client:
         return row
 
     def pages(self, kind, config):
+        """Each record of a listing, as listed. The caller reads each record,
+        its identifier included, so one it cannot read is counted alone."""
         offset, seen = 0, set()
         limit = config.get("page_size", 100)
         for _ in range(config.get("max_pages", 100)):
@@ -186,14 +197,13 @@ class Client:
                     "Risk Ledger pagination stopped before the reported total"
                 )
             for row in rows:
-                if not isinstance(row, dict):
-                    raise RiskLedgerError("Risk Ledger returned an invalid record")
-                ident = _id(row.get("id"))
-                if ident in seen:
+                ident = _listed_id(row)
+                if ident is not None and ident in seen:
                     raise RiskLedgerError(
                         "Risk Ledger repeated a record across pages; run again after upstream changes settle"
                     )
-                seen.add(ident)
+                if ident is not None:
+                    seen.add(ident)
                 yield row
             offset += len(rows)
             if offset >= total:
@@ -434,7 +444,8 @@ def _risk(db, org, row, vendor, control):
     return risk
 
 
-def _snapshot(db, org, selector, label, kind, row, fields=None):
+def _snapshot_event(org, selector, label, kind, row, fields=None):
+    """What is stored for one record's snapshot."""
     ident = _id(row["id"])
     payload = {
         "riskledger": row,
@@ -450,8 +461,7 @@ def _snapshot(db, org, selector, label, kind, row, fields=None):
     )
     digest = hashlib.sha256(content).hexdigest()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    result = store_event_with_artifact(
-        db,
+    return dict(
         timestamp=now,
         source="riskledger",
         system=label or "Risk Ledger",
@@ -479,6 +489,10 @@ def _snapshot(db, org, selector, label, kind, row, fields=None):
         captured_by="riskledger",
         commit=False,
     )
+
+
+def _snapshot(db, event):
+    result = store_event_with_artifact(db, **event)
     db.commit()
     return int(not result.get("deduped"))
 
@@ -505,113 +519,155 @@ def _collect(db, client, cfg):
     created = 0
     examined = 0
     levels = {_id(x) for x in cfg.get("framework_level_ids", [])}
+    reader = RecordReader()
+    # Domains and controls Keen could not read, so each is fetched and
+    # counted once.
+    unreadable: set[str] = set()
+
+    def read_control(row):
+        row = _clean(row)
+        ident = _id(row.get("id"))
+        domain_id = _id(row.get("domainID"))
+        event = _snapshot_event(
+            org,
+            selector,
+            label,
+            "control",
+            row,
+            {"control.id": ident, "domain.id": domain_id},
+        )
+        return row, event
+
+    def read_domain(row):
+        row = _clean(row)
+        ident = _id(row.get("id"))
+        event = _snapshot_event(
+            org, selector, label, "domain", row, {"domain.id": ident}
+        )
+        return row, event
 
     def domain(ident):
+        """The domain's catalogue row, or None when Keen cannot read it."""
         nonlocal created
         ident = _id(ident)
+        if ident in unreadable:
+            return None
         if ident not in domains:
-            row = _clean(client.one("domain", ident))
+            read = reader.read(read_domain, client.one("domain", ident))
+            if read is None:
+                unreadable.add(ident)
+                return None
+            row, event = read
             domains[ident] = row
             _framework(db)
             _domain(db, row)
-            created += _snapshot(
-                db, org, selector, label, "domain", row, {"domain.id": ident}
-            )
+            created += _snapshot(db, event)
         return domains[ident]
 
     def control(ident):
+        """The control's catalogue row, or None when Keen cannot read it."""
         nonlocal created
         ident = _id(ident)
+        if ident in unreadable:
+            return None
         if ident not in controls:
-            row = _clean(client.one("control", ident))
-            d = domain(row.get("domainID"))
+            read = reader.read(read_control, client.one("control", ident))
+            if read is None:
+                unreadable.add(ident)
+                return None
+            row, event = read
+            d = domain(row["domainID"])
+            if d is None:
+                unreadable.add(ident)
+                return None
             controls[ident] = _control(db, row, d)
-            created += _snapshot(
-                db,
-                org,
-                selector,
-                label,
-                "control",
-                row,
-                {"control.id": ident, "domain.id": _id(d["id"])},
-            )
+            created += _snapshot(db, event)
         return controls[ident]
+
+    def read_supplier(remote):
+        row = _clean(remote)
+        sid = _id(row.get("id"))
+        level = (row.get("framework") or {}).get("level") or {}
+        level_id = level.get("id")
+        if levels and not (isinstance(level_id, str) and level_id in levels):
+            return None
+        ids = []
+        if cfg.get("import_framework", True):
+            ids = [
+                x.get("domainID")
+                for x in row.get("complianceByDomain") or []
+                if isinstance(x, dict)
+            ]
+            ids += [
+                x.get("id")
+                for x in (row.get("framework") or {}).get("addOnDomains") or []
+                if isinstance(x, dict)
+            ]
+        event = _snapshot_event(
+            org,
+            selector,
+            label,
+            "supplier",
+            row,
+            {"supplier.id": sid, "framework.level.id": level_id},
+        )
+        return row, sid, [_id(ident) for ident in ids if ident], event
+
+    def read_risk(remote):
+        row = _clean(remote)
+        sid = row.get("supplierID")
+        if sid:
+            sid = _id(sid)
+        if levels and sid not in allowed_suppliers:
+            return None
+        associated = None
+        if (
+            row.get("associatedType") == "control"
+            and row.get("associatedID")
+            and cfg.get("import_framework", True)
+        ):
+            associated = _id(row["associatedID"])
+        event = _snapshot_event(
+            org,
+            selector,
+            label,
+            "risk",
+            row,
+            {
+                "supplier.id": sid,
+                "control.id": row.get("associatedID")
+                if row.get("associatedType") == "control"
+                else None,
+            },
+        )
+        return row, sid, associated, event
 
     if cfg.get("import_framework", True):
         _framework(db)
         db.commit()
-        for ident in cfg.get("domain_ids", []):
+        for ident in reader.each(cfg.get("domain_ids", []), _id):
             domain(ident)
-        for ident in cfg.get("control_ids", []):
+        for ident in reader.each(cfg.get("control_ids", []), _id):
             control(ident)
     if cfg.get("import_suppliers", True) or cfg.get("import_risks", True):
-        for remote in client.pages("suppliers", cfg):
-            row = _clean(remote)
-            sid = _id(row.get("id"))
-            level = (row.get("framework") or {}).get("level") or {}
-            level_id = level.get("id")
-            if levels and not (isinstance(level_id, str) and level_id in levels):
-                continue
+        suppliers = client.pages("suppliers", cfg)
+        for row, sid, domain_ids, event in reader.each(suppliers, read_supplier):
             allowed_suppliers.add(sid)
             examined += 1
             if cfg.get("import_suppliers", True):
                 vendors[sid] = _vendor(db, org, row)
-            if cfg.get("import_framework", True):
-                ids = [
-                    x.get("domainID")
-                    for x in row.get("complianceByDomain") or []
-                    if isinstance(x, dict)
-                ]
-                ids += [
-                    x.get("id")
-                    for x in (row.get("framework") or {}).get("addOnDomains") or []
-                    if isinstance(x, dict)
-                ]
-                for ident in ids:
-                    if ident:
-                        domain(ident)
-            created += _snapshot(
-                db,
-                org,
-                selector,
-                label,
-                "supplier",
-                row,
-                {"supplier.id": sid, "framework.level.id": level.get("id")},
-            )
+            for ident in reader.each(domain_ids, _id):
+                domain(ident)
+            created += _snapshot(db, event)
     if cfg.get("import_risks", True):
-        for remote in client.pages("risks", cfg):
-            row = _clean(remote)
-            sid = row.get("supplierID")
-            if sid:
-                sid = _id(sid)
-            if levels and sid not in allowed_suppliers:
-                continue
+        risks = client.pages("risks", cfg)
+        for row, sid, associated, event in reader.each(risks, read_risk):
             examined += 1
-            ci = None
-            if (
-                row.get("associatedType") == "control"
-                and row.get("associatedID")
-                and cfg.get("import_framework", True)
-            ):
-                ci = control(row["associatedID"])
+            ci = control(associated) if associated else None
             # A supplier can exist only on the risk endpoint (e.g. disconnected).
             # Do not invent a vendor or fetch resources beyond the configured scope.
             _risk(db, org, row, vendors.get(sid), ci)
-            created += _snapshot(
-                db,
-                org,
-                selector,
-                label,
-                "risk",
-                row,
-                {
-                    "supplier.id": sid,
-                    "control.id": row.get("associatedID")
-                    if row.get("associatedType") == "control"
-                    else None,
-                },
-            )
+            created += _snapshot(db, event)
     name = namespace("riskledger:" + org)
     cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
     if cursor is None:
@@ -622,6 +678,7 @@ def _collect(db, client, cfg):
         "last_success": cursor.last_ts.isoformat(),
         "examined": examined,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "framework_controls": len(controls),
         "framework_domains": len(domains),
     }
@@ -632,6 +689,7 @@ def _collect(db, client, cfg):
         "created_events": created,
         "controls_discovered": len(controls),
         "domains_discovered": len(domains),
+        "invalid_records": reader.invalid,
         "coverage": "API snapshots; assessment answers/evidence files and complete control enumeration are not exposed by the documented API",
     }
 

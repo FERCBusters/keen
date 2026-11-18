@@ -331,7 +331,12 @@ def test_ingest_project_timeline_reads_other_data_as_empty(db, data):
 )
 def test_ingest_project_timeline_reads_a_response_other_than_a_list_as_empty(db, body):
     result, store = _timeline(db, body)
-    assert result == {"project_id": 12, "created_events": 0, "cursor_last_ts": None}
+    assert result == {
+        "project_id": 12,
+        "created_events": 0,
+        "invalid_records": 0,
+        "cursor_last_ts": None,
+    }
     store.assert_not_called()
     db.commit.assert_called_once()
 

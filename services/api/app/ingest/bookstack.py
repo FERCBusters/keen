@@ -10,7 +10,7 @@ import httpx2 as httpx
 from sqlalchemy.orm import Session
 
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
-from app.ingest.common import is_safe_url, store_event_with_artifact
+from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact
 from app.ingest.connections import (
     connection_cache,
     connection_runs,
@@ -23,6 +23,7 @@ from app.ingest.http import retained_listing
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.mapping.targets import resolve_targets
 from app.security.errors import collection_error
+from app.security.json_shape import decode_json
 from app.security.redaction import utf8_bytes
 from app.security.regex import (
     MATCH_CONCURRENTLY,
@@ -199,7 +200,7 @@ def _resolve_book_id(client: httpx.Client, book_slug: Optional[str]) -> Optional
         try:
             r = client.get("/api/books", params=params)
             r.raise_for_status()
-            for item in _book_lookup_candidates(r.json() or {}):
+            for item in _book_lookup_candidates(decode_json(r.content) or {}):
                 item_slug = str(item.get("slug") or "").strip()
                 if item_slug.lower() != slug.lower():
                     continue
@@ -369,7 +370,7 @@ def _get_system_info(client: httpx.Client) -> dict[str, Any]:
     try:
         r = client.get("/api/system")
         r.raise_for_status()
-        data = r.json()
+        data = decode_json(r.content)
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
@@ -446,7 +447,7 @@ def _list_page_items(
 
         r = client.get("/api/pages", params=params)
         r.raise_for_status()
-        body = r.json() or {}
+        body = decode_json(r.content) or {}
         data = body.get("data") if isinstance(body, dict) else None
         if not isinstance(data, list) or not data:
             break
@@ -488,7 +489,7 @@ def _find_page_by_slug(
         params["filter[book_id]"] = int(book_id)
     r = client.get("/api/pages", params=params)
     r.raise_for_status()
-    body = r.json() or {}
+    body = decode_json(r.content) or {}
     data = body.get("data") if isinstance(body, dict) else None
     if isinstance(data, list) and data and isinstance(data[0], dict):
         return _stamp_book_scope(data[0], book_id=book_id, book_slug=book_slug)
@@ -551,7 +552,7 @@ def _find_page_by_title(
         params["filter[book_id]"] = int(book_id)
     r = client.get("/api/pages", params=params)
     r.raise_for_status()
-    body = r.json() or {}
+    body = decode_json(r.content) or {}
     data = body.get("data") if isinstance(body, dict) else None
     if isinstance(data, list) and data and isinstance(data[0], dict):
         return _stamp_book_scope(data[0], book_id=book_id, book_slug=book_slug)
@@ -561,7 +562,7 @@ def _find_page_by_title(
 def _read_page(client: httpx.Client, page_id: int) -> dict[str, Any]:
     r = client.get(f"/api/pages/{page_id}")
     r.raise_for_status()
-    data = r.json() or {}
+    data = decode_json(r.content) or {}
     return data if isinstance(data, dict) else {}
 
 
@@ -1045,235 +1046,254 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
         errors: list[str] = list(unread)
         config_mappings_created = 0
 
-        for pid, page_list in sorted(pages_by_id.items(), key=lambda kv: int(kv[0])):
-            try:
-                page_list_book_id = (
-                    page_list.get("book_id") if isinstance(page_list, dict) else None
-                )
-                page_full = _stamp_book_scope(
-                    _read_page(client, pid),
-                    book_id=page_list_book_id,
-                    book_slug=_extract_book_slug(page_list),
-                )
-                page_slug = (
-                    page_full.get("slug") or page_list.get("slug") or ""
-                ).strip() or None
-                page_title = (
-                    page_full.get("name") or page_list.get("name") or ""
-                ).strip() or f"Page {pid}"
-                page_book_slug = _extract_book_slug(page_list, page_full)
+        cursor_last = cur.last_ts
 
-                created_at = _parse_bookstack_ts(
-                    page_full.get("created_at") or page_list.get("created_at")
-                )
-                updated_at = _parse_bookstack_ts(
-                    page_full.get("updated_at") or page_list.get("updated_at")
-                )
-                ts = updated_at or created_at or run_started.replace(tzinfo=None)
-
-                is_updated_in_window = bool(
-                    updated_at and updated_at > (cur.last_ts or datetime.min)
-                )
-                is_created = bool(
-                    created_at
-                    and updated_at
-                    and created_at == updated_at
-                    and is_updated_in_window
-                )
-                action = (
-                    "created"
-                    if is_created
-                    else ("updated" if is_updated_in_window else "snapshot")
-                )
-
-                actor = None
-                ub = page_full.get("updated_by")
-                if isinstance(ub, dict):
-                    actor = (ub.get("name") or ub.get("slug") or "").strip() or None
-                cb = page_full.get("created_by")
-                if not actor and isinstance(cb, dict):
-                    actor = (cb.get("name") or cb.get("slug") or "").strip() or None
-
-                # Prefer the configured book scope if present, otherwise fall back
-                # to the list response's book_slug.
-                book_slug_eff = book_slug or page_book_slug
-                url_slug = _page_url(instance_base_url, book_slug_eff, page_slug)
-                url_direct = _page_direct_url(instance_base_url, pid)
-                primary_url = url_direct or url_slug
-
-                preview_text, preview_src = _make_preview(page_full, preview_chars)
-
-                # Store a small snapshot for evidence. Default is a preview-only
-                # capture (no full page content) with a link.
-                page_snapshot: dict[str, Any] = {
-                    "id": pid,
-                    "book_id": page_full.get("book_id") or page_list.get("book_id"),
-                    "chapter_id": page_full.get("chapter_id")
-                    or page_list.get("chapter_id"),
-                    "name": page_title,
-                    "slug": page_slug,
-                    "book_slug": book_slug_eff,
-                    "draft": (
-                        page_full.get("draft")
-                        if "draft" in page_full
-                        else page_list.get("draft")
-                    ),
-                    "template": (
-                        page_full.get("template")
-                        if "template" in page_full
-                        else page_list.get("template")
-                    ),
-                    "revision_count": (
-                        page_full.get("revision_count")
-                        if "revision_count" in page_full
-                        else page_list.get("revision_count")
-                    ),
-                    "editor": (
-                        page_full.get("editor")
-                        if "editor" in page_full
-                        else page_list.get("editor")
-                    ),
-                    "created_at": str(
-                        page_full.get("created_at") or page_list.get("created_at") or ""
-                    ),
-                    "updated_at": str(
-                        page_full.get("updated_at") or page_list.get("updated_at") or ""
-                    ),
-                    "updated_by": actor,
-                    "url": primary_url,
-                    "url_slug": url_slug,
-                    "url_direct": url_direct,
-                    "preview": preview_text,
-                    "preview_source": preview_src,
-                    "preview_chars": preview_chars,
-                }
-                tags = page_full.get("tags")
-                if isinstance(tags, list):
-                    page_snapshot["tags"] = tags
-                if capture_full_content:
-                    # Optional, off by default.
-                    page_snapshot["html"] = page_full.get("html")
-                    page_snapshot["raw_html"] = page_full.get("raw_html")
-                    page_snapshot["markdown"] = page_full.get("markdown")
-
-                payload = {
-                    "instance": {
-                        "app_name": instance_name,
-                        "base_url": (instance_base_url or "").rstrip("/"),
-                    },
-                    "page": page_snapshot,
-                }
-                payload_bytes = utf8_bytes(
-                    json.dumps(
-                        payload,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                        ensure_ascii=False,
+        def fetched():
+            """Each page with its full record, read one at a time. A page that
+            cannot be fetched is reported, and the pages after it are still
+            collected."""
+            for pid, page_list in sorted(
+                pages_by_id.items(), key=lambda kv: int(kv[0])
+            ):
+                try:
+                    page_list_book_id = (
+                        page_list.get("book_id")
+                        if isinstance(page_list, dict)
+                        else None
                     )
-                )
-                updated_at_raw = str(
+                    page_full = _stamp_book_scope(
+                        _read_page(client, pid),
+                        book_id=page_list_book_id,
+                        book_slug=_extract_book_slug(page_list),
+                    )
+                except Exception as e:
+                    errors.append(f"page_id={pid}: {collection_error(e)}")
+                    continue
+                yield pid, page_list, page_full
+
+        def read(page):
+            pid, page_list, page_full = page
+            page_slug = (
+                page_full.get("slug") or page_list.get("slug") or ""
+            ).strip() or None
+            page_title = (
+                page_full.get("name") or page_list.get("name") or ""
+            ).strip() or f"Page {pid}"
+            page_book_slug = _extract_book_slug(page_list, page_full)
+
+            created_at = _parse_bookstack_ts(
+                page_full.get("created_at") or page_list.get("created_at")
+            )
+            updated_at = _parse_bookstack_ts(
+                page_full.get("updated_at") or page_list.get("updated_at")
+            )
+            ts = updated_at or created_at or run_started.replace(tzinfo=None)
+
+            is_updated_in_window = bool(
+                updated_at and updated_at > (cursor_last or datetime.min)
+            )
+            is_created = bool(
+                created_at
+                and updated_at
+                and created_at == updated_at
+                and is_updated_in_window
+            )
+            action = (
+                "created"
+                if is_created
+                else ("updated" if is_updated_in_window else "snapshot")
+            )
+
+            actor = None
+            ub = page_full.get("updated_by")
+            if isinstance(ub, dict):
+                actor = (ub.get("name") or ub.get("slug") or "").strip() or None
+            cb = page_full.get("created_by")
+            if not actor and isinstance(cb, dict):
+                actor = (cb.get("name") or cb.get("slug") or "").strip() or None
+
+            # Prefer the configured book scope if present, otherwise fall back
+            # to the list response's book_slug.
+            book_slug_eff = book_slug or page_book_slug
+            url_slug = _page_url(instance_base_url, book_slug_eff, page_slug)
+            url_direct = _page_direct_url(instance_base_url, pid)
+            primary_url = url_direct or url_slug
+
+            preview_text, preview_src = _make_preview(page_full, preview_chars)
+
+            # Store a small snapshot for evidence. Default is a preview-only
+            # capture (no full page content) with a link.
+            page_snapshot: dict[str, Any] = {
+                "id": pid,
+                "book_id": page_full.get("book_id") or page_list.get("book_id"),
+                "chapter_id": page_full.get("chapter_id")
+                or page_list.get("chapter_id"),
+                "name": page_title,
+                "slug": page_slug,
+                "book_slug": book_slug_eff,
+                "draft": (
+                    page_full.get("draft")
+                    if "draft" in page_full
+                    else page_list.get("draft")
+                ),
+                "template": (
+                    page_full.get("template")
+                    if "template" in page_full
+                    else page_list.get("template")
+                ),
+                "revision_count": (
+                    page_full.get("revision_count")
+                    if "revision_count" in page_full
+                    else page_list.get("revision_count")
+                ),
+                "editor": (
+                    page_full.get("editor")
+                    if "editor" in page_full
+                    else page_list.get("editor")
+                ),
+                "created_at": str(
+                    page_full.get("created_at") or page_list.get("created_at") or ""
+                ),
+                "updated_at": str(
                     page_full.get("updated_at") or page_list.get("updated_at") or ""
-                ).strip()
-                ext_id = f"page:{pid}:{updated_at_raw or 'unknown'}"
+                ),
+                "updated_by": actor,
+                "url": primary_url,
+                "url_slug": url_slug,
+                "url_direct": url_direct,
+                "preview": preview_text,
+                "preview_source": preview_src,
+                "preview_chars": preview_chars,
+            }
+            tags = page_full.get("tags")
+            if isinstance(tags, list):
+                page_snapshot["tags"] = tags
+            if capture_full_content:
+                # Optional, off by default.
+                page_snapshot["html"] = page_full.get("html")
+                page_snapshot["raw_html"] = page_full.get("raw_html")
+                page_snapshot["markdown"] = page_full.get("markdown")
 
-                day = ts.date().isoformat()
-                safe_page = (page_slug or f"page-{pid}").replace("/", "-")
-                safe_book = (
-                    book_slug_eff or (f"book-{book_id}" if book_id else "")
-                ).replace("/", "-")
-                safe_slug = "-".join([x for x in (safe_book, safe_page) if x])
-                key = f"bookstack/{label}/{day}/{safe_slug}-{pid}.json"
-
-                system_parts = [label]
-                if book_slug_eff:
-                    system_parts.append(book_slug_eff)
-                system_parts.append(safe_page)
-                system = ":".join(system_parts)
-                summary = f"bookstack: {action} page '{page_title}'" + (
-                    f" ({safe_slug})" if safe_slug else ""
+            payload = {
+                "instance": {
+                    "app_name": instance_name,
+                    "base_url": (instance_base_url or "").rstrip("/"),
+                },
+                "page": page_snapshot,
+            }
+            payload_bytes = utf8_bytes(
+                json.dumps(
+                    payload,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
                 )
+            )
+            updated_at_raw = str(
+                page_full.get("updated_at") or page_list.get("updated_at") or ""
+            ).strip()
+            ext_id = f"page:{pid}:{updated_at_raw or 'unknown'}"
 
-                res = store_event_with_artifact(
-                    db,
-                    # Keep timestamps UTC-naive for consistency with other ingesters.
-                    timestamp=ts,
-                    source="bookstack",
-                    system=system,
-                    actor=actor,
-                    action=action,
-                    outcome="info",
-                    severity=2,
-                    summary=summary,
-                    raw_pointer={
-                        "bookstack": {
-                            "instance": (instance_base_url or "").rstrip("/"),
-                            "page_id": pid,
-                            "book_id": page_full.get("book_id")
-                            or page_list.get("book_id")
-                            or book_id,
-                            "page_slug": page_slug,
-                            "book_slug": book_slug_eff,
-                            "url": primary_url,
-                            "url_slug": url_slug,
-                            "url_direct": url_direct,
-                        }
-                    },
-                    normalized_payload={
-                        "bookstack": {
-                            "instance": instance_name,
-                            "page_id": pid,
-                            "page_slug": page_slug,
-                            "page_title": page_title,
-                            "book_slug": book_slug_eff,
-                            "action": action,
-                            "url": primary_url,
-                            "created_at": str(
-                                page_full.get("created_at")
-                                or page_list.get("created_at")
-                                or ""
-                            ),
-                            "updated_at": str(
-                                page_full.get("updated_at")
-                                or page_list.get("updated_at")
-                                or ""
-                            ),
-                            "preview": preview_text,
-                            "preview_source": preview_src,
-                            "preview_chars": preview_chars,
-                        }
-                    },
-                    external_id=ext_id,
-                    artifact_kind="bookstack_page",
-                    artifact_bytes=payload_bytes,
-                    artifact_content_type="application/json",
-                    artifact_key=key,
-                    captured_by="keen:bookstack",
-                )
+            day = ts.date().isoformat()
+            safe_page = (page_slug or f"page-{pid}").replace("/", "-")
+            safe_book = (
+                book_slug_eff or (f"book-{book_id}" if book_id else "")
+            ).replace("/", "-")
+            safe_slug = "-".join([x for x in (safe_book, safe_page) if x])
+            key = f"bookstack/{label}/{day}/{safe_slug}-{pid}.json"
 
-                if res.get("deduped"):
-                    deduped += 1
-                else:
-                    created += 1
+            system_parts = [label]
+            if book_slug_eff:
+                system_parts.append(book_slug_eff)
+            system_parts.append(safe_page)
+            system = ":".join(system_parts)
+            summary = f"bookstack: {action} page '{page_title}'" + (
+                f" ({safe_slug})" if safe_slug else ""
+            )
 
-                # Apply configured page->control mappings (method=config) for this event.
-                eid = str(res.get("event_id") or "").strip()
-                if eid and page_mappings:
-                    for pm in page_mappings:
-                        if not pm.matches(page_list, page_full):
-                            continue
-                        rationale = f"bookstack config mapping: {pm.rationale}"
-                        config_mappings_created += _ensure_and_add_mappings(
-                            db,
-                            event_id=eid,
-                            refs=pm.map_to,
-                            confidence=pm.confidence,
-                            method="config",
-                            rationale=rationale,
-                        )
+            event = dict(
+                # Keep timestamps UTC-naive for consistency with other ingesters.
+                timestamp=ts,
+                source="bookstack",
+                system=system,
+                actor=actor,
+                action=action,
+                outcome="info",
+                severity=2,
+                summary=summary,
+                raw_pointer={
+                    "bookstack": {
+                        "instance": (instance_base_url or "").rstrip("/"),
+                        "page_id": pid,
+                        "book_id": page_full.get("book_id")
+                        or page_list.get("book_id")
+                        or book_id,
+                        "page_slug": page_slug,
+                        "book_slug": book_slug_eff,
+                        "url": primary_url,
+                        "url_slug": url_slug,
+                        "url_direct": url_direct,
+                    }
+                },
+                normalized_payload={
+                    "bookstack": {
+                        "instance": instance_name,
+                        "page_id": pid,
+                        "page_slug": page_slug,
+                        "page_title": page_title,
+                        "book_slug": book_slug_eff,
+                        "action": action,
+                        "url": primary_url,
+                        "created_at": str(
+                            page_full.get("created_at")
+                            or page_list.get("created_at")
+                            or ""
+                        ),
+                        "updated_at": str(
+                            page_full.get("updated_at")
+                            or page_list.get("updated_at")
+                            or ""
+                        ),
+                        "preview": preview_text,
+                        "preview_source": preview_src,
+                        "preview_chars": preview_chars,
+                    }
+                },
+                external_id=ext_id,
+                artifact_kind="bookstack_page",
+                artifact_bytes=payload_bytes,
+                artifact_content_type="application/json",
+                artifact_key=key,
+                captured_by="keen:bookstack",
+            )
+            # Configured page mappings match against the page's own values.
+            mapped = [pm for pm in page_mappings if pm.matches(page_list, page_full)]
+            return event, mapped
 
-                runs.append(res)
-            except Exception as e:
-                errors.append(f"page_id={pid}: {collection_error(e)}")
+        reader = RecordReader()
+        for event, mapped in reader.each(fetched(), read):
+            res = store_event_with_artifact(db, **event)
+
+            if res.get("deduped"):
+                deduped += 1
+            else:
+                created += 1
+
+            # Apply configured page->control mappings (method=config) for this event.
+            eid = str(res.get("event_id") or "").strip()
+            if eid:
+                for pm in mapped:
+                    rationale = f"bookstack config mapping: {pm.rationale}"
+                    config_mappings_created += _ensure_and_add_mappings(
+                        db,
+                        event_id=eid,
+                        refs=pm.map_to,
+                        confidence=pm.confidence,
+                        method="config",
+                        rationale=rationale,
+                    )
+
+            runs.append(res)
 
         # Cursor: Move the window forward to the start of this run.
         if not unread:
@@ -1289,6 +1309,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
                 "created": created,
                 "deduped": deduped,
                 "config_mappings_created": config_mappings_created,
+                "invalid_records": reader.invalid,
                 "errors": errors,
                 "cursor_set_to": cur.last_ts.isoformat() if cur.last_ts else None,
             },

@@ -3,6 +3,7 @@
 import asyncio
 import re
 import time
+from json import dumps
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -484,7 +485,7 @@ def test_taiga_tokens_are_isolated_between_connections_and_runs(monkeypatch):
             requests.append((taiga.settings.taiga_base_url, json["username"]))
             return SimpleNamespace(
                 raise_for_status=lambda: None,
-                json=lambda: {"auth_token": "token-" + json["username"]},
+                content=dumps({"auth_token": "token-" + json["username"]}).encode(),
             )
 
         def close(self):
@@ -529,7 +530,7 @@ def test_bookstack_lookup_isolated_between_connections():
         return SimpleNamespace(
             get=lambda *a, **kw: SimpleNamespace(
                 raise_for_status=lambda: None,
-                json=lambda: {"data": [{"slug": "same", "id": ident}]},
+                content=dumps({"data": [{"slug": "same", "id": ident}]}).encode(),
             )
         )
 

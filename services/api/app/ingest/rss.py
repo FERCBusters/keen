@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings as deployment_settings
 from app.core.datetime_utils import to_utc_naive, utc_now_naive
 from app.db.models import IngestionCursor
-from app.ingest.common import is_safe_url, store_event_with_artifact
+from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
@@ -417,11 +417,11 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
     created = 0
     newest_ts: datetime | None = cursor_last
 
-    for e in entries_sorted:
+    def read(e):
         entry_id = e["id"]  # The parser keeps only entries with an identity.
         ts = _entry_ts(e)
         if floor_ts and ts < floor_ts:
-            continue
+            return None
 
         title = (e.get("title") or "").strip()
         if not title:
@@ -452,8 +452,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
 
         key = f"rss/{_safe_label_from_url(url)}/{ts.date().isoformat()}/{ext_id}.json"
 
-        res = store_event_with_artifact(
-            db,
+        return dict(
             timestamp=ts,
             source="rss",
             system=system,
@@ -477,11 +476,15 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
             artifact_key=key,
             captured_by="keen:rss",
         )
+
+    reader = RecordReader()
+    for event in reader.each(entries_sorted, read):
+        res = store_event_with_artifact(db, **event)
         if not res.get("deduped"):
             created += 1
 
-        if newest_ts is None or ts > newest_ts:
-            newest_ts = ts
+        if newest_ts is None or event["timestamp"] > newest_ts:
+            newest_ts = event["timestamp"]
 
     # Advance the cursor. It starts at the stored cursor and only moves on to
     # an entry's time, so a run without entries leaves the cursor unchanged.
@@ -496,6 +499,7 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         "label": label,
         "system": system,
         "created_events": created,
+        "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
         "feed_type": feed_meta.get("type"),
     }
