@@ -26,7 +26,7 @@ jobs:
       image: docker.io/library/debian:13@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6
     services:
       postgres:
-        image: docker.io/library/postgres:16@sha256:dd2bf3ce2dc83a81674cf7f217fcfd8a5009a4b325dda5b843bfee82a06cff6f
+        image: docker.io/library/postgres:16@sha256:3950ad7c3148ca2175ef1b6c36c9efbf78957ae8fbe8b3a5d7c35af50500382f
         env:
           POSTGRES_USER: keen_test
           POSTGRES_PASSWORD: keen_test
@@ -37,7 +37,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
       valkey:
-        image: docker.io/valkey/valkey:8@sha256:8f836008e0986c36adf50da714c7060cf689dbb335f61fe077939d90fa650809
+        image: docker.io/valkey/valkey:8@sha256:5032c4dd7abe08d6fd9382054608183e2bf1f7e3895ef619b8784698454325f7
         options: >-
           --health-cmd "valkey-cli ping"
           --health-interval 5s
