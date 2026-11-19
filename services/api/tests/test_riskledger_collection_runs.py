@@ -233,6 +233,21 @@ def test_a_failure_part_way_keeps_completed_snapshots_and_reports_safely(ledger)
     assert ledger.cursor() is None
 
 
+def test_the_task_time_limit_ends_the_import_unreported(ledger, monkeypatch):
+    """A time limit is not an import failure: it leaves the run, keeping the
+    snapshots already committed, so the next run continues."""
+    from app.ingest import riskledger
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    def stopped(*args):
+        raise SoftTimeLimitExceeded()
+
+    monkeypatch.setattr(riskledger, "_collect", stopped)
+    with pytest.raises(SoftTimeLimitExceeded):
+        ledger.run()
+    assert ledger.cursor() is None
+
+
 def test_one_import_runs_at_a_time(ledger):
     engine = ledger.db.get_bind().engine
     with engine.connect() as other:

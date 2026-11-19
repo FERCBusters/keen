@@ -307,3 +307,53 @@ def test_an_events_mappings_are_stored_in_control_order(contract_db, monkeypatch
         event.remove(Mapping, "before_insert", record)
 
     assert inserted == [1, 2, 3]
+
+
+def test_a_source_longer_than_its_column_is_clipped_not_refused(pg, written):
+    """A label the events table cannot hold would fail every event it names, so
+    the shared store path clips the source as it clips the other labels."""
+    long_source = "webhook:" + "a" * 100
+    stored = common.store_event_with_artifact(
+        pg.db,
+        timestamp=datetime(2026, 10, 1, 9, 0),
+        source=long_source,
+        system=None,
+        actor=None,
+        action="alert",
+        outcome="info",
+        severity=None,
+        summary="Delivery",
+        raw_pointer={},
+        normalized_payload={},
+        external_id="long-source",
+        artifact_kind="webhook",
+        artifact_bytes=b"{}",
+        artifact_content_type="application/json",
+        artifact_key="webhooks/long.json",
+        captured_by="test",
+        commit=False,
+    )
+    event = pg.db.get(Event, uuid.UUID(stored["event_id"]))
+    assert event.source == long_source[:64]
+    # A second delivery of it deduplicates against the clipped source.
+    again = common.store_event_with_artifact(
+        pg.db,
+        timestamp=datetime(2026, 10, 1, 9, 0),
+        source=long_source,
+        system=None,
+        actor=None,
+        action="alert",
+        outcome="info",
+        severity=None,
+        summary="Delivery",
+        raw_pointer={},
+        normalized_payload={},
+        external_id="long-source",
+        artifact_kind="webhook",
+        artifact_bytes=b"{}",
+        artifact_content_type="application/json",
+        artifact_key="webhooks/long.json",
+        captured_by="test",
+        commit=False,
+    )
+    assert again == {"ok": True, "deduped": True, "event_id": stored["event_id"]}

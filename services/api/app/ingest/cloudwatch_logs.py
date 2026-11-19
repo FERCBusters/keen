@@ -163,6 +163,9 @@ def ingest_cloudwatch_logs_once(
         .filter(IngestionCursor.name == cursor_name)
         .one_or_none()
     )
+    # A cursor this run creates is kept by the first page it finishes; until
+    # then a failed request leaves none behind.
+    new_cursor = cur is None
     if cur is None:
         cur = IngestionCursor(
             name=cursor_name,
@@ -252,6 +255,8 @@ def ingest_cloudwatch_logs_once(
         if next_token:
             params["nextToken"] = next_token
 
+        if not new_cursor:
+            db.commit()  # No database transaction spans the remote wait.
         resp = client.filter_log_events(**params)
         events = resp.get("events") or []
         # Sort for stable cursor advancement.
@@ -368,6 +373,7 @@ def ingest_cloudwatch_logs_once(
             cur.updated_at = utc_now_naive()
             db.add(cur)
             db.commit()
+            new_cursor = False
 
         next_token = resp.get("nextToken")
         if not next_token:

@@ -2,7 +2,14 @@
 // wizard, the risk detail page and the Mitigator. Other pages that list risks
 // use its score bands. Each page passes its own framework so links keep the
 // selected framework.
-import { esc, node, userDisplayName, withFramework } from '/app.js';
+import {
+  esc,
+  node,
+  readForAccount,
+  storeForAccount,
+  userDisplayName,
+  withFramework,
+} from '/app.js';
 
 export const RISK_TYPES = ['Confidentiality', 'Integrity', 'Availability'];
 
@@ -170,29 +177,16 @@ export function riskWizardHref(framework, { id = '', method = '', template = '' 
   return withFramework(u.pathname + u.search, framework);
 }
 
-const DRAFT_KEY = 'keen.riskWizardDraft';
-
-// A draft is a per-browser convenience for the hop from the Mitigator into
-// the wizard; storage can be unavailable, so both directions fail quietly.
+// A draft is a convenience for the hop from the Mitigator into the wizard. It
+// belongs to the account that wrote it and goes when that account signs out;
+// storage can be unavailable, so both directions fail quietly.
 export function storeWizardDraft(draft) {
-  try {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    return true;
-  } catch {
-    return false;
-  }
+  return storeForAccount('riskWizardDraft', draft);
 }
 
 export function takeWizardDraft() {
-  try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
-    sessionStorage.removeItem(DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
+  const draft = readForAccount('riskWizardDraft', { take: true });
+  return draft && typeof draft === 'object' ? draft : null;
 }
 
 // How heavily a visualisation draws an item's link for each relevance it can

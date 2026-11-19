@@ -31,7 +31,12 @@ from functools import lru_cache
 from typing import Any, overload
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
+from app.security.json_shape import (
+    MAX_DEPTH,
+    NESTED_TOO_DEEPLY,
+    decodes_within,
+    json_depth,
+)
 from app.security.regex import scan_pattern
 
 REDACTED = "REDACTED"
@@ -500,6 +505,8 @@ def mask_event_data_bytes(data: bytes, content_type: str | None) -> tuple[bytes,
 
     if ct == "application/json" or ct.endswith("+json"):
         try:
+            if not decodes_within(txt):
+                raise ValueError("too many values to decode")
             obj = json.loads(txt)
             if json_depth(obj) is None:
                 raise ValueError("nested too deeply")
@@ -571,6 +578,8 @@ def redact_bytes(data: bytes, content_type: str | None) -> tuple[bytes, str]:
     new_txt = txt
     if ct == "application/json" or ct.endswith("+json"):
         try:
+            if not decodes_within(txt):
+                raise ValueError("too many values to decode")
             obj = json.loads(txt)
             if json_depth(obj) is None:
                 raise ValueError("nested too deeply")

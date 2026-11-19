@@ -14,6 +14,7 @@ from app.core.source_meta import get_source_meta
 from app.db.models import SourceConnection
 from app.ingest import registry
 from app.ingest.connections import connections, deployment_settings
+from app.ingest.webhooks import PROVIDER_NAME, PROVIDER_NAME_HELP
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
 from app.security.regex import scan_pattern
@@ -167,13 +168,10 @@ def validate(payload):
         value = payload.configuration.get(key)
         if value and not scan_pattern(r"[A-Za-z0-9-]{1,128}").fullmatch(value):
             raise DomainError(422, "Enter a valid HTTP header name")
-    if payload.source == "webhooks" and not scan_pattern(
-        r"[A-Za-z0-9_-]{1,100}"
-    ).fullmatch(payload.configuration.get("provider", "")):
-        raise DomainError(
-            422,
-            "Enter a webhook provider name using letters, numbers, hyphens or underscores",
-        )
+    if payload.source == "webhooks" and not PROVIDER_NAME.fullmatch(
+        payload.configuration.get("provider", "")
+    ):
+        raise DomainError(422, PROVIDER_NAME_HELP)
     if not payload.name.strip():
         raise DomainError(422, "A connection name is required")
 

@@ -27,6 +27,8 @@ from app.storage.filenames import (
 )
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 
+# A masked download is read whole to mask it, so it is at most this long.
+MASKING_LIMIT_BYTES = 20 * 1024 * 1024
 _PREVIEW_CACHE: OrderedDict[str, bytes] = OrderedDict()
 _PREVIEW_CACHE_LOCK = Lock()
 _PREVIEW_CACHE_BYTES = 32 * 1024 * 1024
@@ -104,7 +106,7 @@ def download_artifact(*, artifact_id: str, sample_export: bool, db: Session, use
         buffer = bytearray()
         try:
             for chunk in stream:
-                if len(buffer) + len(chunk) > 20 * 1024 * 1024:
+                if len(buffer) + len(chunk) > MASKING_LIMIT_BYTES:
                     raise DomainError(413, "Artifact exceeds the 20 MiB masking limit")
                 buffer.extend(chunk)
         finally:

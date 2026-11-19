@@ -6,6 +6,7 @@ Only entry points establish a scope; upstream event payloads cannot choose it.
 
 import hashlib
 import os
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
@@ -15,11 +16,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from sqlalchemy import select, text
 
+from app.core import task_deadline
 from app.core.config import settings as deployment_settings
 from app.core.managed_configuration import load_document as deployment_document
+from app.core.task_deadline import TIME_LIMITS
 from app.core.valkey import get_valkey
 from app.db.models import SourceConnection
 from app.ingest import registry
@@ -324,6 +326,25 @@ def rotated(source, items):
     return items[offset:] + items[:offset]
 
 
+def start_run(source, queued_at) -> bool:
+    """Whether a run of ``source`` queued at ``queued_at`` should collect.
+
+    A run of the source that started after this one was queued has collected
+    what this one would, so this one is not needed. Otherwise this run's start
+    is noted for the runs queued behind it. Without Valkey every run collects.
+    """
+    key = "keen:ingest:started:" + source
+    try:
+        store = get_valkey()
+        started = store.get(key)
+        if queued_at is not None and started is not None and float(started) > queued_at:
+            return False
+        store.set(key, time.time(), ex=2 * 24 * 3600)
+    except Exception:
+        return True
+    return True
+
+
 def connection_runs(source):
     """Fan out a scheduled/manual run; one failed connection cannot starve others."""
 
@@ -345,6 +366,8 @@ def connection_runs(source):
                 if c.enabled and (not connection_id or c.id == connection_id)
             ]
             for connection in rotated(source, selected):
+                # A run past its task's deadline starts no further connection.
+                task_deadline.check()
                 with connection_scope(connection):
                     try:
                         if (
@@ -364,13 +387,18 @@ def connection_runs(source):
                                 )
                                 continue
                             with connection_scope(resolve(connection)):
+                                if db is not None:
+                                    # The connection listing and pause checks
+                                    # end here, so no transaction of this run's
+                                    # spans the collector's first remote wait.
+                                    db.commit()
                                 rows = function(db, *args, **kwargs)
                         from app.security.redaction import redact_obj
 
                         results.extend(
                             redact_obj({**row, **identity()}) for row in rows
                         )
-                    except (SoftTimeLimitExceeded, TimeLimitExceeded):
+                    except TIME_LIMITS:
                         # The task's time limit ends the whole run.
                         raise
                     except Exception:

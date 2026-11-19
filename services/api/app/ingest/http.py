@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 
 import httpx2 as httpx
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.security.provider_logging import suppress_provider_logs
 
@@ -251,6 +252,8 @@ class IngestionTransport(httpx.BaseTransport):
         self.lock = Lock()
 
     def handle_request(self, request):
+        # A run past its task's deadline makes no further request.
+        task_deadline.check()
         deadline = time.monotonic() + MAX_RESPONSE_SECONDS
         addresses = destination(str(request.url))
         headers = request.headers.copy()

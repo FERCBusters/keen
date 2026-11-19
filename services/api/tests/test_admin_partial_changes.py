@@ -177,9 +177,17 @@ def test_a_remap_without_filters_reaches_every_unmapped_event(admin, monkeypatch
     )
     db.commit()
     seen = []
-    monkeypatch.setattr(
-        admin_service, "apply_rules", lambda _db, event: seen.append(event.summary)
-    )
+    # An event removed after the remap listed it, here by the first event's
+    # mapping, is passed over.
+    removed = _event(db, timestamp=datetime(2001, 1, 1), summary="Removed meanwhile")
+    db.commit()
+
+    def apply_rules(session, event):
+        if not seen:
+            session.query(Event).filter(Event.id == removed.id).delete()
+        seen.append(event.summary)
+
+    monkeypatch.setattr(admin_service, "apply_rules", apply_rules)
     monkeypatch.setattr(
         admin_service, "apply_bookstack_config_mappings", lambda _db, _e: 0
     )

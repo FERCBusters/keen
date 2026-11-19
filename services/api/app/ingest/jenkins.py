@@ -80,6 +80,7 @@ def ingest_jenkins_job(
 ) -> dict[str, Any]:
     cursor_name = f"jenkins:{job_name}"
     cur = _get_or_create_cursor(db, cursor_name)
+    db.commit()  # No database transaction spans the remote wait.
 
     tree = "builds[number,url,timestamp,result,duration,building],lastBuild[number,url,timestamp,result]"
     with _client() as c:

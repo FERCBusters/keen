@@ -42,6 +42,27 @@ def json_depth(
     return deepest
 
 
+# The most values a JSON text from outside Keen is decoded into where it is
+# decoded whole: each value costs tens to hundreds of bytes as Python objects,
+# many times its text, and copies made while redacting or masking it multiply
+# that again. A larger text is handled as text, as one that is not JSON is.
+MAX_DECODED_VALUES = 100_000
+
+
+def decodes_within(text: str | bytes, limit: int = MAX_DECODED_VALUES) -> bool:
+    """Whether a JSON text holds at most ``limit`` values, read without decoding.
+
+    Each value after the first in an array or object follows a comma, and each
+    array or object opens with a bracket, so these counts bound the values
+    json_depth counts. Commas and brackets inside strings only raise the count.
+    """
+    if isinstance(text, str):
+        found = text.count(",") + text.count("[") + text.count("{")
+    else:
+        found = text.count(b",") + text.count(b"[") + text.count(b"{")
+    return found + 1 <= limit
+
+
 # Characters that open, close or quote JSON structure, and the string escape.
 _STRUCTURE = scan_pattern(r'[\[\]{}"\\]')
 _MARKER = json.dumps(NESTED_TOO_DEEPLY)

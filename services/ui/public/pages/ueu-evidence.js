@@ -55,6 +55,7 @@ const reasons = {
   sensitive_name: 'redacted: sensitive field name',
   sensitive_value: 'redacted: sensitive value',
   above_evidence_mode_ceiling: 'removed: above the identity’s evidence mode',
+  enrolled_agent_type: 'replaced: the type Keen enrolled the identity as',
 };
 
 function badge(map, value) {

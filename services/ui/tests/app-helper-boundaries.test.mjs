@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadUi } from './support/load-ui.mjs';
+import { accountValue } from './support/account-storage.mjs';
 
 const badges = [];
 const ui = await loadUi('app.js', {
@@ -190,25 +191,88 @@ test('editing is refused without an audit, even for administrators', () => {
   assert.equal(a.canEditAuditForUser({ can_admin_audits: true }, undefined), false);
 });
 
-test('remembering no audit clears the remembered audit', async (t) => {
+async function signedIn(t, account) {
   const globals = {};
   const u = await loadUi('app.js', {
-    html: '<select id="pick"><option value="a1">One</option><option value="a2">Two</option></select>',
+    html:
+      '<button id="navLogout">Sign out</button>' +
+      '<select id="pick"><option value="a1">One</option><option value="a2">Two</option></select>',
     globals,
     setup(window) {
       globals.sessionStorage = window.sessionStorage;
     },
+    vendor:
+      account === undefined
+        ? {}
+        : {
+            initNavbar: async () => ({ user_id: account }),
+            initCollapsibleFilterSections: () => {},
+          },
   });
   t.after(() => u.close());
+  if (account !== undefined) await u.api.initNavbar();
+  return { u, storage: globals.sessionStorage };
+}
+
+test('remembering no audit clears the remembered audit', async (t) => {
+  const { u, storage } = await signedIn(t, 'u1');
   const select = u.document.getElementById('pick');
   u.api.rememberSamplingAudit('a2');
   u.api.preselectSamplingAudit(select);
   assert.equal(select.value, 'a2');
   u.api.rememberSamplingAudit(null);
-  assert.equal(globals.sessionStorage.getItem('keen.samplingAudit'), '');
+  assert.equal(accountValue(storage, 'samplingAudit'), '');
   select.value = 'a1';
   u.api.preselectSamplingAudit(select);
   assert.equal(select.value, 'a1');
+});
+
+test('tab storage is read back only for the account that wrote it', async (t) => {
+  // One account leaves a draft in the tab, as when its wizard failed to start
+  // before reading it, and another signs in there.
+  const { u, storage } = await signedIn(t, 'u2');
+  storage.setItem(
+    'keen.account.riskWizardDraft',
+    JSON.stringify({ account: 'u1', value: { title: 'Theirs' } }),
+  );
+  storage.setItem('keen.account.samplingAudit', JSON.stringify({ account: 'u1', value: 'a2' }));
+  assert.equal(u.api.readForAccount('riskWizardDraft', { take: true }), null);
+  const select = u.document.getElementById('pick');
+  u.api.preselectSamplingAudit(select);
+  assert.equal(select.value, 'a1');
+  // What another account left is removed once found.
+  assert.equal(storage.getItem('keen.account.riskWizardDraft'), null);
+  assert.equal(storage.getItem('keen.account.samplingAudit'), null);
+  // The account's own values come back, and a taken value only once.
+  assert.equal(u.api.storeForAccount('riskWizardDraft', { title: 'Mine' }), true);
+  assert.equal(u.api.readForAccount('riskWizardDraft').title, 'Mine');
+  assert.equal(u.api.readForAccount('riskWizardDraft', { take: true }).title, 'Mine');
+  assert.equal(u.api.readForAccount('riskWizardDraft'), null);
+  // A record without a value, or unreadable storage, holds nothing.
+  storage.setItem('keen.account.empty', JSON.stringify({ account: 'u2' }));
+  assert.equal(u.api.readForAccount('empty'), null);
+  storage.setItem('keen.account.broken', '{');
+  assert.equal(u.api.readForAccount('broken'), null);
+});
+
+test('signing out removes everything the account kept in the tab', async (t) => {
+  const { u, storage } = await signedIn(t, 'u1');
+  u.api.storeForAccount('riskWizardDraft', { title: 'Mine' });
+  u.api.rememberSamplingAudit('a2');
+  storage.setItem('keen.unrelated', 'kept');
+  u.document.getElementById('navLogout').dispatchEvent(new u.window.Event('click'));
+  assert.equal(storage.getItem('keen.account.riskWizardDraft'), null);
+  assert.equal(storage.getItem('keen.account.samplingAudit'), null);
+  assert.equal(storage.getItem('keen.unrelated'), 'kept');
+});
+
+test('without a signed-in account nothing is kept in the tab', async (t) => {
+  const { u, storage } = await signedIn(t, undefined);
+  assert.equal(u.api.storeForAccount('riskWizardDraft', { title: 'Anyone' }), false);
+  storage.setItem('keen.account.riskWizardDraft', JSON.stringify({ account: '', value: {} }));
+  assert.equal(u.api.readForAccount('riskWizardDraft'), null);
+  u.api.forgetAccountStorage();
+  assert.equal(storage.length, 0);
 });
 
 test('loading markup falls back to its default message, a full-size spinner and one column', () => {

@@ -217,8 +217,9 @@ def test_once_streams_events_and_paginates(db):
     assert result["log_group"] == "/prod/app"
     assert result["region"] == "ap-southeast-2"
     assert cursor.last_ts == datetime(2025, 10, 9, 8, 53, 29, tzinfo=timezone.utc)
-    # The cursor is saved as each page finishes, then once more for the run.
-    assert db.commit.call_count == 3
+    # Each request starts with no transaction open, the cursor is saved as
+    # each page finishes, then once more for the run.
+    assert db.commit.call_count == 5
     db.rollback.assert_not_called()
     assert calls[0]["logGroupName"] == "/prod/app"
     assert calls[0]["filterPattern"] == "ERROR"
@@ -304,8 +305,9 @@ def test_once_deduped_event_still_advances_cursor_and_skips_bad_timestamps(db):
     assert result["created_artifacts"] == 0
     assert result["created_mappings"] == 0
     assert result["cursor_last_ts"] == "2025-10-09T08:53:20+00:00"
-    # One commit for the page's cursor and one for the run.
-    assert db.commit.call_count == 2
+    # One commit before the request, one for the page's cursor and one for
+    # the run.
+    assert db.commit.call_count == 3
 
 
 def test_one_unreadable_event_neither_stops_nor_freezes_the_query(db):
@@ -350,7 +352,8 @@ def test_once_repeated_token_stops(db):
             db, "name", {"log_group": "g"}, {"max_pages": 50}
         )
     assert result["pages"] == 1
-    db.commit.assert_called_once_with()
+    # One before the request and one for the run; an empty page saves nothing.
+    assert db.commit.call_count == 2
 
 
 def test_once_stream_names_must_be_a_list(db):
@@ -567,7 +570,8 @@ def test_paging_stops_at_the_page_limit_with_the_cursor_at_the_newest_event(db):
     assert calls[1]["nextToken"] == "tok-1"
     assert [event["external_id"] for event in stored] == ["ev1", "ev2"]
     assert cursor.last_ts == datetime.fromtimestamp((MS + 2000) / 1000, tz=timezone.utc)
-    assert db.commit.call_count == 3
+    # Before each request, after each page and once for the run.
+    assert db.commit.call_count == 5
 
 
 def test_a_run_stopped_partway_keeps_the_pages_it_finished(db):
@@ -598,8 +602,9 @@ def test_a_run_stopped_partway_keeps_the_pages_it_finished(db):
 
     newest = datetime.fromtimestamp((MS + 4000) / 1000, tz=timezone.utc)
     assert [event["external_id"] for event in stored] == ["ev1", "ev2"]
-    # The first page's cursor was committed before the second page was asked for.
-    assert saved == [newest]
+    # Nothing was open before the first request; the first page's cursor was
+    # committed before the second page was asked for.
+    assert saved == [None, newest, newest]
 
     # The next run continues from that cursor, less the overlap.
     captured = {}

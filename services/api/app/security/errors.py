@@ -4,7 +4,9 @@ import socket
 import ssl
 
 import httpx2 as httpx
-from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+
+from app.core import task_deadline
+from app.core.task_deadline import TIME_LIMITS
 
 
 def collection_error(exc):
@@ -13,10 +15,12 @@ def collection_error(exc):
     A collector reports each input's failure and carries on with the next.
     The task's time limit is not one input's failure: it ends the whole run,
     so it is raised again here, from every handler that describes a failure,
-    and the run stops with the pages and inputs it has finished.
+    and the run stops with the pages and inputs it has finished. So is a
+    deadline that passed while the failure happened.
     """
-    if isinstance(exc, (SoftTimeLimitExceeded, TimeLimitExceeded)):
+    if isinstance(exc, TIME_LIMITS):
         raise exc
+    task_deadline.check()
     if isinstance(exc, httpx.HTTPStatusError):
         return (
             f"Collection failed: upstream returned HTTP {int(exc.response.status_code)}"

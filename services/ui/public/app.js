@@ -276,6 +276,53 @@ export function frameworkLabel(slug) {
   return name && name !== slug ? `${name} (${slug})` : slug;
 }
 
+// Tab storage that belongs to the signed-in account, such as a draft carried
+// from one page to the next or the audit being sampled into. Each value is kept
+// with the account it belongs to and read back only for that account, and
+// signing out removes them all, so nothing one account leaves in a browser tab
+// reaches the next account to sign in there.
+const ACCOUNT_STORAGE_PREFIX = 'keen.account.';
+let signedInAccount = '';
+
+export function storeForAccount(name, value) {
+  if (!signedInAccount) return false;
+  try {
+    sessionStorage.setItem(
+      ACCOUNT_STORAGE_PREFIX + name,
+      JSON.stringify({ account: signedInAccount, value }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The value stored under ``name`` for the signed-in account, or null; with
+// ``take`` it is removed once read. A value another account left is removed.
+export function readForAccount(name, { take = false } = {}) {
+  try {
+    const key = ACCOUNT_STORAGE_PREFIX + name;
+    const raw = sessionStorage.getItem(key);
+    if (raw === null) return null;
+    const stored = JSON.parse(raw);
+    const mine = Boolean(signedInAccount) && stored?.account === signedInAccount;
+    if (take || !mine) sessionStorage.removeItem(key);
+    return mine ? (stored.value ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetAccountStorage() {
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith(ACCOUNT_STORAGE_PREFIX)) sessionStorage.removeItem(key);
+    }
+  } catch {
+    // Storage that cannot be read holds nothing to remove.
+  }
+}
+
 let navbarInitialisation;
 // A document can load several page modules. Share its complete shell setup,
 // including notification polling, without persisting account data across loads.
@@ -370,9 +417,12 @@ async function initialiseNavbar(...args) {
     },
     framework: { ...cfg.framework, selectMaxChars: 19, selectMinChars: 14 },
   });
+  signedInAccount = String(me?.user_id || '');
   // Keen logout mutates authentication state and therefore uses a CSRF POST.
   const logoutButton = document.getElementById('navLogout');
   const logoutUrl = String(me?.logout_url || '').trim();
+  // Registered first, so it runs however the sign-out then proceeds.
+  logoutButton?.addEventListener('click', forgetAccountStorage, { capture: true });
   if (logoutButton && (!logoutUrl || logoutUrl === '/api/v1/auth/oidc/logout')) {
     logoutButton.addEventListener(
       'click',
@@ -623,12 +673,44 @@ function _applyPendingRichText() {
   }
 }
 
+// Markup pasted or dropped into an editor is sanitised before the editor sees
+// it. A drag that starts inside an editor moves the editor's own content,
+// which was sanitised when it arrived, so its drop is left to the browser.
+let _draggingFromRichText = false;
+
+function _richTextDragStart(event) {
+  _draggingFromRichText = Boolean(event.target?.closest?.('.rich-text-editor [contenteditable]'));
+}
+
+function _richTextDragEnd() {
+  _draggingFromRichText = false;
+}
+
+// Places the caret where a drop landed, as the browser would have.
+function _caretAtDrop(event) {
+  const doc = event.target.ownerDocument;
+  let range = doc.caretRangeFromPoint?.(event.clientX, event.clientY) || null;
+  if (!range) {
+    const position = doc.caretPositionFromPoint?.(event.clientX, event.clientY);
+    if (position) {
+      range = doc.createRange();
+      range.setStart(position.offsetNode, position.offset);
+    }
+  }
+  if (!range) return;
+  const selection = doc.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 function _pasteIntoRichText(event) {
   const editable = event.target?.closest?.('.rich-text-editor [contenteditable]');
-  const data = event.clipboardData;
+  const data = event.type === 'drop' ? event.dataTransfer : event.clipboardData;
   if (!editable || !data?.types?.includes?.('text/html')) return;
+  if (event.type === 'drop' && _draggingFromRichText) return;
   event.preventDefault();
   event.stopPropagation();
+  if (event.type === 'drop') _caretAtDrop(event);
   const html = sanitizeRichTextHtml(data.getData('text/html'));
   if (html) document.execCommand('insertHTML', false, html);
   else document.execCommand('insertText', false, data.getData('text/plain'));
@@ -779,6 +861,9 @@ export function initRichTextEditors(root = document, opts = {}) {
     // Capturing at the document runs before Wysi's bubbling paste handler,
     // which stopping propagation here then skips.
     document.addEventListener('paste', _pasteIntoRichText, true);
+    document.addEventListener('drop', _pasteIntoRichText, true);
+    document.addEventListener('dragstart', _richTextDragStart, true);
+    document.addEventListener('dragend', _richTextDragEnd, true);
     // Likewise before Wysi's bubbling input handler re-parses each edit.
     document.addEventListener('input', _keepRichTextInParagraphs, true);
     _richTextPasteGuarded = true;
@@ -976,24 +1061,14 @@ export function canSampleIntoAudit(me = null, entityType = '') {
 // The audit an auditor is gathering evidence for, remembered in this browser
 // tab so each sampling dialog starts with it. A convenience only: the dialog
 // still lists every audit the account can sample into.
-const SAMPLING_AUDIT_KEY = 'keen.samplingAudit';
-
+// Without storage each dialog starts with the first audit.
 export function rememberSamplingAudit(auditId) {
-  try {
-    sessionStorage.setItem(SAMPLING_AUDIT_KEY, String(auditId || ''));
-  } catch {
-    // Without storage each dialog starts with the first audit.
-  }
+  storeForAccount('samplingAudit', String(auditId || ''));
 }
 
 // Selects the remembered audit in a list of audit choices when it is there.
 export function preselectSamplingAudit(select) {
-  let remembered = '';
-  try {
-    remembered = sessionStorage.getItem(SAMPLING_AUDIT_KEY);
-  } catch {
-    return;
-  }
+  const remembered = readForAccount('samplingAudit');
   if (remembered && [...select.options].some((option) => option.value === remembered))
     select.value = remembered;
 }

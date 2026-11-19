@@ -8,6 +8,7 @@ import json
 import time
 import uuid
 from functools import partial
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import desc, func, or_, select
@@ -61,6 +62,7 @@ from app.services.event_filters import (
     run_scan,
     scan_budget,
 )
+from app.services.event_payloads import payloads, without_payloads
 from app.services.exports import Export
 from app.services.mapping_provenance import rule_id_of
 from app.services.presentation import event_identifier as _event_identifier
@@ -190,8 +192,6 @@ def list_events(
                         Event.outcome,
                         Event.severity,
                         Event.summary,
-                        Event.raw_pointer,
-                        Event.normalized_payload,
                     )
                 )
                 .order_by(desc(Event.timestamp))
@@ -202,6 +202,7 @@ def list_events(
         )
 
         event_ids = [e.id for e in events]
+        links = _links(db, events)
 
         controls_by_event = (
             page_controls(db, framework, event_ids) if not unmapped else {}
@@ -229,15 +230,13 @@ def list_events(
                     "connection_id": e.connection_id,
                     "connection_name": e.connection_name,
                     "system": e.system,
-                    "identifier": _event_identifier(e),
+                    "identifier": links[e.id][1],
                     "actor": e.actor,
                     "action": e.action,
                     "outcome": e.outcome,
                     "severity": e.severity,
                     "summary": e.summary,
-                    "source_url": _redact_str(
-                        _extract_source_url(e.raw_pointer, e.normalized_payload)
-                    ),
+                    "source_url": links[e.id][0],
                     "controls": controls_by_event.get(e.id, []),
                     "artifact_count": artifact_counts.get(e.id, 0),
                 }
@@ -614,13 +613,40 @@ def get_event(*, event_id: str, framework: str, sample_export: bool, db: Session
     return resp
 
 
+def _links(db: Session, events) -> dict[uuid.UUID, tuple[str | None, str | None]]:
+    """Each event's source URL and identifier, which its stored payloads give.
+
+    ``events`` are read without their payloads; the payloads are read a group
+    at a time, so a page of large evidence is never held in memory at once.
+    """
+    by_id = {e.id: e for e in events}
+    links: dict[uuid.UUID, tuple[str | None, str | None]] = {
+        e.id: (None, e.system or None) for e in events
+    }
+    for event_id, raw_pointer, payload in payloads(db, by_id):
+        e = by_id[event_id]
+        links[event_id] = (
+            _redact_str(_extract_source_url(raw_pointer, payload)),
+            _event_identifier(
+                SimpleNamespace(
+                    source=e.source,
+                    system=e.system,
+                    raw_pointer=raw_pointer,
+                    normalized_payload=payload,
+                )
+            ),
+        )
+    return links
+
+
 def _export_page(db: Session, framework: str, qry, after, take: int):
     """The next ``take`` exported events after the ``(timestamp, id)`` key.
 
     Events run newest first, and by identifier within a timestamp, as the
     ``(timestamp DESC, id)`` index reads them; each page starts where the last
     ended, so the filter is never re-run over the events already exported.
-    Returns the events, their control references and their artefact counts.
+    Returns the events, read without their payloads, their control
+    references, their artefact counts and their source URLs and identifiers.
     """
     page = qry
     if after is not None:
@@ -629,7 +655,12 @@ def _export_page(db: Session, framework: str, qry, after, take: int):
             Event.timestamp <= timestamp,
             or_(Event.timestamp < timestamp, Event.id > event_id),
         )
-    batch = page.order_by(desc(Event.timestamp), Event.id).limit(take).all()
+    batch = (
+        page.options(*without_payloads())
+        .order_by(desc(Event.timestamp), Event.id)
+        .limit(take)
+        .all()
+    )
 
     event_ids = [e.id for e in batch]
     controls_by_event: dict[uuid.UUID, list[str]] = {}
@@ -659,7 +690,7 @@ def _export_page(db: Session, framework: str, qry, after, take: int):
             .all()
         )
         artifact_counts = {ev_id: int(n) for ev_id, n in rows}
-    return batch, controls_by_event, artifact_counts
+    return batch, controls_by_event, artifact_counts, _links(db, batch)
 
 
 def export_events(
@@ -775,7 +806,9 @@ def export_events(
             scan_budget(db, filters, within_ms=left)
             page = partial(_export_page, db, framework, qry, after, take)
             try:
-                batch, controls_by_event, artifact_counts = run_scan(db, filters, page)
+                batch, controls_by_event, artifact_counts, links = run_scan(
+                    db, filters, page
+                )
             except DomainError:
                 incomplete = True
                 break
@@ -795,11 +828,9 @@ def export_events(
                     "action": e.action,
                     "outcome": e.outcome,
                     "severity": e.severity,
-                    "identifier": _event_identifier(e),
+                    "identifier": links[e.id][1],
                     "summary": e.summary,
-                    "source_url": _redact_str(
-                        _extract_source_url(e.raw_pointer, e.normalized_payload)
-                    ),
+                    "source_url": links[e.id][0],
                     "controls": controls_by_event.get(e.id, []),
                     "artifact_count": artifact_counts.get(e.id, 0),
                 }

@@ -15,6 +15,7 @@ import ssl
 import time
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from app.core import task_deadline
 from app.ingest.http import budget, budgeted, remaining
 from app.security.json_shape import decode_json
 from cryptography.fernet import Fernet
@@ -134,6 +135,8 @@ def request(
     timeout=20,
     form=None,
 ):
+    # A run past its task's deadline makes no further request.
+    task_deadline.check()
     deadline = time.monotonic() + timeout
     u, addresses = destination(url)
     pairs = parse_qsl(u.query, keep_blank_values=True) + list((query or {}).items())

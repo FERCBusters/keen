@@ -578,6 +578,92 @@ test('pasted HTML is sanitised before Wysi can re-parse it', async (t) => {
   assert.equal(inserted.length, 2);
 });
 
+test('dropped HTML is sanitised before Wysi can re-parse it', async (t) => {
+  const inserted = [];
+  const ui = await loadUi('app.js', {
+    html: '<div class="rich-text-editor"><textarea id="notes" data-rich-text="1"></textarea></div><p id="outside"></p>',
+    setup(window) {
+      window.editors = installWysi(window);
+      window.document.execCommand = (command, _ui, value) => {
+        inserted.push([command, value]);
+        return true;
+      };
+    },
+  });
+  t.after(ui.close);
+  ui.api.initRichTextEditors(ui.document);
+  const [notes] = ui.window.editors;
+  const doc = ui.document;
+  const drop = (target, data) => {
+    const event = new ui.window.Event('drop', { bubbles: true, cancelable: true });
+    event.dataTransfer = { types: Object.keys(data), getData: (type) => data[type] || '' };
+    event.clientX = 5;
+    event.clientY = 7;
+    target.dispatchEvent(event);
+    return event;
+  };
+  const caret = () => {
+    const range = doc.getSelection().getRangeAt(0);
+    return [range.startContainer, range.startOffset];
+  };
+  notes.editable.textContent = 'Existing text';
+  const text = notes.editable.firstChild;
+
+  // The caret moves to where the drop landed before the sanitised markup goes in.
+  const asked = [];
+  doc.caretRangeFromPoint = (x, y) => {
+    asked.push([x, y]);
+    const range = doc.createRange();
+    range.setStart(text, 3);
+    return range;
+  };
+  const event = drop(notes.editable, {
+    'text/html': `<em onmouseover="x()">Dropped</em><img src=x onerror="x()">`,
+    'text/plain': 'Dropped',
+  });
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(asked, [[5, 7]]);
+  assert.deepEqual(caret(), [text, 3]);
+  assert.equal(inserted.length, 1);
+  const probe = doc.createElement('div');
+  probe.innerHTML = inserted[0][1];
+  assert.deepEqual(
+    [...probe.querySelectorAll('*')].map((el) => el.tagName),
+    ['EM'],
+  );
+  assert.equal(/onmouseover|onerror/.test(probe.innerHTML), false);
+
+  // A browser with only caretPositionFromPoint is handled the same way.
+  delete doc.caretRangeFromPoint;
+  doc.caretPositionFromPoint = () => ({ offsetNode: text, offset: 5 });
+  drop(notes.editable, { 'text/html': '<b>x</b>', 'text/plain': 'x' });
+  assert.deepEqual(caret(), [text, 5]);
+  // Without a position, the markup goes where the caret already is.
+  doc.caretPositionFromPoint = () => null;
+  drop(notes.editable, { 'text/html': '<img src="/x">', 'text/plain': 'picture' });
+  assert.deepEqual(caret(), [text, 5]);
+  assert.deepEqual(inserted.at(-1), ['insertText', 'picture']);
+  delete doc.caretPositionFromPoint;
+  drop(notes.editable, { 'text/html': '<b>y</b>', 'text/plain': 'y' });
+  assert.equal(inserted.length, 4);
+
+  // Moving the editor's own content is left to the browser.
+  notes.editable.dispatchEvent(new ui.window.Event('dragstart', { bubbles: true }));
+  assert.equal(drop(notes.editable, { 'text/html': '<b>moved</b>' }).defaultPrevented, false);
+  notes.editable.dispatchEvent(new ui.window.Event('dragend', { bubbles: true }));
+  // A drag that starts elsewhere is sanitised again once it ends.
+  doc.getElementById('outside').dispatchEvent(new ui.window.Event('dragstart', { bubbles: true }));
+  assert.equal(drop(notes.editable, { 'text/html': '<b>z</b>' }).defaultPrevented, true);
+  // Plain-text drops and drops elsewhere keep their usual behaviour.
+  assert.equal(drop(notes.editable, { 'text/plain': 'text' }).defaultPrevented, false);
+  assert.equal(
+    drop(doc.getElementById('outside'), { 'text/html': '<b>x</b>' }).defaultPrevented,
+    false,
+  );
+  assert.equal(inserted.length, 5);
+  assert.equal(ui.window.editors.wysiPastes.length, 0);
+});
+
 test('Wysi is started only by the shared rich-text helper', async () => {
   // Any other caller would hand Wysi content without the protections above.
   const scripts = await firstPartyScripts();

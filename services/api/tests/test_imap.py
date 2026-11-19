@@ -465,6 +465,33 @@ def test_failure_preserves_checkpoint_and_enforces_backoff(contract_db, monkeypa
     assert imap.ingest_imap_all(contract_db)[0]["skipped"]
 
 
+def test_the_task_time_limit_ends_the_poll_without_a_backoff(contract_db, monkeypatch):
+    """A time limit is the run's, not the mailbox's: it is not recorded as a
+    failed poll, so the mailbox is not backed off for it."""
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    peer = sc.Connection(
+        "limited",
+        "imap",
+        "Limited",
+        {"host": "mail.example", "username": "reader"},
+        {"password": "p"},
+        {},
+    )
+    monkeypatch.setattr(sc, "connections", lambda *a: [peer])
+
+    def stopped(*a):
+        raise SoftTimeLimitExceeded()
+
+    monkeypatch.setattr(imap, "fetch", stopped)
+    with pytest.raises(SoftTimeLimitExceeded):
+        imap.ingest_imap_all(contract_db)
+    cursor = contract_db.query(IngestionCursor).one()
+    assert "failures" not in cursor.meta and "retry_after" not in cursor.meta
+
+
 def test_connection_admin_csrf_credential_isolation_and_queue(keen, monkeypatch):
     from app.worker import tasks
     from cryptography.fernet import Fernet

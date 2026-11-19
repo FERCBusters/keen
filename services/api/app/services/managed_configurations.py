@@ -31,6 +31,7 @@ from app.db.models import (
 )
 from app.ingest import registry
 from app.ingest.bookstack import book_scope
+from app.ingest.webhooks import PROVIDER_NAME, PROVIDER_NAME_HELP
 from app.mapping.collector import collector_id, collector_pointer_filter
 from app.mapping.fields import observed_fields, validate_fields
 from app.mapping.rules import (
@@ -48,6 +49,7 @@ from app.security.diary_visibility import diary_filter_condition
 from app.security.redaction import redact_url
 from app.security.regex import scan_pattern
 from app.services.errors import DomainError
+from app.services.event_payloads import payloads, without_payloads
 from app.services.rule_sources import distinct_sources, reads_source, rule_sources
 
 
@@ -656,13 +658,8 @@ def _validate_collection_entry(adapter: str, section: str, entry: dict, key: str
             validate_config({"organizations": [entry]})
         except RiskLedgerError as exc:
             raise DomainError(400, str(exc)) from None
-    if adapter == "webhooks" and not scan_pattern(r"[A-Za-z0-9_-]{1,64}").fullmatch(
-        key
-    ):
-        raise DomainError(
-            400,
-            "Webhook provider name must use letters, numbers, underscores or hyphens",
-        )
+    if adapter == "webhooks" and not PROVIDER_NAME.fullmatch(key):
+        raise DomainError(400, PROVIDER_NAME_HELP)
     if section == "feeds":
         url = urlparse(key)
         if url.scheme != "https" or not url.hostname or url.username or url.password:
@@ -968,6 +965,7 @@ def bookstack_catalog(
         if connection is None:
             raise DomainError(404, "Connection not found")
         scope = connection_scope(resolve(connection))
+    db.commit()  # No database transaction spans the remote wait.
     try:
         with scope, _client() as client:
             params = {"count": 100, "offset": offset}
@@ -1543,12 +1541,19 @@ def preview_rule(*, payload: RuleInput, user: User, db: Session):
     # administrator reaches this route and opens them all; an MCP connection
     # that was lent the role here opens the ones its own scopes name.
     query = query.filter(diary_filter_condition(db, user))
-    events = query.order_by(Event.timestamp.desc()).limit(200).all()
+    events = (
+        query.options(*without_payloads())
+        .order_by(Event.timestamp.desc())
+        .limit(200)
+        .all()
+    )
     examples: list[dict[str, Any]] = []
     nonmatches: list[dict[str, Any]] = []
     count = 0
-    for event in events:
-        hits = evaluate_by_framework(event_fields(event), [rule])
+    by_id = {event.id: event for event in events}
+    for event_id, raw_pointer, stored in payloads(db, by_id):
+        event = by_id[event_id]
+        hits = evaluate_by_framework(event_fields(event, (raw_pointer, stored)), [rule])
         if hits:
             count += 1
             if len(examples) < 10:
@@ -1622,7 +1627,16 @@ def evidence_event_samples(
                 raise DomainError(400, "Invalid collection item") from exc
     # As in preview_rule: link entries follow the caller's own authority.
     query = query.filter(diary_filter_condition(db, user))
-    rows = query.order_by(Event.timestamp.desc()).limit(20).all()
+    rows = (
+        query.options(*without_payloads())
+        .order_by(Event.timestamp.desc())
+        .limit(20)
+        .all()
+    )
+    fields = {
+        event_id: observed_fields(payload or {})
+        for event_id, _, payload in payloads(db, [row.id for row in rows])
+    }
     return {
         "items": [
             {
@@ -1636,9 +1650,10 @@ def evidence_event_samples(
                 "outcome": row.outcome,
                 "severity": row.severity,
                 "summary": row.summary[:180],
-                "fields": observed_fields(row.normalized_payload or {}),
+                "fields": fields.get(row.id, []),
             }
             for row in rows
+            if row.id in fields
         ]
     }
 

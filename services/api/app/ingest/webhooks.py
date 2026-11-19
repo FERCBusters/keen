@@ -4,21 +4,42 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
+from sqlalchemy import String
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.valkey import get_valkey
+from app.db.models import Event
 from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import current_connection, load_document, namespace
 from app.ingest.registry import Source, register
+from app.security.json_shape import decodes_within
 from app.security.placeholders import is_placeholder
+from app.security.regex import scan_pattern
 
 # The providers defined in the webhooks.yml Keen ships. Each has its own
 # delivery allowance per client address; any other provider name shares one.
 BUILT_IN_PROVIDERS = frozenset({"cloudtrail_source_ip", "enroll"})
 _MAX_WEBHOOK_PAYLOAD_BYTES = 10 * 1024 * 1024  # 10MB
+# A provider's deliveries are stored as events of the source
+# "webhook:<provider>", so a provider name is as long as the events table's
+# source column leaves room for. Both editors that name a provider refuse a
+# longer one.
+SOURCE_PREFIX = "webhook:"
+# SQLAlchemy types each column's type as TypeEngine and a String's length as
+# optional; the events table's source column is a String(64).
+PROVIDER_CHARS = cast(int, cast(String, Event.__table__.c.source.type).length) - len(
+    SOURCE_PREFIX
+)
+PROVIDER_NAME = scan_pattern(rf"[A-Za-z0-9_-]{{1,{PROVIDER_CHARS}}}")
+PROVIDER_NAME_HELP = (
+    "Enter a webhook provider name of up to "
+    f"{PROVIDER_CHARS} letters, numbers, hyphens or underscores"
+)
+# An event type names the delivery's action and a folder of its artefacts.
+EVENT_TYPE_CHARS = 128
 # Replay protection: reject webhooks older than 15 minutes
 _WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 900
 
@@ -140,6 +161,10 @@ def ingest_webhook(
 ) -> dict[str, Any]:
     if len(body) > _MAX_WEBHOOK_PAYLOAD_BYTES:
         raise ValueError("Webhook payload too large")
+    if len(event_type) > EVENT_TYPE_CHARS:
+        raise ValueError(
+            f"Webhook event type must be at most {EVENT_TYPE_CHARS} characters"
+        )
 
     # Check for replay attacks with timestamp validation
     if _check_replay_protection(provider, event_type, body, headers):
@@ -165,6 +190,10 @@ def _store_webhook_event(
 ) -> dict[str, Any]:
     summary = f"webhook:{provider}/{event_type}"
     try:
+        # A body of more values than Keen decodes is kept as text, as one that
+        # is not JSON is: decoded, it would cost the API many times its size.
+        if not decodes_within(body):
+            raise ValueError("too many values to decode")
         parsed = json.loads(body.decode("utf-8"))
     except Exception:
         parsed = {"raw": body.decode("utf-8", errors="replace")}
@@ -193,7 +222,7 @@ def _store_webhook_event(
     res = store_event_with_artifact(
         db,
         timestamp=ts,
-        source=f"webhook:{provider}",
+        source=SOURCE_PREFIX + provider,
         system=None,
         actor=None,
         action=event_type,

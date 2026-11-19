@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.core.datetime_utils import utc_now_naive
+from app.core.task_deadline import TIME_LIMITS
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import (
@@ -131,6 +132,9 @@ def ingest_imap_all(db):
     db.commit()  # No database transaction spans the remote wait.
     try:
         result = fetch({**config, "password": password}, state)
+    except TIME_LIMITS:
+        # The task's time limit ends the run; it is no failed poll to back off.
+        raise
     except Exception:
         db.rollback()
         cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()

@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { SIGNED_IN, accountEntry, accountValue } from './support/account-storage.mjs';
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
@@ -119,7 +120,7 @@ async function mitigator(t, options = {}) {
     hash: '',
   };
   const ui = await page(t, 'mitigator', {
-    me: options.me || { is_admin: true },
+    me: options.me || { is_admin: true, user_id: SIGNED_IN },
     globals: { sessionStorage: storage, location },
     get: async (u) => {
       if (u.pathname === '/api/v1/risks/categories') {
@@ -283,7 +284,7 @@ test('the wizard receives the ticked controls and affected records as a draft', 
   ui.document.querySelector('.mitigator-affected-select[value="1"]').checked = false;
   ui.el('mitigatorToWizard').click();
   assert.equal(location.href, '/risk-wizard.html?framework=A');
-  const draft = JSON.parse(storage.getItem('keen.riskWizardDraft'));
+  const draft = accountValue(storage, 'riskWizardDraft');
   assert.deepEqual(draft, {
     method: 'cia',
     title: 'Payroll staff get phished',
@@ -305,11 +306,11 @@ test('a template or a PESTLE(E) item can be chosen instead', async (t) => {
   await analyse(ui, state);
   ui.document.querySelector('[data-use-template="tpl1"]').click();
   assert.equal(location.href, '/risk-wizard.html?template=tpl1&framework=A');
-  assert.equal(JSON.parse(storage.getItem('keen.riskWizardDraft')).template_id, 'tpl1');
+  assert.equal(accountValue(storage, 'riskWizardDraft').template_id, 'tpl1');
   ui.el('mitigatorToPestleWizard').click();
   assert.equal(location.href, '/risk-wizard.html?method=pestle&framework=A');
   // A factor names the same ticked records; a vendor without detail has none.
-  assert.deepEqual(JSON.parse(storage.getItem('keen.riskWizardDraft')), {
+  assert.deepEqual(accountValue(storage, 'riskWizardDraft'), {
     method: 'pestle',
     threat_summary: 'Phishing regulation',
     pestle_type: 'Legal',
@@ -346,7 +347,7 @@ test('an empty analysis says nothing matched and falls back to the description',
   assert.match(sections[2].textContent, /No controls matched strongly enough/);
   assert.equal(ui.el('mitigatorToPestleWizard'), null);
   ui.el('mitigatorToWizard').click();
-  const draft = JSON.parse(storage.getItem('keen.riskWizardDraft'));
+  const draft = accountValue(storage, 'riskWizardDraft');
   assert.equal(draft.method, 'general');
   assert.equal(draft.threat_summary, 'Something vague');
   assert.deepEqual(draft.controls, []);

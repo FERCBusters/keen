@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadUi } from './support/load-ui.mjs';
+import { accountEntry, accountValue } from './support/account-storage.mjs';
 
 // The shared "Sample into audit" dialog used by event, ISMS and risk pages.
 const AUDITS = [
@@ -37,6 +38,9 @@ async function sampling(t, { audits = AUDITS, auditsError, post, url, globals } 
       };
     },
     vendor: {
+      // The page's navigation names the signed-in account first, as on every page.
+      initNavbar: async () => AUDITOR,
+      initCollapsibleFilterSections: () => {},
       toast: (el, message, type) => toasts.push({ el: el?.id, message, type }),
       apiGet: async (path) => {
         calls.push({ method: 'GET', path });
@@ -50,6 +54,9 @@ async function sampling(t, { audits = AUDITS, auditsError, post, url, globals } 
     },
   });
   t.after(ui.close);
+  await ui.api.initNavbar();
+  // Only the dialog's own requests are of interest.
+  calls.length = 0;
   const el = (id) => ui.document.getElementById(id);
   const open = (options = {}) =>
     ui.api.openAuditSampleModal({
@@ -231,7 +238,7 @@ test('the dialog opens only for saved items and users who may sample them', asyn
 });
 
 test('the dialog starts with the audit being worked on and remembers the last one used', async (t) => {
-  const stored = { 'keen.samplingAudit': 'a4' };
+  const stored = accountEntry('samplingAudit', 'a4', AUDITOR.user_id);
   const sessionStorage = {
     getItem: (key) => stored[key] ?? null,
     setItem: (key, value) => {
@@ -243,10 +250,10 @@ test('the dialog starts with the audit being worked on and remembers the last on
   assert.equal(ui.el('entityAuditSampleSelect').value, 'a4');
   ui.el('entityAuditSampleSelect').value = 'a1';
   await ui.submit();
-  assert.equal(stored['keen.samplingAudit'], 'a1');
+  assert.equal(accountValue(stored, 'samplingAudit'), 'a1');
 
   // An audit that is no longer offered is ignored.
-  stored['keen.samplingAudit'] = 'a2';
+  Object.assign(stored, accountEntry('samplingAudit', 'a2', AUDITOR.user_id));
   await ui.open();
   assert.equal(ui.el('entityAuditSampleSelect').value, 'a1');
 

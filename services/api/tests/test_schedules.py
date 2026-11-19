@@ -566,3 +566,114 @@ def test_an_email_goes_out_with_no_transaction_open_and_a_failure_tries_again(
     # The sent row stays claimed; the others are free for a later run.
     assert reminded["Lead"] is not None
     assert reminded["No address"] is None and reminded["Broken"] is None
+
+
+def test_the_soft_time_limit_ends_delivery_and_releases_the_row_in_hand(
+    contract_db, monkeypatch
+):
+    """The worker raises its soft limit once, inside whichever send is running.
+    Delivery stops there, releases that row for the next run and leaves the
+    rows after it unclaimed, so the hard limit has nothing to cut off."""
+    from app.db.models import Audit, AuditAttendee
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    audit = Audit(title="A", framework_slug="A", status="open", audit_type="internal")
+    contract_db.add(audit)
+    contract_db.flush()
+    rows = [AuditAttendee(audit_id=audit.id, name=name) for name in ("a", "b", "c")]
+    contract_db.add_all(rows)
+    contract_db.commit()
+    composed = []
+
+    def compose(attendee):
+        composed.append(attendee.name)
+
+        def deliver():
+            if attendee.name == "b":
+                raise SoftTimeLimitExceeded()
+
+        return deliver
+
+    with pytest.raises(SoftTimeLimitExceeded):
+        schedules.deliver_once(
+            contract_db,
+            model=AuditAttendee,
+            marker="reminded_at",
+            ids=[row.id for row in rows],
+            compose=compose,
+        )
+    assert composed == ["a", "b"]
+    contract_db.expire_all()
+    reminded = {
+        row.name: row.reminded_at for row in contract_db.query(AuditAttendee).all()
+    }
+    assert reminded["a"] is not None
+    assert reminded["b"] is None and reminded["c"] is None
+
+
+def test_delivery_past_the_task_deadline_claims_nothing_more(contract_db, monkeypatch):
+    """A handler elsewhere that swallowed the worker's one raise cannot keep the
+    loop going: the next row checks the task's deadline first."""
+    from app.core import task_deadline
+    from app.db.models import Audit, AuditAttendee
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    audit = Audit(title="A", framework_slug="A", status="open", audit_type="internal")
+    contract_db.add(audit)
+    contract_db.flush()
+    row = AuditAttendee(audit_id=audit.id, name="a")
+    contract_db.add(row)
+    contract_db.commit()
+    compose = Mock(return_value=True)
+    # A deadline that has already passed.
+    task_deadline.start(-1)
+    try:
+        with pytest.raises(SoftTimeLimitExceeded):
+            schedules.deliver_once(
+                contract_db,
+                model=AuditAttendee,
+                marker="reminded_at",
+                ids=[row.id],
+                compose=compose,
+            )
+    finally:
+        task_deadline.finish()
+    compose.assert_not_called()
+    contract_db.expire_all()
+    assert contract_db.get(AuditAttendee, row.id).reminded_at is None
+
+
+def test_a_time_limit_before_the_claim_commits_releases_nothing(contract_db):
+    """A row another worker claimed is never released by this one's limit."""
+    from app.db.models import Audit, AuditAttendee
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    audit = Audit(title="A", framework_slug="A", status="open", audit_type="internal")
+    contract_db.add(audit)
+    contract_db.flush()
+    elsewhere = AuditAttendee(
+        audit_id=audit.id, name="Lead", reminded_at=datetime(2026, 5, 1, 9, 0)
+    )
+    contract_db.add(elsewhere)
+    contract_db.commit()
+    real_commit = contract_db.commit
+
+    def commit():
+        raise SoftTimeLimitExceeded()
+
+    contract_db.commit = commit
+    try:
+        with pytest.raises(SoftTimeLimitExceeded):
+            schedules.deliver_once(
+                contract_db,
+                model=AuditAttendee,
+                marker="reminded_at",
+                ids=[elsewhere.id],
+                compose=Mock(return_value=True),
+            )
+    finally:
+        contract_db.commit = real_commit
+    contract_db.expire_all()
+    assert contract_db.get(AuditAttendee, elsewhere.id).reminded_at == datetime(
+        2026, 5, 1, 9, 0
+    )

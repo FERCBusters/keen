@@ -886,7 +886,7 @@ def test_webhook_providers_need_simple_names(defs, name, accepted):
     else:
         assert response.status_code == 400
         assert response.json()["detail"] == (
-            "Webhook provider name must use letters, numbers, underscores or hyphens"
+            "Enter a webhook provider name of up to 56 letters, numbers, hyphens or underscores"
         )
         assert defs.versions()["webhooks"] == 0
 

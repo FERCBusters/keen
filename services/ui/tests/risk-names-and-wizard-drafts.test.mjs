@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { accountEntry } from './support/account-storage.mjs';
 
 // The fields the analysis API sends for each existing risk it matches.
 const match = (overrides) => ({
@@ -123,7 +124,7 @@ test('the wizard starts blank when the browser refuses to read session storage',
 });
 
 test('a stored value that is not a draft is discarded and the wizard starts blank', async (t) => {
-  const data = { 'keen.riskWizardDraft': '42' };
+  const data = accountEntry('riskWizardDraft', 42);
   const ui = await wizard(t, {
     getItem: (k) => data[k] ?? null,
     setItem: (k, v) => (data[k] = v),
@@ -138,7 +139,7 @@ test('a stored draft missing fields fills only what it holds', async (t) => {
   // The draft is browser storage, written by whichever build of the page ran
   // last, so a field it lacks stays empty instead of reading "undefined".
   const data = {
-    'keen.riskWizardDraft': JSON.stringify({
+    ...accountEntry('riskWizardDraft', {
       asset_name: 'Badge readers',
       // A record named without its detail, one without its name, one without an
       // id, and one of no known kind.

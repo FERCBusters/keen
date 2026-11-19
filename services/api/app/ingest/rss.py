@@ -310,6 +310,9 @@ def ingest_rss_feed(db: Session, feed_cfg: dict[str, Any]) -> dict[str, Any]:
         )
         db.add(cur)
         db.flush()
+    else:
+        # A cursor this run creates stays uncommitted until the feed is stored.
+        db.commit()  # No database transaction spans the remote wait.
 
     headers: dict[str, str] = {}
     # A connection without its own user agent sends the deployment's.

@@ -9,6 +9,7 @@ Each test checks what the client receives and what was stored or dispatched.
 
 import asyncio
 import logging
+import re
 import ssl
 
 import anyio
@@ -20,7 +21,7 @@ from app.db.models import AuditLog
 from app.security import auth as security_auth
 from app.security import request_limits
 from app.security.errors import collection_error
-from app.security.regex import compile_pattern
+from app.security.regex import compile_pattern, validate_pattern
 from app.security.request_limits import RequestBodyLimitMiddleware, screen_cookies
 from app.security.rich_text import sanitize_rich_text_html
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -504,12 +505,18 @@ def test_rich_text_drops_links_and_self_closed_tags_it_cannot_trust(html, expect
         ("a.*b.*c", "Use one unbounded repetition at most"),
         ("(?:x+)y*", "Use one unbounded repetition at most"),
         # Python reads this as a set; the matching engine reads a POSIX class.
-        ("[a[:digit:]", "Invalid match pattern"),
+        ("[a[:digit:]", "Invalid pattern: unterminated character set at position 11"),
+        # Python reads a word boundary and literal braces; the matching engine
+        # reads a Unicode boundary it cannot parse in this form.
+        ("\\b{start}", "Invalid pattern: expected } at position 4"),
+        ("\\b{end}", "Invalid pattern: expected } at position 4"),
     ],
 )
 def test_administrator_patterns_the_matcher_cannot_bound_are_refused(pattern, message):
-    with pytest.raises(ValueError, match="^" + message.replace("(", r"\(") + "$"):
-        compile_pattern(pattern)
+    # Saving refuses what matching would refuse, with the same reason.
+    for check in (validate_pattern, compile_pattern):
+        with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
+            check(pattern)
     assert compile_pattern("a.*b").search("a--b")
 
 

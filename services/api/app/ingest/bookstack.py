@@ -873,6 +873,7 @@ def ingest_bookstack_all(db: Session) -> list[dict[str, Any]]:
         )
 
     runs: list[dict[str, Any]] = []
+    db.commit()  # No database transaction spans the remote wait.
     with _client() as client:
         sysinfo = _get_system_info(client)
         instance_name = (

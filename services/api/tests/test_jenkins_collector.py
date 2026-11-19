@@ -117,7 +117,8 @@ def test_ingest_job_uses_cursor_and_classifies_outcomes(db):
         "[prod] jenkins deploy build #3 SUCCESS",
     ]
     assert all(s["system"] == "prod" for s in stored)
-    db.commit.assert_called_once_with()
+    # One commit before the request, one once the results are stored.
+    assert db.commit.call_count == 2
 
 
 def test_ingest_job_skips_seen_and_unknown_timestamp_builds(db):
@@ -162,7 +163,8 @@ def test_ingest_job_cursor_blocks_old_builds(db):
     store.assert_not_called()
     assert result["created_events"] == 0
     assert result["cursor_last_ts"] == "2026-10-10T00:00:00"
-    db.commit.assert_called_once_with()
+    # One commit before the request, one once the results are stored.
+    assert db.commit.call_count == 2
 
 
 def _builds(db, body):
@@ -188,7 +190,8 @@ def test_ingest_job_skips_builds_other_than_objects(db):
     result, stored = _builds(db, body)
     assert result["created_events"] == 2
     assert [s["raw_pointer"]["jenkins"]["build_number"] for s in stored] == [0, 2]
-    db.commit.assert_called_once_with()
+    # One commit before the request, one once the results are stored.
+    assert db.commit.call_count == 2
 
 
 @pytest.mark.parametrize(
@@ -197,7 +200,8 @@ def test_ingest_job_skips_builds_other_than_objects(db):
 def test_ingest_job_reads_a_listing_of_another_shape_as_empty(db, body):
     result, stored = _builds(db, body)
     assert (result["created_events"], stored) == (0, [])
-    db.commit.assert_called_once_with()
+    # One commit before the request, one once the results are stored.
+    assert db.commit.call_count == 2
 
 
 def test_ingest_all_collections_and_error_paths(db):

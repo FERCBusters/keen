@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -86,9 +87,33 @@ function copyRequired(src, dest) {
   fs.copyFileSync(src, dest);
 }
 
+// A dependency fetched from a git host has no checksum in the lockfile, so the
+// browser code Keen ships from one must match the digest recorded when it was
+// last reviewed; a fetch that returns other content stops the build.
+const reviewed = JSON.parse(
+  fs.readFileSync(new URL('./reviewed-vendor-files.json', import.meta.url), 'utf8'),
+).files;
+
+function copyReviewed(name, dest) {
+  const src = nm(...name.split('/'));
+  if (!fs.existsSync(src)) {
+    throw new Error(
+      `Required vendored asset is missing: ${src}. Run npm install in services/ui first.`,
+    );
+  }
+  const digest = crypto.createHash('sha256').update(fs.readFileSync(src)).digest('hex');
+  if (digest !== reviewed[name]) {
+    throw new Error(
+      `${name} has SHA-256 ${digest}, not the reviewed ${reviewed[name]}; review the ` +
+        'fetched file before recording its digest in scripts/reviewed-vendor-files.json.',
+    );
+  }
+  copyRequired(src, dest);
+}
+
 // Wysi rich-text editor
-copyRequired(nm('wysi', 'dist', 'wysi.min.css'), out('wysi', 'wysi.min.css'));
-copyRequired(nm('wysi', 'dist', 'wysi.min.js'), out('wysi', 'wysi.min.js'));
+copyReviewed('wysi/dist/wysi.min.css', out('wysi', 'wysi.min.css'));
+copyReviewed('wysi/dist/wysi.min.js', out('wysi', 'wysi.min.js'));
 
 console.log('Vendored assets into public/vendor');
 

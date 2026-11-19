@@ -9,7 +9,7 @@ Each section names the property it enforces across the codebase:
   takes no lock until its credential matches;
 - unverified webhook deliveries spend only their own allowance;
 - untrusted text reaches chat services as plain text;
-- scheduled collections expire while a slow one holds the worker;
+- scheduled collections keep their turns while a slow one holds the worker;
 - session and second-factor cookies are host-only where the browser allows.
 """
 
@@ -24,6 +24,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import app.worker.tasks  # noqa: F401 - registers the worker tasks
+import fakeredis
 import pytest
 from app.agents import credentials
 from app.agents.credentials import locked_agent
@@ -488,6 +489,123 @@ def test_chat_messages_carry_untrusted_text_as_text():
 
 
 # --- Scheduled collections ---------------------------------------------------------------
+
+
+def test_a_queued_collection_outlasts_a_full_round_of_every_source():
+    """A scheduled run waits its turn: it is dropped only after every source
+    could have run once at its whole budget ahead of it, as when the worker is
+    stopped, never while a slow source holds the worker."""
+    assert SCHEDULED_COLLECTION_EXPIRY >= sum(SOURCE_RUN_SECONDS.values())
+
+
+def _serial_worker(monkeypatch, budgets, rounds):
+    """Run beat's fixed publish order on one serial worker for ``rounds``
+    half-hour ticks; return the start time of each run that collected."""
+    from app.ingest import connections
+
+    store = fakeredis.FakeRedis()
+    clock = {"now": 0.0}
+    monkeypatch.setattr(connections, "get_valkey", lambda: store)
+    monkeypatch.setattr(connections.time, "time", lambda: clock["now"])
+    queue, ran, free_at = [], {name: [] for name in budgets}, 0.0
+    for tick in range(rounds):
+        published = tick * 1800.0
+        # Every source falls due at once, in the same order each time.
+        queue.extend((name, published) for name in budgets)
+        while queue and free_at < published + 1800:
+            name, queued_at = queue.pop(0)
+            clock["now"] = max(free_at, queued_at)
+            if queued_at + SCHEDULED_COLLECTION_EXPIRY < clock["now"]:
+                continue
+            if connections.start_run(name, queued_at):
+                ran[name].append(clock["now"])
+                free_at = clock["now"] + budgets[name]
+            else:
+                free_at = clock["now"]
+    return ran, queue
+
+
+def test_sources_due_together_take_turns_behind_a_slow_source(monkeypatch):
+    """Four sources fall due together every half hour and each run takes 25
+    minutes, more than the worker can do: each still runs in turn, and the
+    queue behind them stays short."""
+    budgets = {name: 1500.0 for name in ("cloudwatch", "es", "workspace", "loki")}
+    ran, waiting = _serial_worker(monkeypatch, budgets, rounds=48)
+    assert all(len(starts) >= 10 for starts in ran.values()), ran
+    for starts in ran.values():
+        # No source waits much longer than one run of each of the others.
+        gaps = [later - earlier for earlier, later in zip(starts, starts[1:])]
+        assert max(gaps) <= 4 * 1500 + 1800, gaps
+    assert len(waiting) <= 3 * len(budgets)
+    # A slow source alone delays the others by its own run only.
+    budgets = {"slow": 1500.0, "a": 30.0, "b": 30.0, "c": 30.0}
+    ran, _ = _serial_worker(monkeypatch, budgets, rounds=12)
+    assert [len(starts) for starts in ran.values()] == [12, 12, 12, 12]
+
+
+def test_each_queued_collection_notes_when_it_was_queued():
+    headers = {}
+    task = sorted(worker.COLLECTION_TASKS)[0]
+    worker._note_queued_at(sender=task, headers=headers)
+    assert isinstance(headers[worker.QUEUED_AT], float)
+    other = {}
+    worker._note_queued_at(
+        sender="app.worker.tasks.evidence_retention_task", headers=other
+    )
+    assert other == {}
+
+
+def test_a_run_covered_by_a_later_start_collects_nothing(monkeypatch):
+    from app.ingest import connections
+    from app.worker import tasks
+
+    store = fakeredis.FakeRedis()
+    monkeypatch.setattr(connections, "get_valkey", lambda: store)
+    collected = []
+    source = next(iter(tasks.COLLECTION_TASKS))
+    task = tasks.COLLECTION_TASKS[source]
+    declared = tasks.find_source(source)
+    monkeypatch.setattr(
+        type(declared), "collect", lambda self, db: collected.append(self.name) or []
+    )
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: _NullSession())
+    queued = time.time()
+
+    def run(**request):
+        # The worker sets each message header as an attribute of the request.
+        task.push_request(**request)
+        try:
+            return task.run()
+        finally:
+            task.pop_request()
+
+    # Unstamped runs, such as a manual run, always collect.
+    assert run() == []
+    assert run(**{worker.QUEUED_AT: queued - 60}) == [
+        {
+            "source": source,
+            "skipped": True,
+            "reason": "A run that started after this one was queued has collected "
+            "this source",
+        }
+    ]
+    assert run(**{worker.QUEUED_AT: time.time() + 60}) == []
+    assert collected == [source, source]
+    # Without Valkey a run collects.
+    monkeypatch.setattr(connections, "get_valkey", _no_valkey)
+    assert connections.start_run(source, queued - 60) is True
+
+
+def _no_valkey():
+    raise ConnectionError("valkey down")
+
+
+class _NullSession:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *exc):
+        return False
 
 
 def test_every_scheduled_collection_expires_while_it_waits():

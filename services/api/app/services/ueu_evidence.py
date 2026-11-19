@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import timezone
 
 from app.agents.ueu import catalogue as catalogues
-from app.agents.ueu.custody import redact, withhold_payload
+from app.agents.ueu.custody import enrolled_asset_type, redact, withhold_payload
 from app.agents.ueu.envelope import Envelope, EnvelopeError, validate
 from app.agents.ueu.jcs import CanonicalError, canonical, parse_canonical
 from app.core.config import settings
@@ -274,6 +274,7 @@ def persist(db, agent, resources, received_at):
                 continue
             chain = advance(agent, env) if env.stream == agent.id else "untracked"
             doc, changes = redact(env.document, env.spec)
+            enrolled_asset_type(doc, changes, agent.agent_type)
             if effective_mode(env) > ceiling:
                 if env.event_type in LINES_ONLY:
                     # The organisation does not collect whole log lines from

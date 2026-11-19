@@ -7,6 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { SIGNED_IN, accountEntry, accountValue } from './support/account-storage.mjs';
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
@@ -101,12 +102,12 @@ async function wizard(t, options = {}) {
   const state = { posted: [], patched: [], gets: [] };
   const ui = await page(t, 'risk-wizard', {
     query: options.query || '',
-    me: options.me || { is_admin: true },
+    me: options.me || { is_admin: true, user_id: SIGNED_IN },
     frameworks: options.frameworks,
     vendor: options.vendor,
     globals: {
       sessionStorage: memoryStorage(
-        options.draft ? { 'keen.riskWizardDraft': JSON.stringify(options.draft) } : {},
+        options.draft ? accountEntry('riskWizardDraft', options.draft) : {},
       ),
     },
     get: async (u) => {

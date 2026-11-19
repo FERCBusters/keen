@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
@@ -513,6 +514,8 @@ def refresh_all(db) -> list[dict]:
     out = []
     now = utc_now_naive()
     for key in KEYS:
+        # A run past its task's deadline reads no further provider.
+        task_deadline.check()
         try:
             if not due(db, key, now):
                 continue
@@ -531,6 +534,8 @@ def activity_all(db) -> list[dict]:
 
     out = []
     for key in KEYS:
+        # A run past its task's deadline reads no further provider.
+        task_deadline.check()
         try:
             out.append(collect_activity(db, key))
         except Exception:

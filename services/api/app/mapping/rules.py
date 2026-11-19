@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.mapping.collector import matches_collector
 from app.mapping.fields import field_matches, validate_fields
 from app.security.json_shape import MAX_DEPTH
-from app.security.regex import MatchBudgetExceeded, scan_pattern
+from app.security.regex import UNMATCHABLE, scan_pattern
 
 log = logging.getLogger(__name__)
 
@@ -569,12 +569,17 @@ def _conditions_hold(
     return True
 
 
-def event_fields(event: Any) -> dict[str, Any]:
+def event_fields(event: Any, payloads: tuple[Any, Any] | None = None) -> dict[str, Any]:
     """An event as rule conditions read it.
 
     Collection, the rule preview and the backfill all match on this one view,
-    so a rule decides the same way wherever it is evaluated.
+    so a rule decides the same way wherever it is evaluated. ``payloads`` are
+    the event's raw pointer and normalised payload when it was read without
+    them (services.event_payloads).
     """
+    raw_pointer, normalized_payload = (
+        (event.raw_pointer, event.normalized_payload) if payloads is None else payloads
+    )
     return {
         "source": event.source,
         "connection_id": event.connection_id,
@@ -585,8 +590,8 @@ def event_fields(event: Any) -> dict[str, Any]:
         "outcome": event.outcome,
         "severity": event.severity,
         "summary": event.summary,
-        "raw_pointer": event.raw_pointer,
-        "normalized_payload": event.normalized_payload,
+        "raw_pointer": raw_pointer,
+        "normalized_payload": normalized_payload,
     }
 
 
@@ -654,14 +659,17 @@ def evaluate_by_framework(
                 labels=labels,
                 summary=summary,
             )
-        except MatchBudgetExceeded:
+        except UNMATCHABLE:
             # Patterns read a bounded window of each value, so only the rule's
-            # own pattern can exhaust its budget. That rule does not match this
-            # event; the event is stored and every other rule still applies, and
-            # rules applied to earlier evidence map it once the rule is fixed.
+            # own pattern can exhaust its budget, and a pattern saved before
+            # the editor compiled it, or read from a rules file, may not compile
+            # at all. That rule does not match this event; the event is stored
+            # and every other rule still applies, and rules applied to earlier
+            # evidence map it once the rule is fixed.
             log.warning(
-                "Mapping rule %s exceeded its pattern time budget and was "
-                "treated as not matching; simplify its pattern",
+                "Mapping rule %s has a pattern that exceeded its time budget or "
+                "cannot be compiled, and was treated as not matching; correct or "
+                "simplify its pattern",
                 r.id,
             )
             continue

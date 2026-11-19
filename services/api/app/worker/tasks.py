@@ -21,6 +21,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import SessionLocal
+from app.ingest.connections import start_run
 from app.ingest.registry import Source, polled
 from app.ingest.registry import find as find_source
 from app.outbound.question_webhooks import (
@@ -46,7 +47,7 @@ from app.services.quizzes.rounds import (
     send_quiz_reminders,
 )
 from app.services.rule_suggestions import refresh_suggestions
-from app.worker.celery_app import celery_app
+from app.worker.celery_app import QUEUED_AT, celery_app
 
 log = logging.getLogger(__name__)
 
@@ -57,8 +58,17 @@ _LOST_LOCK = frozenset({"40P01", LOCK_NOT_AVAILABLE})
 def _collection_task(source: Source):
     """The scheduled task that collects every connection of one source type."""
 
-    @celery_app.task(name=source.task_name)
-    def collect_all():
+    @celery_app.task(name=source.task_name, bind=True)
+    def collect_all(self):
+        if not start_run(source.name, self.request.get(QUEUED_AT)):
+            return [
+                {
+                    "source": source.name,
+                    "skipped": True,
+                    "reason": "A run that started after this one was queued has "
+                    "collected this source",
+                }
+            ]
         with SessionLocal() as db:
             return source.collect(db)
 

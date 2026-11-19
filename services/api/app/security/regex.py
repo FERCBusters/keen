@@ -153,11 +153,19 @@ def _scan_compiled(pattern, flags, timed):
 
 
 def validate_pattern(pattern):
+    """Check a supplied match pattern before it is saved.
+
+    The checks read the pattern as Python's parser does, and the regex package
+    that matches it must read it too: the two disagree on some escapes, such as
+    ``\\b{start}``, and a pattern only one of them reads would pass its checks
+    here and then fail at every match.
+    """
     if len(pattern) > 512:
         raise ValueError("Pattern must be at most 512 characters")
     try:
         parsed = _parser.parse(pattern, 0)
-    except (re.error, RecursionError) as exc:
+        regex.compile(pattern, regex.VERSION0)
+    except (re.error, regex.error, ValueError, RecursionError) as exc:
         raise ValueError(f"Invalid pattern: {exc}") from exc
     if parsed.state.flags & re.VERBOSE:
         raise ValueError(_EXPANDED_MODE)
@@ -215,6 +223,13 @@ def validate_database_pattern(pattern):
         raise ValueError("Lookahead and lookbehind are unsupported")
 
 
+class InvalidMatchPattern(ValueError):
+    """A supplied pattern cannot be matched: it fails the checks or does not
+    compile. Evidence callers treat it as no match for that one rule, as they do
+    MatchBudgetExceeded, so a pattern saved before a check existed, or read from
+    a rules file, never halts a collection run."""
+
+
 class MatchBudgetExceeded(ValueError):
     """A match used its time budget: the pattern, not the input, needs changing.
 
@@ -244,10 +259,15 @@ class BoundedPattern:
         )
 
 
+# A pattern that cannot be matched, for callers that treat it as no match.
+UNMATCHABLE = (InvalidMatchPattern, MatchBudgetExceeded)
+
+
 @lru_cache(maxsize=256)
 def compile_pattern(pattern):
-    validate_pattern(pattern)
     try:
-        return BoundedPattern(regex.compile(pattern, regex.VERSION0))
-    except (regex.error, RecursionError) as exc:
-        raise ValueError("Invalid match pattern") from exc
+        validate_pattern(pattern)
+    except ValueError as exc:
+        raise InvalidMatchPattern(str(exc)) from None
+    # validate_pattern has compiled it once already.
+    return BoundedPattern(regex.compile(pattern, regex.VERSION0))

@@ -259,6 +259,9 @@ def ingest_taiga_project_timeline(
         cur = IngestionCursor(name=cursor_name, last_ts=None, meta={})
         db.add(cur)
         db.flush()
+    else:
+        # A cursor this run creates stays uncommitted until its timeline is stored.
+        db.commit()  # No database transaction spans the remote wait.
 
     client = _taiga_client()
     try:

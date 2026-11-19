@@ -223,7 +223,9 @@ class GitDiscoveryTests(unittest.TestCase):
         self.assertIs(
             matches_collector(collector_id("gitlab", "groups", "team/sub"), event), True
         )
-        db.commit.assert_called_once_with()
+        # The run's own reads end before the collector starts; the collector
+        # commits once.
+        self.assertEqual(db.commit.call_count, 2)
 
     def test_discovery_inputs_reach_runner(self):
         db = Mock()

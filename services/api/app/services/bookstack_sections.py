@@ -117,6 +117,10 @@ def capture_section(*, payload: SectionInput, user, db: Session):
         raise DomainError(
             400, "Use a BookStack section anchor such as bkmrk-access-review"
         )
+    document_id = document.id
+    control_id = control.id if control else None
+    clause_id = clause.id if clause else None
+    db.commit()  # No database transaction spans the remote wait.
     try:
         with _client() as client:
             response = client.get(f"/api/pages/{payload.page_id}")
@@ -145,14 +149,14 @@ def capture_section(*, payload: SectionInput, user, db: Session):
         json.dumps(snapshot, sort_keys=True, ensure_ascii=False, default=str)
     )
     stored = put_bytes(
-        f"bookstack-policy/{document.id}/{uuid.uuid4()}.json", raw, "application/json"
+        f"bookstack-policy/{document_id}/{uuid.uuid4()}.json", raw, "application/json"
     )
     track_unpublished_object(db, stored.uri)
     row = BookStackSectionEvidence(
-        document_id=document.id,
+        document_id=document_id,
         page_id=payload.page_id,
-        target_control_id=control.id if control else None,
-        target_clause_id=clause.id if clause else None,
+        target_control_id=control_id,
+        target_clause_id=clause_id,
         anchor=anchor,
         permalink=permalink,
         page_title=str(page.get("name") or "Page")[:256],

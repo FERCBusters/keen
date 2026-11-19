@@ -46,7 +46,7 @@ REFUSED = [
     (
         "webhooks",
         {"providers": {"bad name": {"secret_header": "X-Signature"}}},
-        "Webhook provider name must use letters, numbers, underscores or hyphens",
+        "Enter a webhook provider name of up to 56 letters, numbers, hyphens or underscores",
     ),
     (
         "gitea",

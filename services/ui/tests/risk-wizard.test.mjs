@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { SIGNED_IN, accountEntry, accountValue } from './support/account-storage.mjs';
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
@@ -119,7 +120,7 @@ async function wizard(t, options = {}) {
   const state = { posted: [], patched: [], gets: [] };
   const ui = await page(t, 'risk-wizard', {
     query: options.query || '',
-    me: options.me || { is_admin: true },
+    me: options.me || { is_admin: true, user_id: SIGNED_IN },
     globals: { sessionStorage: options.storage || memoryStorage(), ...(options.globals || {}) },
     get: async (u) => {
       const p = u.pathname;
@@ -604,7 +605,7 @@ test('editing an existing risk starts at the subject with everything filled in a
 
 test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested controls', async (t) => {
   const storage = memoryStorage({
-    'keen.riskWizardDraft': JSON.stringify({
+    ...accountEntry('riskWizardDraft', {
       method: 'general',
       risk_types: ['Confidentiality', 'Bogus'],
       title: 'Phishing of payroll staff',
@@ -652,7 +653,7 @@ test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested control
 
 test('a draft naming an unknown asset proposes it as new, with the category it suggested', async (t) => {
   const storage = memoryStorage({
-    'keen.riskWizardDraft': JSON.stringify({
+    ...accountEntry('riskWizardDraft', {
       asset_name: 'Badge system',
       category_name: 'People',
       subcategory_name: 'Staff',

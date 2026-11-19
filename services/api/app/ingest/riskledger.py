@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 import httpx2 as httpx
 
+from app.core.task_deadline import TIME_LIMITS
 from app.db.models import (
     ControlItem,
     Framework,
@@ -730,9 +731,13 @@ def ingest_riskledger_all(db):
                     "Accept": "application/json",
                 },
             ) as http:
+                db.commit()  # No database transaction spans the remote wait.
                 return [
                     _collect(db, Client(http, cfg.get("max_run_seconds", 300)), cfg)
                 ]
+    except TIME_LIMITS:
+        # The task's time limit ends the run; it is no import failure.
+        raise
     except Exception as exc:
         db.rollback()
         return [

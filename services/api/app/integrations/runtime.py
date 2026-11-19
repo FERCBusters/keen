@@ -32,8 +32,8 @@ from .schema import Definition
 from .transport import connection_auth
 
 WAITED_TOO_LONG = (
-    "The collection worker was busy for ten minutes, so this run did not start."
-    " The next scheduled run collects from the same point."
+    "The collection worker did not reach this run within a day, so it did not"
+    " start. The next scheduled run collects from the same point."
 )
 
 
@@ -386,8 +386,9 @@ def dispatch(run_id):
     from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY
     from app.worker.tasks import integration_run_task
 
-    # Like a scheduled built-in collection, a run still waiting for the shared
-    # collection worker after this long is dropped; tick() ends its record.
+    # Like a scheduled built-in collection, a run waits its turn on the shared
+    # collection worker, and one still waiting after this long, as while the
+    # worker is stopped, is dropped; tick() ends its record.
     integration_run_task.apply_async((run_id,), expires=SCHEDULED_COLLECTION_EXPIRY)
 
 
@@ -407,15 +408,20 @@ def tick():
             )
             db.commit()
             return
+        from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY
+
         cutoff = now - timedelta(minutes=10)
-        # A run that never started waited for the collection worker, which
-        # other sources share and a long built-in collection can hold for
-        # longer than this. Waiting is not the collector's failure, so the run
-        # ends without drawing on its failure budget and the next one is
-        # queued as usual.
+        # A queued run waits its turn on the collection worker, which other
+        # sources share and a long built-in collection can hold for some time;
+        # while it waits no other run of its collector is queued, so it keeps
+        # its place. One whose job was dropped unstarted ends without drawing
+        # on its failure budget, and the next one is queued as usual.
         db.execute(
             update(Run)
-            .where(Run.status == "queued", Run.created_at < cutoff)
+            .where(
+                Run.status == "queued",
+                Run.created_at < now - timedelta(seconds=SCHEDULED_COLLECTION_EXPIRY),
+            )
             .values(status="cancelled", message=WAITED_TOO_LONG, finished_at=now)
         )
         db.commit()

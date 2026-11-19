@@ -727,3 +727,23 @@ def test_keen_records_written_during_a_run_leave_the_connection_behind():
             assert sc.connection_cache() == {}
         assert sc.current_connection() is connection
         assert sc.connection_cache() == {"token": "connection-secret"}
+
+
+def test_the_runs_own_reads_end_before_each_collector_starts(monkeypatch):
+    """Listing connections and checking pauses opens a transaction, which takes
+    the shared ingestion lease; it ends before a collector makes its first
+    remote request, so an evidence purge never waits on that request."""
+    monkeypatch.setattr(sc.deployment_settings, "loki_enabled", True)
+    monkeypatch.setattr(
+        sc, "connections", lambda *a: [connection("a"), connection("b")]
+    )
+    db = Mock()
+    commits_before = []
+
+    @sc.connection_runs("loki")
+    def run(db):
+        commits_before.append(db.commit.call_count)
+        return []
+
+    run(db)
+    assert commits_before == [1, 2]

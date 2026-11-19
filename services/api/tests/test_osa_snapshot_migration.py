@@ -4,6 +4,7 @@ Run against the release's real seed and the real snapshot, so the counts here
 are the ones an installation sees.
 """
 
+import importlib.util
 import json
 import re
 import uuid
@@ -301,3 +302,131 @@ def test_every_published_framework_has_its_regions_in_the_framework_editor():
     listed = set(re.findall(r"^  (\w+): \[", source, re.MULTILINE))
     assert listed == set(PUBLISHED)
     assert "OSA " + SNAPSHOT["retrieved"] in source
+
+
+def snapshot_migration(data=None, tmp_path=None):
+    """Migration 0056's module, reading ``data`` in place of the shipped snapshot."""
+    spec = importlib.util.spec_from_file_location(
+        "osa_snapshot_0056",
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/0056_osa_snapshot_2026_11.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if data is not None:
+        module.DATA = tmp_path / "snapshot.json"
+        module.DATA.write_text(json.dumps(data))
+    return module
+
+
+def without_clause(ref):
+    """The shipped snapshot with one ISO 27001 clause no longer published."""
+    data = json.loads(json.dumps(SNAPSHOT))
+    for framework in data["frameworks"]:
+        if framework["id"] == "iso_27001_2022":
+            framework["clauses"] = [c for c in framework["clauses"] if c["id"] != ref]
+    return data
+
+
+def clause(conn, ref):
+    return (
+        conn.execute(
+            text(
+                "SELECT c.id, c.metadata, p.ref AS parent FROM framework_clauses c"
+                " LEFT JOIN framework_clauses p ON p.id = c.parent_clause_id"
+                " WHERE c.framework_slug = 'iso_27001_2022' AND c.ref = :ref"
+            ),
+            {"ref": ref},
+        )
+        .mappings()
+        .first()
+    )
+
+
+def file_under(conn, ref, parent):
+    conn.execute(
+        text(
+            "UPDATE framework_clauses SET parent_clause_id = ("
+            " SELECT id FROM framework_clauses"
+            " WHERE framework_slug = 'iso_27001_2022' AND ref = :parent)"
+            " WHERE framework_slug = 'iso_27001_2022' AND ref = :ref"
+        ),
+        {"ref": ref, "parent": parent},
+    )
+
+
+def link_entity(conn, ref):
+    conn.execute(
+        text(
+            "INSERT INTO isms_entity_clause_links"
+            " (entity_type, entity_id, framework_slug, clause_id)"
+            " VALUES ('policy', :entity, 'iso_27001_2022', :clause)"
+        ),
+        {"entity": uuid.uuid4(), "clause": clause(conn, ref)["id"]},
+    )
+
+
+def entity_links(conn, ref):
+    return conn.execute(
+        text(
+            "SELECT count(*) FROM isms_entity_clause_links l"
+            " JOIN framework_clauses c ON c.id = l.clause_id"
+            " WHERE c.framework_slug = 'iso_27001_2022' AND c.ref = :ref"
+        ),
+        {"ref": ref},
+    ).scalar()
+
+
+def test_a_dropped_clause_stays_while_a_clause_in_use_sits_under_it(tmp_path):
+    """Deleting a parent clause would delete the clauses filed under it, and
+    every link to them, so a dropped parent with a surviving child is kept."""
+    with release(BEFORE, seeds=True) as (conn, config):
+        file_under(conn, "6.1.3", "6.1")
+        link_entity(conn, "6.1.3")
+        snapshot_migration(without_clause("6.1"), tmp_path).apply_snapshot(conn)
+
+        child = clause(conn, "6.1.3")
+        assert child is not None and child["parent"] == "6.1"
+        assert entity_links(conn, "6.1.3") == 1
+        assert clause(conn, "6.1")["metadata"]["superseded"] == "2026-11-12"
+        # The parent's own record goes, as an unused dropped control does.
+        assert control(conn, "iso_27001_2022", "6.1") is None
+
+
+def test_a_dropped_clause_chain_above_a_surviving_clause_stays(tmp_path):
+    """Every level above a clause that stays is kept, not only its parent."""
+    data = without_clause("6.1")
+    for framework in data["frameworks"]:
+        if framework["id"] == "iso_27001_2022":
+            framework["clauses"] = [c for c in framework["clauses"] if c["id"] != "6.2"]
+    with release(BEFORE, seeds=True) as (conn, config):
+        file_under(conn, "6.1", "6.2")
+        file_under(conn, "6.1.3", "6.1")
+        snapshot_migration(data, tmp_path).apply_snapshot(conn)
+
+        assert clause(conn, "6.1.3")["parent"] == "6.1"
+        assert clause(conn, "6.1")["parent"] == "6.2"
+        for ref in ("6.1", "6.2"):
+            assert clause(conn, ref)["metadata"]["superseded"] == "2026-11-12"
+
+
+def test_an_unused_dropped_clause_with_no_surviving_child_is_deleted(tmp_path):
+    with release(BEFORE, seeds=True) as (conn, config):
+        snapshot_migration(without_clause("6.1"), tmp_path).apply_snapshot(conn)
+        assert clause(conn, "6.1") is None
+        # Its OSA child, no longer under a published parent, stays at the top.
+        assert clause(conn, "6.1.3")["parent"] is None
+
+
+def test_clause_parents_stay_as_the_installation_has_them():
+    """OSA files 6.1.3 under 6.1 and publishes nothing else under it. Audit
+    scope reads a clause with children as a heading only, so 6.1 stays a clause
+    of its own; a parent an administrator chose is kept."""
+    with release(BEFORE, seeds=True) as (conn, config):
+        file_under(conn, "5.3", "4.4")
+        conn.commit()
+
+        command.upgrade(config, AFTER)
+
+        assert clause(conn, "6.1.3")["parent"] is None
+        assert clause(conn, "5.3")["parent"] == "4.4"

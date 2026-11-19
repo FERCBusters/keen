@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { loadUi } from './load-ui.mjs';
+import { SIGNED_IN } from './account-storage.mjs';
 
 export async function settle(check) {
   for (let i = 0; i < 100; i++) {
@@ -21,7 +22,7 @@ export async function page(
     patch,
     put,
     remove,
-    me = { is_admin: true },
+    me = { is_admin: true, user_id: SIGNED_IN },
     query = '',
     globals = {},
     setup,

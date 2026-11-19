@@ -23,6 +23,7 @@ from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from app.core import task_deadline
 from app.ingest.cloud.base import Unavailable
 from app.security.provider_logging import suppress_provider_logs
 
@@ -53,6 +54,8 @@ class HTTPSOnlyHttp(httplib2.Http):
         self.follow_all_redirects = False
 
     def request(self, uri, *args, **kwargs):
+        # A run past its task's deadline makes no further request.
+        task_deadline.check()
         if not _safe(uri):
             raise ValueError("Google API requests require HTTPS")
         return super().request(uri, *args, **kwargs)

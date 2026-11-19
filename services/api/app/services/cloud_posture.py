@@ -34,6 +34,7 @@ from app.security.permissions import has_permission
 from app.security.roles import compute_effective_role
 from app.services import posture_risks
 from app.services.errors import DomainError
+from app.services.event_payloads import without_payloads
 from app.services.features import state as feature_state
 from app.services.frameworks import framework_parameter
 
@@ -190,6 +191,7 @@ def _scope_out(provider, scope, links, people) -> dict:
 def _activity(db, key) -> list[dict]:
     rows = (
         db.query(Event)
+        .options(*without_payloads())
         .filter(Event.source == key, ~Event.action.like("posture.%"))
         .order_by(Event.timestamp.desc(), Event.id.desc())
         .limit(ACTIVITY_SHOWN)

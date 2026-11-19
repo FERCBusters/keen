@@ -322,6 +322,8 @@ def ingest_google_workspace_stream(
         .filter(IngestionCursor.name == cursor_name)
         .one_or_none()
     )
+    # A cursor this run creates stays uncommitted until the stream is stored.
+    new_cursor = cur is None
     if cur is None:
         cur = IngestionCursor(
             name=cursor_name,
@@ -349,6 +351,8 @@ def ingest_google_workspace_stream(
         start_dt = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
 
     start_time = _rfc3339(start_dt)
+    if not new_cursor:
+        db.commit()  # No database transaction spans the remote wait.
 
     # Collect items (then sort) for cursor stability.
     items: list[dict[str, Any]] = []

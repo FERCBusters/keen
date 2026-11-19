@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { page, settle } from './support/page-fixture.mjs';
+import { SIGNED_IN, accountValue } from './support/account-storage.mjs';
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const HOSTILE = '<img src=x onerror=alert(1)>';
@@ -10,7 +11,7 @@ const HOSTILE = '<img src=x onerror=alert(1)>';
 async function wizard(t, options = {}) {
   const state = { posted: [], stored: {} };
   const ui = await page(t, 'audit-wizard', {
-    me: options.me || { is_admin: true },
+    me: options.me || { is_admin: true, user_id: SIGNED_IN },
     setup: options.setup,
     globals: {
       sessionStorage: {
@@ -371,7 +372,7 @@ test('the review creates the audit with its scope and attendees, then offers whe
       attendees: [{ user_id: null, person_id: null, name: 'Visitor', email: null, role: null }],
     },
   });
-  assert.equal(state.stored['keen.samplingAudit'], 'a9');
+  assert.equal(accountValue(state.stored, 'samplingAudit'), 'a9');
   assert.equal(ui.el('doneTitle').textContent, 'Spring audit is ready');
   assert.equal(ui.el('wizardFooter').hidden, true);
   assert.equal(ui.el('wizardSteps').hidden, true);
@@ -404,7 +405,7 @@ test('SWOT scope is sent when chosen and a refused audit stays on the review', a
   assert.deepEqual(state.posted[0].body.swot_ids, ['s1']);
   assert.equal(visible(ui), 'review');
   assert.equal(ui.el('nextStep').disabled, false);
-  assert.equal(state.stored['keen.samplingAudit'], undefined);
+  assert.equal(accountValue(state.stored, 'samplingAudit'), undefined);
 });
 
 test('readers cannot start audits, and lists follow features and ISMS access', async (t) => {

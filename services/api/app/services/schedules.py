@@ -22,8 +22,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.core.datetime_utils import add_months, utc_now_naive
+from app.core.task_deadline import TIME_LIMITS
 from app.services.errors import DomainError
 from app.services.mailer import smtp_configured
 
@@ -630,19 +632,26 @@ def deliver_once(
     address. Its transaction ends before the email goes out, so none stays open
     while the mail server answers. No address, or a failed delivery, releases
     the claim so a later run tries again while the email is still due.
+
+    The task's time limit ends the loop: the row in hand is released, as a
+    failed delivery is, and the limit raised again, so the task stops at its
+    deadline and no claimed row is left marked without its email.
     """
     column = getattr(model, marker)
     sent = 0
     for row_id in ids:
-        claimed = (
-            db.query(model)
-            .filter(model.id == row_id, column.is_(None))
-            .update({column: utc_now_naive()}, synchronize_session="fetch")
-        )
-        db.commit()
-        if not claimed:
-            continue
+        # A task past its deadline claims no further row.
+        task_deadline.check()
+        claimed = 0
         try:
+            claimed = (
+                db.query(model)
+                .filter(model.id == row_id, column.is_(None))
+                .update({column: utc_now_naive()}, synchronize_session="fetch")
+            )
+            db.commit()
+            if not claimed:
+                continue
             outcome = compose(db.get(model, row_id))
             db.commit()
             if callable(outcome):
@@ -650,6 +659,11 @@ def deliver_once(
                 delivered = True
             else:
                 delivered = bool(outcome)
+        except TIME_LIMITS:
+            db.rollback()
+            if claimed:
+                _release(db, model, column, row_id)
+            raise
         except Exception:
             log.exception("Failed to send an email for %s %s", model.__name__, row_id)
             db.rollback()
@@ -657,8 +671,13 @@ def deliver_once(
         if delivered:
             sent += 1
             continue
-        db.query(model).filter(model.id == row_id).update(
-            {column: None}, synchronize_session="fetch"
-        )
-        db.commit()
+        _release(db, model, column, row_id)
     return sent
+
+
+def _release(db: Session, model: Any, column: Any, row_id: Any) -> None:
+    """Clear a row's claim so a later run sends its email."""
+    db.query(model).filter(model.id == row_id).update(
+        {column: None}, synchronize_session="fetch"
+    )
+    db.commit()

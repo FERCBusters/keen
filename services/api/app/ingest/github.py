@@ -257,6 +257,9 @@ def ingest_github_repo(
         cur = IngestionCursor(name=cursor_name, last_ts=None, meta={})
         db.add(cur)
         db.flush()
+    else:
+        # A cursor this run creates stays uncommitted until its events are stored.
+        db.commit()  # No database transaction spans the remote wait.
 
     with _client() as c:
         events = _fetch_pages(
@@ -388,6 +391,9 @@ def ingest_github_org_events(
         )
         db.add(cur)
         db.flush()
+    else:
+        # A cursor this run creates stays uncommitted until its events are stored.
+        db.commit()  # No database transaction spans the remote wait.
 
     with _client() as c:
         endpoint_path: str
@@ -607,6 +613,8 @@ def ingest_github_org_auditlog(
         .filter(IngestionCursor.name == cursor_name)
         .one_or_none()
     )
+    # A cursor this run creates stays uncommitted until its first page is stored.
+    new_cursor = cur is None
     if cur is None:
         cur = IngestionCursor(name=cursor_name, last_ts=None, meta={})
         db.add(cur)
@@ -628,6 +636,8 @@ def ingest_github_org_auditlog(
     reader = RecordReader()
     cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
     newest_ts = cursor_last
+    if not new_cursor:
+        db.commit()  # No database transaction spans the remote wait.
 
     with _client() as c:
         url: str | None = f"/orgs/{org}/audit-log"
@@ -769,6 +779,8 @@ def ingest_github_atom_feed(
         .filter(IngestionCursor.name == cursor_name)
         .one_or_none()
     )
+    # A cursor this run creates stays uncommitted until the feed is stored.
+    new_cursor = cur is None
     if cur is None:
         # Store a redacted URL so query tokens are never persisted in DB.
         cur = IngestionCursor(
@@ -785,6 +797,8 @@ def ingest_github_atom_feed(
     )
 
     auth = _basic_auth()
+    if not new_cursor:
+        db.commit()  # No database transaction spans the remote wait.
     with ingestion_client(
         timeout=30.0, follow_redirects=False, verify=True, auth=auth
     ) as c:

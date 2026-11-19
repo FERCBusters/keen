@@ -34,6 +34,7 @@ from app.security.roles import is_effective_admin
 from app.services.activity_log import record_action as _audit_action
 from app.services.context import ChangeContext, signed_in_user
 from app.services.errors import DomainError
+from app.services.event_payloads import without_payloads
 from app.services.uploads import Upload
 from app.storage.filenames import safe_download_ext
 from app.storage.s3 import put_bytes
@@ -413,7 +414,11 @@ def admin_list_questions(*, status: str | None = None, db: Session):
     events_by_id = {}
     if event_ids:
         events_by_id = {
-            ev.id: ev for ev in db.query(Event).filter(Event.id.in_(event_ids)).all()
+            ev.id: ev
+            for ev in db.query(Event)
+            .options(*without_payloads())
+            .filter(Event.id.in_(event_ids))
+            .all()
         }
 
     items = []
@@ -1032,7 +1037,11 @@ def my_questions_list(*, context: ChangeContext, db: Session):
     events_by_id = {}
     if event_ids:
         events_by_id = {
-            ev.id: ev for ev in db.query(Event).filter(Event.id.in_(event_ids)).all()
+            ev.id: ev
+            for ev in db.query(Event)
+            .options(*without_payloads())
+            .filter(Event.id.in_(event_ids))
+            .all()
         }
 
     for t in threads:

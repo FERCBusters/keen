@@ -219,3 +219,57 @@ def test_stored_webhooks_summarise_hints_and_keep_raw_bodies(monkeypatch):
     (listed,) = stored
     assert listed["summary"] == "webhook:monitor/alert"
     assert listed["normalized_payload"] == {"payload": ["list", "body"]}
+
+
+def test_both_provider_editors_refuse_a_name_its_events_could_not_be_stored_under():
+    """Deliveries are stored under ``webhook:<provider>``, which the events
+    table's source column must hold, so both editors stop at that length."""
+    from app.db.models import Event
+    from app.services import managed_configurations, source_connections
+    from app.services.errors import DomainError
+
+    room = Event.__table__.c.source.type.length - len("webhook:")
+    assert webhooks.PROVIDER_CHARS == room == 56
+    fits, too_long = "p" * room, "p" * (room + 1)
+    connection = {
+        "source": "webhooks",
+        "name": "Hook",
+        "configuration": {"secret_header": "X-Secret"},
+        "credentials": {"secret": "synthetic"},
+    }
+    source_connections.validate(
+        source_connections.ConnectionInput(
+            **{
+                **connection,
+                "configuration": {"provider": fits, "secret_header": "X-Secret"},
+            }
+        )
+    )
+    managed_configurations._validate_collection_entry(
+        "webhooks", "providers", {"secret_header": "X-Secret"}, fits
+    )
+    for refuse in (
+        lambda name: source_connections.validate(
+            source_connections.ConnectionInput(
+                **{
+                    **connection,
+                    "configuration": {"provider": name, "secret_header": "X-Secret"},
+                }
+            )
+        ),
+        lambda name: managed_configurations._validate_collection_entry(
+            "webhooks", "providers", {"secret_header": "X-Secret"}, name
+        ),
+    ):
+        with pytest.raises(DomainError) as refused:
+            refuse(too_long)
+        assert refused.value.detail == (
+            "Enter a webhook provider name of up to 56 letters, numbers, hyphens "
+            "or underscores"
+        )
+
+
+def test_an_event_type_too_long_to_name_its_artefacts_is_refused(monkeypatch):
+    monkeypatch.setattr(webhooks, "_check_replay_protection", lambda *a: False)
+    with pytest.raises(ValueError, match="^Webhook event type must be at most 128"):
+        webhooks.ingest_webhook(None, "monitor", "e" * 129, b"{}", {})

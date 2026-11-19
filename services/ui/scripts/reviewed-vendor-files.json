@@ -1,0 +1,7 @@
+{
+  "comment": "SHA-256 digests of the browser code Keen ships from dependencies fetched from a git host, which the lockfile cannot checksum. The build refuses a file whose content differs. Update a digest only after reviewing the new file.",
+  "files": {
+    "wysi/dist/wysi.min.css": "9eba866f3cc34b0e7f12db8bffa29ba6886db86739200515472b6b41c8e6f089",
+    "wysi/dist/wysi.min.js": "4a51b304c3af9a0eaaefaad0511d520d1ad8d1b01fe9c6683b879227d885fcbc"
+  }
+}

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
+import { accountValue } from './support/account-storage.mjs';
 
 const d3 = await readFile(new URL('./node_modules/d3/dist/d3.min.js', import.meta.url), 'utf8');
 // Bodies are created in the page realm; compare them as plain JSON values.
@@ -1539,7 +1540,7 @@ test('a new audit opens at its report notes, and finding evidence remembers the 
   assert.deepEqual(scrolled, ['reportNotesForm']);
   assert.equal(ui.document.activeElement?.id, 'auditNotes');
   ui.el('sampleEventLink').dispatchEvent(new ui.window.MouseEvent('click', { cancelable: true }));
-  assert.equal(stored['keen.samplingAudit'], 'a1');
+  assert.equal(accountValue(stored, 'samplingAudit'), 'a1');
 
   // Without the request the page opens at the top as before.
   const plain = await auditPage(t);

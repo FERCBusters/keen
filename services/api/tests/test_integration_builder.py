@@ -462,10 +462,10 @@ def test_recently_started_job_is_not_stale(database, monkeypatch):
 def test_a_run_that_only_waited_for_the_worker_is_not_a_collector_failure(
     database, monkeypatch
 ):
-    # Custom API runs share one collection worker with the built-in sources,
-    # and a long built-in collection can hold it for more than ten minutes.
-    # Waiting behind it says nothing about the collector: three such runs in a
-    # row leave it enabled, with its failure budget untouched.
+    # Custom API runs share one collection worker with the built-in sources.
+    # A run whose job was dropped unstarted, as while the worker is stopped,
+    # says nothing about the collector: three such runs in a row leave it
+    # enabled, with its failure budget untouched.
     db, _ = database
     api.action_collector("collector", "publish", api.Action(version=1), db)
     monkeypatch.setattr(runtime, "dispatch", lambda *a: None)
@@ -476,7 +476,7 @@ def test_a_run_that_only_waited_for_the_worker_is_not_a_collector_failure(
     for _ in range(3):
         db.expire_all()
         run = runtime.queue_run(db, db.get(Collector, "collector"))
-        run.created_at = utc_now_naive() - timedelta(minutes=11)
+        run.created_at = utc_now_naive() - timedelta(hours=25)
         db.commit()
         runtime.tick()
         waited.append(run.id)
@@ -488,9 +488,10 @@ def test_a_run_that_only_waited_for_the_worker_is_not_a_collector_failure(
     collector = db.get(Collector, "collector")
     assert collector.failures == 0 and collector.enabled
 
-    # A run that has waited less than ten minutes is left to start.
+    # A run behind a long collection keeps its place, however long it waits
+    # short of that.
     recent = runtime.queue_run(db, collector)
-    recent.created_at = utc_now_naive() - timedelta(minutes=9)
+    recent.created_at = utc_now_naive() - timedelta(hours=2)
     db.commit()
     runtime.tick()
     db.expire_all()

@@ -47,7 +47,7 @@ from app.db.models import (
     User,
 )
 from app.security.encoding import digest
-from app.security.regex import compile_pattern, scan_pattern
+from app.security.regex import UNMATCHABLE, compile_pattern, scan_pattern
 from app.services.control_inheritance import effective_framework_ids
 from app.services.control_suggestions import activity_words, rank_controls
 from app.services.errors import DomainError
@@ -211,14 +211,7 @@ class _Proposal:
 def _accepts(pattern: str, value: str) -> bool:
     try:
         return bool(compile_pattern(pattern).search(value))
-    except ValueError:
-        return False
-
-
-def _reads(when: dict, source: str) -> bool:
-    try:
-        return reads_source(when, source)
-    except ValueError:
+    except UNMATCHABLE:
         return False
 
 
@@ -242,7 +235,7 @@ def _covered(rules: list[dict], framework: str, source: str, action: str) -> boo
         when = rule.get("when") or {}
         if set(when) - _ACTIVITY_KEYS or not _framework_targets(rule, framework):
             continue
-        if not _reads(when, source):
+        if not reads_source(when, source):
             continue
         if when.get("action") and when["action"] != action:
             continue
@@ -255,7 +248,7 @@ def _covered(rules: list[dict], framework: str, source: str, action: str) -> boo
 def _relation(when: dict, proposal: _Proposal) -> str | None:
     """How a saved rule's conditions relate to a suggestion's events."""
     action = proposal.action
-    same_source = any(_reads(when, source) for source in proposal.sources)
+    same_source = any(reads_source(when, source) for source in proposal.sources)
     if action and when.get("action") == action:
         return "activity" if same_source else "elsewhere"
     if action and same_source and not when.get("action"):

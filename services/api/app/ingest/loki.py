@@ -203,6 +203,9 @@ def ingest_loki_once(
         .filter(IngestionCursor.name == cursor_name)
         .one_or_none()
     )
+    # A cursor this run creates is kept by the first chunk it finishes; until
+    # then a failed request leaves none behind.
+    new_cursor = cur is None
     if cur is None:
         cur = IngestionCursor(name=cursor_name, last_ts=None, meta={})
         db.add(cur)
@@ -357,6 +360,8 @@ def ingest_loki_once(
             if step_seconds > 0:
                 params["step"] = str(step_seconds)
 
+            if not new_cursor:
+                db.commit()  # No database transaction spans the remote wait.
             resp = client.get("/loki/api/v1/query_range", params=params)
             resp.raise_for_status()
             data = decode_json(resp.content)
@@ -479,6 +484,7 @@ def ingest_loki_once(
             cur.meta = meta
             db.add(cur)
             db.commit()
+            new_cursor = False
 
             chunks.append(
                 {

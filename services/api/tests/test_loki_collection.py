@@ -852,8 +852,8 @@ def test_a_pattern_over_its_budget_does_not_match_and_the_run_continues(lk, capl
     assert result["created_events"] == 2
     assert all(len(event.mappings) == 1 for event in lk.events())
     assert [r.getMessage() for r in caplog.records] == [
-        "Mapping rule slow exceeded its pattern time budget and was treated as not "
-        "matching; simplify its pattern"
+        "Mapping rule slow has a pattern that exceeded its time budget or cannot be "
+        "compiled, and was treated as not matching; correct or simplify its pattern"
     ]
     assert "AAAA" not in caplog.text
 
@@ -931,10 +931,11 @@ def test_each_line_commits_before_the_next_is_stored(lk, monkeypatch):
     (result,) = lk.run()
 
     assert result["created_events"] == 3 and result["created_mappings"] == 3
-    # Each line was committed before the next was stored.
-    assert committed_before_each == [0, 1, 2]
-    # One commit for each line, then one for the chunk's cursor.
-    assert len(commits) == 4
+    # The run's connection listing ended before the collector began, and each
+    # line was committed before the next was stored.
+    assert committed_before_each == [1, 2, 3]
+    # That commit, one for each line, then one for the chunk's cursor.
+    assert len(commits) == 5
 
 
 def test_lines_beyond_the_query_limit_are_left_for_the_next_run(lk):
@@ -1085,3 +1086,30 @@ def test_lines_returned_newest_first_still_hold_the_cursor_at_the_newest(lk):
     assert result["chunks"][0]["hit_limit"] is True
     assert [e.summary for e in lk.events()] == ["one", "two"]
     assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == newest
+
+
+def test_no_transaction_is_open_while_loki_answers(lk, monkeypatch):
+    """Every transaction takes the shared ingestion lease, which an evidence
+    purge must have to itself, so none is left open across a request. A cursor
+    a first run creates is the one exception: it stays uncommitted until the
+    first chunk is stored, so a first request that fails leaves no cursor."""
+    open_during = []
+    answer = Upstream.__call__
+
+    def watched(self, request):
+        open_during.append(lk.db.in_transaction())
+        return answer(self, request)
+
+    monkeypatch.setattr(Upstream, "__call__", watched)
+    lk.upstream.replies.append(
+        [{"stream": {"app": "sshd"}, "values": [_line(NOW, "first run")]}]
+    )
+    lk.run()
+    assert open_during == [True]
+    # Later runs, and every chunk after the first, ask with nothing open.
+    monkeypatch.setattr(settings, "loki_catchup_chunks_per_run", 3)
+    lk.clock.now = NOW + timedelta(days=90)
+    lk.upstream.replies.extend([[], [], []])
+    open_during.clear()
+    lk.run()
+    assert len(open_during) == 3 and not any(open_during)

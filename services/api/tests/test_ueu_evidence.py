@@ -3,6 +3,7 @@ catalogue checks and custody."""
 
 import hashlib
 import hmac
+import importlib.util
 import json
 import secrets
 import uuid
@@ -18,6 +19,7 @@ from app.agents.ueu.jcs import canonical, parse
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentKey, Artifact, Event, KeenAgent, UeuBatch, UeuEvidence
 from app.ingest import common
+from app.mapping.rules import evaluate_by_framework, event_fields, parse_rules
 from app.security import agent_signatures as signatures
 from app.security import encoding
 from app.services import ueu_evidence
@@ -1023,6 +1025,70 @@ def test_payloads_are_redacted_with_a_custody_record(keen):
         assert row.custody["original_evidence_hash"] == sealed[0]["hash"]
         stored = keen.objects[db.query(Artifact).one().storage_uri]
         assert b"hunter2" not in stored and stored != sealed[0]["bytes"]
+
+
+def builtin_rules():
+    """The rules migration 0037 adds, as an installation holds them."""
+    spec = importlib.util.spec_from_file_location(
+        "builtin_rules_0037",
+        Path(__file__).resolve().parents[1] / "alembic/versions/0037_builtin_rules.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return parse_rules({"rules": module.RULES})
+
+
+def test_a_declared_asset_type_cannot_claim_another_device_class(keen):
+    """Rules map workstation controls from the stored asset type, so it is the
+    type Keen enrolled the identity as, not the one the envelope declares."""
+    agent, _ = enrolled(keen)
+    assert agent.grant["agent"]["agent_type"] == "server"
+    agent.grant["agent"]["agent_type"] = "workstation"
+    claimed = agent.observation("disk_encryption", "luks", {"enabled": True})
+    assert claimed["asset"]["asset_type"] == "workstation"
+    r, sealed = agent.send(claimed)
+    assert r.status_code == 200, r.text
+    rules = builtin_rules()
+    with keen.db() as db:
+        event = db.query(Event).one()
+        assert event.normalized_payload["ueu"]["asset"]["asset_type"] == "server"
+        row = db.get(UeuEvidence, event.id)
+        assert row.custody["changes"] == [
+            {"path": "asset.asset_type", "reason": "enrolled_agent_type"}
+        ]
+        assert row.custody["original_evidence_hash"] == sealed[0]["hash"]
+        artifact = db.query(Artifact).one()
+        assert parse(keen.objects[artifact.storage_uri])["asset"]["asset_type"] == (
+            "server"
+        )
+        mapped = evaluate_by_framework(event_fields(event), rules)
+    assert set(mapped["KEEN-AF:1.0"]) == {"CRY-4"}
+    # Declared as enrolled, the envelope is stored exactly as signed.
+    agent.grant["agent"]["agent_type"] = "server"
+    r, sealed = agent.send(agent.observation("firewall", "ufw", {"enabled": True}))
+    assert r.status_code == 200, r.text
+    with keen.db() as db:
+        latest = db.query(UeuEvidence).filter_by(evidence_hash=sealed[0]["hash"]).one()
+        assert latest.custody["changes"] == []
+
+
+def test_an_identity_enrolled_as_a_workstation_keeps_its_workstation_mappings(keen):
+    with keen.db() as db:
+        from app.db.models import IsmsPerson
+
+        person = IsmsPerson(name="Ada")
+        db.add(person)
+        db.commit()
+        person_id = str(person.id)
+    agent, _ = enrolled(keen, agent_type="workstation", person_id=person_id)
+    r, _ = agent.send(agent.observation("disk_encryption", "luks", {"enabled": True}))
+    assert r.status_code == 200, r.text
+    with keen.db() as db:
+        event = db.query(Event).one()
+        assert event.normalized_payload["ueu"]["asset"]["asset_type"] == "workstation"
+        assert db.get(UeuEvidence, event.id).custody["changes"] == []
+        mapped = evaluate_by_framework(event_fields(event), builtin_rules())
+    assert {"CRY-3", "CRY-4", "END-40"} <= set(mapped["KEEN-AF:1.0"])
 
 
 def test_the_ceiling_follows_content_when_the_mode_label_is_omitted(keen):

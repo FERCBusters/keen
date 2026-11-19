@@ -25,6 +25,7 @@ import {
   userPillHtml,
   userPillsHtml,
   auditStatusLabel,
+  forgetAccountStorage,
 } from '/app.js';
 
 const status = document.getElementById('status');
@@ -1002,6 +1003,7 @@ if (prefsForm) {
 if (logoutBtn && me?.logout_enabled !== false) {
   const logoutUrl = (me && me.logout_url ? String(me.logout_url) : '').trim();
   logoutBtn.addEventListener('click', async () => {
+    forgetAccountStorage();
     if (logoutUrl && logoutUrl !== '/api/v1/auth/oidc/logout') {
       location.href = logoutUrl;
       return;

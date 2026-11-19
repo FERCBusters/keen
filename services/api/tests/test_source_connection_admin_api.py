@@ -164,12 +164,12 @@ REFUSED = [
     (
         "webhook-provider-spaces",
         _connection(source="webhooks", configuration={"provider": "git hub"}),
-        "Enter a webhook provider name using letters, numbers, hyphens or underscores",
+        "Enter a webhook provider name of up to 56 letters, numbers, hyphens or underscores",
     ),
     (
         "webhook-no-provider",
         _connection(source="webhooks", configuration={}),
-        "Enter a webhook provider name using letters, numbers, hyphens or underscores",
+        "Enter a webhook provider name of up to 56 letters, numbers, hyphens or underscores",
     ),
     ("blank-name", _connection(name="   "), "A connection name is required"),
     (

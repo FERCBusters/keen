@@ -435,6 +435,8 @@ class GiteaCompatibleCollector:
             .filter(IngestionCursor.name == cursor_name)
             .one_or_none()
         )
+        # A cursor this run creates stays uncommitted until the feed is stored.
+        new_cursor = cur is None
         if cur is None:
             # Store a redacted URL so query tokens are never persisted in DB.
             cur = IngestionCursor(
@@ -450,6 +452,8 @@ class GiteaCompatibleCollector:
             else (now - timedelta(days=lookback_days))
         )
         cursor_last = to_utc_naive(cur.last_ts) if cur.last_ts else None
+        if not new_cursor:
+            db.commit()  # No database transaction spans the remote wait.
 
         owner, repo = _infer_owner_repo_from_feed_url(feed_url)
         host = u.netloc

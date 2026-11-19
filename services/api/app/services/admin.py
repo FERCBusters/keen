@@ -1100,13 +1100,18 @@ def admin_remap_run(
     if lim > 0:
         qry = qry.limit(lim)
 
-    events = qry.all()
+    # Events are read one at a time and released once mapped, so a remap of
+    # many events never holds their stored evidence together.
+    event_ids = [event_id for (event_id,) in qry.with_entities(Event.id)]
 
     processed = 0
     created_total = 0
     rule_mappings_created = 0
     bookstack_config_mappings_created = 0
-    for e in events:
+    for event_id in event_ids:
+        e = db.get(Event, event_id)
+        if e is None:
+            continue
         processed += 1
         try:
             rule_created = int(apply_rules(db, e) or 0)
@@ -1118,6 +1123,8 @@ def admin_remap_run(
         except Exception:
             db.rollback()
             continue
+        finally:
+            db.expunge(e)
 
     cache_keys_deleted: dict[str, int] | int = 0
     stats_rebuilt: dict[str, int] = {}

@@ -2,7 +2,7 @@
 
 import copy
 import unittest
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -16,6 +16,7 @@ from app.mapping.collector import (
 )
 from app.security.redaction import redact_obj
 from app.services.errors import DomainError
+from celery.exceptions import SoftTimeLimitExceeded
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge")
 
@@ -215,7 +216,8 @@ class RedmineTests(unittest.TestCase):
         self.assertNotIn("updated_on", requests[0].url.params)
         self.assertEqual(requests[1].url.params["include"], "journals")
         self.assertEqual(result["created_events"], 2)
-        db.commit.assert_called_once()
+        # One commit before the first request, one once the results are stored.
+        self.assertEqual(db.commit.call_count, 2)
         self.assertEqual(store.call_count, 2)
 
     def test_failure_does_not_advance_cursor(self):
@@ -230,11 +232,20 @@ class RedmineTests(unittest.TestCase):
         before = cursor.last_ts
         db = MagicMock()
         db.query.return_value.filter_by.return_value.one_or_none.return_value = cursor
-        with client(lambda req: httpx.Response(403)) as c:
+        asked, committed_after = [], []
+        db.commit.side_effect = lambda: committed_after.append(len(asked))
+
+        def refuse(request):
+            asked.append(request)
+            return httpx.Response(403)
+
+        with client(refuse) as c:
             with self.assertRaises(r.RedmineError):
                 r._project(db, c, "https://host", {"project": "infra"}, PROJECT, {})
         self.assertEqual(cursor.last_ts, before)
-        db.commit.assert_not_called()
+        # The read transaction ended before the request; nothing commits after
+        # the failure.
+        self.assertEqual(committed_after, [0])
 
     def test_periodic_reconciliation_keeps_history_floor(self):
         floor = "2026-01-01T00:00:00"
@@ -329,6 +340,68 @@ class RedmineTests(unittest.TestCase):
         self.assertIn("error", results[0])
         self.assertEqual(results[1]["created_events"], 2)
         db.rollback.assert_called_once()
+
+    def _run(self, **replacements):
+        """A Redmine run of one '*' selection with the given stand-ins."""
+
+        @contextmanager
+        def locked(*args):
+            yield True
+
+        db = MagicMock()
+        with ExitStack() as stack:
+            for target, name, value in (
+                (r.settings, "redmine_enabled", True),
+                (r.settings, "demo_mode", False),
+                (r.settings, "redmine_base_url", "https://host/redmine"),
+                (r.settings, "redmine_api_key", "fixture-secret"),
+                (r, "is_safe_url", MagicMock(return_value=True)),
+                (
+                    r,
+                    "load_document",
+                    MagicMock(return_value={"projects": [{"project": "*"}]}),
+                ),
+                (r, "_run_lock", locked),
+                (r.httpx, "Client", MagicMock()),
+                *((r, name, value) for name, value in replacements.items()),
+            ):
+                stack.enter_context(patch.object(target, name, value))
+            return r.ingest_redmine_all(db)
+
+    def test_the_soft_time_limit_ends_the_run_from_either_handler(self):
+        """A project's or a discovery's handler describes its failure and goes
+        on to the next; the task's time limit is no such failure, so it leaves
+        the run, and the projects after it wait for the next run."""
+        handled = []
+
+        def project(db, client, base, selection, found, config):
+            handled.append(found["id"])
+            raise SoftTimeLimitExceeded()
+
+        with self.assertRaises(SoftTimeLimitExceeded):
+            self._run(
+                _pages=MagicMock(return_value=[PROJECT, {"id": 3}]),
+                _project=project,
+            )
+        self.assertEqual(handled, [PROJECT["id"]])
+        with self.assertRaises(SoftTimeLimitExceeded):
+            self._run(_pages=MagicMock(side_effect=SoftTimeLimitExceeded()))
+
+    def test_ordinary_failures_are_described_without_upstream_text(self):
+        results = self._run(
+            _pages=MagicMock(return_value=[PROJECT, {"id": 3}]),
+            _project=MagicMock(side_effect=RuntimeError("https://user:secret@host")),
+        )
+        self.assertEqual(
+            [row["error"] for row in results],
+            [
+                "Collection failed; check the input, credentials, upstream service "
+                "and storage configuration"
+            ]
+            * 2,
+        )
+        discovery = self._run(_pages=MagicMock(side_effect=RuntimeError("secret")))
+        self.assertNotIn("secret", str(discovery))
 
 
 if __name__ == "__main__":

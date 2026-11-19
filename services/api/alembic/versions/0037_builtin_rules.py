@@ -35,8 +35,8 @@ def _cloud(rule_id: str, description: str, checks: str | None, *refs: str) -> di
     }
 
 
-# Observations from agents Keen enrolled as workstations; the agent reports the
-# type Keen gave it at enrolment.
+# Observations from agents Keen enrolled as workstations: the stored envelope
+# carries the type Keen enrolled the agent as, whatever the agent declares.
 WORKSTATION = [
     {
         "path": ["ueu", "asset", "asset_type"],

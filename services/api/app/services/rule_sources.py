@@ -13,7 +13,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.db.models import Event
-from app.security.regex import compile_pattern
+from app.security.regex import UNMATCHABLE, compile_pattern
 from app.services.errors import DomainError
 
 # A source pattern is matched against at most this many sources.
@@ -55,7 +55,14 @@ def reads_source(when: dict, source: str) -> bool:
     if exact and exact != source:
         return False
     pattern = when.get("source_regex")
-    return not pattern or bool(compile_pattern(pattern).search(source))
+    if not pattern:
+        return True
+    try:
+        return bool(compile_pattern(pattern).search(source))
+    except UNMATCHABLE:
+        # A pattern that cannot be matched reads no source, as rule matching
+        # treats it.
+        return False
 
 
 def rule_sources(db: Session, when: dict) -> list[str]:

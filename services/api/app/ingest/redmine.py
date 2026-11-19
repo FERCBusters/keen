@@ -21,6 +21,7 @@ from app.ingest.connections import (
 )
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
+from app.security.errors import collection_error
 from app.security.json_shape import decode_json
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
@@ -307,6 +308,7 @@ def _project(db, client, base, selection, project, config):
         )
     created, examined = 0, 0
     reader = RecordReader()
+    db.commit()  # No database transaction spans the remote wait.
     stubs = _pages(client, base, "issues", params, config.get("max_pages", 1000))
     for issue_id in reader.each(stubs, lambda stub: _id(stub.get("id"))):
         detail = _json(
@@ -460,7 +462,7 @@ def ingest_redmine_all(db):
                                     "project_id": pid,
                                     "error": str(exc)
                                     if isinstance(exc, RedmineError)
-                                    else "Collection/storage failed; project cursor retained",
+                                    else collection_error(exc),
                                 }
                             )
                     if reader.invalid:
@@ -478,7 +480,7 @@ def ingest_redmine_all(db):
                             "collection": str(selection["project"]),
                             "error": str(exc)
                             if isinstance(exc, RedmineError)
-                            else "Project discovery failed; check configuration and API access",
+                            else collection_error(exc),
                         }
                     )
     return results or [

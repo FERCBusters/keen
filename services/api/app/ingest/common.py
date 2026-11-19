@@ -9,6 +9,7 @@ from sqlalchemy import String, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.db.models import Artifact, ControlItem, Event, Framework, Mapping
 from app.db.session import track_unpublished_object
@@ -93,8 +94,12 @@ class RecordReader:
     def each(
         self, records: Iterable[T], read_one: Callable[[T], R | None]
     ) -> Iterator[R]:
-        """What ``read_one`` makes of each record it can read, in order."""
+        """What ``read_one`` makes of each record it can read, in order.
+
+        A run past its task's deadline reads no further record.
+        """
         for record in records:
+            task_deadline.check()
             value = self.read(read_one, record)
             if value is not None:
                 yield value
@@ -333,12 +338,17 @@ def store_event_with_artifact(
 ) -> dict[str, Any]:
     from app.services.ingestion_pause import require_purge_receiving
 
+    # A run past its task's deadline stores no further record.
+    task_deadline.check()
     require_purge_receiving(db)
     from app.ingest.connections import artifact_key as scoped_artifact_key
     from app.ingest.connections import identity, namespace
 
     external_id = namespace(external_id)
     artifact_key = scoped_artifact_key(attempt_key(artifact_key))
+    # Editors refuse a name that would make a longer source; this keeps a
+    # name saved before they did from failing every event it names.
+    source = source[: cast(String, Event.__table__.c.source.type).length]
 
     (
         system,

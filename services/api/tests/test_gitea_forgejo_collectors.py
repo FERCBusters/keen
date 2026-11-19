@@ -360,6 +360,7 @@ def test_repo_feed_api_success(collector):
     assert b"fixture-secret" not in store.call_args.kwargs["artifact_bytes"]
     cursor_obj = db.add.call_args_list[0].args[0]
     assert cursor_obj.meta["url"] == "https://host.example/team/repo.rss?token=REDACTED"
+    # A cursor the run creates is committed with the results it stores.
     db.commit.assert_called_once_with()
 
 
@@ -402,6 +403,7 @@ def test_repo_feed_rss_fallback(collector):
     assert stored[0]["raw_pointer"][source(collector)]["guid"] == "g1"
     assert stored[0]["system"] == "host.example/team/repo"
     db.rollback.assert_called_once_with()
+    # A cursor the run creates is committed with the results it stores.
     db.commit.assert_called_once_with()
 
 
@@ -456,7 +458,8 @@ def test_repo_feed_uses_cursor_and_skips_seen_items(collector):
     assert result["cursor_last_ts"] == "2026-10-09T12:00:00"
     store.assert_not_called()
     db.add.assert_called_once_with(existing)
-    db.commit.assert_called_once_with()
+    # One commit before the request, one once the results are stored.
+    assert db.commit.call_count == 2
     assert existing.meta.get("url") is None
 
 

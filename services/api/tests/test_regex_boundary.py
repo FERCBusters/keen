@@ -15,8 +15,19 @@ from pathlib import Path
 
 import pytest
 import regex
+from app.mapping.rules import evaluate_by_framework, parse_rules
+from app.security import regex as regex_boundary
 from app.security.redaction import mask_event_data_str, redact_bytes, redact_str
-from app.security.regex import SCAN_REPEATS_HELD, check_scan_pattern, scan_pattern
+from app.security.regex import (
+    SCAN_REPEATS_HELD,
+    check_scan_pattern,
+    compile_pattern,
+    scan_pattern,
+    validate_pattern,
+)
+from app.services.errors import DomainError
+from app.services.managed_configurations import _validate_regex
+from app.services.rule_sources import reads_source
 
 APP = Path(__file__).resolve().parents[1] / "app"
 MIB = 1024 * 1024
@@ -356,3 +367,109 @@ def test_redaction_memory_stays_in_proportion_to_its_text(text):
         lambda: mask_event_data_str(text),
     ):
         assert _peak(run) < 6 * len(text) + MIB
+
+
+# Constructs CPython's parser and the regex package that matches supplied
+# patterns read differently, or that only one of them reads.
+DIALECT_PROBES = (
+    r"\b{start}",
+    r"\b{end}",
+    r"\b{start,end}",
+    r"\b{wb}",
+    r"\p{L}",
+    r"\P{Lu}",
+    r"\G",
+    r"\K",
+    r"\X",
+    "(?|a)",
+    "(?V1)a",
+    r"[\d-z]",
+    "[[a]]",
+    "[a--b]",
+    "[a&&b]",
+    "[a[:digit:]",
+    "a{,3}",
+    r"\N{DASH}",
+    "(?(DEFINE)a)",
+    "a{1,2}{3}",
+    "x{2,1}",
+    r"A",
+)
+
+
+def _reads(compile_with, pattern):
+    try:
+        compile_with(pattern)
+    except Exception:  # noqa: BLE001 - either engine may refuse in its own way
+        return False
+    return True
+
+
+def test_every_match_pattern_the_checks_accept_compiles_in_the_matching_engine():
+    """A pattern the rule editor saves must compile where it is matched.
+
+    The checks read a pattern with Python's parser and matching compiles it
+    with the regex package. The probes include constructs the two disagree on,
+    so a check that read with one engine only would accept one of them here.
+    """
+    divergent = [
+        pattern
+        for pattern in DIALECT_PROBES
+        if _reads(re.compile, pattern)
+        != _reads(lambda p: regex.compile(p, regex.VERSION0), pattern)
+    ]
+    assert {r"\b{start}", r"\b{end}", r"\p{L}", "[a[:digit:]"} <= set(divergent)
+    for pattern in DIALECT_PROBES:
+        try:
+            validate_pattern(pattern)
+        except ValueError:
+            continue
+        # Matching runs; whether it finds anything is the pattern's business.
+        compile_pattern(pattern).search("A dash and some words")
+
+
+def test_a_rule_whose_pattern_cannot_compile_never_stops_the_other_rules(
+    monkeypatch, caplog
+):
+    """A rule saved before the editor compiled its pattern, or read from a rules
+    file, matches nothing; the other rules still map the event."""
+    document = {
+        "rules": [
+            {
+                "id": "uncompilable",
+                "when": {"source": "github", "summary_regex": r"\b{start}"},
+                "map_to": {"CE": ["first"]},
+            },
+            {
+                "id": "ordinary",
+                "when": {"source": "github", "summary_regex": "push"},
+                "map_to": {"CE": ["second"]},
+            },
+        ]
+    }
+    event = {"source": "github", "summary": "push to main"}
+    # The shared parser refuses the pattern, so the rule is skipped.
+    assert [rule.id for rule in parse_rules(document)] == ["ordinary"]
+    # A rule that reached matching anyway is contained to itself.
+    monkeypatch.setattr(regex_boundary, "validate_pattern", lambda pattern: None)
+    saved_earlier = parse_rules(document)
+    monkeypatch.undo()
+    assert [rule.id for rule in saved_earlier] == ["uncompilable", "ordinary"]
+    with caplog.at_level("WARNING", logger="app.mapping.rules"):
+        assert evaluate_by_framework(event, saved_earlier) == {"CE": ["second"]}
+    assert "uncompilable has a pattern that exceeded its time budget or cannot be" in (
+        caplog.text
+    )
+    # The source a rule reads follows the same reading.
+    assert reads_source({"source_regex": r"\b{start}"}, "github") is False
+    assert reads_source({"source_regex": "^git"}, "github") is True
+    assert reads_source({}, "github") is True
+
+
+def test_the_rule_editor_refuses_a_pattern_the_matching_engine_cannot_compile():
+    with pytest.raises(DomainError) as refused:
+        _validate_regex(r"\b{start}", "summary_regex")
+    assert (refused.value.status_code, refused.value.detail) == (
+        400,
+        "summary_regex: Invalid pattern: expected } at position 4",
+    )

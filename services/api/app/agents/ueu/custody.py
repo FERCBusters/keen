@@ -139,3 +139,19 @@ def withhold_payload(document: dict[str, Any], changes: list, reason: str):
         evidence = {k: v for k, v in evidence.items() if k != "payload"}
         document["evidence"] = evidence
         changes.append({"path": "evidence.payload", "reason": reason})
+
+
+def enrolled_asset_type(document: dict[str, Any], changes: list, agent_type: str):
+    """Store the device class Keen enrolled the agent as.
+
+    The agent declares its asset type in the envelope, and rules decide by it
+    which controls a record evidences, workstation controls among them. The
+    declaration is the agent's own, so an agent enrolled as a server could
+    claim a workstation's controls; the stored envelope carries the enrolled
+    type instead. An agent reassigned since its grant declares its earlier type
+    until it renews, and its evidence is kept under the type it holds now.
+    """
+    asset = document["asset"]
+    if asset["asset_type"] != agent_type:
+        document["asset"] = {**asset, "asset_type": agent_type}
+        changes.append({"path": "asset.asset_type", "reason": "enrolled_agent_type"})

@@ -13,8 +13,14 @@ What happens to a control:
   gaps and coverage estimate.
 * One OSA publishes for the first time is added, in scope.
 * One OSA no longer publishes is deleted when nothing depends on it. When
-  something does (evidence, a risk, an owner, a link, a scope decision, tags or
-  a description an administrator wrote) it is kept and marked as superseded.
+  something does (evidence, a risk, an owner, a link, a scope decision, tags, a
+  description an administrator wrote, or a clause that stays filed under it) it
+  is kept and marked as superseded.
+
+Clause parents stay as the installation has them. OSA files 6.1.3 under 6.1
+but publishes nothing else under 6.1, and audit scope treats a clause with
+children as a heading only, so taking OSA's parent would stop 6.1 itself being
+scoped.
 
 What an administrator wrote stays theirs: a description, and a title that no
 longer reads as the earlier snapshot gave it.
@@ -198,6 +204,29 @@ def _update(bind, table, changes: list[dict]) -> None:
         )
 
 
+def _parented(bind, slug: str, surviving: set) -> set:
+    """Clauses of the framework that a surviving clause sits under.
+
+    A clause's parent link deletes its children with it, so a clause OSA no
+    longer publishes stays while a clause that stays is filed under it, however
+    many levels down.
+    """
+    parent_of = dict(
+        bind.execute(
+            sa.select(clauses.c.id, clauses.c.parent_clause_id).where(
+                clauses.c.framework_slug == slug
+            )
+        ).all()
+    )
+    ancestors: set = set()
+    for clause in surviving:
+        parent = parent_of.get(clause)
+        while parent is not None and parent not in ancestors:
+            ancestors.add(parent)
+            parent = parent_of.get(parent)
+    return ancestors
+
+
 def _merged(old: dict, new: dict, title: str) -> dict:
     """Current OSA metadata over what the row held, keeping the row's own keys."""
     meta = {**old, **new}
@@ -277,6 +306,8 @@ def apply_snapshot(bind) -> None:
         }
         refs = {item["id"] for item in framework["clauses"]}
         published, published_clauses, nist = set(), set(), []
+        # Each published clause's row.
+        clause_rows = {}
         added, changed, added_clauses, changed_clauses = [], [], [], []
         for order, item in enumerate(framework["clauses"]):
             ref = item["id"]
@@ -333,6 +364,7 @@ def apply_snapshot(bind) -> None:
             if is_clause:
                 published_clauses.add(ref)
                 clause = held_clauses.get(ref)
+                clause_rows[ref] = ident if clause is None else clause["id"]
                 if clause is None:
                     added_clauses.append(
                         {
@@ -382,11 +414,19 @@ def apply_snapshot(bind) -> None:
             if ref not in published_clauses
             and (item["metadata"] or {}).get("source") == OSA
         ]
+        dropped_ids = {item["id"] for item in dropped_clauses}
+        # Published clauses, clauses that are not OSA's, and dropped ones in use.
+        surviving = (
+            set(clause_rows.values())
+            | ({row["id"] for row in held_clauses.values()} - dropped_ids)
+            | (dropped_ids & used_clauses)
+        )
+        kept_clauses = used_clauses | _parented(bind, slug, surviving)
         _retire(
             bind,
             clauses,
             dropped_clauses,
-            used_clauses,
+            kept_clauses,
             snapshot,
             lambda item, used: item["id"] in used,
         )

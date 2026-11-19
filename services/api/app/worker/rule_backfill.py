@@ -28,6 +28,7 @@ from app.mapping.rules import (
 )
 from app.mapping.targets import resolve_targets
 from app.services.control_evidence_stats import clear_stats_caches
+from app.services.event_payloads import payloads, without_payloads
 from app.services.mapping_provenance import rule_owned_event_ids
 from app.services.rule_sources import rule_sources
 
@@ -128,7 +129,9 @@ def process_batch(job_id: uuid.UUID) -> bool:
                     ),
                 )
             )
-        events = q.limit(BATCH_SIZE).all()
+        # Payloads are read a group at a time below, so a batch of large
+        # evidence is never held in memory at once.
+        events = q.options(*without_payloads()).limit(BATCH_SIZE).all()
         if not events:
             job.status = "completed"
             db.commit()
@@ -168,8 +171,10 @@ def process_batch(job_id: uuid.UUID) -> bool:
         created = 0
         changed = False
         matched = 0
-        for event in events:
-            event_data = event_fields(event)
+        by_id = {event.id: event for event in events}
+        for event_id, raw_pointer, payload in payloads(db, event_ids):
+            event = by_id[event_id]
+            event_data = event_fields(event, (raw_pointer, payload))
             result = evaluate_by_framework(event_data, rule, details=True)
             if result:
                 matched += 1

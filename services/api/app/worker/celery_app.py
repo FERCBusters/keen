@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import time
+
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import before_task_publish, task_postrun, task_prerun
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.ingest.registry import HTTP_QUEUE, IMAP_QUEUE, polled
 from app.worker.sql_trace import connect_task_labels
@@ -67,6 +71,25 @@ celery_app.conf.task_annotations = {
 TASK_SECONDS = 3300
 celery_app.conf.task_soft_time_limit = TASK_SECONDS
 celery_app.conf.task_time_limit = TASK_SECONDS + RUN_GRACE_SECONDS
+
+
+def soft_time_limit(task) -> float | None:
+    """The soft limit the worker applies to this run of ``task``."""
+    _, soft = task.request.timelimit or (None, None)
+    return soft or task.soft_time_limit or celery_app.conf.task_soft_time_limit
+
+
+@task_prerun.connect
+def _start_deadline(task=None, **_):
+    # A handler that swallows the worker's one raise of the soft limit cannot
+    # keep the task going: its next request, record or delivery raises it again.
+    task_deadline.start(soft_time_limit(task))
+
+
+@task_postrun.connect
+def _finish_deadline(**_):
+    task_deadline.finish()
+
 
 # Beat schedules. A crontab minute step only divides the hour: "*/110" matches
 # minute 0 alone, so an interval that is no divisor of 60 is given in seconds.
@@ -155,14 +178,28 @@ celery_app.conf.beat_schedule["security-notifications"] = {
     "schedule": 60.0,
 }
 
-# A scheduled collection waits at most this long for the ingest-http worker.
-# While one long collection holds the worker, the runs scheduled behind it
-# expire, and each source's next scheduled run collects from its cursor, so no
-# backlog builds up behind a slow or hostile source.
-SCHEDULED_COLLECTION_EXPIRY = 600
+# The ingest-http worker runs one collection at a time, in the order they were
+# queued, so sources that fall due together take their turns one after another
+# and a long run delays the runs behind it without dropping them. A collection
+# run notes when its source starts (connections.start_run); a queued run of a
+# source that has started since it was queued finds its work done and ends at
+# once, so a slow or hostile source leaves at most one effective run of each
+# other source waiting, and every source keeps its turn. Each queued run notes
+# when it was queued for that. A run still waiting after this long, as while
+# the worker is stopped, is dropped; the source's next run collects from its
+# cursor.
+SCHEDULED_COLLECTION_EXPIRY = 24 * 3600
+QUEUED_AT = "keen_queued_at"
+COLLECTION_TASKS = frozenset(source.task_name for source in POLLED)
 for _entry in celery_app.conf.beat_schedule.values():
     if (
         celery_app.conf.task_routes.get(_entry["task"], {}).get("queue")
         == "ingest-http"
     ):
         _entry.setdefault("options", {})["expires"] = SCHEDULED_COLLECTION_EXPIRY
+
+
+@before_task_publish.connect
+def _note_queued_at(sender=None, headers=None, **_):
+    if sender in COLLECTION_TASKS:
+        headers[QUEUED_AT] = time.time()
