@@ -662,7 +662,8 @@ def deliver_once(
         except TIME_LIMITS:
             db.rollback()
             if claimed:
-                _release(db, model, column, row_id)
+                with task_deadline.grace():
+                    _release(db, model, column, row_id)
             raise
         except Exception:
             log.exception("Failed to send an email for %s %s", model.__name__, row_id)

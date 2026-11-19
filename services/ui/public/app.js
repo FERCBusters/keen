@@ -676,14 +676,36 @@ function _applyPendingRichText() {
 // Markup pasted or dropped into an editor is sanitised before the editor sees
 // it. A drag that starts inside an editor moves the editor's own content,
 // which was sanitised when it arrived, so its drop is left to the browser.
-let _draggingFromRichText = false;
+// Such a drag carries a token only this page holds, for one drop: a drop whose
+// data lacks it, or whose source editor has left the page, is sanitised. A
+// drag the browser cancelled without a dragend leaves a token no other drag
+// can carry, so later drops are still sanitised.
+const _RICH_TEXT_DRAG_TYPE = 'application/x-keen-rich-text-drag';
+let _richTextDrag = null;
 
 function _richTextDragStart(event) {
-  _draggingFromRichText = Boolean(event.target?.closest?.('.rich-text-editor [contenteditable]'));
+  _richTextDrag = null;
+  const source = event.target?.closest?.('.rich-text-editor [contenteditable]');
+  if (!source || !event.dataTransfer) return;
+  const token = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  event.dataTransfer.setData(_RICH_TEXT_DRAG_TYPE, token);
+  _richTextDrag = { token, source };
 }
 
 function _richTextDragEnd() {
-  _draggingFromRichText = false;
+  _richTextDrag = null;
+}
+
+// Whether a drop moves content within this page's editors; each drag's token
+// serves one drop.
+function _droppedFromRichText(event) {
+  const drag = _richTextDrag;
+  _richTextDrag = null;
+  return Boolean(
+    drag?.source.isConnected && event.dataTransfer.getData(_RICH_TEXT_DRAG_TYPE) === drag.token,
+  );
 }
 
 // Places the caret where a drop landed, as the browser would have.
@@ -707,7 +729,7 @@ function _pasteIntoRichText(event) {
   const editable = event.target?.closest?.('.rich-text-editor [contenteditable]');
   const data = event.type === 'drop' ? event.dataTransfer : event.clipboardData;
   if (!editable || !data?.types?.includes?.('text/html')) return;
-  if (event.type === 'drop' && _draggingFromRichText) return;
+  if (event.type === 'drop' && _droppedFromRichText(event)) return;
   event.preventDefault();
   event.stopPropagation();
   if (event.type === 'drop') _caretAtDrop(event);

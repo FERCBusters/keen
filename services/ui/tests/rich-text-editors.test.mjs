@@ -647,12 +647,58 @@ test('dropped HTML is sanitised before Wysi can re-parse it', async (t) => {
   drop(notes.editable, { 'text/html': '<b>y</b>', 'text/plain': 'y' });
   assert.equal(inserted.length, 4);
 
-  // Moving the editor's own content is left to the browser.
-  notes.editable.dispatchEvent(new ui.window.Event('dragstart', { bubbles: true }));
-  assert.equal(drop(notes.editable, { 'text/html': '<b>moved</b>' }).defaultPrevented, false);
+  // Moving the editor's own content is left to the browser. The drag carries
+  // a token only the page holds, good for one drop.
+  const drag = (source) => {
+    const data = {};
+    const event = new ui.window.Event('dragstart', { bubbles: true });
+    event.dataTransfer = { setData: (type, value) => (data[type] = value) };
+    source.dispatchEvent(event);
+    return data;
+  };
+  const carried = drag(notes.editable);
+  const token = carried['application/x-keen-rich-text-drag'];
+  assert.match(token, /^[0-9a-f]{32}$/);
+  assert.notEqual(drag(notes.editable)['application/x-keen-rich-text-drag'], token);
+  const moved = drag(notes.editable);
+  assert.equal(
+    drop(notes.editable, { 'text/html': '<b>moved</b>', ...moved }).defaultPrevented,
+    false,
+  );
+  // The same token again, as a page that read it from a drag out would send.
+  assert.equal(
+    drop(notes.editable, { 'text/html': '<b>again</b>', ...moved }).defaultPrevented,
+    true,
+  );
+  // A drag the browser cancelled without a dragend: a drop without its token,
+  // or one with a stale token, is sanitised.
+  drag(notes.editable);
+  assert.equal(drop(notes.editable, { 'text/html': '<b>z</b>' }).defaultPrevented, true);
+  drag(notes.editable);
+  assert.equal(
+    drop(notes.editable, { 'text/html': '<b>z</b>', ...carried }).defaultPrevented,
+    true,
+  );
+  // A source editor that left the page mid-drag no longer vouches for its drop.
+  const elsewhere = doc.createElement('div');
+  elsewhere.className = 'rich-text-editor';
+  elsewhere.innerHTML = '<div contenteditable="true">gone</div>';
+  doc.body.append(elsewhere);
+  const detached = drag(elsewhere.firstChild);
+  elsewhere.remove();
+  assert.equal(
+    drop(notes.editable, { 'text/html': '<b>z</b>', ...detached }).defaultPrevented,
+    true,
+  );
+  // A dragend ends the drag's token.
+  const ended = drag(notes.editable);
   notes.editable.dispatchEvent(new ui.window.Event('dragend', { bubbles: true }));
-  // A drag that starts elsewhere is sanitised again once it ends.
-  doc.getElementById('outside').dispatchEvent(new ui.window.Event('dragstart', { bubbles: true }));
+  assert.equal(drop(notes.editable, { 'text/html': '<b>z</b>', ...ended }).defaultPrevented, true);
+  // A drag that starts elsewhere, or that the browser gives no data to, is
+  // sanitised when dropped.
+  drag(doc.getElementById('outside'));
+  assert.equal(drop(notes.editable, { 'text/html': '<b>z</b>' }).defaultPrevented, true);
+  notes.editable.dispatchEvent(new ui.window.Event('dragstart', { bubbles: true }));
   assert.equal(drop(notes.editable, { 'text/html': '<b>z</b>' }).defaultPrevented, true);
   // Plain-text drops and drops elsewhere keep their usual behaviour.
   assert.equal(drop(notes.editable, { 'text/plain': 'text' }).defaultPrevented, false);
@@ -660,7 +706,7 @@ test('dropped HTML is sanitised before Wysi can re-parse it', async (t) => {
     drop(doc.getElementById('outside'), { 'text/html': '<b>x</b>' }).defaultPrevented,
     false,
   );
-  assert.equal(inserted.length, 5);
+  assert.equal(inserted.length, 11);
   assert.equal(ui.window.editors.wysiPastes.length, 0);
 });
 

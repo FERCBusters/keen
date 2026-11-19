@@ -8,10 +8,13 @@ replaced by a recorder at the outbox module.
 from datetime import timedelta
 
 import pytest
+from app.core import task_deadline
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import SecurityNotification, SsoEmailChallenge
 from app.services import mailer, security_notifications
+
+from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -121,6 +124,49 @@ def test_one_recipients_backlog_does_not_hold_up_anyone_elses_mail(outbox):
     db.expire_all()
     assert {row.status for row in urgent} == {"sent"}
     assert [row.status for row in backlog].count("pending") == 8
+
+
+def test_the_worker_time_limit_is_no_failed_delivery(outbox, monkeypatch):
+    # The deadline is placed at each statement and send in turn. Wherever it
+    # falls, the run stops there: no message is marked as a failed attempt or
+    # backed off, and one not yet sent waits, unchanged, for the next run.
+    db, rows, sent = outbox
+
+    def send(**mail):
+        task_deadline.check()  # as mailer.send_email does before connecting
+        sent.append(mail)
+
+    monkeypatch.setattr(security_notifications, "send_email", send)
+
+    def prepare():
+        db.rollback()
+        for row in rows:
+            row.status, row.attempts, row.last_error = "pending", 0, None
+            row.sent_at, row.body = None, "Body"
+        db.commit()
+        sent.clear()
+
+    def after_limit():
+        db.rollback()
+        db.expire_all()
+        delivered = {mail["to_email"] for mail in sent}
+        for row in rows:
+            if row.recipient in delivered:
+                assert row.status in ("sent", "pending") and row.last_error is None
+            else:
+                assert (row.status, row.attempts, row.last_error, row.body) == (
+                    "pending",
+                    0,
+                    None,
+                    "Body",
+                )
+
+    with checked_statements(db.get_bind().engine):
+        checks = stops_wherever_the_deadline_falls(
+            security_notifications.deliver_pending, prepare, after_limit
+        )
+    # Each of the three messages was read, sent and recorded.
+    assert checks >= 9 and len(sent) == 3
 
 
 def test_nothing_is_read_or_sent_without_mail_settings(outbox, monkeypatch):

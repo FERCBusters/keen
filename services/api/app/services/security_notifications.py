@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive as now
 from app.core.email_address import single_mailbox
+from app.core.task_deadline import TIME_LIMITS
 from app.db.models import SecurityNotification, UserLoginIP
 from app.db.session import SessionLocal
 from app.security.mfa import CODE_ATTEMPTS
@@ -127,6 +128,10 @@ def deliver_pending(limit=10):
             row.attempts += 1
             try:
                 send_email(to_email=row.recipient, subject=row.subject, body=row.body)
+            except TIME_LIMITS:
+                # No failed attempt is recorded: the message waits, unchanged,
+                # for the next run.
+                raise
             except Exception as error:
                 # Exception messages may expose SMTP credentials/addresses; retain only the class.
                 row.last_error = type(error).__name__[:100]

@@ -9,9 +9,12 @@ outer transaction may still commit.
 import logging
 
 import pytest
+from app.core.task_deadline import TIME_LIMITS
 from app.db.session import track_unpublished_object
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from tests.task_limits import checked_statements, deadline_at
 
 
 @pytest.fixture
@@ -69,6 +72,42 @@ def test_savepoints_leave_the_decision_to_the_outer_transaction(engine):
             track_unpublished_object(db, "local://local/released.json")
         db.rollback()
     assert queued(engine) == {"local://local/released.json"}
+
+
+def test_an_object_from_a_transaction_the_time_limit_ended_is_still_queued(engine):
+    # Past a worker task's deadline every further statement is refused, but
+    # queueing the transaction's stored objects is its cleanup, not more work:
+    # without it the object would stay in storage outside retention.
+    with checked_statements(engine):
+        db = Session(engine)
+        # The first two checks are the transaction's shared ingestion lock and
+        # SELECT 1; the third, SELECT 2, finds the deadline passed.
+        with deadline_at(3) as refused:
+            db.execute(text("SELECT 1"))
+            track_unpublished_object(db, "local://local/stopped.json")
+            with pytest.raises(TIME_LIMITS):
+                db.execute(text("SELECT 2"))
+            db.rollback()
+            db.close()
+        assert refused == [3]
+    assert queued(engine) == {"local://local/stopped.json"}
+
+
+def test_the_time_limit_leaves_a_savepoint_by_rolling_it_back(engine):
+    # The raise that ends a nested block rolls its savepoint back; that undoes
+    # work rather than doing more, so the deadline lets it through, and the
+    # limit, raised once, is what leaves the block.
+    with checked_statements(engine), Session(engine) as db:
+        db.execute(text("SELECT 1"))
+        # Counted from here: SAVEPOINT, SELECT 2, and SELECT 3, which finds the
+        # deadline passed.
+        with deadline_at(3) as refused:
+            with pytest.raises(TIME_LIMITS):
+                with db.begin_nested():
+                    db.execute(text("SELECT 2"))
+                    db.execute(text("SELECT 3"))
+        assert refused == [3]
+        db.rollback()
 
 
 def test_a_session_joined_to_a_connection_queues_in_its_transaction(contract_db):

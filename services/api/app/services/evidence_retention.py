@@ -12,6 +12,7 @@ from datetime import timedelta
 from sqlalchemy import text
 
 from app.core.datetime_utils import utc_now_naive as now
+from app.core.task_deadline import TIME_LIMITS
 from app.db.session import SessionLocal, queue_stored_objects
 from app.services.control_evidence_stats import clear_stats_caches
 from app.storage.s3 import delete_stored_object
@@ -438,6 +439,9 @@ def storage_batch():
             else:
                 try:
                     delete_stored_object(row["storage_uri"])
+                except TIME_LIMITS:
+                    # The task's limit is no failed deletion to back off.
+                    raise
                 except Exception as exc:
                     # Do not persist provider responses, credentials or signed URLs.
                     code = getattr(exc, "response", {}).get("Error", {}).get("Code")
@@ -474,6 +478,10 @@ def run_retention():
     more = False
     try:
         more = database_batch()
+    except TIME_LIMITS:
+        # The task's time limit is no database failure, and ends storage
+        # cleanup too; the next run continues both.
+        raise
     except Exception as exc:
         with SessionLocal() as db:
             db.execute(

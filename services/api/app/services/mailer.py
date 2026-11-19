@@ -5,6 +5,7 @@ import ssl
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.core.email_address import single_mailbox
 from app.security.regex import scan_pattern
@@ -64,6 +65,8 @@ def send_email(
     this is a no-op; callers should decide whether failed delivery is fatal.
     """
 
+    # A worker task past its deadline sends no further email.
+    task_deadline.check()
     if not smtp_configured():
         return
 

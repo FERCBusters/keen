@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.agents.credentials import LOCK_NOT_AVAILABLE
 from app.core.config import settings
 from app.core.datetime_utils import iso_or_none
+from app.core.task_deadline import TIME_LIMITS
 from app.db.models import (
     Artifact,
     ControlItem,
@@ -381,6 +382,13 @@ def backfill_rule_task(job_id: str) -> None:
             if not process_batch(uuid.UUID(job_id)):
                 return
         backfill_rule_task.delay(job_id)
+    except TIME_LIMITS:
+        # A batch commits whole or not at all, so the job is left running;
+        # recovery continues it from its cursor.
+        log.warning(
+            "Rule backfill %s reached its time limit; it will be resumed", job_id
+        )
+        raise
     except Exception as exc:
         if (
             isinstance(exc, OperationalError)

@@ -1,7 +1,8 @@
 // Browser code from a dependency fetched from a git host is bound to reviewed
 // content. npm records no checksum for such a dependency, so the lockfile
 // cannot detect a fetch that returns different content; the vendoring script
-// compares each file it ships from one with a digest recorded at review.
+// compares each file it ships from one, whichever copy step names it, with a
+// digest recorded at review.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -16,13 +17,7 @@ const reviewed = JSON.parse(
   fs.readFileSync(new URL('scripts/reviewed-vendor-files.json', ui), 'utf8'),
 ).files;
 const script = new URL('scripts/vendor-assets.mjs', ui).pathname;
-
-// Packages fetched from a git host whose lockfile entry carries no checksum.
-function unchecksummed(packages) {
-  return Object.entries(packages)
-    .filter(([name, entry]) => name && entry.resolved?.startsWith('git') && !entry.integrity)
-    .map(([name]) => name.replace(/^node_modules\//, ''));
-}
+const { packageOf, unchecksummed } = await import(new URL('scripts/vendor-guard.mjs', ui));
 
 test('every file shipped from a dependency the lockfile cannot checksum is reviewed', () => {
   const unchecked = unchecksummed(lock.packages);
@@ -43,10 +38,14 @@ test('every file shipped from a dependency the lockfile cannot checksum is revie
     }),
     ['other'],
   );
+  assert.equal(packageOf('wysi/dist/wysi.min.js'), 'wysi');
+  assert.equal(packageOf('@scope/name/dist/app.js'), '@scope/name');
 });
 
-function vendorTree(files) {
+function vendorTree(files, packages = lock.packages) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'keen-vendor-'));
+  if (packages)
+    fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({ packages }));
   for (const [name, content] of Object.entries(files)) {
     const file = path.join(root, 'node_modules', ...name.split('/'));
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -83,4 +82,26 @@ test('the build stops when a required file is missing', (t) => {
   const root = vendorTree({});
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   assert.match(vendor(root), /Required vendored asset is missing: .*wysi\.min\.css/);
+});
+
+test('the build checks every file it ships from such a dependency, not only listed ones', (t) => {
+  // Were Bootstrap fetched from a git host, the files its existing copy steps
+  // ship would need reviewed digests too.
+  const packages = {
+    ...lock.packages,
+    'node_modules/bootstrap': { resolved: 'git+ssh://git@github.com/twbs/bootstrap.git#abc' },
+  };
+  const root = vendorTree({ 'bootstrap/dist/css/bootstrap.min.css': 'body{}' }, packages);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  assert.match(
+    vendor(root),
+    /bootstrap\/dist\/css\/bootstrap\.min\.css has SHA-256 [0-9a-f]{64}, not the reviewed \(none recorded\)/,
+  );
+  assert.equal(fs.existsSync(path.join(root, 'public', 'vendor', 'bootstrap')), false);
+});
+
+test('without the lockfile the build stops', (t) => {
+  const root = vendorTree({}, null);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  assert.match(vendor(root), /package-lock\.json is missing; the vendored files cannot be checked/);
 });

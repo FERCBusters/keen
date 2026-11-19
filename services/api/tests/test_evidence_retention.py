@@ -226,6 +226,9 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.mockcache = patch.object(r, "clear_stats_caches")
         self.mockcache.start()
         self.addCleanup(self.mockcache.stop)
+        self.reset()
+
+    def reset(self):
         with self.session() as db:
             db.execute(
                 text(
@@ -671,6 +674,49 @@ class RetentionDatabaseTests(unittest.TestCase):
             r.storage_batch()
             delete.assert_called_once_with("local://local/test")
         self.assertEqual(self.sql("SELECT * FROM evidence_object_cleanup"), [])
+
+    def test_the_worker_time_limit_is_no_failed_cleanup(self):
+        # The deadline is placed at each statement and storage deletion in
+        # turn. Wherever it falls the run stops there: no purge job records a
+        # database failure, no deletion is booked as failed and backed off, and
+        # storage cleanup does not carry on past it.
+        if self.engine is None:
+            self.skipTest("needs a libpq PostgreSQL engine")
+        from app.core import task_deadline
+
+        from tests.task_limits import (
+            checked_statements,
+            stops_wherever_the_deadline_falls,
+        )
+
+        deleted = []
+
+        def delete(uri):
+            task_deadline.check()  # the deletion waits on storage
+            deleted.append(uri)
+
+        def prepare():
+            self.reset()
+            for name in ("one", "two"):
+                self.artifact(self.event(90), f"local://local/{name}")
+            self.job("age", 30)
+            deleted.clear()
+
+        def after_limit():
+            for job in self.sql("SELECT last_error FROM evidence_purge_jobs"):
+                self.assertNotIn("Database cleanup failed", job["last_error"] or "")
+            for row in self.sql("SELECT * FROM evidence_object_cleanup"):
+                self.assertEqual((row["attempts"], row["last_error"]), (0, None))
+
+        with (
+            patch.object(r, "delete_stored_object", delete),
+            checked_statements(self.engine),
+        ):
+            checks = stops_wherever_the_deadline_falls(
+                r.run_retention, prepare, after_limit
+            )
+        self.assertEqual(sorted(deleted), ["local://local/one", "local://local/two"])
+        self.assertGreater(checks, 10)
 
     def test_shared_storage_is_preserved(self):
         old = self.event(90)

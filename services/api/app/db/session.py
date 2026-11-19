@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import DateTime, Engine, bindparam, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
 from app.db.sql_trace import install_statement_labels
@@ -13,6 +14,19 @@ from app.db.sql_trace import install_statement_labels
 engine = create_engine(settings.database_url, pool_pre_ping=True, hide_parameters=True)
 if settings.sql_trace:
     install_statement_labels(engine)
+
+
+@event.listens_for(engine, "before_cursor_execute")
+def _within_task_deadline(conn, cursor, statement, parameters, context, executemany):
+    # A worker task past its soft deadline runs no further statement, so no
+    # handler can carry its work on, or write the limit down as a failure.
+    # Undoing a savepoint is no further work: it is how the limit's own raise
+    # leaves a nested block, and refusing it would raise again mid-rollback.
+    if statement.startswith("ROLLBACK TO SAVEPOINT"):
+        return
+    task_deadline.check()
+
+
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
@@ -118,13 +132,16 @@ def _queue_unpublished_objects(session, transaction):
     not_before = utc_now_naive() + UNPUBLISHED_OBJECT_GRACE
     try:
         bind = session.get_bind()
-        if isinstance(bind, Engine):
-            with bind.begin() as connection:
-                queue_stored_objects(connection, uris, not_before)
-        else:
-            # A session joined to an externally managed connection queues the
-            # objects in that connection's transaction.
-            queue_stored_objects(bind, uris, not_before)
+        # Queued even when a worker task's time limit ended the transaction:
+        # this is the cleanup that keeps its stored objects inside retention.
+        with task_deadline.grace():
+            if isinstance(bind, Engine):
+                with bind.begin() as connection:
+                    queue_stored_objects(connection, uris, not_before)
+            else:
+                # A session joined to an externally managed connection queues
+                # the objects in that connection's transaction.
+                queue_stored_objects(bind, uris, not_before)
     except Exception:
         # The database is likely unavailable; the objects stay unreferenced.
         log.warning("Could not queue %d unpublished evidence objects", len(uris))

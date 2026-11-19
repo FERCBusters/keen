@@ -42,6 +42,7 @@ from app.db.models import (
     RiskCategory,
     RiskControlLink,
 )
+from sqlalchemy import event as sa_event
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -530,10 +531,30 @@ def test_event_lookups_list_audits_that_sampled_the_event(audits):
     no_events = app.client(app.user("audits.read"))
     _get(no_events, f"/v1/audits/by-event/{event.id}", expect=403)
 
-    detail = _get(reader, f"/v1/audits/{audits.completed.id}")
+    # The audit shows each sampled event by its fields; their stored payloads,
+    # which an audit's samples would otherwise hold all at once, are not read.
+    statements = []
+
+    def record(conn, cursor, statement, *args):
+        statements.append(statement)
+
+    engine = db.get_bind().engine
+    sa_event.listen(engine, "before_cursor_execute", record)
+    try:
+        detail = _get(reader, f"/v1/audits/{audits.completed.id}")
+    finally:
+        sa_event.remove(engine, "before_cursor_execute", record)
     (evidence,) = detail["evidence"]
     assert evidence["event"]["id"] == str(event.id)
+    assert (evidence["event"]["summary"], evidence["event"]["source"]) == (
+        "Deploy",
+        "jenkins",
+    )
     assert [c["ref"] for c in evidence["controls"]] == ["A.5.1"]
+    assert any("FROM events" in statement for statement in statements)
+    assert not [
+        s for s in statements if "normalized_payload" in s or "raw_pointer" in s
+    ]
 
 
 def test_sampled_records_are_described_with_their_controls(audits):

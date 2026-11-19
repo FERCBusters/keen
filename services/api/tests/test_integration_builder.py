@@ -11,6 +11,7 @@ from unittest.mock import Mock
 import app.services.integrations as integrations_operations
 import pytest
 from app.api.routes import integrations as api
+from app.core import task_deadline
 from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event
 from app.db.models import IntegrationCollector as Collector
@@ -27,7 +28,10 @@ from app.integrations.templates import templates
 from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
+
+from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 
 NO_SKIPS = skipped_summary({})
 
@@ -630,6 +634,63 @@ def test_failed_partial_run_preserves_cursor_and_retry_deduplicates(
     db.expire_all()
     assert db.query(Event).count() == 2 and db.get(Collector, "collector").cursor
     assert db.get(Run, r.id).duplicates == 1 and db.get(Run, r.id).new_records == 1
+
+
+def test_the_worker_time_limit_is_no_collector_failure(
+    database, postgres_engine, monkeypatch
+):
+    # The deadline is placed at each statement and request of a custom API run
+    # in turn. Wherever it falls the run stops there: it is cancelled, or left
+    # queued if it had not started, and the collector keeps its failure budget
+    # and its cursor, so the next run collects the same records again.
+    db, _ = database
+    api.action_collector("collector", "publish", api.Action(version=1), db)
+    d = Definition()
+    rows = [{"fields": normalize(record(n), d), "record": record(n)} for n in (1, 2)]
+
+    def collect(*a):
+        task_deadline.check()  # the request to the API
+        return rows, "2026-01-01T12:00:00+00:00", 1, NO_SKIPS
+
+    monkeypatch.setattr(runtime, "collect", collect)
+    import app.ingest.common as common
+
+    monkeypatch.setattr(
+        common,
+        "put_bytes",
+        lambda **k: SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=50
+        ),
+    )
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
+    queued = []
+
+    def prepare():
+        db.rollback()
+        db.execute(text("TRUNCATE events CASCADE"))
+        db.query(Run).delete()
+        c = db.get(Collector, "collector")
+        c.failures, c.cursor, c.enabled = 0, None, True
+        queued[:] = [runtime.queue_run(db, c).id]
+        db.commit()
+
+    def after_limit():
+        db.rollback()
+        db.expire_all()
+        c = db.get(Collector, "collector")
+        assert (c.failures, c.enabled, c.cursor) == (0, True, None)
+        run = db.get(Run, queued[0])
+        assert run.status in ("queued", "cancelled")
+        if run.status == "cancelled":
+            assert run.message == runtime.STOPPED_AT_TIME_LIMIT
+
+    with checked_statements(postgres_engine):
+        checks = stops_wherever_the_deadline_falls(
+            lambda: runtime.run_job(queued[0]), prepare, after_limit
+        )
+    db.expire_all()
+    assert db.get(Run, queued[0]).status == "succeeded"
+    assert db.query(Event).count() == 2 and checks > 10
 
 
 def test_pasted_sample_does_not_execute_framework_regex_rules(database, monkeypatch):

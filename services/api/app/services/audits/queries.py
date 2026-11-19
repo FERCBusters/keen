@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import desc, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.datetime_utils import iso_or_none
 from app.core.references import try_uuid
@@ -48,6 +48,7 @@ from app.services.audits.validation import (
     date_overlaps,
 )
 from app.services.errors import DomainError
+from app.services.event_payloads import without_payloads
 from app.services.isms.access import can_read_isms
 from app.services.mailer import user_email
 from app.services.schedules import occurrences_between
@@ -514,8 +515,12 @@ def get_audit(*, audit_id: str, db: Session, user: User):
         .order_by(IsmsDocument.document_type.asc(), IsmsDocument.title.asc())
         .all()
     )
+    # Each sample's event is shown by its fields, not its stored payload, so the
+    # events are read without their payloads: an audit's samples would
+    # otherwise hold every sampled event's evidence at once.
     evidence = (
         db.query(AuditEvidence)
+        .options(selectinload(AuditEvidence.event).options(*without_payloads()))
         .filter(AuditEvidence.audit_id == a.id)
         .order_by(desc(AuditEvidence.added_at))
         .all()

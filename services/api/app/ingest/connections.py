@@ -282,10 +282,12 @@ def advisory_lock(db, number: int):
         finally:
             if acquired:
                 try:
-                    handle.execute(
-                        text("SELECT pg_advisory_unlock(:key)"), {"key": number}
-                    )
-                    handle.commit()
+                    # Released even when the task's time limit ended the run.
+                    with task_deadline.grace():
+                        handle.execute(
+                            text("SELECT pg_advisory_unlock(:key)"), {"key": number}
+                        )
+                        handle.commit()
                 except Exception:
                     handle.invalidate()
                     raise
@@ -332,6 +334,12 @@ def start_run(source, queued_at) -> bool:
     A run of the source that started after this one was queued has collected
     what this one would, so this one is not needed. Otherwise this run's start
     is noted for the runs queued behind it. Without Valkey every run collects.
+
+    A run its time limit ends keeps its turn: the runs of its source queued
+    behind it end at once, and what it left is collected, from the saved
+    cursors, by the source's next scheduled run. Handing the turn back would
+    let a source whose every run reaches its limit run each queued copy in
+    full, holding the worker from the sources queued between them.
     """
     key = "keen:ingest:started:" + source
     try:

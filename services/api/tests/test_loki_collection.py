@@ -1113,3 +1113,46 @@ def test_no_transaction_is_open_while_loki_answers(lk, monkeypatch):
     open_during.clear()
     lk.run()
     assert len(open_during) == 3 and not any(open_during)
+
+
+def test_wherever_the_time_limit_falls_no_line_is_lost_or_stored_twice(lk):
+    # The deadline is placed at each statement and request of a run in turn.
+    # Wherever it falls the run stops there, with no query reported as failed,
+    # and the next run stores what is left from the saved cursor: every line
+    # once, each with its artifact.
+    from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
+
+    lines = [
+        {
+            "stream": {"app": "sshd", "host": "bastion-1"},
+            "values": [
+                _line(NOW - timedelta(minutes=9), json.dumps(OSSEC)),
+                _line(NOW - timedelta(minutes=7), json.dumps(ACCESS)),
+                _line(NOW - timedelta(minutes=5), "password=hunter2 failed for bob"),
+            ],
+        }
+    ]
+    stopped = []
+
+    def prepare():
+        lk.db.rollback()
+        for model in (Mapping, Artifact, Event, IngestionCursor, SourceIngestionState):
+            lk.db.query(model).delete()
+        lk.db.commit()
+        lk.upstream.requests.clear()
+        lk.upstream.replies[:] = [lines]
+
+    def after_limit():
+        lk.db.rollback()
+        stopped.append(len(lk.events()))
+        lk.upstream.replies[:] = [lines]
+        (result,) = lk.run()
+        assert "error" not in result
+        stored = lk.events()
+        assert len({event.external_id for event in stored}) == len(stored) == 3
+        assert lk.db.query(Artifact).count() == 3
+
+    with checked_statements(lk.db.get_bind().engine):
+        checks = stops_wherever_the_deadline_falls(lk.run, prepare, after_limit)
+    # The sweep stopped runs before, between and after the stored lines.
+    assert set(stopped) == {0, 1, 2, 3} and checks > 10

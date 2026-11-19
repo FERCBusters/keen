@@ -2,15 +2,46 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-function copyIfExists(src, dest) {
-  if (!fs.existsSync(src)) return;
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.copyFileSync(src, dest);
-}
+import { packageOf, unchecksummed } from './vendor-guard.mjs';
 
 const root = process.cwd();
 const nm = (...parts) => path.join(root, 'node_modules', ...parts);
 const out = (...parts) => path.join(root, 'public', 'vendor', ...parts);
+
+// A dependency fetched from a git host has no checksum in the lockfile, so each
+// file Keen ships from one must match the digest recorded when it was last
+// reviewed; a fetch that returns other content, or a file never reviewed,
+// stops the build. Without the lockfile nothing can be told apart, so the
+// build stops too.
+const lockfile = path.join(root, 'package-lock.json');
+if (!fs.existsSync(lockfile)) {
+  throw new Error(`${lockfile} is missing; the vendored files cannot be checked.`);
+}
+const unchecked = new Set(unchecksummed(JSON.parse(fs.readFileSync(lockfile, 'utf8')).packages));
+const reviewed = JSON.parse(
+  fs.readFileSync(new URL('./reviewed-vendor-files.json', import.meta.url), 'utf8'),
+).files;
+
+function copy(src, dest) {
+  const name = path.relative(nm(), src).split(path.sep).join('/');
+  if (unchecked.has(packageOf(name))) {
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(src)).digest('hex');
+    if (digest !== reviewed[name]) {
+      throw new Error(
+        `${name} has SHA-256 ${digest}, not the reviewed ${reviewed[name] ?? '(none recorded)'}; ` +
+          'review the fetched file before recording its digest in ' +
+          'scripts/reviewed-vendor-files.json.',
+      );
+    }
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
+}
+
+function copyIfExists(src, dest) {
+  if (!fs.existsSync(src)) return;
+  copy(src, dest);
+}
 
 // Bootstrap
 copyIfExists(
@@ -83,37 +114,12 @@ function copyRequired(src, dest) {
       `Required vendored asset is missing: ${src}. Run npm install in services/ui first.`,
     );
   }
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.copyFileSync(src, dest);
-}
-
-// A dependency fetched from a git host has no checksum in the lockfile, so the
-// browser code Keen ships from one must match the digest recorded when it was
-// last reviewed; a fetch that returns other content stops the build.
-const reviewed = JSON.parse(
-  fs.readFileSync(new URL('./reviewed-vendor-files.json', import.meta.url), 'utf8'),
-).files;
-
-function copyReviewed(name, dest) {
-  const src = nm(...name.split('/'));
-  if (!fs.existsSync(src)) {
-    throw new Error(
-      `Required vendored asset is missing: ${src}. Run npm install in services/ui first.`,
-    );
-  }
-  const digest = crypto.createHash('sha256').update(fs.readFileSync(src)).digest('hex');
-  if (digest !== reviewed[name]) {
-    throw new Error(
-      `${name} has SHA-256 ${digest}, not the reviewed ${reviewed[name]}; review the ` +
-        'fetched file before recording its digest in scripts/reviewed-vendor-files.json.',
-    );
-  }
-  copyRequired(src, dest);
+  copy(src, dest);
 }
 
 // Wysi rich-text editor
-copyReviewed('wysi/dist/wysi.min.css', out('wysi', 'wysi.min.css'));
-copyReviewed('wysi/dist/wysi.min.js', out('wysi', 'wysi.min.js'));
+copyRequired(nm('wysi', 'dist', 'wysi.min.css'), out('wysi', 'wysi.min.css'));
+copyRequired(nm('wysi', 'dist', 'wysi.min.js'), out('wysi', 'wysi.min.js'));
 
 console.log('Vendored assets into public/vendor');
 

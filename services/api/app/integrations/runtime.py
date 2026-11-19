@@ -7,8 +7,10 @@ import uuid
 from datetime import date, timedelta
 from typing import Any, cast
 
+from app.core import task_deadline
 from app.core.config import settings
 from app.core.datetime_utils import utc_now_naive
+from app.core.task_deadline import TIME_LIMITS
 from app.db.models import IntegrationCollector as Collector
 from app.db.models import IntegrationConnection as Connection
 from app.db.models import IntegrationRevision as Revision
@@ -31,6 +33,10 @@ from .errors import IntegrationError
 from .schema import Definition
 from .transport import connection_auth
 
+STOPPED_AT_TIME_LIMIT = (
+    "The run reached the collection worker's time limit and stopped. The next"
+    " scheduled run collects from the same point."
+)
 WAITED_TOO_LONG = (
     "The collection worker did not reach this run within a day, so it did not"
     " start. The next scheduled run collects from the same point."
@@ -356,6 +362,23 @@ def run_job(run_id):
         if not run.preview:
             c.cursor, c.last_success, c.failures = cursor, utc_now_naive(), 0
         db.commit()
+    except TIME_LIMITS:
+        # The worker's time limit is no failure of the collector's: the run is
+        # cancelled without drawing on its failure budget, and the next run
+        # collects from the saved cursor.
+        db.rollback()
+        with task_deadline.grace():
+            db.execute(
+                update(Run)
+                .where(Run.id == run_id, Run.status == "running")
+                .values(
+                    status="cancelled",
+                    message=STOPPED_AT_TIME_LIMIT,
+                    finished_at=utc_now_naive(),
+                )
+            )
+            db.commit()
+        raise
     except Exception as exc:
         db.rollback()
         run = db.get(Run, run_id)

@@ -18,6 +18,7 @@ from app.security.auth import create_user
 from app.services import workstation_posture as posture
 from app.services.people import ensure_person_for_user
 from cryptography.fernet import Fernet
+from sqlalchemy import event as sa_event
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
@@ -895,3 +896,59 @@ def test_devices_report_the_platform_their_key_sends(setup):
         row.health = {k: v for k, v in row.health.items() if k != "platform"}
         db.commit()
         assert summary(db, pid)["devices"][0]["platform"] == "windows"
+
+
+def test_a_page_of_devices_reads_their_evidence_a_bounded_group_at_a_time(
+    setup, monkeypatch
+):
+    # Twenty devices with up to 128 streams each would otherwise hold every
+    # stream's stored payload at once. Each payload is reduced to what the page
+    # shows as its group is read, so the page is the same whatever the group.
+    from app.services import event_payloads
+
+    pid, aid, sim = workstation(setup)
+    _, factory, *_ = setup
+    assert (
+        send(
+            sim,
+            make_posture(sim),
+            make_posture(sim, "firewall", "windows-firewall", enabled=True),
+            make_posture(sim, "disk_encryption", "bitlocker", scope="C:"),
+        ).status_code
+        == 200
+    )
+    with factory() as db:
+        whole = summary(db, pid)
+        read = []
+        grouped = event_payloads._read
+
+        def reading(db, ids):
+            read.append(len(ids))
+            return grouped(db, ids)
+
+        monkeypatch.setattr(event_payloads, "_read", reading)
+        monkeypatch.setattr(event_payloads, "PAYLOAD_TEXT_PER_READ", 1)
+        statements = []
+
+        def record(conn, cursor, statement, *args):
+            statements.append(statement)
+
+        engine = db.get_bind().engine
+        sa_event.listen(engine, "before_cursor_execute", record)
+        try:
+            assert summary(db, pid) == whole
+        finally:
+            sa_event.remove(engine, "before_cursor_execute", record)
+        assert read == [1] * db.query(AgentPostureObservation).count()
+        assert len(read) >= 3
+        # Payloads are read only by the sizing query and the groups: the
+        # listing of the devices' evidence leaves them out.
+        assert sum("normalized_payload" in s for s in statements) == 1 + len(read)
+
+        # Evidence removed after the page listed it, as by retention, shows
+        # nothing rather than failing the page.
+        monkeypatch.setattr(posture, "payloads", lambda db, ids: iter(()))
+        (laptop,) = summary(db, pid)["devices"]
+        assert {c["check"]: c["observations"] for c in laptop["checks"]}[
+            "antivirus"
+        ] == []

@@ -3,12 +3,13 @@
 The worker raises SoftTimeLimitExceeded once, wherever the task is. It is an
 ordinary Exception, so a handler that describes one input's failure and carries
 on would swallow it. The worker also records the deadline as each task starts,
-and the shared work loops check it before each request, record, connection and
-delivery, so a swallowed raise is raised again at the next of them.
+and every SQL statement, outbound request and email checks it, so a swallowed
+raise is raised again at the next of them. The contract is checked against
+every task the worker registers.
 """
 
-import ast
 import inspect
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +18,8 @@ from unittest.mock import MagicMock
 import httpx2 as httpx
 import pytest
 from app.core import task_deadline
+from app.core.config import settings
+from app.db.session import SessionLocal
 from app.ingest import common
 from app.ingest import connections as sc
 from app.ingest import http as ingest_http
@@ -26,6 +29,10 @@ from app.security.errors import collection_error
 from app.services import schedules
 from app.worker import celery_app as worker
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+from sqlalchemy import event as sa_event
+from sqlalchemy import text
+
+from tests.task_limits import checked_statements, ending
 
 APP = Path(__file__).resolve().parents[1] / "app"
 STORE_ARGUMENTS = [
@@ -153,55 +160,131 @@ def test_collection_error_raises_the_task_limit_itself(limit):
         collection_error(limit())
 
 
-def _calls(function: ast.FunctionDef) -> set[str]:
-    return {
-        ast.unparse(node.func)
-        for node in ast.walk(function)
-        if isinstance(node, ast.Call)
-    }
+def _arguments(task) -> list:
+    """Placeholder arguments for a task: identifiers name nothing stored."""
+    values = []
+    for name, parameter in inspect.signature(task.run).parameters.items():
+        if parameter.default is not inspect.Parameter.empty:
+            continue
+        if name == "source":
+            values.append("loki")
+        elif name.endswith("_ids"):
+            values.append([str(uuid.uuid4())])
+        else:
+            values.append(str(uuid.uuid4()))
+    return values
 
 
-# Each loop that does a task's repeated work, and the call that makes it stop.
-CHECKPOINTS = {
-    ("ingest/http.py", "handle_request"): "task_deadline.check",
-    ("integrations/transport.py", "request"): "task_deadline.check",
-    ("ingest/cloud/google.py", "request"): "task_deadline.check",
-    ("ingest/common.py", "each"): "task_deadline.check",
-    ("ingest/common.py", "store_event_with_artifact"): "task_deadline.check",
-    ("ingest/connections.py", "run"): "task_deadline.check",
-    ("ingest/cloud/runner.py", "refresh_all"): "task_deadline.check",
-    ("ingest/cloud/runner.py", "activity_all"): "task_deadline.check",
-    ("services/schedules.py", "deliver_once"): "task_deadline.check",
-    ("security/errors.py", "collection_error"): "task_deadline.check",
-}
+def at_passed_deadline(task) -> str:
+    """How ``task`` ends when the first thing it asks for finds the deadline passed."""
+    return ending(lambda: task.run(*_arguments(task)), 1)
 
 
-def checkpoints_missing(root: Path) -> list[str]:
-    missing = []
-    for (path, name), call in CHECKPOINTS.items():
-        tree = ast.parse((root / path).read_text())
-        functions = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and node.name == name
-        ]
-        if not functions or not any(call in _calls(f) for f in functions):
-            missing.append(f"{path}:{name}")
-    return missing
+def keen_tasks():
+    import app.worker.tasks  # noqa: F401 - registers the worker tasks
+    from app.worker.celery_app import celery_app
+
+    return sorted(
+        (name, task)
+        for name, task in celery_app.tasks.items()
+        if not name.startswith("celery.")
+    )
 
 
-def test_every_shared_work_loop_checks_the_task_deadline():
-    assert checkpoints_missing(APP) == []
+@pytest.fixture
+def worker_database(postgres_engine):
+    """The worker's sessions on a migrated schema, checked as the worker's are."""
+    bound = SessionLocal.kw["bind"]
+    SessionLocal.configure(bind=postgres_engine)
+    try:
+        with checked_statements(postgres_engine):
+            yield postgres_engine
+    finally:
+        SessionLocal.configure(bind=bound)
 
 
-def test_the_checkpoint_check_finds_a_loop_without_one(tmp_path):
-    for path, _ in CHECKPOINTS:
-        target = tmp_path / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text((APP / path).read_text())
-    store = tmp_path / "services/schedules.py"
-    store.write_text(store.read_text().replace("task_deadline.check()", "pass"))
-    assert checkpoints_missing(tmp_path) == ["services/schedules.py:deliver_once"]
+def test_the_application_engine_checks_the_deadline_before_each_statement():
+    from app.db import session
+
+    assert sa_event.contains(
+        session.engine, "before_cursor_execute", session._within_task_deadline
+    )
+
+
+def test_a_statement_past_the_deadline_is_refused_except_in_grace(worker_database):
+    with SessionLocal() as db:
+        assert db.execute(text("SELECT 1")).scalar() == 1
+        db.rollback()
+        with passed_deadline():
+            with pytest.raises(SoftTimeLimitExceeded):
+                db.execute(text("SELECT 1"))
+            db.rollback()
+            with task_deadline.grace():
+                assert db.execute(text("SELECT 2")).scalar() == 2
+            db.rollback()
+            with pytest.raises(SoftTimeLimitExceeded):
+                db.execute(text("SELECT 3"))
+
+
+def test_every_worker_task_stops_at_a_passed_deadline(worker_database, monkeypatch):
+    """Derived from the tasks the worker registers, not from a list: each one,
+    started past its deadline, raises the time limit or finishes having asked
+    for nothing at all.
+    One that catches the limit at its first statement and returns normally,
+    recording a failure or carrying on, is reported."""
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example")
+    monkeypatch.setattr(settings, "smtp_from_email", "keen@example.test")
+    outcomes = {name: at_passed_deadline(task) for name, task in keen_tasks()}
+    assert len(outcomes) >= 40
+    assert [
+        name
+        for name, outcome in outcomes.items()
+        if outcome in ("swallowed", "continued")
+    ] == []
+    # Every scheduled collection, and the work that reads or writes evidence,
+    # reaches the database and so stops there.
+    for name in (
+        "app.worker.tasks.ingest_loki_all_task",
+        "app.worker.tasks.evidence_retention_task",
+        "app.worker.tasks.integration_run_task",
+        "app.worker.tasks.backfill_rule_task",
+        "app.worker.tasks.security_notifications_task",
+        "keen.ingest_source_connection",
+    ):
+        assert outcomes[name] == "limit", name
+
+
+def test_the_task_check_reports_a_task_that_swallows_the_limit(worker_database):
+    from app.worker.celery_app import celery_app
+
+    @celery_app.task(name="tests.swallowing_task")
+    def swallowing_task():
+        try:
+            with SessionLocal() as db:
+                db.execute(text("SELECT 1"))
+        except Exception:  # noqa: BLE001 - the swallowing shape under test
+            return {"error": "Database failed"}
+
+    @celery_app.task(name="tests.continuing_task")
+    def continuing_task():
+        with SessionLocal() as db:
+            try:
+                db.execute(text("SELECT 1"))
+            except Exception:  # noqa: BLE001 - the swallowing shape under test
+                db.rollback()
+            db.execute(text("SELECT 2"))
+
+    @celery_app.task(name="tests.idle_task")
+    def idle_task():
+        return {}
+
+    try:
+        assert at_passed_deadline(swallowing_task) == "swallowed"
+        assert at_passed_deadline(continuing_task) == "continued"
+        assert at_passed_deadline(idle_task) == "finished"
+    finally:
+        for name in ("swallowing_task", "continuing_task", "idle_task"):
+            celery_app.tasks.pop(f"tests.{name}")
 
 
 def test_deliver_once_is_reachable_through_schedules():

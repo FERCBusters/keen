@@ -15,6 +15,7 @@ import hashlib
 import json
 import uuid
 from datetime import timedelta
+from types import SimpleNamespace
 
 from pydantic import Field
 
@@ -31,6 +32,7 @@ from app.db.models import (
 from app.security.permissions import has_permission
 from app.services import posture_risks
 from app.services.errors import DomainError
+from app.services.event_payloads import payloads, without_payloads
 from app.services.features import state as feature_state
 from app.services.frameworks import framework_parameter
 from app.services.isms.metric_values import threshold_status
@@ -339,17 +341,19 @@ def thresholds(db):
     return targets_and_changes(db)[0]
 
 
-def _platform(agent, events):
-    """The device's platform: recorded at ingestion, or from loaded evidence."""
+def _payload_platform(payload):
+    """The platform an event's envelope names, if it is one KEEN knows."""
+    envelope = (payload or {}).get("ueu") or {}
+    platform = (envelope.get("asset") or {}).get("platform")
+    return platform if platform in PLATFORMS else None
+
+
+def _platform(agent, platforms):
+    """The device's platform: recorded at ingestion, or from its evidence."""
     platform = (agent.health or {}).get("platform")
     if platform in PLATFORMS:
         return platform
-    for event in events:
-        envelope = (event.normalized_payload or {}).get("ueu") or {}
-        platform = (envelope.get("asset") or {}).get("platform")
-        if platform in PLATFORMS:
-            return platform
-    return None
+    return next((p for p in platforms if p is not None), None)
 
 
 def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
@@ -375,8 +379,13 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
         .limit(PAGE_SIZE)
         .all()
     )
+    # Each event is listed without its payload. The payloads are read
+    # afterwards in bounded groups, each reduced at once to what the page shows
+    # of it, so the page holds one group of payloads at a time, not twenty
+    # devices' worth of streams together.
     evidence = (
         db.query(AgentPostureObservation, Event)
+        .options(*without_payloads())
         .join(Event, Event.id == AgentPostureObservation.event_id)
         .filter(AgentPostureObservation.agent_id.in_([a.id for a in agents]))
         .all()
@@ -390,6 +399,34 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
         failing_from[event.id] = pointer.attention_since
     targets, changed = targets_and_changes(db)
     now = utc_now_naive()
+    active_agents = {a.id for a in agents if a.enabled and a.expires_at > now}
+    stored_by = {event.id: (pointer.agent_id, event) for pointer, event in evidence}
+    # An event removed since it was listed, as by retention, shows nothing.
+    Reading = tuple[dict | None, list[str], str | None]
+    nothing: Reading = (None, [], None)
+    readings: dict[uuid.UUID, Reading] = {}
+    for event_id, _, payload in payloads(db, stored_by):
+        agent_id, event = stored_by[event_id]
+        stored = SimpleNamespace(normalized_payload=payload)
+        fresh = now - MAX_AGE <= event.timestamp <= now
+        o = observation(stored)
+        if o is not None:
+            status, detail = (
+                evaluate(o, targets)
+                if fresh and agent_id in active_agents
+                else ("stale", "")
+            )
+            o = {
+                **{name: o[name] for name in ("check", "provider", "scope", "reason")},
+                "status": status,
+                "detail": detail,
+            }
+        run = coverage(stored)
+        readings[event_id] = (
+            o,
+            run["checks_unavailable"] if run is not None and fresh else [],
+            _payload_platform(payload),
+        )
     # Recorded risks show only where risk management is enabled; their titles
     # need risk read access, their effect on a result does not.
     risks_on = feature_state(db).enabled("risk_cia")
@@ -405,32 +442,28 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
     )
     devices = []
     for agent in agents:
-        active = agent.enabled and agent.expires_at > now
+        active = agent.id in active_agents
+        events = grouped.get(agent.id, [])
         unavailable = set()
-        for event in grouped.get(agent.id, []):
-            run = coverage(event)
-            if run is not None and now - MAX_AGE <= event.timestamp <= now:
-                unavailable.update(run["checks_unavailable"])
+        for event in events:
+            unavailable.update(readings.get(event.id, nothing)[1])
         checks = []
         for key, label in CHECKS.items():
             rows = []
             # When each failing scope's failure began.
             starts = []
-            for event in grouped.get(agent.id, []):
-                o = observation(event)
+            for event in events:
+                o = readings.get(event.id, nothing)[0]
                 if o is None or o["check"] != key:
                     continue
-                fresh = now - MAX_AGE <= event.timestamp <= now
-                status, detail = (
-                    evaluate(o, targets) if fresh and active else ("stale", "")
-                )
+                status = o["status"]
                 rows.append(
                     {
                         "provider": o["provider"],
                         "scope": o["scope"],
                         "status": status,
                         "reason": o["reason"],
-                        "detail": detail,
+                        "detail": o["detail"],
                         "observed_at": iso_utc(event.timestamp),
                         "event_id": str(event.id),
                     }
@@ -486,7 +519,9 @@ def person_posture(*, db, user, person_id, offset=0, include_revoked=True):
             {
                 "agent_id": agent.id,
                 "hostname": agent.name,
-                "platform": _platform(agent, grouped.get(agent.id, [])),
+                "platform": _platform(
+                    agent, [readings.get(event.id, nothing)[2] for event in events]
+                ),
                 "active": active,
                 "revoked": not agent.enabled,
                 "last_seen": iso_utc(agent.last_seen),
