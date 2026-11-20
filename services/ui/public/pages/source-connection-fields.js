@@ -22,6 +22,7 @@ const labels = {
   token: 'Access token',
   cookie: 'Authentication cookie',
   api_token: 'API token',
+  account_id: 'Account ID',
   api_key: 'API key',
   token_id: 'Token ID',
   token_secret: 'Token secret',

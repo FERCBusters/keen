@@ -400,7 +400,9 @@ def ingest_elasticsearch_once(db, client, entry, deadline):
             now - timedelta(minutes=entry["initial_lookback_minutes"])
         ).isoformat()
         cursor.meta = meta
-        db.commit()
+    # No transaction is open while Elasticsearch answers: each holds the
+    # shared ingestion lease, which an evidence purge must have to itself.
+    db.commit()
     start = (
         previous - timedelta(minutes=entry["overlap_minutes"])
         if previous

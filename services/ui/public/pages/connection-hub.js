@@ -239,6 +239,7 @@ const layouts = {
   op_events: { streams: ['stream', 'label'] },
   bitwarden: { streams: ['stream', 'label'] },
   mosyle: { streams: ['stream', 'label'] },
+  cloudflare: { streams: ['stream', 'label'] },
   forgejo: { organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label'] },
   gitea: { organizations: ['org', 'label'], users: ['user', 'label'], feeds: ['url', 'label'] },
   gitlab: { groups: ['group', 'label'], users: ['user', 'label'] },
@@ -267,6 +268,14 @@ const layouts = {
   taiga: { projects: ['id', 'label'] },
   google_workspace: { streams: ['name', 'application', 'user_key'] },
   bookstack: { selected_pages: ['id', 'name'] },
+};
+
+// The streams each event-log source offers, named on its stream field.
+const streamLabels = {
+  op_events: 'Stream: auditevents, itemusages or signinattempts',
+  bitwarden: 'Stream: events',
+  mosyle: 'Stream: adminlogs',
+  cloudflare: 'Stream: audit',
 };
 async function editCollection(adapter, existing = null, connection = null) {
   if (!layouts[adapter])
@@ -298,23 +307,19 @@ async function editCollection(adapter, existing = null, connection = null) {
           ? "Organisation UUID (or * for the API key's organisation)"
           : adapter === 'redmine' && name === 'project'
             ? 'Project ID / identifier (or * for all accessible projects)'
-            : adapter === 'op_events' && name === 'stream'
-              ? 'Stream: auditevents, itemusages or signinattempts'
-              : adapter === 'bitwarden' && name === 'stream'
-                ? 'Stream: events'
-                : adapter === 'mosyle' && name === 'stream'
-                  ? 'Stream: adminlogs'
-                  : {
-                      name: 'Name',
-                      index_pattern: 'Index pattern',
-                      query: 'Message filter (optional)',
-                      timestamp_field: 'Timestamp field',
-                      message_field: 'Message field',
-                      system_field: 'System field',
-                      actor_field: 'Actor field',
-                      action_field: 'Action field',
-                      outcome_field: 'Outcome field',
-                    }[name] || name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
+            : (name === 'stream' && streamLabels[adapter]) ||
+              {
+                name: 'Name',
+                index_pattern: 'Index pattern',
+                query: 'Message filter (optional)',
+                timestamp_field: 'Timestamp field',
+                message_field: 'Message field',
+                system_field: 'System field',
+                actor_field: 'Actor field',
+                action_field: 'Action field',
+                outcome_field: 'Outcome field',
+              }[name] ||
+              name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
       const input = document.createElement('input');
       input.className = 'form-control';
       input.dataset.field = name;

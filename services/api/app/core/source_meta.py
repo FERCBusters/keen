@@ -65,6 +65,7 @@ SOURCE_LABELS = {
     "op_events": "1Password",
     "bitwarden": "Bitwarden",
     "mosyle": "Mosyle",
+    "cloudflare": "Cloudflare",
     "bookstack": "BookStack",
     "taiga": "Taiga",
     "google_workspace": "Google Workspace",

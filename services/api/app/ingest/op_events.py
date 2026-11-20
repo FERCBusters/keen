@@ -11,7 +11,6 @@ position before the next is requested.
 from __future__ import annotations
 
 import hashlib
-import json
 from datetime import timedelta
 
 import httpx2 as httpx
@@ -22,6 +21,8 @@ from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (
     EventApiError,
+    canonical,
+    identity,
     label,
     member,
     paging_token,
@@ -33,7 +34,6 @@ from app.ingest.event_api import (
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
-from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -141,15 +141,10 @@ def _read(base, entry, item, collected):
     # An event without a readable time is kept, dated when it was collected.
     when = timestamp(item.get("timestamp")) or collected
     payload = {"stream": stream, "event": item}
-    content = utf8_bytes(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    )
+    content = canonical(payload)
     ident = text(item.get("uuid"))
     # An event without an identifier is told apart by its content.
-    identity = ident or hashlib.sha256(content).hexdigest()
-    digest = hashlib.sha256(
-        utf8_bytes(json.dumps([base, stream, identity], ensure_ascii=False))
-    ).hexdigest()
+    digest = identity(base, stream, ident or hashlib.sha256(content).hexdigest())
     return dict(
         timestamp=when,
         source="op_events",
@@ -176,12 +171,12 @@ def _read(base, entry, item, collected):
     )
 
 
-def _restart(cursor, started, limit, config):
+def _restart(newest, started, limit, config):
     """A request that starts the stream again, shortly before the newest event
     stored, or as far back as the first run reads."""
     since = (
-        cursor.last_ts - OVERLAP
-        if cursor.last_ts
+        newest - OVERLAP
+        if newest
         else started - timedelta(days=config.get("initial_lookback_days", 7))
     )
     return {
@@ -215,9 +210,15 @@ def _stream(db, client, base, entry, config):
         cursor = IngestionCursor(name=name, meta={})
     started = utc_now_naive()
     meta = cursor.meta or {}
+    # The newest stored time, kept here: reading the cursor again after a
+    # commit would open a transaction before the next request.
+    newest = cursor.last_ts
+    # No transaction is open while 1Password answers: each holds the shared
+    # ingestion lease, which an evidence purge must have to itself.
+    db.commit()
 
     def restart():
-        return _restart(cursor, started, limit, config)
+        return _restart(newest, started, limit, config)
 
     # A position carries the page size it began with, so a changed page size
     # starts the stream again.
@@ -238,7 +239,6 @@ def _stream(db, client, base, entry, config):
         if more and (position == body.get("cursor") or position in seen):
             raise OnePasswordError("1Password repeated a page; cursor retained")
         seen.add(position)
-        newest = cursor.last_ts
         for event in reader.each(items, lambda item: _read(base, entry, item, started)):
             result = store_event_with_artifact(db, **event)
             created += int(not result.get("deduped", False))
@@ -327,5 +327,6 @@ register(
         definition_sections=("streams",),
         key_field="stream",
         demo=False,
+        validate_config=validate_config,
     )
 )

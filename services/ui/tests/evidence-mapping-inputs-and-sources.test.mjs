@@ -95,6 +95,7 @@ test('each kind of collection input is named by its own field before Next', asyn
     ['op_events', 'streams', 'auditevents', { stream: 'auditevents', label: 'Vault' }, 'stream'],
     ['bitwarden', 'streams', 'events', { stream: 'events', label: 'Vault' }, 'stream'],
     ['mosyle', 'streams', 'adminlogs', { stream: 'adminlogs', label: 'Fleet' }, 'stream'],
+    ['cloudflare', 'streams', 'audit', { stream: 'audit', label: 'Edge' }, 'stream'],
   ];
   const ui = await editor(t, {
     sources: [
@@ -105,6 +106,7 @@ test('each kind of collection input is named by its own field before Next', asyn
       'op_events',
       'bitwarden',
       'mosyle',
+      'cloudflare',
       'github',
       'keen-agent',
     ],
@@ -137,13 +139,23 @@ test('each kind of collection input is named by its own field before Next', asyn
 
 test('Risk Ledger, Redmine, password manager and Jenkins inputs explain their identifying fields', async (t) => {
   const ui = await editor(t, {
-    sources: ['riskledger', 'redmine', 'op_events', 'bitwarden', 'mosyle', 'jenkins', 'keen-agent'],
+    sources: [
+      'riskledger',
+      'redmine',
+      'op_events',
+      'bitwarden',
+      'mosyle',
+      'cloudflare',
+      'jenkins',
+      'keen-agent',
+    ],
     collectors: [
       collection('riskledger', 'organizations', '*', { org: '*' }),
       collection('redmine', 'projects', 'ops', { project: 'ops' }),
       collection('op_events', 'streams', 'itemusages', { stream: 'itemusages' }),
       collection('bitwarden', 'streams', 'events', { stream: 'events' }),
       collection('mosyle', 'streams', 'adminlogs', { stream: 'adminlogs' }),
+      collection('cloudflare', 'streams', 'audit', { stream: 'audit' }),
       collection('jenkins', 'jobs', 'deploy', { name: 'deploy', label: 'web', kind: 'deploy' }),
     ],
   });
@@ -189,6 +201,15 @@ test('Risk Ledger, Redmine, password manager and Jenkins inputs explain their id
     collectorId('mosyle', 'streams', 'adminlogs'),
   );
   assert.match(help('stream'), /^Enter adminlogs: the administrator action log is the one stream/);
+  assert.equal(help('label'), undefined);
+  await ui.click('close-editor');
+  await ui.openInput(
+    'cloudflare',
+    'env:cloudflare',
+    'streams',
+    collectorId('cloudflare', 'streams', 'audit'),
+  );
+  assert.match(help('stream'), /^Enter audit: the account audit log is the one stream Cloudflare/);
   assert.equal(help('label'), undefined);
   await ui.click('close-editor');
   await ui.openInput('jenkins', 'env:jenkins', 'jobs', collectorId('jenkins', 'jobs', 'deploy'));

@@ -121,6 +121,19 @@ def record_loops(source: str, filename: str):
     return {(file, name, contained) for (file, name), contained in found.items()}
 
 
+def _handed_read(call: ast.AST):
+    """The read function a call hands to a RecordReader, directly or through
+    ``event_api.read_windows``, or None."""
+    if not isinstance(call, ast.Call):
+        return None
+    if _name(call) == "read_windows":
+        return next((kw.value for kw in call.keywords if kw.arg == "read"), None)
+    if isinstance(call.func, ast.Attribute) and call.func.attr in {"each", "read"}:
+        if call.args:
+            return call.args[-1] if call.func.attr == "each" else call.args[0]
+    return None
+
+
 def _read_functions(source: str):
     """(name, names used) for each function handed to a RecordReader."""
     tree = ast.parse(source)
@@ -130,14 +143,9 @@ def _read_functions(source: str):
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     for call in ast.walk(tree):
-        if not (
-            isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Attribute)
-            and call.func.attr in {"each", "read"}
-            and call.args
-        ):
+        handed = _handed_read(call)
+        if handed is None:
             continue
-        handed = call.args[-1] if call.func.attr == "each" else call.args[0]
         if isinstance(handed, ast.Name) and handed.id in defined:
             handed = defined[handed.id]
         elif not isinstance(handed, ast.Lambda):
@@ -206,6 +214,18 @@ def test_the_read_check_detects_database_work():
     )
     assert [("read", True)] == [
         (name, "db" in names) for name, names in _read_functions(source)
+    ]
+    # A read function handed to the shared reader of windowed logs is held to
+    # the same rule.
+    windowed = (
+        "def collect(db, rows):\n"
+        "    return read_windows(\n"
+        "        db, name='x', request=request,\n"
+        "        read=lambda item, collected: db.get(Event, item['id']),\n"
+        "    )\n"
+    )
+    assert [("lambda", True)] == [
+        (name, "db" in names) for name, names in _read_functions(windowed)
     ]
 
 

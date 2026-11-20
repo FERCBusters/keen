@@ -39,7 +39,7 @@ def written(monkeypatch):
     return objects
 
 
-def store(db, external_id):
+def store(db, external_id, commit=False):
     return common.store_event_with_artifact(
         db,
         timestamp=datetime(2026, 10, 1, 9, 0),
@@ -58,7 +58,7 @@ def store(db, external_id):
         artifact_content_type="application/json",
         artifact_key="race/" + external_id + ".json",
         captured_by="test",
-        commit=False,
+        commit=commit,
     )
 
 
@@ -106,6 +106,43 @@ def test_an_event_another_worker_stored_first_is_reported_as_a_duplicate(pg, wri
     # This worker stores neither an artefact nor a second event.
     assert written == []
     assert pg.db.query(Artifact).count() == 0
+
+
+@pytest.mark.parametrize("commit", [True, False])
+def test_an_event_already_stored_ends_the_transaction_as_a_new_one_does(
+    pg, written, commit
+):
+    # A collector's next request is not made with a transaction left open.
+    external_id = uuid.uuid4().hex
+    store(pg.db, external_id, commit=commit)
+
+    result = store(pg.db, external_id, commit=commit)
+
+    assert result["deduped"] is True
+    assert pg.db.in_transaction() is not commit
+
+
+@pytest.mark.parametrize("commit", [True, False])
+def test_an_event_another_worker_stored_first_ends_the_transaction_too(
+    pg, written, commit
+):
+    external_id = uuid.uuid4().hex
+    winner = []
+    event.listen(
+        pg.db,
+        "before_flush",
+        lambda *a: winner.append(competing_worker(pg.engine, external_id)),
+        once=True,
+    )
+    try:
+        result = store(pg.db, external_id, commit=commit)
+        still_open = pg.db.in_transaction()
+    finally:
+        for event_id in winner:
+            remove(pg.engine, event_id)
+
+    assert result["deduped"] is True
+    assert still_open is not commit
 
 
 def test_a_constraint_failure_without_a_stored_event_is_raised(pg, written):

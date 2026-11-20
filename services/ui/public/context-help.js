@@ -275,6 +275,7 @@ const sourceGuides = {
   op_events: ['1Password', '1password'],
   bitwarden: ['Bitwarden', 'bitwarden'],
   mosyle: ['Mosyle', 'mosyle'],
+  cloudflare: ['Cloudflare', 'cloudflare'],
   google_workspace: ['Google Workspace', 'google-workspace'],
   cloudwatch_logs: ['Amazon CloudWatch Logs', 'cloudwatch'],
   aws: ['AWS', 'aws'],

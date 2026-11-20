@@ -161,6 +161,16 @@ REFUSED = [
         "Mosyle collects one stream: adminlogs",
     ),
     (
+        "cloudflare",
+        {"streams": [{"stream": "dns"}]},
+        "Cloudflare collects one stream: audit",
+    ),
+    (
+        "cloudflare",
+        {"page_size": 5000},
+        "Cloudflare page_size must be an integer between 1 and 1000",
+    ),
+    (
         "elasticsearch",
         {"queries": [{"name": "audit"}]},
         "Enter an index, alias or data stream pattern",
@@ -211,6 +221,10 @@ def test_settings_that_cannot_run_are_refused(defs, name, document, detail):  # 
         (
             "mosyle",
             {"streams": [{"stream": "adminlogs", "label": "Fleet"}]},
+        ),
+        (
+            "cloudflare",
+            {"streams": [{"stream": "audit", "label": "Production"}]},
         ),
         ("taiga", {"projects": [{"id": 12}]}),
         ("bookstack", {"selected_pages": [{"id": 4, "book_id": 2}]}),

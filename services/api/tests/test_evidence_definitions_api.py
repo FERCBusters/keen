@@ -1590,6 +1590,7 @@ def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
         "op_events_enabled",
         "bitwarden_enabled",
         "mosyle_enabled",
+        "cloudflare_enabled",
         "imap_enabled",
     ):
         monkeypatch.setattr(settings, name, True)
@@ -1610,9 +1611,10 @@ def test_demo_environments_show_supplier_sources_as_disabled(defs, monkeypatch):
             "op_events",
             "bitwarden",
             "mosyle",
+            "cloudflare",
             "imap",
         )
-    ] == [False] * 6
+    ] == [False] * 7
     assert (enabled["keen-agent"], enabled["api-ingesters"]) == (False, False)
     # Every source is listed under the name people know it by, never its ID
     # alone where it has one.

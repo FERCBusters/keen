@@ -10,7 +10,6 @@ it apart and a log read again is stored once.
 from __future__ import annotations
 
 import hashlib
-import json
 from calendar import timegm
 from datetime import datetime, timedelta
 from typing import Any
@@ -24,17 +23,19 @@ from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (
     EventApiError,
+    canonical,
+    one_stream_config,
     read_json,
     read_response,
     records,
-    text,
+    short,
     timestamp,
+    window_setting,
 )
 from app.ingest.http import client as ingestion_client
 from app.ingest.http import no_cookies
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
-from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -61,31 +62,7 @@ class MosyleError(EventApiError):
 
 
 def validate_config(config):
-    if not isinstance(config, dict):
-        raise MosyleError("Mosyle settings must be an object")
-    streams = config.get("streams", [])
-    if not isinstance(streams, list) or len(streams) > 1:
-        raise MosyleError("Mosyle collects one stream: " + STREAM)
-    for entry in streams:
-        if not isinstance(entry, dict) or entry.get("stream") != STREAM:
-            raise MosyleError("Mosyle collects one stream: " + STREAM)
-        if (
-            not isinstance(entry.get("label", ""), str)
-            or len(entry.get("label", "")) > 128
-        ):
-            raise MosyleError("Mosyle label must be at most 128 characters")
-    for field, default, lo, hi in [
-        ("initial_lookback_days", 30, 0, 367),
-        ("window_hours", 24, 1, 168),
-        ("overlap_minutes", 60, 0, 1440),
-        ("max_pages", 100, 1, 1000),
-    ]:
-        value = config.get(field, default)
-        if type(value) is not int or not lo <= value <= hi:
-            raise MosyleError(
-                f"Mosyle {field} must be an integer between {lo} and {hi}"
-            )
-    return config
+    return one_stream_config(config, product=PRODUCT, stream=STREAM, error=MosyleError)
 
 
 class _Session:
@@ -191,20 +168,12 @@ def _slug(value) -> str:
     return "_".join(words) or "unknown"
 
 
-def _short(value) -> str | None:
-    """An upstream string for a summary: its first 200 characters."""
-    found = text(value)
-    return found.strip()[:200] if found else None
-
-
 def _read(entry, item, collected):
     """What is stored for one log."""
-    actor = _short(item.get("username"))
-    summary = "Mosyle admin: " + (_short(item.get("action")) or "action")
+    actor = short(item.get("username"))
+    summary = "Mosyle admin: " + (short(item.get("action")) or "action")
     payload = {"stream": STREAM, "event": item}
-    content = utf8_bytes(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    )
+    content = canonical(payload)
     digest = hashlib.sha256(API.encode() + b"\n" + content).hexdigest()
     return dict(
         # Mosyle writes a log's time without a time zone; it is read as UTC.
@@ -243,14 +212,13 @@ def _collect(db, session, entry, config):
     if cursor.last_ts is None:
         # The first run fixes where the log is read from.
         cursor.last_ts = started - timedelta(
-            days=config.get("initial_lookback_days", 30)
+            days=window_setting(config, "initial_lookback_days")
         )
         db.add(cursor)
-        db.commit()
     start = cursor.last_ts
-    window = timedelta(hours=config.get("window_hours", 24))
+    window = timedelta(hours=window_setting(config, "window_hours"))
     # Each window reaches back this far, for logs Mosyle lists late.
-    overlap = timedelta(minutes=config.get("overlap_minutes", 60))
+    overlap = timedelta(minutes=window_setting(config, "overlap_minutes"))
     # A window the last run left unfinished continues from its next page.
     meta = cursor.meta or {}
     until = timestamp(meta.get("until"))
@@ -258,9 +226,12 @@ def _collect(db, session, entry, config):
     number = saved if type(saved) is int and 1 < saved <= MAX_WINDOW_PAGES else 1
     if not (until and number > 1 and start < until <= min(start + window, started)):
         until = None
+    # No transaction is open while Mosyle answers: each holds the shared
+    # ingestion lease, which an evidence purge must have to itself.
+    db.commit()
     created = dropped = pages = 0
     reader = RecordReader()
-    while pages < config.get("max_pages", 100):
+    while pages < window_setting(config, "max_pages"):
         if until is None:
             if start >= started:
                 break
@@ -374,5 +345,6 @@ register(
         definition_sections=("streams",),
         key_field="stream",
         demo=False,
+        validate_config=validate_config,
     )
 )

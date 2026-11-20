@@ -21,6 +21,8 @@ from app.ingest.connections import Connection, connection_scope, namespace
 from app.mapping.collector import collector_id, event_collector
 from celery.exceptions import SoftTimeLimitExceeded
 
+from tests.transactions import open_while_answering
+
 BASE = "https://events.1password.com"
 TOKEN = "synthetic.onepassword.token"
 MARKER = "upstream-body-marker"
@@ -368,6 +370,19 @@ def test_a_position_1password_no_longer_accepts_restarts_from_the_newest_event(v
     assert restart == {"limit": 100, "start_time": "2026-10-01T09:57:00Z"}
     # Events read again are recognised; only the new one is stored.
     assert result["created_events"] == 1 and len(vault.events()) == 3
+
+
+def test_no_transaction_is_open_while_1password_answers(vault, monkeypatch):
+    open_during = open_while_answering(monkeypatch, OnePassword, vault.db)
+    # The first run starts the stream; the next continues from its position,
+    # which 1Password refuses, so it starts again from the newest event.
+    vault.run()
+    vault.api.answer = lambda request, body: (
+        httpx.Response(400, text=MARKER) if "cursor" in body else None
+    )
+    vault.run()
+
+    assert len(open_during) == 3 and not any(open_during)
 
 
 @pytest.mark.parametrize("status", [400, 401])

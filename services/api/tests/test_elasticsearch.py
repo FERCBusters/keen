@@ -21,6 +21,8 @@ from app.mapping.collector import (
 )
 from app.services.errors import DomainError
 
+from tests.transactions import open_while_answering
+
 
 def input_config(**values):
     return es.validate_input({"name": "Auth", "index_pattern": "logs-*", **values})
@@ -653,6 +655,18 @@ def test_queries_beyond_the_run_budget_wait_for_the_next_run(elastic, monkeypatc
 def test_an_empty_input_list_contacts_nobody(elastic):
     assert elastic.run() == []
     assert elastic.clients == []
+
+
+def test_no_transaction_is_open_while_elasticsearch_answers(elastic, monkeypatch):
+    open_during = open_while_answering(monkeypatch, Elastic, elastic.db)
+    elastic.server.pages["auth-*"] = [page([hit()])]
+    elastic.run(recent("Auth", "auth-*"))
+    # A later run is handed the stored hit again, and recognises it.
+    elastic.server.pages["auth-*"] = [page([hit("2"), hit()])]
+    elastic.run(recent("Auth", "auth-*"))
+
+    # Each run opens a point in time, searches and closes it.
+    assert len(open_during) == 6 and not any(open_during)
 
 
 def test_a_failed_point_in_time_close_does_not_fail_the_window(elastic):

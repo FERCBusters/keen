@@ -10,11 +10,24 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.ingest import registry
+
 
 def collector_id(adapter: str, section: str, key: Any) -> str:
     return json.dumps(
         [adapter, section, str(key)], separators=(",", ":"), ensure_ascii=False
     )
+
+
+def _reads_streams(source: str) -> bool:
+    """Whether ``source`` collects the named streams of a vendor's log.
+
+    Such a source lists its streams in a ``streams`` section and points each
+    event at the stream it was read from, as ``raw_pointer[source]["stream"]``,
+    so a source of that shape needs no entry here.
+    """
+    found = registry.find(source)
+    return found is not None and found.section == "streams"
 
 
 def event_collector(event: dict) -> str | None:
@@ -44,7 +57,7 @@ def event_collector(event: dict) -> str | None:
         section, key = info.get("section"), info.get("key")
     elif source == "taiga":
         section, key = "projects", info.get("project_id")
-    elif source in ("google_workspace", "op_events", "bitwarden", "mosyle"):
+    elif _reads_streams(source):
         section, key = "streams", info.get("stream")
     elif source == "bookstack":
         section, key = "selected_pages", info.get("page_id")
@@ -74,6 +87,8 @@ def collector_pointer_filter(identity: str) -> dict:
         return {adapter: {"section": section, "key": key}}
     if adapter in ("forgejo", "gitea") and section in ("organizations", "users"):
         return {adapter: {"owner": key}}
+    if _reads_streams(adapter):
+        return {adapter: {"stream": key}}
     if adapter == "github":
         if section == "repos":
             owner, repo = key.split("/", 1)
@@ -88,10 +103,6 @@ def collector_pointer_filter(identity: str) -> dict:
         "forgejo": "feed",
         "gitea": "feed",
         "taiga": "project_id",
-        "google_workspace": "stream",
-        "op_events": "stream",
-        "bitwarden": "stream",
-        "mosyle": "stream",
         "bookstack": "page_id",
     }[adapter]
     return {adapter: {field: int(key) if adapter in ("taiga", "bookstack") else key}}

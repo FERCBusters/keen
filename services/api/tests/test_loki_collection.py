@@ -30,6 +30,8 @@ from app.ingest.connections import connection_scope, connections
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri
 from sqlalchemy.orm import sessionmaker
 
+from tests.transactions import open_while_answering
+
 FW = "fw-loki"
 NOW = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -1093,14 +1095,7 @@ def test_no_transaction_is_open_while_loki_answers(lk, monkeypatch):
     purge must have to itself, so none is left open across a request. A cursor
     a first run creates is the one exception: it stays uncommitted until the
     first chunk is stored, so a first request that fails leaves no cursor."""
-    open_during = []
-    answer = Upstream.__call__
-
-    def watched(self, request):
-        open_during.append(lk.db.in_transaction())
-        return answer(self, request)
-
-    monkeypatch.setattr(Upstream, "__call__", watched)
+    open_during = open_while_answering(monkeypatch, Upstream, lk.db)
     lk.upstream.replies.append(
         [{"stream": {"app": "sshd"}, "values": [_line(NOW, "first run")]}]
     )

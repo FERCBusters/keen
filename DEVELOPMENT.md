@@ -268,7 +268,7 @@ Evidence reaches Keen five ways, and every one of them ends in the same function
 
 | Way in | Code | What starts it |
 | --- | --- | --- |
-| Built-in collectors (GitHub, Loki, Jenkins and 14 more) | `app/ingest/<source>.py` | Celery beat, or an administrator's Run button |
+| Built-in collectors (GitHub, Loki, Jenkins and 15 more) | `app/ingest/<source>.py` | Celery beat, or an administrator's Run button |
 | Mail | `app/ingest/imap.py` and `imap_support/` | `keen.dispatch_imap`, every five minutes, on its own worker |
 | Webhooks and signed metric submissions | `ingest/webhooks.py`, `services/webhooks.py` | An inbound HTTP request |
 | Custom API ingesters | `app/integrations/` | `integration_tick_task`, every minute |
@@ -311,6 +311,7 @@ register(
 | `section`, `id_field` | Where new collection items go, and the field that names one | The configuration editor |
 | `definition_sections`, `key_field` | The sections edited as evidence definitions, and what identifies an item to a mapping rule | Evidence definitions |
 | `demo` | `False` hides the source in a demonstration installation | Enablement |
+| `validate_config` | The function that refuses a configuration document the collector cannot run, with a `ValueError` whose message the administrator sees | Saving its configuration or a connection's inputs |
 
 Three properties are derived from those, so a source never states them: `collected` (it has a queue), `polled` (its queue is the HTTP one) and `enabled` (its `KEEN_<SOURCE>_ENABLED` setting, unless a demo withholds it). `run_seconds` reads `KEEN_<SOURCE>_RUN_SECONDS`.
 
@@ -321,7 +322,7 @@ Everything below is computed from the registry, and none of it needs editing whe
 - The set of sources an administrator can pause (`ingestion_pause.pausable_sources()`).
 - Connection field validation and the connection form (`ingest/connections.py`, `services/source_connections.py`).
 - Configuration documents and evidence definitions (`services/managed_configurations.py`).
-- The enabled flags the Admin page shows (`services/admin.py`).
+- The enabled flags the Admin page and the source catalogue show (`services/admin.py`, `services/managed_configurations.py`).
 
 `tests/test_source_registry.py` holds the contract: every module with an `ingest_<name>_all` function is registered, every registered source has the settings its kind needs, and the worker routes, limits and schedules every polled source.
 
@@ -362,13 +363,14 @@ A record whose shape or values `read` cannot handle (a missing member, a value o
 
 1. Add settings to `core/config.py`: `<source>_enabled`, `<source>_run_seconds`, `<source>_config_path`, and its base URL and credentials.
 2. Create `app/ingest/<source>.py` with `ingest_<source>_all(db)` under the two decorators, reading each record through `RecordReader.each` and calling `store_event_with_artifact` for each event it yields, and reporting `reader.invalid` as `invalid_records`.
-3. Declare it with `register(Source(...))` at the bottom of that module.
+   A vendor's event log read in time windows with an opaque paging value hands its request and its `read` function to `ingest/event_api.py::read_windows`, as Bitwarden and Cloudflare do, and validates its settings with `one_stream_config`.
+3. Declare it with `register(Source(...))` at the bottom of that module, naming its `validate_config`.
 4. Add `config/<source>.yml` with shipped defaults, and document the settings in `.env.example`.
-5. Teach `mapping/collector.py::event_collector` how to read the source's `raw_pointer`, so rules can target one collection item.
+5. Teach `mapping/collector.py::event_collector` how to read the source's `raw_pointer`, so rules can target one collection item. A source that lists a vendor's log streams in a `streams` section, and points each event at its stream as `raw_pointer[<source>]["stream"]`, is recognised from its declaration and needs no entry there.
 6. Add the source to the Admin page's evidence configuration (`pages/evidence-config.js`, `pages/connection-hub.js`) and write its Help page.
 7. Test the collector against a fake upstream. `tests/test_source_registry.py` will already be checking your declaration.
 
-Steps 5 and 6 are the parts the registry does not yet cover: the collector-identity chain in `mapping/collector.py` and the source lists in the UI are still written per source.
+Steps 5 and 6 are the parts the registry does not yet cover: apart from stream sources, the collector-identity chain in `mapping/collector.py` and the source lists in the UI are still written per source.
 
 ## Mapping rules
 

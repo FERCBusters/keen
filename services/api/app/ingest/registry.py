@@ -16,6 +16,7 @@ time the registry is read.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
 from pkgutil import iter_modules
@@ -59,6 +60,9 @@ class Source:
     key_field: str | None = None
     # Whether a demonstration installation offers the source.
     demo: bool = True
+    # Refuses a configuration document the collector cannot run, with a
+    # ValueError whose message is safe to show the administrator.
+    validate_config: Callable[[dict], object] | None = None
 
     @property
     def collected(self) -> bool:

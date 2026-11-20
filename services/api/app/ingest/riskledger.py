@@ -655,10 +655,12 @@ def _collect(db, client, cfg):
         for row, sid, domain_ids, event in reader.each(suppliers, read_supplier):
             allowed_suppliers.add(sid)
             examined += 1
-            if cfg.get("import_suppliers", True):
-                vendors[sid] = _vendor(db, org, row)
+            # The domains are fetched before the vendor is written, so no
+            # write waits uncommitted on Risk Ledger's answer.
             for ident in reader.each(domain_ids, _id):
                 domain(ident)
+            if cfg.get("import_suppliers", True):
+                vendors[sid] = _vendor(db, org, row)
             created += _snapshot(db, event)
     if cfg.get("import_risks", True):
         risks = client.pages("risks", cfg)
@@ -766,5 +768,6 @@ register(
         definition_sections=("organizations",),
         key_field="org",
         demo=False,
+        validate_config=validate_config,
     )
 )

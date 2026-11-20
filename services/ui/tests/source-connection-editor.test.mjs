@@ -329,6 +329,35 @@ test('a Mosyle source groups its sign-in beside its access token, and fills none
   assert.notEqual(field('email').type, 'password');
 });
 
+test('a Cloudflare source asks for its account ID and API token, and fills neither in', async (t) => {
+  const ui = await loadUi('pages/source-connection-editor.js', {
+    setup(w) {
+      w.HTMLDialogElement.prototype.showModal = function () {};
+    },
+  });
+  t.after(ui.close);
+  const types = [
+    {
+      source: 'cloudflare',
+      label: 'Cloudflare',
+      enabled: true,
+      fields: ['account_id'],
+      credential_fields: ['api_token'],
+    },
+  ];
+  const created = ui.api.editSourceConnection({ types, onSaved: async () => {} });
+  const field = (key) => created.querySelector(`[data-key="${key}"]`);
+  const label = (key) => field(key).closest('label').textContent;
+  for (const key of ['account_id', 'api_token']) assert.equal(field(key).value, '', key);
+  assert.equal(label('account_id'), 'Account ID');
+  assert.equal(label('api_token'), 'API token');
+  // The server is Cloudflare's own: the editor offers no endpoint to change.
+  assert.equal(field('base_url'), null);
+  // The token is entered as a secret; the account ID is not.
+  assert.equal(field('api_token').type, 'password');
+  assert.notEqual(field('account_id').type, 'password');
+});
+
 test('IMAP defaults to headers only and reveals a 4000 character body limit on request', async (t) => {
   let saved;
   const ui = await loadUi('pages/source-connection-editor.js', {

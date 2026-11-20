@@ -21,6 +21,8 @@ from app.ingest.connections import Connection, connection_scope, namespace
 from app.mapping.collector import collector_id, event_collector
 from celery.exceptions import SoftTimeLimitExceeded
 
+from tests.transactions import open_while_answering
+
 API = "https://93.184.216.34/api"
 IDENTITY_URL = "https://93.184.216.35/identity"
 CLIENT_ID = "organization.3f2504e0-4f89-11d3-9a0c-0305e82c3301"
@@ -340,6 +342,22 @@ def test_a_window_is_paged_and_its_cursor_moves_only_when_it_is_complete(vault):
     assert len(vault.events()) == 5
     cursor = vault.cursor()
     assert (cursor.last_ts, cursor.meta) == (NOW + timedelta(minutes=10), {})
+
+
+def test_no_transaction_is_open_while_bitwarden_answers(vault, monkeypatch):
+    open_during = open_while_answering(monkeypatch, Bitwarden, vault.db)
+    vault.inputs.update(initial_lookback_days=1, max_pages=2)
+    vault.api.size = 1
+    vault.api.events = [event(1000, f"2026-10-10T0{hour}:00:00Z") for hour in (1, 2, 3)]
+    # The first run creates the cursor and leaves a window part-read; the next
+    # finishes it and reads up to the present.
+    vault.run()
+    vault.clock.now = NOW + timedelta(minutes=10)
+    vault.inputs["max_pages"] = 10
+    vault.run()
+
+    # Each run signs in, then lists its pages.
+    assert len(open_during) == 6 and not any(open_during)
 
 
 def test_a_paging_value_bitwarden_no_longer_accepts_restarts_its_window(vault):

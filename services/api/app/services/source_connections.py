@@ -147,6 +147,16 @@ def validate(payload):
         for name in ("base_url", "identity_url")
     ):
         raise DomainError(422, "Bitwarden requires HTTPS API and identity URLs")
+    if payload.source == "cloudflare":
+        from app.ingest.cloudflare import ACCOUNT_ID
+
+        # The account ID is a segment of every request's path.
+        account = payload.configuration.get("account_id")
+        if account and not ACCOUNT_ID.fullmatch(account):
+            raise DomainError(
+                422,
+                "Enter the Cloudflare account ID: 32 lowercase hexadecimal characters",
+            )
     if payload.source == "mosyle":
         # The administrator Keen signs in to Mosyle as is one mailbox.
         email = payload.configuration.get("email")

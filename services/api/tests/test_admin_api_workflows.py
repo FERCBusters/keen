@@ -697,7 +697,14 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
 
     # Every polled source type has the one run route, whatever declares it.
     sources = [source.name for source in registry.polled()]
-    assert {"loki", "github", "elasticsearch", "bitwarden", "mosyle"} <= set(sources)
+    assert {
+        "loki",
+        "github",
+        "elasticsearch",
+        "bitwarden",
+        "mosyle",
+        "cloudflare",
+    } <= set(sources)
     for source in sources:
         monkeypatch.setitem(tasks.COLLECTION_TASKS, source, Task(source))
         monkeypatch.setattr(settings, f"{source}_enabled", True)
@@ -724,7 +731,7 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
         settings, "demo_expires_at", datetime(2999, 1, 1, tzinfo=timezone.utc)
     )
     monkeypatch.setattr(settings, "demo_mode", True)
-    for source in ("redmine", "op_events", "bitwarden", "mosyle"):
+    for source in ("redmine", "op_events", "bitwarden", "mosyle", "cloudflare"):
         assert (
             admin.call("POST", f"/v1/admin/ingest/{source}/run", status=409)["detail"]
             == "Source type is unavailable in demo mode"
@@ -740,9 +747,10 @@ def test_ingest_runs_queue_enabled_sources_and_refuse_disabled_or_paused(
         status["op_events"],
         status["bitwarden"],
         status["mosyle"],
+        status["cloudflare"],
         status["imap"],
         status["github"],
-    ) == (False, False, False, False, False, False, False)
+    ) == (False, False, False, False, False, False, False, False)
     monkeypatch.setattr(settings, "demo_mode", False)
 
     monkeypatch.setattr(

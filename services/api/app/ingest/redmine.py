@@ -503,5 +503,6 @@ register(
         definition_sections=("projects",),
         key_field="project",
         demo=False,
+        validate_config=validate_config,
     )
 )

@@ -27,6 +27,8 @@ from app.ingest import riskledger as rl
 from app.ingest.connections import Connection, connection_scope, namespace
 from sqlalchemy import text
 
+from tests.transactions import open_while_answering
+
 ORG, SUP, RID, CTL, DOM, LEVEL, OTHER = [
     f"00000000-0000-4000-8000-00000000000{i}" for i in range(1, 8)
 ]
@@ -215,6 +217,16 @@ def test_a_run_imports_suppliers_risks_and_the_controls_they_name(ledger):
     # An unchanged account yields no new snapshots.
     (again,) = ledger.run()
     assert (again["created_events"], ledger.db.query(Event).count()) == (0, 5)
+
+
+def test_no_transaction_is_open_while_risk_ledger_answers(ledger, monkeypatch):
+    open_during = open_while_answering(monkeypatch, RiskLedger, ledger.db)
+    # A second run reads the same records again.
+    ledger.run()
+    ledger.run()
+
+    # Each run reads the organisation, suppliers, risks, domain and control.
+    assert len(open_during) == 10 and not any(open_during)
 
 
 def test_a_failure_part_way_keeps_completed_snapshots_and_reports_safely(ledger):

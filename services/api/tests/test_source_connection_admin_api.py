@@ -64,6 +64,18 @@ def _bitwarden(credentials=None, **configuration):
     }
 
 
+def _cloudflare(credentials=None, **configuration):
+    return {
+        "source": "cloudflare",
+        "name": "Production",
+        "configuration": {
+            "account_id": "0123456789abcdef0123456789abcdef",
+            **configuration,
+        },
+        "credentials": credentials or {"api_token": "synthetic-cloudflare-token"},
+    }
+
+
 def _mosyle(credentials=None, **configuration):
     return {
         "source": "mosyle",
@@ -231,6 +243,31 @@ REFUSED = [
     (
         "mosyle-foreign-credential",
         _mosyle(credentials={"token": "t"}),
+        "Unsupported connection field",
+    ),
+    *(
+        (
+            f"cloudflare-account-{case}",
+            _cloudflare(account_id=value),
+            "Enter the Cloudflare account ID: 32 lowercase hexadecimal characters",
+        )
+        for case, value in (
+            ("upper", "0123456789ABCDEF0123456789ABCDEF"),
+            ("short", "0123456789abcdef0123456789abcde"),
+            ("path", "0123456789abcdef0123456789abc/.."),
+            ("query", "0123456789abcdef0123456789abcdef?x"),
+        )
+    ),
+    (
+        # The server is Cloudflare's own: a connection names no endpoint.
+        "cloudflare-endpoint",
+        _cloudflare(base_url="https://api.cloudflare.com.attacker.example"),
+        "Unsupported connection field",
+    ),
+    (
+        # The API token is the one credential; a Global API key is not taken.
+        "cloudflare-global-key",
+        _cloudflare(credentials={"api_key": "k"}),
         "Unsupported connection field",
     ),
     (
@@ -417,6 +454,37 @@ def test_a_demo_lists_connections_but_cannot_change_or_run_them(admin, monkeypat
     deleted = admin.send("DELETE", f"{ROOT}/{row['id']}", version=row["version"])
     assert (deleted.status_code, deleted.json()["detail"]) == (403, message)
     assert [c["name"] for c in admin.saved()] == ["Production logs"]
+
+
+# --- Cloudflare ----------------------------------------------------------------
+
+
+def test_a_cloudflare_connection_saves_its_account_and_stream(admin):
+    body = {
+        **_cloudflare(),
+        "inputs": {"streams": [{"stream": "audit", "label": "Production"}]},
+    }
+
+    created = admin.send("POST", ROOT, body)
+
+    assert created.status_code == 200, created.text
+    row = created.json()
+    assert row["configuration"] == {"account_id": "0123456789abcdef0123456789abcdef"}
+    # The API token is write-only.
+    assert row["has_credentials"] is True and "synthetic" not in created.text
+    assert row["inputs"] == body["inputs"]
+    # A connection may be saved before its account is chosen.
+    blank = admin.send("POST", ROOT, {**_cloudflare(account_id=""), "name": "Later"})
+    assert blank.status_code == 200, blank.text
+
+    refused = admin.send(
+        "POST", ROOT, {**_cloudflare(), "inputs": {"streams": [{"stream": "dns"}]}}
+    )
+    assert (refused.status_code, refused.json()["detail"]) == (
+        400,
+        "Cloudflare collects one stream: audit",
+    )
+    assert [c["name"] for c in admin.saved()] == ["Later", "Production"]
 
 
 # --- Mosyle --------------------------------------------------------------------

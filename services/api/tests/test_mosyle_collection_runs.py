@@ -21,6 +21,8 @@ from app.ingest.connections import Connection, connection_scope, namespace
 from app.mapping.collector import collector_id, event_collector
 from celery.exceptions import SoftTimeLimitExceeded
 
+from tests.transactions import open_while_answering
+
 HOST = "businessapi.mosyle.com"
 LOGIN = "https://businessapi.mosyle.com/v1/login"
 LOGS = "https://businessapi.mosyle.com/v1/adminlogs"
@@ -406,6 +408,22 @@ def test_a_window_is_paged_and_its_cursor_moves_only_when_it_is_complete(fleet):
     ]
     cursor = fleet.cursor()
     assert (cursor.last_ts, cursor.meta) == (NOW + timedelta(minutes=10), {})
+
+
+def test_no_transaction_is_open_while_mosyle_answers(fleet, monkeypatch):
+    open_during = open_while_answering(monkeypatch, Mosyle, fleet.db)
+    fleet.inputs.update(initial_lookback_days=1, max_pages=2)
+    fleet.api.size = 1
+    fleet.api.logs = [log(f"Step {n}", 2026, 10, 10, n) for n in (1, 2, 3)]
+    # The first run creates the cursor and leaves a window part-read; the next
+    # finishes it and reads up to the present.
+    fleet.run()
+    fleet.clock.now = NOW + timedelta(minutes=10)
+    fleet.inputs["max_pages"] = 3
+    fleet.run()
+
+    # Each run signs in, then lists its pages.
+    assert len(open_during) == 7 and not any(open_during)
 
 
 @pytest.mark.parametrize(

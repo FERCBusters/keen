@@ -9,19 +9,19 @@ once every page of it is stored.
 from __future__ import annotations
 
 import hashlib
-import json
-from datetime import timedelta
 
 import httpx2 as httpx
 
 from app.core.datetime_utils import utc_now_naive
-from app.db.models import IngestionCursor
-from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (
     EventApiError,
+    Page,
+    canonical,
+    one_stream_config,
     paging_token,
     read_json,
+    read_windows,
     records,
     safe_base,
     text,
@@ -30,7 +30,6 @@ from app.ingest.event_api import (
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.security.errors import collection_error
-from app.security.redaction import utf8_bytes
 from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
@@ -135,31 +134,9 @@ class BitwardenError(EventApiError):
 
 
 def validate_config(config):
-    if not isinstance(config, dict):
-        raise BitwardenError("Bitwarden settings must be an object")
-    streams = config.get("streams", [])
-    if not isinstance(streams, list) or len(streams) > 1:
-        raise BitwardenError("Bitwarden collects one stream: events")
-    for entry in streams:
-        if not isinstance(entry, dict) or entry.get("stream") != "events":
-            raise BitwardenError("Bitwarden collects one stream: events")
-        if (
-            not isinstance(entry.get("label", ""), str)
-            or len(entry.get("label", "")) > 128
-        ):
-            raise BitwardenError("Bitwarden label must be at most 128 characters")
-    for field, default, lo, hi in [
-        ("initial_lookback_days", 30, 0, 367),
-        ("window_hours", 24, 1, 168),
-        ("overlap_minutes", 60, 0, 1440),
-        ("max_pages", 100, 1, 1000),
-    ]:
-        value = config.get(field, default)
-        if type(value) is not int or not lo <= value <= hi:
-            raise BitwardenError(
-                f"Bitwarden {field} must be an integer between {lo} and {hi}"
-            )
-    return config
+    return one_stream_config(
+        config, product=PRODUCT, stream="events", error=BitwardenError
+    )
 
 
 def _access_token(client, identity, client_id, secret):
@@ -205,9 +182,7 @@ def _read(base, entry, item, collected):
     actor = text(item.get("actingUserId"))
     outcome = "failure" if known and code in FAILURES else "info"
     payload = {"stream": "events", "event": item}
-    content = utf8_bytes(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    )
+    content = canonical(payload)
     # Bitwarden gives an event no identifier, so its content tells it apart
     # and a window read again stores nothing twice.
     digest = hashlib.sha256(base.encode() + b"\n" + content).hexdigest()
@@ -239,92 +214,36 @@ def _read(base, entry, item, collected):
 
 
 def _collect(db, client, base, headers, entry, config):
-    digest = hashlib.sha256(base.encode()).hexdigest()
-    name = namespace("bitwarden:" + digest)
-    cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
-    if cursor is None:
-        cursor = IngestionCursor(name=name, meta={})
-    started = utc_now_naive()
-    if cursor.last_ts is None:
-        # The first run fixes where the log is read from.
-        cursor.last_ts = started - timedelta(
-            days=config.get("initial_lookback_days", 30)
-        )
-        db.add(cursor)
-        db.commit()
-    start = cursor.last_ts
-    window = timedelta(hours=config.get("window_hours", 24))
-    # Clients report some events late, so each window reaches back this far.
-    overlap = timedelta(minutes=config.get("overlap_minutes", 60))
-    # A window the last run left unfinished continues from its paging value.
-    meta = cursor.meta or {}
-    until = timestamp(meta.get("until"))
-    token = meta.get("token")
-    if not (until and isinstance(token, str) and start < until <= started):
-        until = token = None
-    resumed = token is not None
-    created = dropped = pages = 0
-    reader = RecordReader()
-    seen = set()
-    while pages < config.get("max_pages", 100):
-        if until is None:
-            if start >= started:
-                break
-            until = min(start + window, started)
-        params = {
-            "start": (start - overlap).isoformat() + "Z",
-            "end": until.isoformat() + "Z",
-        }
+    """Read the event log in time windows, oldest first."""
+
+    def request(since, until, token):
+        params = {"start": since.isoformat() + "Z", "end": until.isoformat() + "Z"}
         if token:
             params["continuationToken"] = token
-        try:
-            data = read_json(
-                client,
-                "GET",
-                base + "/public/events",
-                product=PRODUCT,
-                params=params,
-                headers=headers,
-            )
-        except EventApiError as exc:
-            if exc.status != 400 or not resumed:
-                raise
-            # Bitwarden no longer accepts the saved paging value: read the
-            # window again from its first page.
-            token, resumed = None, False
-            continue
-        resumed = False
+        data = read_json(
+            client,
+            "GET",
+            base + "/public/events",
+            product=PRODUCT,
+            params=params,
+            headers=headers,
+        )
         items, invalid = records(data.get("data"), PAGE_ROWS, PRODUCT)
-        following = paging_token(data.get("continuationToken"), PRODUCT)
-        if following and (following == token or following in seen):
-            raise BitwardenError("Bitwarden repeated a page; cursor retained")
-        for event in reader.each(items, lambda item: _read(base, entry, item, started)):
-            result = store_event_with_artifact(db, **event)
-            created += int(not result.get("deduped", False))
-        dropped += invalid
-        pages += 1
-        if following:
-            seen.add(following)
-            token = following
-            cursor.meta = {"until": until.isoformat(), "token": token}
-        else:
-            # The window is complete. Its end is never later than now.
-            cursor.last_ts = start = until
-            cursor.meta = {}
-            until = token = None
-            seen = set()
-        cursor.updated_at = utc_now_naive()
-        db.add(cursor)
-        db.commit()
-    return {
-        "stream": "events",
-        "pages": pages,
-        "created_events": created,
-        "invalid_records": dropped + reader.invalid,
-        # More remains when the page limit ended the run; the next continues.
-        "more": until is not None or start < started,
-        "cursor": start.isoformat() + "Z",
-    }
+        return Page(
+            items, invalid, paging_token(data.get("continuationToken"), PRODUCT)
+        )
+
+    digest = hashlib.sha256(base.encode()).hexdigest()
+    return read_windows(
+        db,
+        name=namespace("bitwarden:" + digest),
+        config=config,
+        product=PRODUCT,
+        stream="events",
+        now=utc_now_naive,
+        request=request,
+        read=lambda item, collected: _read(base, entry, item, collected),
+    )
 
 
 @pausable("bitwarden")
@@ -405,5 +324,6 @@ register(
         definition_sections=("streams",),
         key_field="stream",
         demo=False,
+        validate_config=validate_config,
     )
 )

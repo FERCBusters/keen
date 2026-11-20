@@ -323,40 +323,11 @@ def _validate_connector(name: str, document: dict):
             403, "The public mig5 RSS preset is fixed in demo environments."
         )
     _safe_document(document)
-    if name == "riskledger":
-        from app.ingest.riskledger import RiskLedgerError, validate_config
-
+    check = connectors()[name].validate_config
+    if check is not None:
         try:
-            validate_config(document)
-        except RiskLedgerError as exc:
-            raise DomainError(400, str(exc)) from None
-    if name == "redmine":
-        from app.ingest.redmine import RedmineError, validate_config
-
-        try:
-            validate_config(document)
-        except RedmineError as exc:
-            raise DomainError(400, str(exc)) from None
-    if name == "op_events":
-        from app.ingest.op_events import OnePasswordError, validate_config
-
-        try:
-            validate_config(document)
-        except OnePasswordError as exc:
-            raise DomainError(400, str(exc)) from None
-    if name == "bitwarden":
-        from app.ingest.bitwarden import BitwardenError, validate_config
-
-        try:
-            validate_config(document)
-        except BitwardenError as exc:
-            raise DomainError(400, str(exc)) from None
-    if name == "mosyle":
-        from app.ingest.mosyle import MosyleError, validate_config
-
-        try:
-            validate_config(document)
-        except MosyleError as exc:
+            check(document)
+        except ValueError as exc:
             raise DomainError(400, str(exc)) from None
     key = connectors()[name].section
     rows = document.get(key, {} if name == "webhooks" else [])
@@ -817,13 +788,8 @@ def source_catalogue(*, db: Session):
     }
     items: list[dict[str, Any]] = []
     for name in [*connectors(), "imap"]:
-        enabled = bool(getattr(settings, f"{name}_enabled", False))
-        if (
-            name
-            in ("redmine", "riskledger", "op_events", "bitwarden", "mosyle", "imap")
-            and settings.demo_mode
-        ):
-            enabled = False
+        # A demonstration installation withholds the sources it does not offer.
+        enabled = registry.get(name).enabled
         count = sum(1 for item in collectors if item["adapter"] == name)
         matching_rules = sum(1 for rule in rules if _reads_type(rule, name))
         sources = [

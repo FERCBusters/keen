@@ -13,6 +13,7 @@ import pytest
 from app.core import managed_configuration
 from app.core.config import settings
 from app.db.models import ManagedConfiguration
+from app.ingest import registry
 from app.mapping import rules as rule_parser
 from app.mapping.collector import (
     collector_id,
@@ -426,6 +427,7 @@ def test_confidence_defaults_and_whole_numbers_are_read_as_fractions():
         ("op_events", "streams", "signinattempts", {"stream": "signinattempts"}),
         ("bitwarden", "streams", "events", {"stream": "events"}),
         ("mosyle", "streams", "adminlogs", {"stream": "adminlogs"}),
+        ("cloudflare", "streams", "audit", {"stream": "audit"}),
         ("bookstack", "selected_pages", 12, {"page_id": 12}),
         (
             "github",
@@ -447,6 +449,31 @@ def test_collector_identity_roundtrip_and_other_collection_rejection(
     assert matches_collector(collector_id(source, section, "other"), event) is False
     pointer = collector_pointer_filter(identity)
     assert all(info[k] == v for k, v in pointer[source].items())
+
+
+def test_a_source_that_reads_streams_needs_no_entry_of_its_own(monkeypatch):
+    # A stream source is known by its declaration, so adding one of that shape
+    # changes nothing in mapping.
+    declared = registry.Source(
+        name="example_log",
+        module=__name__,
+        section="streams",
+        id_field="stream",
+        key_field="stream",
+    )
+    registry.sources()
+    monkeypatch.setitem(registry._sources, declared.name, declared)
+    identity = collector_id("example_log", "streams", "audit")
+    event = {
+        "source": "example_log",
+        "raw_pointer": {"example_log": {"stream": "audit"}},
+    }
+
+    assert event_collector(event) == identity
+    assert collector_pointer_filter(identity) == {"example_log": {"stream": "audit"}}
+    # A source no module declares has no collection item.
+    undeclared = {"source": "other_log", "raw_pointer": {"other_log": {"stream": "x"}}}
+    assert event_collector(undeclared) is None
 
 
 def test_a_rule_can_require_one_collection():

@@ -386,6 +386,10 @@ def store_event_with_artifact(
         .one_or_none()
     )
     if existing:
+        # A stored record ends its transaction as a new one does, so nothing
+        # is left open while the collector's next request waits.
+        if commit:
+            db.commit()
         return {"ok": True, "deduped": True, "event_id": str(existing[0])}
 
     ev = Event(
@@ -417,6 +421,8 @@ def store_event_with_artifact(
         )
         if existing_id is None:
             raise
+        if commit:
+            db.commit()
         return {
             "ok": True,
             "deduped": True,
