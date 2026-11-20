@@ -381,28 +381,37 @@ def run_job(run_id):
         raise
     except Exception as exc:
         db.rollback()
-        run = db.get(Run, run_id)
-        if run:
-            # Exception text from arbitrary providers/libraries may contain credentials.
-            safe = (
-                str(exc)
-                if isinstance(exc, IntegrationError)
-                else "Collection failed; verify definition, connection and worker configuration."
-            )
-            if isinstance(exc, InvalidToken):
-                safe = "Saved credentials could not be decrypted. Check that API and worker use the original shared integration secret key."
-            elif isinstance(exc, socket.gaierror):
-                safe = "DNS lookup failed for the configured API host."
-            elif isinstance(exc, ssl.SSLError):
-                safe = "TLS verification failed. Check the upstream certificate and trust configuration."
-            elif isinstance(exc, TimeoutError):
-                safe = "The upstream API timed out. Narrow the query or check service availability."
-            elif isinstance(exc, json.JSONDecodeError):
-                safe = "The API response was not valid JSON. Check the endpoint and authentication."
-            # Redact even validation errors before persisting.
-            fail(db, run, str(redact_obj(safe))[:500])
+        # Recorded even when the deadline passed while the run waited on the
+        # failing request: a run left "running" would be failed by tick's
+        # stale sweep instead, with a message that hides the real error.
+        with task_deadline.grace():
+            _record_failure(db, run_id, exc)
     finally:
         db.close()
+
+
+def _record_failure(db, run_id, exc):
+    """Fail the run with a message safe to show, for its collector's budget."""
+    run = db.get(Run, run_id)
+    if run:
+        # Exception text from arbitrary providers/libraries may contain credentials.
+        safe = (
+            str(exc)
+            if isinstance(exc, IntegrationError)
+            else "Collection failed; verify definition, connection and worker configuration."
+        )
+        if isinstance(exc, InvalidToken):
+            safe = "Saved credentials could not be decrypted. Check that API and worker use the original shared integration secret key."
+        elif isinstance(exc, socket.gaierror):
+            safe = "DNS lookup failed for the configured API host."
+        elif isinstance(exc, ssl.SSLError):
+            safe = "TLS verification failed. Check the upstream certificate and trust configuration."
+        elif isinstance(exc, TimeoutError):
+            safe = "The upstream API timed out. Narrow the query or check service availability."
+        elif isinstance(exc, json.JSONDecodeError):
+            safe = "The API response was not valid JSON. Check the endpoint and authentication."
+        # Redact even validation errors before persisting.
+        fail(db, run, str(redact_obj(safe))[:500])
 
 
 def dispatch(run_id):

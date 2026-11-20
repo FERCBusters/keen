@@ -1115,11 +1115,12 @@ def test_no_transaction_is_open_while_loki_answers(lk, monkeypatch):
     assert len(open_during) == 3 and not any(open_during)
 
 
-def test_wherever_the_time_limit_falls_no_line_is_lost_or_stored_twice(lk):
+def test_wherever_the_time_limit_falls_no_line_is_lost_or_stored_twice(lk, monkeypatch):
     # The deadline is placed at each statement and request of a run in turn.
     # Wherever it falls the run stops there, with no query reported as failed,
     # and the next run stores what is left from the saved cursor: every line
-    # once, each with its artifact.
+    # once, each with its artifact. An object stored for a line the limit
+    # stopped is queued for the retention worker, not left in storage.
     from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 
     lines = [
@@ -1133,18 +1134,39 @@ def test_wherever_the_time_limit_falls_no_line_is_lost_or_stored_twice(lk):
         }
     ]
     stopped = []
+    written = []
+    queued_once = []
+    put_bytes = common.put_bytes
+
+    def writing(**kwargs):
+        stored = put_bytes(**kwargs)
+        written.append(stored.uri)
+        return stored
+
+    monkeypatch.setattr(common, "put_bytes", writing)
 
     def prepare():
         lk.db.rollback()
         for model in (Mapping, Artifact, Event, IngestionCursor, SourceIngestionState):
             lk.db.query(model).delete()
+        lk.db.execute(sqlalchemy.text("DELETE FROM evidence_object_cleanup"))
         lk.db.commit()
         lk.upstream.requests.clear()
         lk.upstream.replies[:] = [lines]
+        written.clear()
 
     def after_limit():
         lk.db.rollback()
         stopped.append(len(lk.events()))
+        kept = {artifact.storage_uri for artifact in lk.db.query(Artifact)}
+        queued = set(
+            lk.db.execute(
+                sqlalchemy.text("SELECT storage_uri FROM evidence_object_cleanup")
+            ).scalars()
+        )
+        assert set(written) <= kept | queued
+        if queued:
+            queued_once.append(True)
         lk.upstream.replies[:] = [lines]
         (result,) = lk.run()
         assert "error" not in result
@@ -1154,5 +1176,7 @@ def test_wherever_the_time_limit_falls_no_line_is_lost_or_stored_twice(lk):
 
     with checked_statements(lk.db.get_bind().engine):
         checks = stops_wherever_the_deadline_falls(lk.run, prepare, after_limit)
-    # The sweep stopped runs before, between and after the stored lines.
+    # The sweep stopped runs before, between and after the stored lines, and
+    # at least once after a line's object was stored but before its event was.
     assert set(stopped) == {0, 1, 2, 3} and checks > 10
+    assert queued_once

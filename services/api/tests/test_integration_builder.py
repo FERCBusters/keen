@@ -693,6 +693,50 @@ def test_the_worker_time_limit_is_no_collector_failure(
     assert db.query(Event).count() == 2 and checks > 10
 
 
+def test_an_upstream_error_the_deadline_overtakes_is_still_recorded(
+    database, postgres_engine, monkeypatch
+):
+    # The upstream answers with an error. Wherever the deadline falls, the run
+    # is never left "running" for tick's stale sweep to fail with a message
+    # that hides that error: before the request it is cancelled; once the
+    # request has failed, the failure is recorded even past the deadline.
+    db, _ = database
+    api.action_collector("collector", "publish", api.Action(version=1), db)
+
+    def collect(*a):
+        task_deadline.check()  # the request to the API
+        raise IntegrationError("The upstream API answered 503.")
+
+    monkeypatch.setattr(runtime, "collect", collect)
+    queued = []
+
+    def prepare():
+        db.rollback()
+        db.query(Run).delete()
+        c = db.get(Collector, "collector")
+        c.failures, c.cursor, c.enabled = 0, None, True
+        queued[:] = [runtime.queue_run(db, c).id]
+        db.commit()
+
+    def after_limit():
+        db.rollback()
+        db.expire_all()
+        assert db.get(Collector, "collector").failures == 0
+        run = db.get(Run, queued[0])
+        assert run.status in ("queued", "cancelled")
+        if run.status == "cancelled":
+            assert run.message == runtime.STOPPED_AT_TIME_LIMIT
+
+    with checked_statements(postgres_engine):
+        stops_wherever_the_deadline_falls(
+            lambda: runtime.run_job(queued[0]), prepare, after_limit
+        )
+    db.expire_all()
+    run = db.get(Run, queued[0])
+    assert (run.status, run.message) == ("failed", "The upstream API answered 503.")
+    assert db.get(Collector, "collector").failures == 1
+
+
 def test_pasted_sample_does_not_execute_framework_regex_rules(database, monkeypatch):
     db, _ = database
     import app.mapping.rules as rules

@@ -635,7 +635,9 @@ def deliver_once(
 
     The task's time limit ends the loop: the row in hand is released, as a
     failed delivery is, and the limit raised again, so the task stops at its
-    deadline and no claimed row is left marked without its email.
+    deadline and no claimed row is left marked without its email. A release
+    is cleanup, so it runs even past the deadline, whichever way the
+    delivery ended.
     """
     column = getattr(model, marker)
     sent = 0
@@ -662,8 +664,7 @@ def deliver_once(
         except TIME_LIMITS:
             db.rollback()
             if claimed:
-                with task_deadline.grace():
-                    _release(db, model, column, row_id)
+                _release(db, model, column, row_id)
             raise
         except Exception:
             log.exception("Failed to send an email for %s %s", model.__name__, row_id)
@@ -677,8 +678,13 @@ def deliver_once(
 
 
 def _release(db: Session, model: Any, column: Any, row_id: Any) -> None:
-    """Clear a row's claim so a later run sends its email."""
-    db.query(model).filter(model.id == row_id).update(
-        {column: None}, synchronize_session="fetch"
-    )
-    db.commit()
+    """Clear a row's claim so a later run sends its email.
+
+    Runs past the task's deadline: a claim left in place would stop the
+    email from ever being sent.
+    """
+    with task_deadline.grace():
+        db.query(model).filter(model.id == row_id).update(
+            {column: None}, synchronize_session="fetch"
+        )
+        db.commit()

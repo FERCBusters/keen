@@ -677,3 +677,68 @@ def test_a_time_limit_before_the_claim_commits_releases_nothing(contract_db):
     assert contract_db.get(AuditAttendee, elsewhere.id).reminded_at == datetime(
         2026, 5, 1, 9, 0
     )
+
+
+def test_wherever_the_deadline_falls_no_row_stays_claimed_without_its_email(
+    contract_db,
+):
+    """The deadline is placed at each statement and send in turn, with one
+    address missing and one delivery failing. Wherever it falls, every row
+    whose email did not go out is free for a later run: a release is cleanup,
+    and runs even when the deadline passed while the mail server answered."""
+    from app.core import task_deadline
+    from app.db.models import Audit, AuditAttendee
+
+    from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
+
+    audit = Audit(title="A", framework_slug="A", status="open", audit_type="internal")
+    contract_db.add(audit)
+    contract_db.flush()
+    rows = [
+        AuditAttendee(audit_id=audit.id, name=name)
+        for name in ("Lead", "No address", "Broken", "Last")
+    ]
+    contract_db.add_all(rows)
+    contract_db.commit()
+    ids = [row.id for row in rows]
+    delivered = []
+
+    def compose(attendee):
+        name = attendee.name
+        if name == "No address":
+            return False
+
+        def deliver():
+            task_deadline.check()  # as mailer.send_email does before connecting
+            if name == "Broken":
+                raise RuntimeError("mail server down")
+            delivered.append(name)
+
+        return deliver
+
+    def prepare():
+        contract_db.rollback()
+        contract_db.query(AuditAttendee).update({"reminded_at": None})
+        contract_db.commit()
+        delivered.clear()
+
+    def after_limit():
+        contract_db.rollback()
+        contract_db.expire_all()
+        for row in contract_db.query(AuditAttendee).all():
+            assert (row.reminded_at is not None) == (row.name in delivered), row.name
+
+    with checked_statements(contract_db.get_bind().engine):
+        stops_wherever_the_deadline_falls(
+            lambda: schedules.deliver_once(
+                contract_db,
+                model=AuditAttendee,
+                marker="reminded_at",
+                ids=ids,
+                compose=compose,
+            ),
+            prepare,
+            after_limit,
+        )
+    after_limit()
+    assert delivered == ["Lead", "Last"]

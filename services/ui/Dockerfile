@@ -15,10 +15,16 @@ RUN apk add --no-cache git ca-certificates \
  && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" \
  && git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
-# Lockfile includes the full public Git commit for the design system.
+# Lockfile includes the full public Git commit for the design system. No
+# dependency's install script runs: npm does not check what it fetches for a
+# git dependency, so none of their code runs until the check below.
 COPY services/ui/package.json services/ui/package-lock.json ./
-RUN npm ci \
+RUN npm ci --ignore-scripts \
  && node --input-type=module -e "import { transformSync } from 'esbuild'; transformSync('let x = 1');"
+
+# Each git dependency must be the tree recorded when it was reviewed.
+COPY services/ui/scripts/vendor-guard.mjs services/ui/scripts/check-git-packages.mjs services/ui/scripts/reviewed-git-packages.json ./scripts/
+RUN node scripts/check-git-packages.mjs --fetched
 
 # Build the pinned npm package's assets (uses only its included source/scripts).
 RUN npm --prefix node_modules/@fercbusters/mosp-design-system run build

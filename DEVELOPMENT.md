@@ -474,6 +474,12 @@ The UI has no framework and no build step. Each screen is a static HTML file and
 | `public/help/` | The Help site: hand-written HTML pages and a search index built from them with `bash build-help-index.sh` |
 | `services/ui/tests/` | One `*.test.mjs` per behaviour, run under Node with jsdom |
 
+`public/vendor/` is filled by `npm run build` in `services/ui`, from the packages in `package-lock.json`. Two of them, the MOSP design system and the Wysi editor, are fetched from GitHub by commit, and npm checks nothing about what it fetches for those. The build compares each one with the tree recorded when it was last reviewed (`scripts/reviewed-git-packages.json`), and stops if it differs. To move one to a new commit:
+
+1. Change its pin in `package.json` and run `npm install --ignore-scripts` in `services/ui`, so none of the new code runs before you have read it.
+2. Review what changed between the two commits.
+3. Run `npm run vendor:record` and commit the updated `reviewed-git-packages.json` with the lockfile.
+
 ### How a page module is built
 
 Every page module follows the same order. `pages/risk.js` is a short example.
