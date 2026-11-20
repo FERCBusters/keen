@@ -6,6 +6,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { loadUi } from './load-ui.mjs';
 
+// The streams the catalogue says each source offers, as Keen declares them.
+const SOURCE_STREAMS = {
+  op_events: ['auditevents', 'itemusages', 'signinattempts'],
+  bitwarden: ['events'],
+  mosyle: ['adminlogs'],
+  cloudflare: ['audit'],
+};
+
 const html = await readFile(new URL('../../public/admin.html', import.meta.url), 'utf8');
 
 export const hostile = '<img src=x onerror=alert(1)>';
@@ -109,7 +117,13 @@ export async function editor(t, server = {}) {
       };
     }
     if (path === '/api/v1/admin/source-catalogue')
-      return { items: state.sources.map((adapter) => ({ adapter, enabled: true })) };
+      return {
+        items: state.sources.map((adapter) => ({
+          adapter,
+          enabled: true,
+          ...(SOURCE_STREAMS[adapter] && { streams: SOURCE_STREAMS[adapter] }),
+        })),
+      };
     if (path === '/api/v1/admin/integrations')
       return { collectors: structuredClone(state.integrations) };
     if (path === '/api/v1/admin/source-connections')

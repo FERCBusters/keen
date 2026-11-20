@@ -391,6 +391,18 @@ def test_credentials_stay_out_of_definitions_and_adapter_settings(defs):
     assert (current["jenkins"], current["rules"]) == (0, 0)
 
 
+def test_the_forms_are_told_the_streams_a_source_offers(defs):
+    listed = defs.admin.get("/v1/admin/managed-configurations").json()["items"]
+    catalogue = defs.admin.get("/v1/admin/source-catalogue").json()["items"]
+
+    for items, field in ((listed, "name"), (catalogue, "adapter")):
+        streams = {item[field]: item.get("streams") for item in items}
+        assert streams["cloudflare"] == ["audit"]
+        assert streams["op_events"] == ["auditevents", "itemusages", "signinattempts"]
+        # A source whose inputs name their own streams offers none.
+        assert streams["google_workspace"] == streams["loki"] == []
+
+
 def test_documents_holding_credentials_are_withheld_from_the_editors(defs):
     defs.shipped(
         "rss",

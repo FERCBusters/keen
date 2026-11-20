@@ -60,6 +60,10 @@ class Source:
     key_field: str | None = None
     # Whether a demonstration installation offers the source.
     demo: bool = True
+    # The streams a vendor's log offers, for a source whose inputs each name
+    # one of them; empty when an input names its own. The forms offer these
+    # and no others, and need not ask when there is only one.
+    streams: tuple[str, ...] = ()
     # Refuses a configuration document the collector cannot run, with a
     # ValueError whose message is safe to show the administrator.
     validate_config: Callable[[dict], object] | None = None

@@ -162,15 +162,9 @@ const layouts = {
   webhooks: { providers: ['ui_name', 'badge_color', 'secret_header', 'secret_env'] },
 };
 
-// The streams each event-log source offers, explained under its stream field.
+// The streams each source offers, when its inputs name one of a fixed set.
 // An input of these sources is named by its stream.
-const streamHelp = {
-  op_events:
-    'One of auditevents, itemusages or signinattempts. The token must be allowed to read that event type.',
-  bitwarden: 'Enter events: the organisation event log is the one stream Bitwarden offers.',
-  mosyle: 'Enter adminlogs: the administrator action log is the one stream Mosyle offers.',
-  cloudflare: 'Enter audit: the account audit log is the one stream Cloudflare offers.',
-};
+let sourceStreams = {};
 const apiRoot = '/api/v1/admin';
 let settingsVersion = 0;
 let draftEventFields = [];
@@ -300,7 +294,7 @@ function definitionKey(adapter, section, entry) {
   if (adapter === 'github' && section === 'repos')
     return `${entry.owner || ''}/${entry.repo || ''}`;
   if (adapter === 'redmine') return String(entry.project || '').trim();
-  if (Object.hasOwn(streamHelp, adapter)) return String(entry.stream || '').trim();
+  if (Object.hasOwn(sourceStreams, adapter)) return String(entry.stream || '').trim();
   const field =
     section === 'groups'
       ? 'group'
@@ -767,12 +761,17 @@ function fieldNode(name, value, kind = 'text') {
   text.className = 'form-label';
   text.textContent = fieldTitles[name] || label(name);
   wrapper.append(text);
+  // The streams the source offers, when it offers a fixed set.
+  const choices = (name === 'stream' && sourceStreams[$('definition-adapter').value]) || [];
   const input =
     name === 'logql' || name === 'rationale'
       ? document.createElement('textarea')
-      : document.createElement('input');
-  input.className = 'form-control';
+      : document.createElement(choices.length ? 'select' : 'input');
+  input.className = choices.length ? 'form-select' : 'form-control';
   input.dataset.field = name;
+  for (const choice of choices) input.add(new Option(choice, choice));
+  // With only one stream there is nothing to ask: it is kept as it is.
+  wrapper.hidden = choices.length === 1;
   if (kind === 'checkbox') {
     input.type = 'checkbox';
     input.className = 'form-check-input';
@@ -787,19 +786,17 @@ function fieldNode(name, value, kind = 'text') {
       ? 'Use * for the authenticated organisation, or its UUID to pin the expected API account. Imports supplier/risk snapshots; assessment answers and evidence files are unavailable through the public API.'
       : name === 'project' && $('definition-adapter').value === 'redmine'
         ? 'Project ID or identifier. Use * as the sole collection to discover all projects accessible to the API key.'
-        : name === 'stream' && Object.hasOwn(streamHelp, $('definition-adapter').value)
-          ? streamHelp[$('definition-adapter').value]
-          : name === 'kind' && $('definition-adapter').value === 'jenkins'
-            ? 'Action assigned to Jenkins events from this job, such as build or deployment. Match it with the Action field below.'
-            : name === 'label' && $('definition-adapter').value === 'jenkins'
-              ? 'System assigned to Jenkins events from this job. Match it with the System field below.'
-              : name === 'logql'
-                ? 'Loki query selecting log lines to collect. A separate match below narrows the resulting events.'
-                : name === 'event.action'
-                  ? 'Activity name this collection assigns to incoming events. For example, login. The matching Activity field below can select this exact value.'
-                  : name === 'event.outcome'
-                    ? 'Result this collection assigns to incoming events. Use success only when the query actually selects successful events. Use info when it makes no result claim.'
-                    : '';
+        : name === 'kind' && $('definition-adapter').value === 'jenkins'
+          ? 'Action assigned to Jenkins events from this job, such as build or deployment. Match it with the Action field below.'
+          : name === 'label' && $('definition-adapter').value === 'jenkins'
+            ? 'System assigned to Jenkins events from this job. Match it with the System field below.'
+            : name === 'logql'
+              ? 'Loki query selecting log lines to collect. A separate match below narrows the resulting events.'
+              : name === 'event.action'
+                ? 'Activity name this collection assigns to incoming events. For example, login. The matching Activity field below can select this exact value.'
+                : name === 'event.outcome'
+                  ? 'Result this collection assigns to incoming events. Use success only when the query actually selects successful events. Use info when it makes no result claim.'
+                  : '';
   if (helpText) {
     const help = document.createElement('div');
     help.className = 'form-text';
@@ -2172,6 +2169,11 @@ async function load() {
   const observed = await apiGet(`${apiRoot}/evidence-event-samples`);
   for (const source of observed.sources) $('source-options').append(new Option(source, source));
   const catalogue = await apiGet(`${apiRoot}/source-catalogue`);
+  sourceStreams = Object.fromEntries(
+    catalogue.items
+      .filter((item) => item.streams?.length)
+      .map((item) => [item.adapter, item.streams]),
+  );
   enabledSources = catalogue.items
     .filter((item) => item.enabled && item.mapping_source !== false)
     .map((item) => ({

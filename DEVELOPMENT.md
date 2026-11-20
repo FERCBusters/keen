@@ -311,6 +311,7 @@ register(
 | `section`, `id_field` | Where new collection items go, and the field that names one | The configuration editor |
 | `definition_sections`, `key_field` | The sections edited as evidence definitions, and what identifies an item to a mapping rule | Evidence definitions |
 | `demo` | `False` hides the source in a demonstration installation | Enablement |
+| `streams` | The fixed set of streams a vendor's log offers, for a source whose inputs each name one; the forms offer these as a choice, and ask nothing when there is one. `tests/test_source_registry.py` checks that `validate_config` accepts exactly these | The input forms, through the configuration list and source catalogue |
 | `validate_config` | The function that refuses a configuration document the collector cannot run, with a `ValueError` whose message the administrator sees | Saving its configuration or a connection's inputs |
 
 Three properties are derived from those, so a source never states them: `collected` (it has a queue), `polled` (its queue is the HTTP one) and `enabled` (its `KEEN_<SOURCE>_ENABLED` setting, unless a demo withholds it). `run_seconds` reads `KEEN_<SOURCE>_RUN_SECONDS`.
@@ -363,7 +364,7 @@ A record whose shape or values `read` cannot handle (a missing member, a value o
 
 1. Add settings to `core/config.py`: `<source>_enabled`, `<source>_run_seconds`, `<source>_config_path`, and its base URL and credentials.
 2. Create `app/ingest/<source>.py` with `ingest_<source>_all(db)` under the two decorators, reading each record through `RecordReader.each` and calling `store_event_with_artifact` for each event it yields, and reporting `reader.invalid` as `invalid_records`.
-   A vendor's event log read in time windows with an opaque paging value hands its request and its `read` function to `ingest/event_api.py::read_windows`, as Bitwarden and Cloudflare do, and validates its settings with `one_stream_config`.
+   A vendor's event log read in time windows with an opaque paging value hands its request and its `read` function to `ingest/event_api.py::read_windows`, as Bitwarden and Cloudflare do, validates its settings with `one_stream_config`, and declares its stream in `streams`.
 3. Declare it with `register(Source(...))` at the bottom of that module, naming its `validate_config`.
 4. Add `config/<source>.yml` with shipped defaults, and document the settings in `.env.example`.
 5. Teach `mapping/collector.py::event_collector` how to read the source's `raw_pointer`, so rules can target one collection item. A source that lists a vendor's log streams in a `streams` section, and points each event at its stream as `raw_pointer[<source>]["stream"]`, is recognised from its declaration and needs no entry there.

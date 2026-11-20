@@ -31,8 +31,10 @@ from celery.exceptions import SoftTimeLimitExceeded
 from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 from tests.transactions import open_while_answering
 
-ACCOUNT = "ACraC9ywjzvAaic73ng9FCthpxFgsCts"
-OTHER_ACCOUNT = "g2iEdmackkhmpt2345oh5Auqdxzwp9ve"
+# Keen accepts an account ID only as Cloudflare writes one: 32 lowercase
+# hexadecimal characters. These are made up.
+ACCOUNT = "0123456789abcdef0123456789abcdef"
+OTHER_ACCOUNT = "fedcba9876543210fedcba9876543210"
 TOKEN = "synthetic-cloudflare-api-token"
 MARKER = "upstream-body-marker"
 NOW = datetime(2026, 11, 19, 12, 0, 0)

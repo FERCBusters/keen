@@ -327,6 +327,7 @@ register(
         definition_sections=("streams",),
         key_field="stream",
         demo=False,
+        streams=tuple(STREAMS),
         validate_config=validate_config,
     )
 )

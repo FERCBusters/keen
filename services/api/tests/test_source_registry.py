@@ -42,6 +42,19 @@ def test_a_declared_source_has_the_settings_its_kind_reads():
         assert source.config_path == getattr(settings, source.config_setting)
 
 
+def test_a_source_with_fixed_streams_accepts_those_and_no_others():
+    # The forms offer a source's declared streams and nothing else, so its
+    # declaration and the settings it accepts must agree.
+    fixed = [source for source in registry.sources() if source.streams]
+    assert {source.name for source in fixed} >= {"bitwarden", "cloudflare", "mosyle"}
+    for source in fixed:
+        assert (source.section, source.key_field) == ("streams", "stream")
+        for stream in source.streams:
+            source.validate_config({"streams": [{"stream": stream}]})
+        with pytest.raises(ValueError):
+            source.validate_config({"streams": [{"stream": "other"}]})
+
+
 def test_the_worker_routes_limits_and_schedules_every_polled_source():
     routes = celery_app.conf.task_routes
     limits = celery_app.conf.task_annotations

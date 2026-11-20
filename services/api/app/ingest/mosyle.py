@@ -345,6 +345,7 @@ register(
         definition_sections=("streams",),
         key_field="stream",
         demo=False,
+        streams=(STREAM,),
         validate_config=validate_config,
     )
 )

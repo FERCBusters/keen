@@ -191,6 +191,15 @@ test('a feed source is ready once it has its feed', async (t) => {
 
 test('Risk Ledger, Redmine and password manager inputs explain their identifiers', async (t) => {
   const ui = await hub(t, {
+    put: async (url, body) => body,
+    configurations: {
+      items: [
+        { name: 'op_events', streams: ['auditevents', 'itemusages', 'signinattempts'] },
+        { name: 'bitwarden', streams: ['events'] },
+        { name: 'mosyle', streams: ['adminlogs'] },
+        { name: 'cloudflare', streams: ['audit'] },
+      ],
+    },
     named: {
       types: [
         type('riskledger', 'Risk Ledger'),
@@ -210,8 +219,12 @@ test('Risk Ledger, Redmine and password manager inputs explain their identifiers
       ],
     },
   });
+  // The fields asked for: a field there is no choice in is not shown.
   const labels = () =>
-    [...ui.el('collection-fields').querySelectorAll('label')].map((l) => l.textContent);
+    [...ui.el('collection-fields').querySelectorAll('label')]
+      .filter((l) => !l.hidden)
+      .map((l) => l.firstChild.textContent);
+  const stream = () => ui.el('collection-fields').querySelector('[data-field="stream"]');
   await ui.button(ui.card('Vendors'), 'Add input').onclick();
   assert.deepEqual(labels(), ["Organisation UUID (or * for the API key's organisation)", 'Label']);
   await ui.button(ui.card('Tracker'), 'Add input').onclick();
@@ -219,19 +232,34 @@ test('Risk Ledger, Redmine and password manager inputs explain their identifiers
     'Project ID / identifier (or * for all accessible projects)',
     'Label',
   ]);
+  // 1Password's streams are chosen from, not typed.
   await ui.button(ui.card('Company vault'), 'Add input').onclick();
-  assert.deepEqual(labels(), ['Stream: auditevents, itemusages or signinattempts', 'Label']);
-  await ui.button(ui.card('Team vault'), 'Add input').onclick();
-  assert.deepEqual(labels(), ['Stream: events', 'Label']);
-  await ui.button(ui.card('Fleet'), 'Add input').onclick();
-  assert.deepEqual(labels(), ['Stream: adminlogs', 'Label']);
-  await ui.button(ui.card('Edge'), 'Add input').onclick();
-  assert.deepEqual(labels(), ['Stream: audit', 'Label']);
+  assert.deepEqual(labels(), ['Stream', 'Label']);
+  assert.equal(stream().tagName, 'SELECT');
+  assert.deepEqual(
+    [...stream().options].map((option) => option.value),
+    ['auditevents', 'itemusages', 'signinattempts'],
+  );
+  assert.equal(stream().value, 'auditevents');
+  // A source with one stream asks for none, and has one kind of input to add.
+  for (const name of ['Team vault', 'Fleet', 'Edge']) {
+    await ui.button(ui.card(name), 'Add input').onclick();
+    assert.deepEqual(labels(), ['Label'], name);
+    assert.equal(ui.el('collection-type').hidden, true);
+    assert.equal(ui.el('collection-type').labels[0].hidden, true);
+  }
+  ui.el('collection-fields').querySelector('[data-field="label"]').value = 'mig5';
+  await ui.el('collection-save').onclick();
+  assert.equal(ui.el('collection-error').textContent, '');
+  const saved = ui.calls.find((call) => call.method === 'PUT');
+  assert.deepEqual(saved.body.inputs, { streams: [{ stream: 'audit', label: 'mig5' }] });
 });
 
 test('clearing the additional settings saves just the entered fields', async (t) => {
   const ui = await hub(t, { put: async (url, body) => body });
   await ui.button(ui.card('My Forgejo'), 'Add input').onclick();
+  // Forgejo has several kinds of input to choose between.
+  assert.equal(ui.el('collection-type').hidden, false);
   ui.el('collection-type').value = 'users';
   ui.el('collection-type').dispatchEvent(new ui.window.Event('change'));
   ui.el('collection-fields').querySelector('[data-field="user"]').value = 'erin';

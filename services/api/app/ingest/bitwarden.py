@@ -34,6 +34,8 @@ from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
 PRODUCT = "Bitwarden"
+# The one stream Bitwarden offers: the organisation event log.
+STREAM = "events"
 # Bitwarden chooses the page size; a page holding more than this is refused.
 PAGE_ROWS = 1000
 _CLIENT_ID = scan_pattern(r"organization\.[0-9A-Fa-f-]{36}")
@@ -135,7 +137,7 @@ class BitwardenError(EventApiError):
 
 def validate_config(config):
     return one_stream_config(
-        config, product=PRODUCT, stream="events", error=BitwardenError
+        config, product=PRODUCT, stream=STREAM, error=BitwardenError
     )
 
 
@@ -181,7 +183,7 @@ def _read(base, entry, item, collected):
         action, description = "event.unknown", "Event of an unreadable type"
     actor = text(item.get("actingUserId"))
     outcome = "failure" if known and code in FAILURES else "info"
-    payload = {"stream": "events", "event": item}
+    payload = {"stream": STREAM, "event": item}
     content = canonical(payload)
     # Bitwarden gives an event no identifier, so its content tells it apart
     # and a window read again stores nothing twice.
@@ -199,7 +201,7 @@ def _read(base, entry, item, collected):
         raw_pointer={
             "bitwarden": {
                 "section": "streams",
-                "stream": "events",
+                "stream": STREAM,
                 "type": code if type(code) is int else None,
             }
         },
@@ -239,7 +241,7 @@ def _collect(db, client, base, headers, entry, config):
         name=namespace("bitwarden:" + digest),
         config=config,
         product=PRODUCT,
-        stream="events",
+        stream=STREAM,
         now=utc_now_naive,
         request=request,
         read=lambda item, collected: _read(base, entry, item, collected),
@@ -301,7 +303,7 @@ def ingest_bitwarden_all(db):
         db.rollback()
         return [
             {
-                "stream": "events",
+                "stream": STREAM,
                 "error": str(exc)
                 if isinstance(exc, EventApiError)
                 else collection_error(exc),
@@ -324,6 +326,7 @@ register(
         definition_sections=("streams",),
         key_field="stream",
         demo=False,
+        streams=(STREAM,),
         validate_config=validate_config,
     )
 )

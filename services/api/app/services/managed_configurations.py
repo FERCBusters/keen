@@ -475,6 +475,7 @@ def list_configurations(*, db: Session):
                 "name": n,
                 "section": spec.section,
                 "key": spec.id_field,
+                "streams": list(spec.streams),
                 "version": _version(db, n),
             }
             for n, spec in connectors().items()
@@ -789,7 +790,8 @@ def source_catalogue(*, db: Session):
     items: list[dict[str, Any]] = []
     for name in [*connectors(), "imap"]:
         # A demonstration installation withholds the sources it does not offer.
-        enabled = registry.get(name).enabled
+        declared = registry.get(name)
+        enabled = declared.enabled
         count = sum(1 for item in collectors if item["adapter"] == name)
         matching_rules = sum(1 for rule in rules if _reads_type(rule, name))
         sources = [
@@ -808,6 +810,8 @@ def source_catalogue(*, db: Session):
                 "observed_events": events,
                 "last_seen": last_seen,
                 "managed_version": _version(db, name),
+                # The streams an input may name, when the source offers a fixed set.
+                "streams": list(declared.streams),
                 "description": (
                     "Risk Ledger pulls supplier/risk snapshots and a discovered subset of framework controls. Assessment answers and evidence files are not exposed by its public API. See the Risk Ledger help chapter."
                     if name == "riskledger"

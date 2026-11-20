@@ -93,9 +93,12 @@ test('each kind of collection input is named by its own field before Next', asyn
     ['riskledger', 'organizations', '*', { org: '*', label: 'Suppliers' }, 'org'],
     ['redmine', 'projects', 'ops', { project: 'ops', label: 'Operations' }, 'project'],
     ['op_events', 'streams', 'auditevents', { stream: 'auditevents', label: 'Vault' }, 'stream'],
-    ['bitwarden', 'streams', 'events', { stream: 'events', label: 'Vault' }, 'stream'],
-    ['mosyle', 'streams', 'adminlogs', { stream: 'adminlogs', label: 'Fleet' }, 'stream'],
-    ['cloudflare', 'streams', 'audit', { stream: 'audit', label: 'Edge' }, 'stream'],
+  ];
+  // A source with one stream asks for none: its input is named by that stream.
+  const settled = [
+    ['bitwarden', 'events', 'Vault'],
+    ['mosyle', 'adminlogs', 'Fleet'],
+    ['cloudflare', 'audit', 'Edge'],
   ];
   const ui = await editor(t, {
     sources: [
@@ -112,9 +115,25 @@ test('each kind of collection input is named by its own field before Next', asyn
     ],
     collectors: [
       ...inputs.map(([adapter, section, key, entry]) => collection(adapter, section, key, entry)),
+      ...settled.map(([adapter, stream, label]) =>
+        collection(adapter, 'streams', stream, { stream, label }),
+      ),
       collection('github', 'repos', 'octo/keen', { owner: 'octo', repo: 'keen' }),
     ],
   });
+  for (const [adapter, stream] of settled) {
+    await ui.openInput(
+      adapter,
+      'env:' + adapter,
+      'streams',
+      collectorId(adapter, 'streams', stream),
+    );
+    assert.equal(ui.field('stream').value, stream);
+    assert.equal(ui.field('stream').parentElement.hidden, true, `${adapter} asks for no stream`);
+    await ui.click('next-step');
+    assert.equal(step(ui), '2', `${adapter} is named by its one stream`);
+    await ui.click('close-editor');
+  }
   for (const [adapter, section, key, , name] of inputs) {
     await ui.openInput(adapter, 'env:' + adapter, section, collectorId(adapter, section, key));
     // With its naming field filled, the input moves on to the mapping name.
@@ -153,9 +172,6 @@ test('Risk Ledger, Redmine, password manager and Jenkins inputs explain their id
       collection('riskledger', 'organizations', '*', { org: '*' }),
       collection('redmine', 'projects', 'ops', { project: 'ops' }),
       collection('op_events', 'streams', 'itemusages', { stream: 'itemusages' }),
-      collection('bitwarden', 'streams', 'events', { stream: 'events' }),
-      collection('mosyle', 'streams', 'adminlogs', { stream: 'adminlogs' }),
-      collection('cloudflare', 'streams', 'audit', { stream: 'audit' }),
       collection('jenkins', 'jobs', 'deploy', { name: 'deploy', label: 'web', kind: 'deploy' }),
     ],
   });
@@ -183,33 +199,14 @@ test('Risk Ledger, Redmine, password manager and Jenkins inputs explain their id
     'streams',
     collectorId('op_events', 'streams', 'itemusages'),
   );
-  assert.match(help('stream'), /^One of auditevents, itemusages or signinattempts\./);
-  assert.equal(help('label'), undefined);
-  await ui.click('close-editor');
-  await ui.openInput(
-    'bitwarden',
-    'env:bitwarden',
-    'streams',
-    collectorId('bitwarden', 'streams', 'events'),
+  // The streams 1Password offers are chosen from, not typed.
+  assert.equal(ui.field('stream').tagName, 'SELECT');
+  assert.deepEqual(
+    [...ui.field('stream').options].map((option) => option.value),
+    ['auditevents', 'itemusages', 'signinattempts'],
   );
-  assert.match(help('stream'), /^Enter events: the organisation event log is the one stream/);
-  await ui.click('close-editor');
-  await ui.openInput(
-    'mosyle',
-    'env:mosyle',
-    'streams',
-    collectorId('mosyle', 'streams', 'adminlogs'),
-  );
-  assert.match(help('stream'), /^Enter adminlogs: the administrator action log is the one stream/);
-  assert.equal(help('label'), undefined);
-  await ui.click('close-editor');
-  await ui.openInput(
-    'cloudflare',
-    'env:cloudflare',
-    'streams',
-    collectorId('cloudflare', 'streams', 'audit'),
-  );
-  assert.match(help('stream'), /^Enter audit: the account audit log is the one stream Cloudflare/);
+  assert.equal(ui.field('stream').value, 'itemusages');
+  assert.equal(help('stream'), undefined);
   assert.equal(help('label'), undefined);
   await ui.click('close-editor');
   await ui.openInput('jenkins', 'env:jenkins', 'jobs', collectorId('jenkins', 'jobs', 'deploy'));

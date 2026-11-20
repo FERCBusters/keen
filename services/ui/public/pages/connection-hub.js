@@ -6,6 +6,8 @@ const root = '/api/v1/admin',
   byId = (id) => document.getElementById('hub-' + id);
 let connectionTypes = [];
 let entries = [];
+// The streams each source offers, when its inputs name one of a fixed set.
+let streamChoices = {};
 const sourceTypeLabel = (source) =>
   connectionTypes.find((t) => t.source === source)?.label || source;
 function button(text, action, danger = false) {
@@ -53,6 +55,7 @@ async function load() {
     apiGet(root + '/source-connections'),
   ]);
   connectionTypes = named.types;
+  streamChoices = Object.fromEntries(config.items.map((c) => [c.name, c.streams]));
   entries = config.items.map((c) => ({
     key: 'builtin:' + c.name,
     name: c.name,
@@ -270,13 +273,6 @@ const layouts = {
   bookstack: { selected_pages: ['id', 'name'] },
 };
 
-// The streams each event-log source offers, named on its stream field.
-const streamLabels = {
-  op_events: 'Stream: auditevents, itemusages or signinattempts',
-  bitwarden: 'Stream: events',
-  mosyle: 'Stream: adminlogs',
-  cloudflare: 'Stream: audit',
-};
 async function editCollection(adapter, existing = null, connection = null) {
   if (!layouts[adapter])
     throw new Error('Use the evidence editor for this specialised collection type.');
@@ -297,9 +293,13 @@ async function editCollection(adapter, existing = null, connection = null) {
     );
   type.value = existing?.section || Object.keys(layouts[adapter])[0];
   type.disabled = !!existing;
+  // A source with one kind of input has nothing to choose.
+  type.hidden = type.labels[0].hidden = type.options.length < 2;
   const paint = () => {
     byId('collection-fields').replaceChildren();
     for (const name of layouts[adapter][type.value]) {
+      // The streams the source offers, when it offers a fixed set.
+      const choices = (name === 'stream' && streamChoices[adapter]) || [];
       const label = document.createElement('label');
       label.className = 'form-label d-block';
       label.textContent =
@@ -307,8 +307,7 @@ async function editCollection(adapter, existing = null, connection = null) {
           ? "Organisation UUID (or * for the API key's organisation)"
           : adapter === 'redmine' && name === 'project'
             ? 'Project ID / identifier (or * for all accessible projects)'
-            : (name === 'stream' && streamLabels[adapter]) ||
-              {
+            : {
                 name: 'Name',
                 index_pattern: 'Index pattern',
                 query: 'Message filter (optional)',
@@ -318,13 +317,16 @@ async function editCollection(adapter, existing = null, connection = null) {
                 actor_field: 'Actor field',
                 action_field: 'Action field',
                 outcome_field: 'Outcome field',
-              }[name] ||
-              name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
-      const input = document.createElement('input');
-      input.className = 'form-control';
+              }[name] || name.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
+      const input = document.createElement(choices.length ? 'select' : 'input');
+      input.className = choices.length ? 'form-select' : 'form-control';
       input.dataset.field = name;
+      for (const choice of choices) input.add(new Option(choice, choice));
+      // With only one stream there is nothing to ask: it is sent as it is.
+      label.hidden = choices.length === 1;
       input.value =
         existing?.entry?.[name] ??
+        choices[0] ??
         (adapter === 'elasticsearch'
           ? {
               timestamp_field: '@timestamp',
@@ -356,7 +358,7 @@ async function editCollection(adapter, existing = null, connection = null) {
       const entry = JSON.parse(byId('collection-extra').value || '{}');
       if (!entry || Array.isArray(entry) || typeof entry !== 'object')
         throw new Error('Additional settings must be a JSON object.');
-      for (const input of byId('collection-fields').querySelectorAll('input')) {
+      for (const input of byId('collection-fields').querySelectorAll('[data-field]')) {
         const key = input.dataset.field;
         const value = input.value.trim();
         if (value) entry[key] = key === 'id' ? Number(value) : value;

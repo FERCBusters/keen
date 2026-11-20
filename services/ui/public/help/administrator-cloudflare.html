@@ -19,7 +19,7 @@ KEEN_CLOUDFLARE_POLL_SECONDS=900
 <p>HTTPS and certificate verification are mandatory, redirects are refused, cookies Cloudflare sets are discarded, each request ends within two minutes and responses are limited to 8 MiB. A saved token is write-only.</p>
 </details>
 <h3 id="cloudflare-streams">Select the stream in Keen</h3>
-<p>Define a Cloudflare source with the account ID and the API token, then select <strong>Add input</strong> on that source in <strong>Sources &amp; evidence mapping</strong> and enter the stream <code>audit</code>, the one stream Cloudflare offers here. An optional label becomes the event's <code>system</code>; otherwise it is <code>Cloudflare</code>. The shipped stream list is empty, so enabling the adapter alone collects nothing; add the stream, then use <strong>Ingest runners → Run Cloudflare</strong> or wait for the scheduled run.</p>
+<p>Define a Cloudflare source with the account ID and the API token, then select <strong>Add input</strong> on that source in <strong>Sources &amp; evidence mapping</strong>. Cloudflare offers one stream here, the account audit log, so there is nothing to choose. An optional label becomes the event's <code>system</code>; otherwise it is <code>Cloudflare</code>. The shipped stream list is empty, so enabling the adapter alone collects nothing; add the stream, then use <strong>Ingest runners → Run Cloudflare</strong> or wait for the scheduled run.</p>
 <details class="more"><summary>Going deeper: the YAML file and its settings</summary>
 <p>Administrators can also manage <code>config/cloudflare.yml</code>; saved web-UI configuration overrides it.</p>
 <pre><code>ui_name: Cloudflare
