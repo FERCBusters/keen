@@ -1104,16 +1104,19 @@ def test_logout_requires_intent_and_get_never_revokes(
             "/account.html",
         )
         assert sessions.get_session(redis, sid)["user_id"] == str(reader.id)
-        for headers in (
-            {},
-            {"Origin": "https://evil.example", "X-CSRF-Token": "synthetic-token"},
-            {"Origin": "https://keen.example", "X-CSRF-Token": "wrong"},
+        for headers, detail in (
+            ({}, "CSRF token missing or invalid"),
+            (
+                {"Origin": "https://evil.example", "X-CSRF-Token": "synthetic-token"},
+                "Authentication request origin is not allowed",
+            ),
+            (
+                {"Origin": "https://keen.example", "X-CSRF-Token": "wrong"},
+                "CSRF token missing or invalid",
+            ),
         ):
             refused = client.post(path, headers=headers)
-            assert (refused.status_code, refused.json()) == (
-                403,
-                {"detail": "CSRF token missing or invalid"},
-            )
+            assert (refused.status_code, refused.json()) == (403, {"detail": detail})
             assert sessions.get_session(redis, sid)["user_id"] == str(reader.id)
         response = client.post(
             path,
@@ -1605,3 +1608,53 @@ def test_oversized_websocket_messages_close_the_connection(
             socket.receive_json()
     assert (closed.value.code, closed.value.reason) == (1008, "")
     assert questions.notification_hub._user_sockets == {}
+
+
+def test_websocket_handshakes_are_bounded_per_address(production_client, monkeypatch):
+    from app.api.routes import questions
+    from starlette.websockets import WebSocketDisconnect
+
+    client, *_ = production_client
+    snapshot = Mock(return_value=None)
+    monkeypatch.setattr(questions, "_notification_snapshot", snapshot)
+    monkeypatch.setattr(questions, "_HANDSHAKES_PER_MINUTE", 2)
+    reasons = []
+    for _ in range(3):
+        with pytest.raises(WebSocketDisconnect) as closed:
+            with client.websocket_connect("/ws/notifications", headers=ORIGIN):
+                pass
+        reasons.append((closed.value.code, closed.value.reason))
+    # The third attempt is refused before any session or database work.
+    assert reasons == [
+        (1008, ""),
+        (1008, ""),
+        (1008, "Too many connection attempts"),
+    ]
+    assert snapshot.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/v1/auth/login", "/v1/auth/logout", "/v1/auth/mfa/state", "/v1/oauth/token"],
+)
+def test_every_unsafe_request_comes_from_keen_itself(production_client, path):
+    """Writes before anyone is signed in (signing in or out, a second factor in
+    progress) have no CSRF token, so the origin is checked for every write."""
+    client, *_ = production_client
+    for headers in (
+        {"Origin": "https://evil.example"},
+        {"Origin": "null"},
+        {"Sec-Fetch-Site": "cross-site"},
+    ):
+        refused = client.post(path, json={}, headers=headers)
+        assert (refused.status_code, refused.json()) == (
+            403,
+            {"detail": "Authentication request origin is not allowed"},
+        ), (path, headers)
+
+
+def test_clients_without_an_origin_reach_the_route(production_client):
+    """Machine clients (agents, webhooks, MCP) send no Origin."""
+    client, *_ = production_client
+    response = client.post("/v1/agents/heartbeat", json={})
+    assert response.json() != {"detail": "Authentication request origin is not allowed"}

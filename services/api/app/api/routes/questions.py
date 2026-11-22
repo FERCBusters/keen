@@ -11,7 +11,10 @@ from app.api.routing import Router
 from app.api.uploads import upload_inputs
 from app.db.session import get_db
 from app.realtime.notifications import notification_hub
+from app.security import auth
 from app.security.auth import require_admin, require_authenticated
+from app.security.client_ip import request_ip
+from app.security.rate_limit import address_window_allow
 from app.security.redaction import storable
 from app.services import questions as service
 from app.services.questions import (
@@ -159,6 +162,24 @@ async def admin_set_question_status(
     )
 
 
+# WebSocket handshakes each client address may start a minute.
+_HANDSHAKES_PER_MINUTE = 30
+
+
+def _handshake_allowed(websocket: WebSocket) -> bool:
+    # The allowance lives in the store that holds the sessions (auth's Valkey
+    # connection), and fails closed: without it no session can be checked either.
+    allowed, _ = address_window_allow(
+        auth.get_valkey(),
+        "ws-handshake",
+        request_ip(websocket),
+        _HANDSHAKES_PER_MINUTE,
+        60,
+        fail_closed=True,
+    )
+    return allowed
+
+
 @router.websocket("/ws/notifications")
 async def ws_notifications(websocket: WebSocket):
     """Bounded notification connections with periodic session revalidation."""
@@ -168,6 +189,11 @@ async def ws_notifications(websocket: WebSocket):
 
     if not request_origin_allowed(websocket, require_origin=True):
         await websocket.close(code=1008, reason="Origin not allowed")
+        return
+    # Each handshake costs a session lookup and a database read, so every
+    # client address (an IPv6 /64 counts as one) gets a small allowance first.
+    if not await run_in_threadpool(_handshake_allowed, websocket):
+        await websocket.close(code=1008, reason="Too many connection attempts")
         return
     initial = await run_in_threadpool(
         _notification_snapshot,

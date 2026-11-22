@@ -40,6 +40,7 @@ from app.security.csrf import (
     csrf_valid,
     generate_csrf_token,
     get_csrf_token_from_request,
+    request_origin_allowed,
     set_csrf_cookie,
 )
 from app.security.demo import DemoExpiryMiddleware
@@ -191,6 +192,21 @@ async def csrf_middleware(request: Request, call_next):
     a non-HttpOnly cookie into a request header for all unsafe methods.
     """
     if is_public_request(request):
+        # A browser sends every write from KEEN's own origin, including the
+        # public ones (signing in or out, a second factor in progress, and any
+        # route added to the public list later), which have no session to bind
+        # a CSRF token to. Machine clients send no Origin. Signed-in writes
+        # are checked with their CSRF token below.
+        if request.method.upper() in {
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+        } and not request_origin_allowed(request):
+            return JSONResponse(
+                {"detail": "Authentication request origin is not allowed"},
+                status_code=403,
+            )
         return await call_next(request)
 
     # Only enforce CSRF for authenticated browser sessions. An MCP tool's
