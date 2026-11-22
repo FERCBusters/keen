@@ -4,8 +4,8 @@ from contextlib import contextmanager
 
 import pytest
 from app.db.models import IsmsDocumentFolder, IsmsOrgNode
-from app.services.errors import DomainError
 from app.services.hierarchy import validate_parent
+from myf.services.errors import DomainError
 from sqlalchemy import event as sql_event
 
 LOCK = "pg_advisory_xact_lock"

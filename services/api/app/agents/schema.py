@@ -3,9 +3,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
+from myf.security.encoding import digest
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from app.security.encoding import digest
 
 
 class Strict(BaseModel):

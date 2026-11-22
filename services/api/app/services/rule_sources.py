@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from myf.security.regex import UNMATCHABLE, compile_pattern
+from myf.services.errors import DomainError
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.db.models import Event
-from app.security.regex import UNMATCHABLE, compile_pattern
-from app.services.errors import DomainError
 
 # A source pattern is matched against at most this many sources.
 MAX_SOURCES = 10_000

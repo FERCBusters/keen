@@ -15,47 +15,48 @@ from fastapi.openapi.docs import (
 )
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
-from redis.exceptions import RedisError
-from sqlalchemy import String
-from starlette.concurrency import run_in_threadpool
-
-from app.api.context import machine_credential
-from app.api.errors import domain_error_response, validation_error_response
-from app.api.mcp import server as mcp_server
-from app.api.routes import OPENAPI_TAGS
-from app.api.routes import router as api_router
-from app.api.sql_trace import RequestLabelMiddleware
-from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
-from app.core.valkey import get_valkey
-from app.db.models import AuditLog, User
-from app.db.session import SessionLocal
-from app.realtime.notifications import (
+from myf.api.context import machine_credential
+from myf.api.sql_trace import RequestLabelMiddleware
+from myf.core.datetime_utils import utc_now_naive
+from myf.core.valkey import get_valkey
+from myf.realtime.notifications import (
     start_notification_listener,
     stop_notification_listener,
 )
-from app.security.auth import ROLE_ADMIN, create_user, get_current_user_from_request
-from app.security.client_ip import request_ip as _client_ip
-from app.security.csrf import (
+from myf.security.auth import ROLE_ADMIN, create_user, get_current_user_from_request
+from myf.security.client_ip import request_ip as _client_ip
+from myf.security.csrf import (
     csrf_valid,
     generate_csrf_token,
     get_csrf_token_from_request,
     request_origin_allowed,
     set_csrf_cookie,
 )
-from app.security.demo import DemoExpiryMiddleware
-from app.security.headers import SecurityHeadersMiddleware
-from app.security.mcp_tokens import ADMIN_SCOPES, INNER_TOKEN
-from app.security.permissions import (
+from myf.security.headers import SecurityHeadersMiddleware
+from myf.security.permissions import (
     ensure_session_authorization_current,
     has_permission,
 )
-from app.security.placeholders import is_placeholder
-from app.security.rate_limit import address_window_allow, fixed_window_allow
-from app.security.redaction import redact_query_string, redact_str
-from app.security.regex import scan_pattern
-from app.security.request_limits import RequestBodyLimitMiddleware
-from app.security.roles import attach_effective_role, lock_admin_changes
+from myf.security.placeholders import is_placeholder
+from myf.security.rate_limit import address_window_allow, fixed_window_allow
+from myf.security.redaction import redact_query_string, redact_str
+from myf.security.regex import scan_pattern
+from myf.security.request_limits import RequestBodyLimitMiddleware
+from myf.security.roles import attach_effective_role, lock_admin_changes
+from myf.services.errors import DomainError
+from redis.exceptions import RedisError
+from sqlalchemy import String
+from starlette.concurrency import run_in_threadpool
+
+from app.api.errors import domain_error_response, validation_error_response
+from app.api.mcp import server as mcp_server
+from app.api.routes import OPENAPI_TAGS
+from app.api.routes import router as api_router
+from app.core.config import settings
+from app.db.models import AuditLog, User
+from app.db.session import SessionLocal
+from app.security.demo import DemoExpiryMiddleware
+from app.security.mcp_tokens import ADMIN_SCOPES, INNER_TOKEN
 from app.security.route_policy import (
     NOT_A_TOOL_ROUTE,
     gated_write_permission,
@@ -64,7 +65,6 @@ from app.security.route_policy import (
     mcp_tool_route_scope,
     policy_path,
 )
-from app.services.errors import DomainError
 from app.services.mcp_oauth import scoped_user
 
 log = logging.getLogger(__name__)

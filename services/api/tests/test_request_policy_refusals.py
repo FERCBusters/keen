@@ -18,12 +18,12 @@ import pytest
 from app import main
 from app.core.config import settings
 from app.db.models import AuditLog
-from app.security import auth as security_auth
-from app.security import request_limits
-from app.security.errors import collection_error
-from app.security.regex import compile_pattern, validate_pattern
-from app.security.request_limits import RequestBodyLimitMiddleware, screen_cookies
-from app.security.rich_text import sanitize_rich_text_html
+from myf.security import auth as security_auth
+from myf.security import request_limits
+from myf.security.errors import collection_error
+from myf.security.regex import compile_pattern, validate_pattern
+from myf.security.request_limits import RequestBodyLimitMiddleware, screen_cookies
+from myf.security.rich_text import sanitize_rich_text_html
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import event
 

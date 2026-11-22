@@ -82,11 +82,13 @@ def test_ref_sort_key_natural_order():
 def test_try_uuid():
     import uuid
 
-    parsed = rf.try_uuid("7f6cc9e2-4372-4b4b-b8d6-dfa10c001234")
+    from myf.core.identifiers import try_uuid
+
+    parsed = try_uuid("7f6cc9e2-4372-4b4b-b8d6-dfa10c001234")
     assert isinstance(parsed, uuid.UUID)
-    assert rf.try_uuid("not-a-uuid") is None
-    assert rf.try_uuid(12345) is None
-    assert rf.try_uuid("") is None
+    assert try_uuid("not-a-uuid") is None
+    assert try_uuid(12345) is None
+    assert try_uuid("") is None
 
 
 def test_absolute_http_url():

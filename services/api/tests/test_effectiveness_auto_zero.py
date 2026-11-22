@@ -12,7 +12,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from app.core.config import settings
-from app.core.datetime_utils import add_months
 from app.db.models import (
     EntityChangelog,
     IsmsEffectivenessMeasure,
@@ -21,6 +20,7 @@ from app.db.models import (
 )
 from app.services import effectiveness_metrics as metrics
 from app.services.isms.serializers import _metric_entry_out
+from myf.core.datetime_utils import add_months
 
 TODAY = date(2026, 4, 10)  # last closed month: March 2026
 

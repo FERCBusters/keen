@@ -2,17 +2,13 @@
 
 import uuid
 
+from myf.security.permissions import has_any_permission, has_permission
+from myf.security.roles import is_active_user
 from sqlalchemy import CompoundSelect, select
 from sqlalchemy.orm import Session
 
 from app.db.models import IsmsMeetingAttendee, IsmsMeetingPerson, IsmsPerson, User
-from app.security.permissions import (
-    ISMS_READ_PERMISSION,
-    has_any_permission,
-    has_permission,
-    has_shared_permission,
-)
-from app.security.roles import is_active_user
+from app.security.permissions import ISMS_READ_PERMISSION, has_shared_permission
 
 from .constants import (
     ISMS_MANAGE_PERMISSION,

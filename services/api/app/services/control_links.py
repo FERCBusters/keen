@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import uuid
 
+from myf.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.cache import cache_delete_prefix
 from app.db.models import ControlItem, CrossFrameworkControlLink, User
 from app.services.control_inheritance import crosswalk_links
-from app.services.errors import DomainError
 
 
 class LinkInput(BaseModel):

@@ -5,7 +5,8 @@ network is used; the tests read the message the server would have received.
 """
 
 from app.core.config import settings
-from app.services import mailer
+from app.services import mailer as keen_mailer
+from myf.services import mailer
 
 # Imported fixture: SMTP classes replaced by a recorder, with mail configured.
 from tests.test_mailer import smtp  # noqa: F401
@@ -20,7 +21,7 @@ def _sent(recorder):
 
 
 def test_audit_reminders_describe_the_audit_and_attach_its_invite(smtp):  # noqa: F811
-    mailer.send_audit_reminder_email(
+    keen_mailer.send_audit_reminder_email(
         to_email="auditor@example.test",
         attendee_name=" ",
         audit_title="Access review",
@@ -50,7 +51,7 @@ def test_audit_reminders_describe_the_audit_and_attach_its_invite(smtp):  # noqa
 
 
 def test_audit_reminders_name_the_end_date_when_there_is_one(smtp):  # noqa: F811
-    mailer.send_audit_reminder_email(
+    keen_mailer.send_audit_reminder_email(
         to_email="auditor@example.test",
         attendee_name="Robin",
         audit_title="Access review",
@@ -68,7 +69,7 @@ def test_audit_reminders_name_the_end_date_when_there_is_one(smtp):  # noqa: F81
 
 
 def test_quiz_invitations_give_the_due_date_and_a_calendar_entry(smtp):  # noqa: F811
-    mailer.send_quiz_open_email(
+    keen_mailer.send_quiz_open_email(
         to_email="student@example.test",
         person_name="",
         quiz_title="Security basics",
@@ -98,7 +99,7 @@ def test_quiz_invitations_give_the_due_date_and_a_calendar_entry(smtp):  # noqa:
 
 
 def test_quiz_reminders_reuse_the_invitations_calendar_entry(smtp):  # noqa: F811
-    mailer.send_quiz_reminder_email(
+    keen_mailer.send_quiz_reminder_email(
         to_email="student@example.test",
         person_name=" Ada ",
         quiz_title="Security basics",

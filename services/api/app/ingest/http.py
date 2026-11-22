@@ -22,10 +22,10 @@ from threading import Lock
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
+from myf.core import task_deadline
+from myf.security.provider_logging import suppress_provider_logs
 
-from app.core import task_deadline
 from app.core.config import settings
-from app.security.provider_logging import suppress_provider_logs
 
 suppress_provider_logs("httpx2")
 

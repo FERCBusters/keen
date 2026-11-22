@@ -12,8 +12,8 @@ from types import SimpleNamespace
 import pytest
 from app.db.models import KeenAgent, UeuSettings
 from app.integrations.transport import decrypt
-from app.security.encoding import unb64url
 from cryptography.fernet import Fernet
+from myf.security.encoding import unb64url
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (

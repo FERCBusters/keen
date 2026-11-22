@@ -18,12 +18,12 @@ import anyio
 import httpx2 as httpx
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token, get_http_request
+from myf.security.client_ip import request_ip
 from pydantic import Field
 
 from app.api.mcp import runtime
 from app.api.mcp.shaping import clip, compact, evidence, fit, html_text, listing
 from app.core.config import settings
-from app.security.client_ip import request_ip
 from app.security.mcp_tokens import INNER_TOKEN, SCOPES, WRITE_SCOPES
 
 _TIMEOUT = 60.0

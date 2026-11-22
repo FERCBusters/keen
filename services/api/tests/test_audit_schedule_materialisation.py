@@ -475,7 +475,7 @@ def test_deleting_an_account_or_a_person_ends_their_audit_mail(contract_db, remi
     # row must not then be read as an external attendee typed in by hand, or
     # audit mail would start again for someone who has left.
     from app.services import assurance, users
-    from app.services.context import ChangeContext
+    from myf.services.context import ChangeContext
 
     db = contract_db
     audit = _audit(db, date(2026, 4, 11))

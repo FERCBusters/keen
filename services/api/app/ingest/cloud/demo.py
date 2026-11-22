@@ -11,7 +11,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from functools import partial
 
-from app.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import utc_now_naive
+
 from app.ingest.cloud import provider as cloud_provider
 from app.ingest.cloud.base import Activity, Check, Identity, ScopeResult
 

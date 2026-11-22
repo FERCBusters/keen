@@ -9,9 +9,9 @@ reports more work after a full batch, then drains the rest.
 import uuid
 from datetime import timedelta
 
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Audit, Event, UeuBatch, UeuEvidence
 from app.services import evidence_retention as retention
+from myf.core.datetime_utils import utc_now_naive
 from sqlalchemy import event, text
 
 # Imported fixture: an isolated PostgreSQL schema with retention's tables,

@@ -14,7 +14,8 @@ import unicodedata
 from collections import Counter
 from functools import lru_cache
 
-from app.security.regex import scan_pattern
+from myf.security.regex import scan_pattern
+
 from app.services.evidence_taxonomy import CONCEPTS
 
 _STOP = set(

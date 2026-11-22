@@ -605,10 +605,10 @@ def test_evidence_retention_task_self_schedules_only_on_progress():
 def test_audit_log_retention_deletes_expired_records_in_short_batches(
     contract_db, monkeypatch
 ):
-    from app.core.datetime_utils import utc_now_naive
     from app.db.models import AuditLog
     from app.services import audit_retention
     from app.worker.celery_app import celery_app
+    from myf.core.datetime_utils import utc_now_naive
     from sqlalchemy.orm import sessionmaker
 
     # Each batch commits in its own session, as the worker's would.
@@ -678,7 +678,7 @@ def test_audit_log_retention_deletes_expired_records_in_short_batches(
 
 def test_security_notifications_task():
     with patch(
-        "app.services.security_notifications.deliver_pending", return_value=[1]
+        "myf.services.security_notifications.deliver_pending", return_value=[1]
     ) as deliver:
         assert wt.security_notifications_task() == [1]
     deliver.assert_called_once()

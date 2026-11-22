@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from fastapi import Depends, Request
+from myf.api.context import change_context
+from myf.security.auth import require_authenticated
 from sqlalchemy.orm import Session
 
-from app.api.context import change_context
 from app.api.routing import Router
 from app.db.session import get_db
 from app.schemas import (
@@ -13,7 +14,6 @@ from app.schemas import (
     SavedSearchCreatePayload,
     SavedSearchOut,
 )
-from app.security.auth import require_authenticated
 from app.services import control_owners
 from app.services import me as service
 

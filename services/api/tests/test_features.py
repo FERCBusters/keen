@@ -6,7 +6,7 @@ import pytest
 from app.db.models import ManagedConfiguration, ManagedConfigurationRevision
 from app.security.feature_policy import requirements
 from app.services import features
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -347,7 +347,11 @@ def test_every_router_has_an_availability_decision():
     def walk(routes):
         for route in routes:
             if isinstance(route, APIRoute):
-                owner = route.endpoint.__module__.removeprefix("app.api.routes.")
+                # myf's routes (sign-in, second factors, SSO addresses) are
+                # named as KEEN's own were.
+                owner = route.endpoint.__module__.removeprefix(
+                    "app.api.routes."
+                ).removeprefix("myf.api.routes.")
                 if owner.startswith("isms."):
                     assert set(ISMS_OWNERS) | {
                         "overview",

@@ -17,10 +17,12 @@ import uuid
 from datetime import timedelta
 from types import SimpleNamespace
 
+from myf.core.datetime_utils import iso_utc, utc_now_naive
+from myf.security.permissions import has_permission
+from myf.services.errors import DomainError
 from pydantic import Field
 
 from app.agents.ueu.catalogue import KEEN_VERSIONS
-from app.core.datetime_utils import iso_utc, utc_now_naive
 from app.db.models import (
     AgentPostureObservation,
     Event,
@@ -29,9 +31,7 @@ from app.db.models import (
     IsmsPersonAsset,
     KeenAgent,
 )
-from app.security.permissions import has_permission
 from app.services import posture_risks
-from app.services.errors import DomainError
 from app.services.event_payloads import payloads, without_payloads
 from app.services.features import state as feature_state
 from app.services.frameworks import framework_parameter

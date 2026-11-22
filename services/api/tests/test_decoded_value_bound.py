@@ -15,9 +15,9 @@ import tracemalloc
 import pytest
 from app.ingest import webhooks
 from app.ingest.common import normalise_ingested_fields
-from app.security.json_shape import MAX_DECODED_VALUES, decodes_within, json_depth
-from app.security.redaction import mask_event_data_bytes, redact_bytes
 from app.services.artifacts import MASKING_LIMIT_BYTES
+from myf.security.json_shape import MAX_DECODED_VALUES, decodes_within, json_depth
+from myf.security.redaction import mask_event_data_bytes, redact_bytes
 
 WEBHOOK_BYTES = webhooks._MAX_WEBHOOK_PAYLOAD_BYTES
 

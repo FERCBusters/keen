@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from app.core.config import settings
 from app.services import presentation
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 
 HOSTILE = '<img src=x onerror="alert(1)">'
 

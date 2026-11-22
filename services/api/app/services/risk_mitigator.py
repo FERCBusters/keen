@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from myf.security.regex import scan_pattern
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -26,7 +27,6 @@ from app.db.models import (
     RiskControlLink,
     RiskLibraryEntry,
 )
-from app.security.regex import scan_pattern
 from app.services import features
 from app.services.affected import KIND_FEATURES, record_out
 from app.services.control_refs import clause_summary, control_summary

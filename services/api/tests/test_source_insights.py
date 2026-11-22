@@ -11,8 +11,8 @@ import pytest
 from app.core import cache, source_meta
 from app.db.models import ControlItem, Event, Framework, Mapping, User
 from app.services import source_insights as insights
-from app.services.errors import DomainError
 from app.services.events import event_control_suggestions
+from myf.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 # Imported fixture: the assembled application with an in-memory session store.

@@ -6,6 +6,8 @@ import uuid
 from datetime import date
 from urllib.parse import urlparse
 
+from myf.services.errors import DomainError
+from myf.services.text import clean_email, clean_text
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -21,12 +23,10 @@ from app.db.models import (
     User,
 )
 from app.services.audit_schedules import end_attendee_mail
-from app.services.errors import DomainError
 from app.services.isms.organisation import require_quiz_authority_for_audience_roles
 from app.services.people import ensure_person_for_user as ensure_person_for_user
 from app.services.people import person_for_user as person_for_user
 from app.services.people import require_link_authority
-from app.services.text import clean_email, clean_text
 
 
 class PersonInput(BaseModel):

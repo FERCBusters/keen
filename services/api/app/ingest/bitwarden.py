@@ -11,8 +11,10 @@ from __future__ import annotations
 import hashlib
 
 import httpx2 as httpx
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.errors import collection_error
+from myf.security.regex import scan_pattern
 
-from app.core.datetime_utils import utc_now_naive
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (
     EventApiError,
@@ -29,8 +31,6 @@ from app.ingest.event_api import (
 )
 from app.ingest.http import client as ingestion_client
 from app.ingest.registry import HTTP_QUEUE, Source, register
-from app.security.errors import collection_error
-from app.security.regex import scan_pattern
 from app.services.ingestion_pause import pausable
 
 PRODUCT = "Bitwarden"

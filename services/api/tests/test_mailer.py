@@ -9,7 +9,8 @@ from datetime import date
 
 import pytest
 from app.core.config import settings
-from app.services import mailer
+from app.services import mailer as keen_mailer
+from myf.services import mailer
 
 
 class FakeSMTP:
@@ -157,7 +158,7 @@ def test_header_injection_reaches_no_mail_server(smtp):
 
 
 def test_audit_invites_are_all_day_escaped_and_folded():
-    ics = mailer.build_audit_ics(
+    ics = keen_mailer.build_audit_ics(
         audit_title="Review; scope, ",
         audit_type="EXTERNAL",
         framework_slug="A",
@@ -193,7 +194,7 @@ def test_audit_invites_are_all_day_escaped_and_folded():
 
 
 def test_invite_dates_fall_back_safely():
-    ics = mailer.build_audit_ics(
+    ics = keen_mailer.build_audit_ics(
         audit_title="",
         audit_type="internal",
         framework_slug="A",
@@ -226,7 +227,7 @@ def test_long_multibyte_lines_fold_on_character_boundaries():
 
 
 def test_scheduled_audit_emails_attach_a_calendar_invite(smtp):
-    mailer.send_scheduled_audit_created_email(
+    keen_mailer.send_scheduled_audit_created_email(
         to_email="auditor@example.test",
         attendee_name="  ",
         audit_title="Access review",

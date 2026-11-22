@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from threading import RLock
 from weakref import WeakKeyDictionary
 
+from myf.services.errors import DomainError
 from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import ManagedConfiguration, ManagedConfigurationRevision
-from app.services.errors import DomainError
 
 CONFIG_NAME = "features"
 

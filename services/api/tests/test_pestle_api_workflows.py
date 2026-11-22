@@ -548,9 +548,9 @@ def test_pestle_access_and_text_helpers_guard_their_bounds(pestle, monkeypatch):
     # framework cleaners refuse oversized or missing values.
     from app.core.config import settings
     from app.services import pestle as service
-    from app.services.errors import DomainError
     from app.services.frameworks import framework_parameter
-    from app.services.text import clean_text
+    from myf.services.errors import DomainError
+    from myf.services.text import clean_text
 
     assert service.can_read_pestle(pestle.db, None) is False
     assert service.can_manage_pestle(pestle.db, None) is False

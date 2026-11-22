@@ -9,13 +9,14 @@ builds its tree. Application code reaches XML parsers only through the boundary.
 """
 
 import ast
-from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
-from app.security.xml import MAX_NAMESPACE_NAME, parse_untrusted_xml
+from myf.security.xml import MAX_NAMESPACE_NAME, parse_untrusted_xml
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 REFUSED = "XML documents with an internal DTD subset are refused"
 
 ATOM = (
@@ -200,7 +201,7 @@ def xml_parser_uses(root):
     for path in sorted(root.rglob("*.py")):
         if path == root / "security/xml.py":
             continue
-        where = path.relative_to(root)
+        where = name_in(path, root)
         nodes = list(ast.walk(ast.parse(path.read_text())))
         trees = {"xml.etree.ElementTree"}
         for node in nodes:
@@ -266,7 +267,7 @@ def test_the_boundary_check_finds_direct_parser_use(tmp_path):
 def test_a_document_over_the_size_bound_is_refused_before_parsing(monkeypatch):
     # A tree costs many times its text whatever the document's shape, so size
     # is the bound; the parser never sees a larger document.
-    from app.security import xml
+    from myf.security import xml
 
     def unreachable(*args, **kwargs):
         raise AssertionError("parsed a document over the size bound")

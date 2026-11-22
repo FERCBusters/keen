@@ -25,10 +25,10 @@ from app.db.models import (
     RiskCategory,
     User,
 )
-from app.services.errors import DomainError
 from app.services.isms.link_diary import MANUAL_RATIONALE, remove_entity_link_diary
 from app.services.isms.mutations import _apply_links, _delete_entity_links
 from app.services.isms.schemas import IsmsLinksPayload
+from myf.services.errors import DomainError
 from sqlalchemy import text
 
 # Imported fixture: the assembled application with real sign-in, permission
@@ -384,8 +384,8 @@ def test_deletion_keeps_audit_held_entries(db):
 
 
 def test_deleting_a_swot_item_withdraws_its_entry(db):
-    from app.services.context import ChangeContext
     from app.services.isms import swot
+    from myf.services.context import ChangeContext
 
     admin = _user(db, "swot-admin", role="admin")
     item = IsmsSwot(title="Strength", kind="strength", status="defined")

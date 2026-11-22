@@ -5,7 +5,7 @@ import argparse
 
 from app.db.models import MfaChallenge, MfaCredential, MfaRecoveryCode, User
 from app.db.session import SessionLocal
-from app.security.mfa import audit
+from myf.security.mfa import audit
 
 
 def main():

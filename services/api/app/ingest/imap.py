@@ -8,8 +8,10 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from app.core.datetime_utils import utc_now_naive
-from app.core.task_deadline import TIME_LIMITS
+from myf.core.datetime_utils import utc_now_naive
+from myf.core.task_deadline import TIME_LIMITS
+from myf.security.redaction import mask_mail_address_headers
+
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import (
@@ -20,7 +22,6 @@ from app.ingest.connections import (
 )
 from app.ingest.imap_support.config import configuration
 from app.ingest.registry import IMAP_QUEUE, Source, register
-from app.security.redaction import mask_mail_address_headers
 from app.services.ingestion_pause import pausable
 
 WORKER_TIMEOUT = 55

@@ -1,14 +1,15 @@
 """Architectural contracts supplement behavioural and assembled-app security tests."""
 
 import ast
-from pathlib import Path
 
 from app.api.routing import Router
-from app.services.errors import DomainError
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from myf.services.errors import DomainError
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 
 
 def test_services_do_not_depend_on_http_adapters():
@@ -27,7 +28,7 @@ def test_services_do_not_depend_on_http_adapters():
                     name == prefix or name.startswith(prefix + ".")
                     for prefix in ("app.api", "fastapi", "starlette")
                 ):
-                    violations.append(f"{path.relative_to(APP)}:{node.lineno}: {name}")
+                    violations.append(f"{name_in(path, APP)}:{node.lineno}: {name}")
     assert not violations, "\n".join(violations)
 
 
@@ -52,7 +53,7 @@ def test_routes_delegate_database_operations():
                 and node.func.value.id in {"db", "session"}
                 and node.func.attr in operations
             ):
-                violations.append(f"{path.relative_to(APP)}:{node.lineno}")
+                violations.append(f"{name_in(path, APP)}:{node.lineno}")
     assert not violations, "\n".join(violations)
 
 
@@ -62,7 +63,7 @@ def test_routes_use_common_router():
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.ImportFrom) and node.module == "fastapi":
                 if any(alias.name == "APIRouter" for alias in node.names):
-                    violations.append(str(path.relative_to(APP)))
+                    violations.append(str(name_in(path, APP)))
     assert not violations, violations
 
 

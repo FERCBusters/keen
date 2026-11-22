@@ -662,7 +662,7 @@ def test_domain_operations_refuse_callers_without_audit_authority(aud):
     # that bypasses the HTTP dependencies is still refused.
     from app.services.audits import access, operations
     from app.services.audits.schemas import AuditCreatePayload
-    from app.services.errors import DomainError
+    from myf.services.errors import DomainError
 
     reader = aud.keen.user("audits.read")
     with pytest.raises(DomainError) as refused:
@@ -702,7 +702,7 @@ def test_sample_references_describe_missing_records_without_leaking(aud):
         entity_href,
     )
     from app.services.audits.validation import AUDIT_SAMPLE_ENTITY_LABELS
-    from app.services.errors import DomainError
+    from myf.services.errors import DomainError
 
     assert entity_href("ledger_entry", uuid.uuid4(), FW) == "/audits.html"
     assert (

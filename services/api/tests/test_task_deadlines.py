@@ -11,13 +11,11 @@ every task the worker registers.
 import inspect
 import uuid
 from contextlib import contextmanager
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import httpx2 as httpx
 import pytest
-from app.core import task_deadline
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.ingest import common
@@ -25,16 +23,18 @@ from app.ingest import connections as sc
 from app.ingest import http as ingest_http
 from app.ingest.common import RecordReader
 from app.integrations import transport
-from app.security.errors import collection_error
 from app.services import schedules
 from app.worker import celery_app as worker
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+from myf.core import task_deadline
+from myf.security.errors import collection_error
 from sqlalchemy import event as sa_event
 from sqlalchemy import text
 
+from tests.source_tree import SOURCES
 from tests.task_limits import checked_statements, ending
 
-APP = Path(__file__).resolve().parents[1] / "app"
+APP = SOURCES
 STORE_ARGUMENTS = [
     name
     for name, parameter in inspect.signature(

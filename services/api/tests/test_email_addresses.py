@@ -2,8 +2,8 @@
 
 A recipient reaches an SMTP To header, where a comma or semicolon starts another
 address, and smtplib sends to every address the header lists. One helper
-(app.core.email_address.single_mailbox) decides what an address is; request
-values pass through app.services.text.clean_email, identity-provider and
+(myf.core.email_address.single_mailbox) decides what an address is; request
+values pass through myf.services.text.clean_email, identity-provider and
 directory addresses through the helper itself, and the mailer checks again and
 names its one envelope recipient. The sweep below refuses a hand-rolled email
 check anywhere else, so a new field cannot accept a list of addresses.
@@ -14,12 +14,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from app.core.email_address import compared_mailbox, single_mailbox
-from app.services import mailer, security_notifications
-from app.services.errors import DomainError
-from app.services.text import clean_email
+from myf.core.email_address import compared_mailbox, single_mailbox
+from myf.services import mailer, security_notifications
+from myf.services.errors import DomainError
+from myf.services.text import clean_email
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 HELPER = APP / "core" / "email_address.py"
 # "@" tests outside the helper that are not about email addresses.
 NOT_EMAIL = {
@@ -172,11 +174,11 @@ def test_no_email_check_outside_the_shared_helper():
     for path in sorted(APP.rglob("*.py")):
         if path == HELPER:
             continue
-        relative = str(path.relative_to(APP))
+        relative = str(name_in(path, APP))
         offenders += _email_checks(path.read_text(), relative)
     assert offenders == [], (
-        "Validate addresses with app.services.text.clean_email or "
-        "app.core.email_address.single_mailbox"
+        "Validate addresses with myf.services.text.clean_email or "
+        "myf.core.email_address.single_mailbox"
     )
     # The sweep finds the checks that let a list of addresses through.
     assert _email_checks('ok = "@" in value', "services/x.py") == [
@@ -188,7 +190,10 @@ def test_no_email_check_outside_the_shared_helper():
 
 
 def test_every_smtp_send_names_its_envelope_recipients():
-    tree = ast.parse((APP / "services" / "mailer.py").read_text())
+    # myf's mailer holds the SMTP sends; KEEN's own invites go through it.
+    from myf.services import mailer
+
+    tree = ast.parse(Path(mailer.__file__).read_text())
     sends = [
         node
         for node in ast.walk(tree)

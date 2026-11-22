@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import uuid
 
+from myf.security.permissions import has_any_permission
+from myf.security.roles import is_active_user
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.models import Event, User
-from app.security.permissions import has_any_permission, has_shared_permission
-from app.security.roles import is_active_user
+from app.security.permissions import has_shared_permission
 
 DIARY_SOURCE = "diary"
 # Automatic framework-link entries use this system name and an external ID of

@@ -7,10 +7,10 @@ from unittest.mock import Mock
 import fakeredis
 import pytest
 from app.core.config import settings
-from app.security import csrf, sessions
-from app.security.client_ip import normalise_ip, request_ip
-from app.security.rate_limit import fixed_window_allow
 from fastapi import Request, Response
+from myf.security import csrf, sessions
+from myf.security.client_ip import normalise_ip, request_ip
+from myf.security.rate_limit import fixed_window_allow
 
 
 def request(headers=None, peer="192.0.2.5"):
@@ -179,12 +179,12 @@ def test_forwarded_ip_stops_at_first_untrusted_hop(monkeypatch, peer, chain, exp
 
 
 def test_an_untrusted_forwarding_proxy_is_reported_once(monkeypatch, caplog):
-    from app.security import client_ip
+    from myf.security import client_ip
 
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "")
     monkeypatch.setattr(client_ip, "_untrusted_proxy_reported", threading.Event())
     forwarded = {"x-forwarded-for": "198.51.100.7, synthetic-header-marker"}
-    with caplog.at_level(logging.WARNING, logger="app.security.client_ip"):
+    with caplog.at_level(logging.WARNING, logger="myf.security.client_ip"):
         # Public peers, and private peers that forward nothing, are ordinary.
         assert request_ip(request(forwarded, "93.184.216.34")) == "93.184.216.34"
         assert request_ip(request({}, "172.18.0.5")) == "172.18.0.5"
@@ -202,7 +202,7 @@ def test_an_untrusted_forwarding_proxy_is_reported_once(monkeypatch, caplog):
     caplog.clear()
     monkeypatch.setattr(client_ip, "_untrusted_proxy_reported", threading.Event())
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "172.18.0.0/16")
-    with caplog.at_level(logging.WARNING, logger="app.security.client_ip"):
+    with caplog.at_level(logging.WARNING, logger="myf.security.client_ip"):
         assert request_ip(request(forwarded, "172.18.0.5")) == "172.18.0.5"
         chain = request({"x-forwarded-for": "198.51.100.7"}, "172.18.0.5")
         assert request_ip(chain) == "198.51.100.7"

@@ -24,8 +24,8 @@ from app.db.models import (
     Mapping,
 )
 from app.mapping.rules import rule_rationale
-from app.security.regex import compile_pattern, validate_database_pattern
 from app.services import events as event_operations
+from myf.security.regex import compile_pattern, validate_database_pattern
 from psycopg2 import errors
 from sqlalchemy import event as sql_event
 from sqlalchemy import text
@@ -538,8 +538,8 @@ def test_a_regular_expression_scan_runs_with_a_time_budget(events):
 
 
 def test_a_cancelled_scan_is_reported_as_the_pattern_taking_too_long(events):
-    from app.services.errors import DomainError
     from app.services.event_filters import parse_event_filters, run_scan
+    from myf.services.errors import DomainError
     from psycopg2 import errors
     from sqlalchemy.exc import OperationalError
 
@@ -829,8 +829,8 @@ def test_incidents_need_their_own_permissions(events):
 def test_incident_operations_check_permissions_themselves(events, monkeypatch):
     from app.schemas import IncidentCreatePayload
     from app.services import events as event_operations
-    from app.services.context import ChangeContext
-    from app.services.errors import DomainError
+    from myf.services.context import ChangeContext
+    from myf.services.errors import DomainError
 
     # The incident webhook is configured; the reader still lacks permission.
     monkeypatch.setattr(event_operations, "incident_webhook_enabled", lambda: True)

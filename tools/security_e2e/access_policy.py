@@ -18,7 +18,7 @@ Rules:
   permission of at least one set.
 
 A permission that implies others (IMPLIED_PERMISSIONS, resolved the same way by
-services/api/app/security/permissions.py) counts as each permission it implies,
+services/api/myf/security/permissions.py) counts as each permission it implies,
 so every rule also admits the sets that hold its permissions that way.
 
 Administrators pass every rule except PUBLIC, which does not depend on accounts.

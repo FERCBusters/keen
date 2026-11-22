@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from myf.core.identifiers import try_uuid as _try_uuid
+from myf.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     ControlItem,
     IsmsDocument,
@@ -19,7 +20,6 @@ from app.db.models import (
     User,
 )
 from app.services.entity_changelog import list_entity_changelogs
-from app.services.errors import DomainError
 from app.services.features import state
 from app.services.frameworks import framework_parameter
 

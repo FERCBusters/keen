@@ -13,6 +13,8 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime, timedelta, timezone
 
+from myf.security.regex import scan_pattern
+
 from app.core.config import settings
 from app.ingest.cloud import google
 from app.ingest.cloud.base import (
@@ -33,7 +35,6 @@ from app.ingest.cloud.base import (
     split_list,
     text_field,
 )
-from app.security.regex import scan_pattern
 
 ORGANISATION = scan_pattern(r"[1-9][0-9]{0,19}")
 PROJECT = scan_pattern(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")

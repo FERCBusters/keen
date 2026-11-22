@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from urllib.parse import urlsplit
 
+from myf.security.regex import scan_pattern
+from myf.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -17,9 +19,7 @@ from app.db.models import (
     Mapping,
 )
 from app.schemas import FrameworkUpsert
-from app.security.regex import scan_pattern
 from app.services.control_evidence_stats import clear_stats_caches
-from app.services.errors import DomainError
 from app.services.framework_catalogue import _framework_selection
 
 _SLUG_RE = scan_pattern(r"[A-Za-z0-9._:-]{1,64}")

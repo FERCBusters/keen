@@ -5,8 +5,7 @@ from __future__ import annotations
 import time
 
 from celery.signals import task_postrun, task_prerun
-
-from app.db import sql_trace
+from myf.db import sql_trace
 
 _running: dict[str, tuple] = {}
 

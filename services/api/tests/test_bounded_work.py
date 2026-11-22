@@ -20,7 +20,6 @@ import textwrap
 import time
 import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
 from urllib.parse import quote
 
 import app.worker.tasks  # noqa: F401 - registers the worker tasks
@@ -29,7 +28,6 @@ import pytest
 from app.agents import credentials
 from app.agents.credentials import locked_agent
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     AgentEnrollmentProfile,
     Event,
@@ -43,10 +41,16 @@ from app.integrations.engine import next_link
 from app.integrations.runtime import scrub
 from app.integrations.schema import MAX_DECODINGS, has_dot_segment
 from app.outbound import question_webhooks as qw
-from app.security import auth, mfa, request_limits
-from app.security.encoding import digest
-from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
-from app.security.redaction import (
+from app.security import request_policy
+from app.services import agent_enrollment
+from app.worker import celery_app as worker
+from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY, TASK_SECONDS, celery_app
+from fastapi import HTTPException
+from myf.core.datetime_utils import utc_now_naive
+from myf.security import auth, mfa
+from myf.security.encoding import digest
+from myf.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
+from myf.security.redaction import (
     REDACTED,
     mask_event_data_bytes,
     mask_event_data_obj,
@@ -54,15 +58,12 @@ from app.security.redaction import (
     redact_obj,
     storable,
 )
-from app.services import agent_enrollment
-from app.services.errors import DomainError
-from app.worker import celery_app as worker
-from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY, TASK_SECONDS, celery_app
-from fastapi import HTTPException
+from myf.services.errors import DomainError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
+from tests.source_tree import SOURCES, name_in
 from tests.source_types import HTTP_INGEST_SOURCES, SOURCE_RUN_SECONDS
 
 # Imported fixture: the assembled application with an in-memory session store.
@@ -72,7 +73,7 @@ from tests.test_assembled_authority_regressions import (
 )
 from tests.timing import measured
 
-APP = Path(__file__).resolve().parents[1] / "app"
+APP = SOURCES
 
 
 def nested(depth, leaf):
@@ -193,7 +194,7 @@ REVIEWED_RECURSION = {
 def test_every_recursive_function_has_a_reviewed_depth_bound():
     found = set()
     for path in sorted(APP.rglob("*.py")):
-        rel = path.relative_to(APP).as_posix()
+        rel = name_in(path, APP).as_posix()
         found |= _self_recursive(ast.parse(path.read_text()), rel + ":")
     assert found == set(REVIEWED_RECURSION)
 
@@ -235,7 +236,7 @@ def test_dateutil_parses_only_through_the_bounded_feed_helper():
                         alias.name for alias in node.names
                     ]
                     if any(name.startswith("dateutil") for name in names):
-                        users.add(path.relative_to(APP).as_posix())
+                        users.add(name_in(path, APP).as_posix())
     assert users == {"ingest/rss.py"}
 
 
@@ -262,7 +263,7 @@ def test_detail_paths_are_filled_in_linear_time():
         assert fill("7", "{" * 65_536) == "{" * 65_536
     assert timing.seconds < 0.1
     # The longest path a saved definition can hold.
-    longest = "{" * request_limits.MAX_BODY
+    longest = "{" * request_policy.MAX_BODY
     with measured() as timing:
         fill("7", longest)
     assert timing.seconds < RUN_SHARE_SECONDS

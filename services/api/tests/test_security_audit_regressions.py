@@ -12,14 +12,14 @@ from unittest.mock import Mock
 
 import pytest
 from app.core.config import settings
-from app.security import auth, ldap, passwords
 from app.services import artifacts, questions
-from app.services.errors import DomainError
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from fastapi import HTTPException
+from myf.security import auth, ldap, passwords
+from myf.services.errors import DomainError
 
 
 @pytest.mark.parametrize("scheme", ["ldaps", "ldap"])
@@ -242,8 +242,8 @@ def test_preview_cache_bounds_bytes_and_entries(monkeypatch):
 def test_admin_group_cannot_remove_all_inherited_admins(contract_db, operation):
     from app.db.models import Group, User, user_groups
     from app.schemas import GroupMembersPayload, GroupUpdatePayload
-    from app.security.roles import count_effective_admins
     from app.services import admin
+    from myf.security.roles import count_effective_admins
 
     db = contract_db
     users = [

@@ -19,7 +19,7 @@ from app.mapping.collector import (
     collector_pointer_filter,
     event_collector,
 )
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 
 from tests.transactions import open_while_answering
 

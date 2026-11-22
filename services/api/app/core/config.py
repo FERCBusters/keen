@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-import ipaddress
 from datetime import datetime
 
+from myf.config import MyfSettings
 from pydantic import AliasChoices, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class Settings(MyfSettings):
     model_config = SettingsConfigDict(env_prefix="KEEN_", case_sensitive=False)
+
+    # KEEN's names for the settings myf defines (myf.config.MyfSettings).
+    session_cookie_name: str = Field(default="keen_session")
+    csrf_cookie_name: str = Field(default="keen_csrf")
+    smtp_from_name: str = Field(default="Keen")
 
     timezone: str = Field(default="Etc/UTC")
     # Visible date input format used by MOSP shared date widgets. API values remain YYYY-MM-DD.
@@ -37,7 +42,13 @@ class Settings(BaseSettings):
     demo_expires_at: datetime | None = None
     demo_consultation_url: str = "https://mig5.net/"
 
-    @model_validator(mode="after")
+    def check_application(self) -> None:
+        # KEEN's demo and hosted profiles explain a refused configuration
+        # better than myf's own checks, so they run first.
+        self.validate_demo()
+        self.validate_hosted_security()
+        super().check_application()
+
     def validate_demo(self):
         if self.demo_mode:
             if not self.demo_expires_at or not self.demo_expires_at.tzinfo:
@@ -52,7 +63,6 @@ class Settings(BaseSettings):
     hosted_mode: bool = Field(default=False)
     hosted_owner_subject: str = Field(default="")
 
-    @model_validator(mode="after")
     def validate_hosted_security(self):
         if self.hosted_mode:
             if not self.hosted_owner_subject or not self.oidc_issuer.startswith(
@@ -101,182 +111,10 @@ class Settings(BaseSettings):
                 )
         return self
 
-    # Cookie-backed sessions stored in Valkey/Redis
-    session_cookie_name: str = Field(default="keen_session")
-    session_ttl_seconds: int = Field(default=60 * 60 * 24 * 7)  # 7 days
-    # Absolute lifetime from sign-in, whatever the session's use (30 days).
-    session_max_age_seconds: int = Field(default=60 * 60 * 24 * 30, ge=300)
-
-    # Cookie settings - secure by default for production
-    cookie_secure: bool = Field(default=True)
-    cookie_samesite: str = Field(default="strict")  # lax|strict|none
-    cookie_domain: str = Field(default="")
-
-    # Local username/password login. Disable this when native OIDC is the only
-    # allowed interactive login path.
-    local_auth_enabled: bool = Field(default=True)
-    ldap_enabled: bool = False
-    ldap_url: str = "ldaps://localhost:636"
-    ldap_bind_dn: str = ""
-    ldap_bind_password: str = ""
-    # Search below this DN; set it to an OU DN to restrict access to that OU.
-    ldap_base_dn: str = ""
-    ldap_username_attribute: str = "uid"
-    ldap_email_attribute: str = "mail"
-    ldap_id_attribute: str = "entryUUID"
-    ldap_user_filter: str = "(objectClass=person)"
-    # Optional: sign-in also needs a group matching this filter to list the
-    # user. For directories that record membership on the group entry.
-    ldap_group_filter: str = ""
-    ldap_group_base_dn: str = ""
-    ldap_group_member_attribute: str = "member"
-    ldap_ca_cert_path: str = ""
-    ldap_timeout_seconds: int = Field(default=5, ge=1, le=30)
-    ldap_auto_provision: bool = True
-
-    mfa_policy: str = Field(default="optional")
-    mfa_encryption_key: str = Field(default="", repr=False)
-
-    @field_validator("mfa_policy")
-    @classmethod
-    def validate_mfa_policy(cls, value):
-        if value not in {"optional", "admins", "all"}:
-            raise ValueError("MFA policy must be optional, admins or all")
-        return value
-
-    # Characters a new local password needs. NIST SP 800-63B-4 asks for 15
-    # where a password can be an account's only factor, and allows as few as
-    # eight where every account also uses a second factor.
-    password_min_length: int = Field(default=15, ge=8, le=128)
-
-    @model_validator(mode="after")
-    def validate_password_min_length(self):
-        if self.password_min_length < 15 and self.mfa_policy != "all":
-            raise ValueError(
-                "KEEN_PASSWORD_MIN_LENGTH below 15 requires KEEN_MFA_POLICY=all"
-            )
-        return self
-
-    # Trusted proxy auth (REMOTE_USER)
-    # When enabled, an upstream reverse proxy can authenticate a user and pass
-    # their username via a header (default: REMOTE_USER). If present, this
-    # identity overrides the cookie-backed session.
-    #
-    # IMPORTANT: Only enable this if you have a trusted proxy that strips any
-    # client-supplied REMOTE_USER header and injects its own. Native OIDC ignores
-    # REMOTE_USER even if this is accidentally enabled.
-    trust_remote_user: bool = Field(default=False)
-    remote_user_header_name: str = Field(default="REMOTE_USER")
-    # The authenticating proxies whose identity header Keen accepts, as
-    # comma-separated addresses or CIDRs. This is a separate list from
-    # KEEN_SECURITY_TRUSTED_PROXY_CIDRS: a hop trusted to forward client
-    # addresses is not thereby trusted to name the signed-in account. Required
-    # while KEEN_TRUST_REMOTE_USER is on; there is no default.
-    remote_user_trusted_cidrs: str = Field(default="")
-
-    @field_validator("remote_user_trusted_cidrs", "security_trusted_proxy_cidrs")
-    @classmethod
-    def validate_proxy_networks(cls, value):
-        """Each comma-separated entry is an address or network."""
-        for entry in value.split(","):
-            if entry.strip():
-                ipaddress.ip_network(entry.strip())
-        return value
-
-    @model_validator(mode="after")
-    def validate_remote_user_trust(self):
-        if self.trust_remote_user and not self.remote_user_trusted_cidrs.strip(", "):
-            raise ValueError(
-                "KEEN_TRUST_REMOTE_USER requires KEEN_REMOTE_USER_TRUSTED_CIDRS: "
-                "the addresses of the proxies that authenticate users"
-            )
-        return self
-
     # Optional sign-out address of the trusted proxy that authenticates users.
     # Native OIDC uses KEEN_OIDC_END_SESSION_ENDPOINT and the ID token stored in
     # Keen's own session instead.
     upstream_logout_url: str = Field(default="")
-
-    # -----------------------------------------------------------------------------
-    # Native generic OpenID Connect relying party
-    # -----------------------------------------------------------------------------
-    oidc_enabled: bool = Field(default=False)
-    oidc_provider_label: str = Field(default="Single sign-on")
-    oidc_authorization_endpoint: str = Field(default="")
-    oidc_token_endpoint: str = Field(default="")
-    oidc_token_endpoint_auth_method: str = Field(default="client_secret_basic")
-    oidc_jwks_uri: str = Field(default="")
-    oidc_issuer: str = Field(default="")
-    oidc_userinfo_endpoint: str = Field(default="")
-    oidc_client_id: str = Field(default="")
-    oidc_client_secret: str = Field(default="")
-    oidc_scopes: str = Field(default="openid email profile")
-    oidc_redirect_uri: str = Field(default="")
-    oidc_end_session_endpoint: str = Field(default="")
-    oidc_post_logout_redirect_uri: str = Field(default="")
-    oidc_id_token_leeway_seconds: int = Field(default=60)
-    oidc_username_claims: str = Field(default="preferred_username,email")
-    oidc_allowed_email_domains: str = Field(default="")
-    oidc_auto_link_existing: bool = Field(default=True)
-    # Present for deployment parity with Statistics, but intentionally unsupported
-    # by Keen's OIDC resolver because Keen must not auto-register users.
-    oidc_auto_provision: bool = Field(default=False)
-    oidc_allowed_algs: str = Field(default="RS256")
-    oidc_allow_insecure_http: bool = Field(default=False)
-
-    # Google OpenID Connect
-    google_sso_enabled: bool = Field(default=False)
-    google_provider_label: str = Field(default="Google")
-    google_authorization_endpoint: str = Field(
-        default="https://accounts.google.com/o/oauth2/v2/auth"
-    )
-    google_token_endpoint: str = Field(default="https://oauth2.googleapis.com/token")
-    google_jwks_uri: str = Field(default="https://www.googleapis.com/oauth2/v3/certs")
-    google_issuer: str = Field(
-        default="https://accounts.google.com,accounts.google.com"
-    )
-    google_userinfo_endpoint: str = Field(
-        default="https://openidconnect.googleapis.com/v1/userinfo"
-    )
-    google_client_id: str = Field(default="")
-    google_client_secret: str = Field(default="")
-    google_scopes: str = Field(default="openid email profile")
-    google_redirect_uri: str = Field(default="")
-    google_end_session_endpoint: str = Field(default="")
-    google_post_logout_redirect_uri: str = Field(default="")
-    google_auto_provision: bool = Field(default=False)
-    google_auto_link_existing: bool = Field(default=True)
-    google_allowed_email_domains: str = Field(default="")
-    google_username_claims: str = Field(default="email")
-
-    # GitHub OAuth
-    github_sso_enabled: bool = Field(default=False)
-    github_provider_label: str = Field(default="GitHub")
-    github_authorization_endpoint: str = Field(
-        default="https://github.com/login/oauth/authorize"
-    )
-    github_token_endpoint: str = Field(
-        default="https://github.com/login/oauth/access_token"
-    )
-    github_user_endpoint: str = Field(default="https://api.github.com/user")
-    github_emails_endpoint: str = Field(default="https://api.github.com/user/emails")
-    github_issuer: str = Field(default="https://github.com/login/oauth")
-    github_client_id: str = Field(default="")
-    github_client_secret: str = Field(default="")
-    github_scopes: str = Field(default="read:user user:email")
-    github_redirect_uri: str = Field(default="")
-    github_auto_provision: bool = Field(default=False)
-    github_auto_link_existing: bool = Field(default=True)
-    github_allowed_email_domains: str = Field(default="")
-
-    # CSRF (double-submit cookie)
-    # - Token is stored in a non-HttpOnly cookie so the UI can echo it in a header.
-    # - For unsafe methods, the API requires the header value to match the cookie.
-    # - With Secure cookies and no cookie domain the name takes the __Host-
-    #   prefix (security/csrf.py); the UI reads that cookie first.
-    csrf_cookie_name: str = Field(default="keen_csrf")
-    csrf_header_name: str = Field(default="X-CSRF-Token")
-    csrf_cookie_samesite: str = Field(default="strict")  # lax|strict|none
 
     # -----------------------------------------------------------------------------
     # UI evidence sampling
@@ -299,65 +137,7 @@ class Settings(BaseSettings):
     # - true: mask at event ingestion time before storage
     event_data_masking: str = Field(default="false")
 
-    # Public base URL (required): the browser-facing origin, without a path.
-    # Absolute links in emails, notifications and outbound webhook messages are
-    # built from it, and browser Origin checks compare against it.
-    # Example: https://keen.example.com
-    public_base_url: str = Field(default="", validate_default=True)
-
-    @field_validator("public_base_url")
-    @classmethod
-    def validate_public_base_url(cls, v: str) -> str:
-        from urllib.parse import urlsplit
-
-        value = (v or "").strip().rstrip("/")
-        if not value:
-            raise ValueError(
-                "KEEN_PUBLIC_BASE_URL is required: set it to the browser-facing "
-                "origin, for example https://keen.example.com"
-            )
-        try:
-            parts = urlsplit(value)
-            parts.port  # Rejects a malformed port.
-        except ValueError:
-            parts = None
-        if (
-            parts is None
-            or parts.scheme not in ("http", "https")
-            or not parts.hostname
-            or parts.username is not None
-            or parts.password is not None
-            or parts.path
-            or parts.query
-            or parts.fragment
-            or any(ord(c) < 33 or ord(c) == 127 or c == "\\" for c in value)
-        ):
-            raise ValueError(
-                "KEEN_PUBLIC_BASE_URL must be an http:// or https:// origin "
-                "without a path, query or credentials, for example "
-                "https://keen.example.com"
-            )
-        return f"{parts.scheme}://{parts.netloc.lower()}"
-
     # -----------------------------------------------------------------------------
-    # SMTP outbound mail
-    # -----------------------------------------------------------------------------
-    # Used for scheduled audit attendee notifications.
-    security_trusted_proxy_cidrs: str = Field(default="")
-
-    smtp_host: str = Field(default="")
-    smtp_port: int = Field(default=587)
-    smtp_username: str = Field(default="")
-    smtp_password: str = Field(default="")
-    smtp_use_tls: bool = Field(default=True)  # STARTTLS
-    smtp_use_ssl: bool = Field(default=False)  # SMTPS (465)
-    smtp_timeout_seconds: int = Field(default=20)
-    smtp_from_email: str = Field(default="")
-    smtp_from_name: str = Field(default="Keen")
-
-    # Database / broker
-    database_url: str = Field(default="")
-    redis_url: str = Field(default="redis://localhost:6379/0")
 
     # Short-lived cache for expensive aggregate/count endpoints used by the UI.
     # Set to 0 to disable. The data remains exact; it may simply be up to this
@@ -813,13 +593,6 @@ class Settings(BaseSettings):
     incident_webhook_signing_secret: str = Field(default="")
     incident_webhook_timeout_seconds: float = Field(default=6.0)
 
-    # -----------------------------------------------------------------------------
-    # Login rate limiting (Valkey/Redis)
-    # -----------------------------------------------------------------------------
-    # Simple fixed-window rate limiting applied to /v1/auth/login.
-    # These are defense-in-depth; a reverse proxy should still enforce limits.
-    login_rate_limit_window_seconds: int = Field(default=300)  # 5 minutes
-    login_rate_limit_per_ip: int = Field(default=30)
     # Current-password checks for password changes, per signed-in account.
     password_change_rate_limit_per_account: int = Field(default=15)
 

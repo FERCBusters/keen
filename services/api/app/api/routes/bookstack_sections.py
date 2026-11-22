@@ -6,12 +6,12 @@ import uuid
 
 from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from myf.security.auth import require_authenticated
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.isms import require_isms_manage, require_isms_read
 from app.api.routing import Router
 from app.db.session import get_db
-from app.security.auth import require_authenticated
 from app.services import bookstack_sections as service
 from app.services.bookstack_sections import SectionInput
 from app.storage.s3 import get_object_stream, iter_stream, parse_s3_uri

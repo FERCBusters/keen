@@ -15,9 +15,7 @@ from unittest.mock import Mock
 import fakeredis
 import pytest
 from app.api import errors
-from app.core import valkey
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     AuditLog,
     EntityChangelog,
@@ -30,12 +28,14 @@ from app.db.models import (
     Permission,
     User,
 )
-from app.security.auth import cookie_name as session_cookie_name
-from app.security.passwords import hash_password
-from app.security.request_limits import MAX_JSON_BODY, MAX_JSON_VALUES
-from app.services.errors import DomainError
+from app.security.request_policy import MAX_JSON_BODY, MAX_JSON_VALUES
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from myf.core import valkey
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.auth import cookie_name as session_cookie_name
+from myf.security.passwords import hash_password
+from myf.services.errors import DomainError
 
 from tests.timing import measured
 
@@ -380,7 +380,7 @@ def test_sign_out_fails_closed_when_revocation_fails(
 def _age_session(keen, sid, seconds):
     from datetime import datetime, timedelta, timezone
 
-    from app.security.sessions import session_key
+    from myf.security.sessions import session_key
 
     key = session_key(sid)
     payload = json.loads(keen.store.get(key))
@@ -393,7 +393,7 @@ def _age_session(keen, sid, seconds):
 def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
     keen, monkeypatch, auth_method
 ):
-    from app.security.sessions import create_session, session_key
+    from myf.security.sessions import create_session, session_key
 
     monkeypatch.setattr(settings, "session_max_age_seconds", 3600)
     user = keen.user()
@@ -427,7 +427,7 @@ def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
 
 
 def test_a_session_without_a_readable_start_is_refused(keen):
-    from app.security.sessions import session_key
+    from myf.security.sessions import session_key
 
     client = keen.client(keen.user())
     sid = client.cookies.get(session_cookie_name())
@@ -808,7 +808,7 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
 
     # A delivery whose secret verified names its credential, and a request
     # carrying a verified machine credential is recorded whatever the count.
-    from app.api.context import machine_credential
+    from myf.api.context import machine_credential
     from starlette.requests import Request as StarletteRequest
 
     monkeypatch.setenv("SYNTHETIC_WEBHOOK_SECRET", "synthetic-webhook-secret")
@@ -1090,7 +1090,7 @@ def test_collected_evidence_with_nul_characters_is_stored(contract_db, monkeypat
     from types import SimpleNamespace
 
     from app.ingest import common
-    from app.security.redaction import prepare_event_fields
+    from myf.security.redaction import prepare_event_fields
 
     monkeypatch.setattr(
         common,

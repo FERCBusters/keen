@@ -24,11 +24,13 @@ import httpx2 as httpx
 import pytest
 from app.ingest import common
 from app.ingest import jenkins as jk
-from app.security import json_shape
 from celery.exceptions import SoftTimeLimitExceeded
+from myf.security import json_shape
+
+from tests.source_tree import SOURCES, name_in
 
 API = pathlib.Path(__file__).resolve().parents[1]
-APP = API / "app"
+APP = SOURCES
 STORE = "store_event_with_artifact"
 
 # Storing loops that do not read through RecordReader, and why each stores a
@@ -158,7 +160,7 @@ def _read_functions(source: str):
 
 def _scanned_sources():
     for path in sorted(APP.rglob("*.py")):
-        yield path.relative_to(APP).as_posix(), path.read_text()
+        yield name_in(path, APP).as_posix(), path.read_text()
 
 
 def test_every_record_loop_reads_through_the_reader():
@@ -315,7 +317,7 @@ def test_every_ingester_decodes_upstream_json_without_a_depth_limit():
         entry for entry in found if (entry[0], entry[1]) not in DECODED_OTHERWISE
     )
     assert not undecoded, (
-        f"Decode upstream JSON with app.security.json_shape.decode_json: {undecoded}"
+        f"Decode upstream JSON with myf.security.json_shape.decode_json: {undecoded}"
     )
     assert set(DECODED_OTHERWISE) <= {(f, n) for f, n, _ in found}
 

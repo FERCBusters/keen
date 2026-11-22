@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import httpx2 as httpx
 import pytest
-from app.core.datetime_utils import to_utc_naive
 from app.ingest import jenkins as jk
+from myf.core.datetime_utils import to_utc_naive
 from sqlalchemy.dialects import postgresql
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge")

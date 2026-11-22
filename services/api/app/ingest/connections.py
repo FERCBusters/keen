@@ -16,17 +16,17 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from myf.core import task_deadline
+from myf.core.task_deadline import TIME_LIMITS
+from myf.core.valkey import get_valkey
+from myf.security.regex import scan_pattern
 from sqlalchemy import select, text
 
-from app.core import task_deadline
 from app.core.config import settings as deployment_settings
 from app.core.managed_configuration import load_document as deployment_document
-from app.core.task_deadline import TIME_LIMITS
-from app.core.valkey import get_valkey
 from app.db.models import SourceConnection
 from app.ingest import registry
 from app.integrations.transport import decrypt
-from app.security.regex import scan_pattern
 
 _current: ContextVar["Connection | None"] = ContextVar(
     "ingestion_connection", default=None
@@ -401,7 +401,7 @@ def connection_runs(source):
                                     # spans the collector's first remote wait.
                                     db.commit()
                                 rows = function(db, *args, **kwargs)
-                        from app.security.redaction import redact_obj
+                        from myf.security.redaction import redact_obj
 
                         results.extend(
                             redact_obj({**row, **identity()}) for row in rows

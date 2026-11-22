@@ -8,21 +8,22 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import app.services.artifacts as artifacts_operations
-import app.services.login as login_operations
 import app.services.questions as questions_operations
 import fakeredis
+import myf.services.login as login_operations
 import pytest
 import regex as regex_engine
 from app.core.config import settings
 from app.ingest import bookstack
-from app.security import csrf, oidc, regex, sessions
-from app.security.auth import cookie_name as session_cookie_name
 from app.security.route_policy import PUBLIC_HTTP_ROUTES, is_public_request
-from app.services.context import ChangeContext
-from app.services.errors import DomainError
 from fastapi.testclient import TestClient
+from myf.security import csrf, oidc, regex, sessions
+from myf.security.auth import cookie_name as session_cookie_name
+from myf.services.context import ChangeContext
+from myf.services.errors import DomainError
 from starlette.requests import Request
 
+from tests.source_tree import SOURCES
 from tests.timing import measured
 
 
@@ -307,7 +308,7 @@ def test_only_the_configured_origin_counts_and_origin_can_be_required(monkeypatc
 def production_client(contract_db, monkeypatch):
     from app import main
     from app.db.models import User
-    from app.security import auth, permissions
+    from myf.security import auth, permissions
     from sqlalchemy.orm import sessionmaker
 
     redis = fakeredis.FakeRedis(decode_responses=True)
@@ -435,7 +436,7 @@ def test_websocket_snapshot_releases_database(production_client, monkeypatch):
 
 
 def test_notification_connection_limits_and_cleanup():
-    from app.realtime.notifications import NotificationHub
+    from myf.realtime.notifications import NotificationHub
 
     async def run():
         hub = NotificationHub()
@@ -543,7 +544,7 @@ def test_bookstack_lookup_isolated_between_connections():
 
 
 def test_sso_start_rate_limit_rejects_before_creating_state(monkeypatch):
-    from app.core import valkey
+    from myf.core import valkey
 
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(valkey, "get_valkey", lambda: redis)
@@ -726,9 +727,8 @@ def test_production_mfa_requires_verified_current_security_version(
 
 def test_production_code_never_opts_out_of_tls_verification():
     import ast
-    from pathlib import Path
 
-    root = Path(__file__).resolve().parents[1] / "app"
+    root = SOURCES
     for path in root.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Call):
@@ -900,8 +900,8 @@ def test_deactivation_permanently_revokes_all_session_methods(
 def test_login_issuers_capture_account_session_version(
     production_client, contract_db, monkeypatch, method
 ):
-    from app.api.routes import auth as routes
-    from app.services import security_notifications
+    from myf.api.routes import auth as routes
+    from myf.services import security_notifications
 
     _, redis, _, user = production_client
     user.session_version = 7
@@ -938,9 +938,9 @@ def test_login_completion_replaces_the_old_session_and_tolerates_a_failed_revoca
     # on that revocation never blocks sign-in. The last sign-in time is stored
     # in the one commit that records the sign-in, so the account row stays
     # locked from the active check until the session exists.
-    from app.core.datetime_utils import utc_now_naive
     from app.db.models import User
-    from app.services import security_notifications
+    from myf.core.datetime_utils import utc_now_naive
+    from myf.services import security_notifications
 
     _, redis, _, user = production_client
     monkeypatch.setattr(login_operations, "get_valkey", lambda: redis)
@@ -1086,8 +1086,8 @@ def test_logout_requires_intent_and_get_never_revokes(
     production_client, monkeypatch, contract_db, path, signed_out
 ):
     from app import main
-    from app.api.routes import auth as routes
     from app.db.session import get_db
+    from myf.api.routes import auth as routes
 
     client, redis, _, reader = production_client
     monkeypatch.setattr(routes, "get_valkey", lambda: redis)
@@ -1658,3 +1658,17 @@ def test_clients_without_an_origin_reach_the_route(production_client):
     client, *_ = production_client
     response = client.post("/v1/agents/heartbeat", json={})
     assert response.json() != {"detail": "Authentication request origin is not allowed"}
+
+
+def test_where_an_origin_is_required_a_sign_in_without_one_is_refused(
+    production_client, monkeypatch
+):
+    """The middleware lets clients without an Origin through; a deployment
+    that requires one (hosted KEEN) refuses such a sign-in at the route."""
+    client, *_ = production_client
+    monkeypatch.setattr(settings, "hosted_mode", True)
+    refused = client.post("/v1/auth/login", json={"username": "a", "password": "b"})
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "Authentication request origin is not allowed"},
+    )

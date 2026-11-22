@@ -5,7 +5,7 @@ fields and in the stored copy of the payload; without it they are kept.
 """
 
 from app.core.config import settings
-from app.security.redaction import MASKED_EMAIL, MASKED_IP
+from myf.security.redaction import MASKED_EMAIL, MASKED_IP
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_metric_webhooks import metrics as metrics

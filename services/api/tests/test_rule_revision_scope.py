@@ -13,8 +13,8 @@ from app.db.models import (
     ManagedConfiguration,
     ManagedConfigurationRevision,
 )
-from app.services.errors import DomainError
 from app.services.managed_configurations import RestoreInput
+from myf.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 

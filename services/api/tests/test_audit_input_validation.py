@@ -13,8 +13,8 @@ from types import SimpleNamespace
 import pytest
 from app.core.config import settings
 from app.services.audits import validation as v
-from app.services.errors import DomainError
-from app.services.text import clean_text
+from myf.services.errors import DomainError
+from myf.services.text import clean_text
 
 
 def refused(call, *args, **kwargs):

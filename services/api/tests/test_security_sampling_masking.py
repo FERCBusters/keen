@@ -30,10 +30,10 @@ from app.db.models import (
     User,
     user_permissions,
 )
-from app.security import auth, csrf, permissions, sessions
-from app.security.auth import cookie_name as session_cookie_name
 from app.services import bookstack_sections
 from fastapi.testclient import TestClient
+from myf.security import auth, csrf, permissions, sessions
+from myf.security.auth import cookie_name as session_cookie_name
 from sqlalchemy.orm import sessionmaker
 
 
@@ -348,7 +348,7 @@ def test_bookstack_capture_redacts_before_storage_and_checksum(
 
 def test_ipv6_masking_malformed_input_finishes_in_bounded_child():
     # A killable child prevents a regex regression from hanging the test runner.
-    from app.security import redaction
+    from myf.security import redaction
 
     source = Path(redaction.__file__).resolve()
     script = """

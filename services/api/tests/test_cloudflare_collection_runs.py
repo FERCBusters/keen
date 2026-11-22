@@ -16,7 +16,6 @@ from unittest.mock import patch
 
 import httpx2 as httpx
 import pytest
-from app.core import task_deadline
 from app.core.config import settings
 from app.db.models import Artifact, Event, IngestionCursor
 from app.ingest import cloudflare
@@ -27,6 +26,7 @@ from app.mapping.collector import (
     event_collector,
 )
 from celery.exceptions import SoftTimeLimitExceeded
+from myf.core import task_deadline
 
 from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 from tests.transactions import open_while_answering

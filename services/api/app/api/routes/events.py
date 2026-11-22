@@ -5,9 +5,9 @@ from typing import Optional
 
 from fastapi import Depends, Query, Request
 from fastapi.responses import StreamingResponse
+from myf.api.context import change_context
 from sqlalchemy.orm import Session
 
-from app.api.context import change_context
 from app.api.dependencies.events import require_events_read
 from app.api.routing import Router
 from app.core.config import settings

@@ -8,6 +8,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal, NoReturn
 
+from myf.core.datetime_utils import utc_now_naive
+from myf.core.valkey import get_valkey
+from myf.security.encoding import digest
+from myf.security.rate_limit import address_window_allow, fixed_window_allow
+from myf.security.regex import scan_pattern
+from myf.services.context import ChangeContext
+from myf.services.errors import DomainError
 from pydantic import Field, field_validator
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
@@ -20,15 +27,8 @@ from app.agents.credentials import (
     revoke_keys,
 )
 from app.agents.schema import Strict
-from app.core.datetime_utils import utc_now_naive
-from app.core.valkey import get_valkey
 from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
 from app.security.agent_signatures import SignatureError, key_id, verify_proof
-from app.security.encoding import digest
-from app.security.rate_limit import address_window_allow, fixed_window_allow
-from app.security.regex import scan_pattern
-from app.services.context import ChangeContext
-from app.services.errors import DomainError
 from app.services.ueu_evidence import catalogue_grant
 from app.services.ueu_subjects import public_subject_key, subject_grant
 

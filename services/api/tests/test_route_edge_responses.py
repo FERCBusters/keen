@@ -8,13 +8,13 @@ its network boundary and the session store is the fixture's in-memory Valkey.
 import json
 from urllib.parse import urlencode
 
-from app.api.routes import auth as auth_routes
 from app.core.config import settings
 from app.db.models import User, UserIdentity
-from app.security import ldap
-from app.security.auth import cookie_name as session_cookie_name
-from app.security.passwords import hash_password
-from app.security.sessions import create_session, session_key
+from myf.api.routes import auth as auth_routes
+from myf.security import ldap
+from myf.security.auth import cookie_name as session_cookie_name
+from myf.security.passwords import hash_password
+from myf.security.sessions import create_session, session_key
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (

@@ -15,12 +15,12 @@ from datetime import date, timedelta
 from functools import partial
 from typing import Any
 
+from myf.core.datetime_utils import iso_or_none, utc_now_naive
+from myf.services.errors import DomainError
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import iso_or_none, utc_now_naive
 from app.db.models import Quiz, QuizAttempt, QuizParticipant, QuizRound, User
-from app.services.errors import DomainError
 from app.services.features import state
 from app.services.mailer import send_quiz_reminder_email
 from app.services.schedules import (

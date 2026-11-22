@@ -10,11 +10,12 @@ A contract test refuses any route that sets a computed media type another way.
 
 import ast
 import uuid
-from pathlib import Path
 
 import pytest
 from app.db.models import Artifact, Framework
 from app.storage.filenames import PASSIVE_DOWNLOAD_TYPES, attachment_media_type
+
+from tests.source_tree import SOURCES
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -22,7 +23,7 @@ from tests.test_assembled_authority_regressions import (
     unsafe,
 )
 
-ROUTES = Path(__file__).resolve().parents[1] / "app" / "api" / "routes"
+ROUTES = SOURCES / "api" / "routes"
 ACTIVE = [
     "text/javascript",
     "application/javascript",

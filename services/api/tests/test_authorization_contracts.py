@@ -11,14 +11,15 @@ from app.db.models import (
     user_groups,
     user_permissions,
 )
-from app.security import passwords, permissions
-from app.security.permissions import (
+from app.security import permissions as keen_permissions
+from myf.security import passwords, permissions
+from myf.security.permissions import (
     ensure_session_authorization_current,
     get_effective_permission_codes,
     has_any_permission,
     has_permission,
 )
-from app.security.roles import compute_effective_role, count_effective_admins
+from myf.security.roles import compute_effective_role, count_effective_admins
 
 
 @pytest.fixture
@@ -253,7 +254,7 @@ def test_snapshots_resolve_implied_permissions_without_queries(people, monkeypat
 
 
 def test_implied_permissions_are_declared_once_and_imply_nothing_further():
-    implications = permissions.PERMISSION_IMPLICATIONS
+    implications = keen_permissions.PERMISSION_IMPLICATIONS
     assert set(implications) == {"audits.manage", "audits.admin"}
     for implied in implications.values():
         assert implied == {"events.read", "isms.read"}

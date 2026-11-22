@@ -20,7 +20,6 @@ import pytest
 from app.api.mcp import provider, runtime, server
 from app.api.routes import mcp as mcp_routes
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     Event,
@@ -35,8 +34,9 @@ from app.db.models import (
 from app.security import mcp_tokens
 from app.security.mcp_tokens import INNER_TOKEN
 from app.services import mcp_oauth
-from app.services.errors import DomainError
 from fastapi.testclient import TestClient
+from myf.core.datetime_utils import utc_now_naive
+from myf.services.errors import DomainError
 
 from tests.test_assembled_authority_regressions import BASE, PASSWORD
 from tests.test_assembled_authority_regressions import (
@@ -1066,7 +1066,7 @@ def test_the_server_is_built_only_while_enabled(monkeypatch):
 
 def test_the_connection_email_names_where_to_revoke_it(mcp, monkeypatch):
     from app.db.models import SecurityNotification
-    from app.services import security_notifications
+    from myf.services import security_notifications
 
     monkeypatch.setattr(security_notifications, "smtp_configured", lambda: True)
     user = mcp.keen.user("isms.read")

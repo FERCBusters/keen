@@ -15,8 +15,8 @@ import pytest
 from app.api.mcp import changes, server, tools
 from app.core.config import settings
 from app.security.mcp_tokens import SCOPES
-from app.security.rich_text import plain_text_html
 from fastmcp.exceptions import ToolError
+from myf.security.rich_text import plain_text_html
 
 from tests.test_mcp_units import inner_route_allowed
 

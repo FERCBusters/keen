@@ -13,11 +13,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any, TypeVar
 
+from myf.services.errors import DomainError
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.services.errors import DomainError
 from app.services.isms.link_diary import (
     deferred_link_diary,
     write_deferred_link_diary,

@@ -13,9 +13,9 @@ is harmless: events are de-duplicated by their external IDs.
 import json
 from datetime import timedelta
 
-from app.core.datetime_utils import utc_now_naive
 from app.db.session import SessionLocal
 from app.ingest.common import store_event_with_artifact
+from myf.core.datetime_utils import utc_now_naive
 
 
 def minimal_pdf(text):

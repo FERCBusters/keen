@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from myf.security.regex import scan_pattern
+
 from app.core.config import settings
 from app.ingest.cloud import google
 from app.ingest.cloud.base import (
@@ -27,7 +29,6 @@ from app.ingest.cloud.base import (
     parse_time,
     plural,
 )
-from app.security.regex import scan_pattern
 
 EMAIL = scan_pattern(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s.]{2,}")
 DIRECTORY = "https://www.googleapis.com/auth/admin.directory.user.readonly"

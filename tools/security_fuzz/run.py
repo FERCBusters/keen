@@ -37,9 +37,9 @@ def offline(seed, count):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "services/api"))
     from html.parser import HTMLParser
 
-    from app.security.csv import spreadsheet_cell
-    from app.security.rich_text import RICH_TEXT_ALLOWED_TAGS, sanitize_rich_text_html
-    from app.security.urls import external_url
+    from myf.security.csv import spreadsheet_cell
+    from myf.security.rich_text import RICH_TEXT_ALLOWED_TAGS, sanitize_rich_text_html
+    from myf.security.urls import external_url
 
     class Inspector(HTMLParser):
         def handle_starttag(self, tag, attrs):

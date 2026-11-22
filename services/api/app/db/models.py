@@ -4,6 +4,8 @@ import uuid
 from datetime import date, datetime, timezone
 from datetime import time as dtime
 
+from myf.core.datetime_utils import to_utc_naive
+from myf.core.datetime_utils import utc_now_naive as utcnow
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -25,8 +27,6 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from app.core.datetime_utils import to_utc_naive
-from app.core.datetime_utils import utc_now_naive as utcnow
 from app.db.session import Base
 
 SCHEDULE_RECURRENCE_VALUES = "'once','weekly','monthly','quarterly','yearly'"

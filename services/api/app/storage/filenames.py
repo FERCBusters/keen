@@ -5,7 +5,7 @@ import os
 from typing import Any
 from urllib.parse import quote
 
-from app.security.regex import scan_pattern
+from myf.security.regex import scan_pattern
 
 # ---------------------------------------------------------------------------
 # Display helpers

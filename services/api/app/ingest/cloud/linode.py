@@ -12,6 +12,8 @@ import ipaddress
 import json
 from datetime import datetime, timedelta, timezone
 
+from myf.security.regex import scan_pattern
+
 from app.core.config import settings
 from app.ingest.cloud.api import JsonApi, items
 from app.ingest.cloud.base import (
@@ -31,7 +33,6 @@ from app.ingest.cloud.base import (
     plural,
     text_field,
 )
-from app.security.regex import scan_pattern
 
 ORIGIN = "https://api.linode.com"
 TOKEN = scan_pattern(r"[A-Za-z0-9._~+/=-]{16,512}")

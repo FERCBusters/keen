@@ -81,7 +81,9 @@ The repository holds two deployable services and their tests. Paths below are re
 | `services/api/app/services/` | The domain logic. One module per feature, or a package (`isms/`, `audits/`, `quizzes/`) for large ones. |
 | `services/api/app/db/models.py` | Every SQLAlchemy model, in one file. |
 | `services/api/alembic/versions/` | Migrations. `0001` loads the 1.0 schema; later ones are incremental. |
-| `services/api/app/security/` | Authentication, permissions, sessions, rate limits, redaction, safe regular expressions, encoding helpers. |
+| `services/api/app/security/` | KEEN's own security policy: its permission catalogue, request size classes, redaction specifics, MCP tokens, hosted and demo rules. |
+| `services/api/app/myf_hooks.py` | KEEN's part in myf's sign-in, session and routing flows. |
+| myf (dependency) | Authentication, sessions, single sign-on, second factors, CSRF, permissions mechanism, rate limits, redaction, safe regular expressions, encoding helpers; shared with OSPMAE and MIDENA. |
 | `services/api/app/ingest/` | One module per evidence source, plus `registry.py`, `common.py` (event storage) and `connections.py`. |
 | `services/api/app/ingest/cloud/` | Cloud posture providers, one module each. |
 | `services/api/app/integrations/` | Custom API ingesters that administrators define without code. |

@@ -3,19 +3,19 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import Depends, Request, WebSocket
+from myf.api.context import change_context
+from myf.api.uploads import upload_inputs
+from myf.realtime.notifications import notification_hub
+from myf.security import auth
+from myf.security.auth import require_admin, require_authenticated
+from myf.security.client_ip import request_ip
+from myf.security.rate_limit import address_window_allow
+from myf.security.redaction import storable
 from sqlalchemy.orm import Session
 
-from app.api.context import change_context
 from app.api.errors import json_object
 from app.api.routing import Router
-from app.api.uploads import upload_inputs
 from app.db.session import get_db
-from app.realtime.notifications import notification_hub
-from app.security import auth
-from app.security.auth import require_admin, require_authenticated
-from app.security.client_ip import request_ip
-from app.security.rate_limit import address_window_allow
-from app.security.redaction import storable
 from app.services import questions as service
 from app.services.questions import (
     _count_unread_replies_for_user,
@@ -183,9 +183,8 @@ def _handshake_allowed(websocket: WebSocket) -> bool:
 @router.websocket("/ws/notifications")
 async def ws_notifications(websocket: WebSocket):
     """Bounded notification connections with periodic session revalidation."""
+    from myf.security.csrf import request_origin_allowed
     from starlette.concurrency import run_in_threadpool
-
-    from app.security.csrf import request_origin_allowed
 
     if not request_origin_allowed(websocket, require_origin=True):
         await websocket.close(code=1008, reason="Origin not allowed")

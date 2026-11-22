@@ -23,8 +23,6 @@ select = [
 # importing the application, so they also run on their own outside tests.sh.
 "services/api/tests/test_demo_seed_crosswalk.py" = ["E402"]
 "services/api/tests/test_mitigator_catalogue.py" = ["E402"]
-# The XML parsing boundary itself; the rest of the application parses through it.
-"services/api/app/security/xml.py" = ["S314"]
 # Migrations are fixed operator code: their SQL names tables from their own
 # constants and binds every value.
 "services/api/alembic/**" = ["S608"]

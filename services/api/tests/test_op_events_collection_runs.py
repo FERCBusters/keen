@@ -14,12 +14,12 @@ from unittest.mock import patch
 import httpx2 as httpx
 import pytest
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event, IngestionCursor
 from app.ingest import op_events as onepassword
 from app.ingest.connections import Connection, connection_scope, namespace
 from app.mapping.collector import collector_id, event_collector
 from celery.exceptions import SoftTimeLimitExceeded
+from myf.core.datetime_utils import utc_now_naive
 
 from tests.transactions import open_while_answering
 

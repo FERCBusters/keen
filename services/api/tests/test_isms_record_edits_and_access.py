@@ -21,7 +21,7 @@ from app.db.models import (
     IsmsOrgNode,
 )
 from app.services import features
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 
 # Imported fixtures: the assembled application, a populated ISMS and a
 # catalogue with linked policies and measures.

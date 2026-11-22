@@ -7,16 +7,17 @@ the first, so the source tree is checked for hand-rolled ones.
 import ast
 import hashlib
 from datetime import date, datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from app.core.datetime_utils import iso_or_none, iso_utc, to_utc_naive
 from app.mapping.rules import evaluate_by_framework, event_fields, parse_rules
-from app.security import encoding
-from app.security.regex import scan_pattern
+from myf.core.datetime_utils import iso_or_none, iso_utc, to_utc_naive
+from myf.security import encoding
+from myf.security.regex import scan_pattern
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 # The modules that own each helper.
 OWNERS = {"security/encoding.py", "core/datetime_utils.py"}
 ISO = scan_pattern(r"(\w+)\.isoformat\(\)(\+'Z')?if\1(isnotNone)?elseNone")
@@ -63,7 +64,7 @@ def _copies(source):
 def test_no_module_restates_a_shared_digest_codec_or_serialiser():
     offenders = {}
     for path in APP.rglob("*.py"):
-        label = str(path.relative_to(APP))
+        label = str(name_in(path, APP))
         if label in OWNERS:
             continue
         copies = _copies(path.read_text())

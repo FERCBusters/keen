@@ -6,10 +6,12 @@ import uuid
 from urllib.parse import urlsplit
 
 from cryptography.fernet import InvalidToken
+from myf.core.email_address import single_mailbox
+from myf.security.regex import scan_pattern
+from myf.services.errors import DomainError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from app.core.email_address import single_mailbox
 from app.core.source_meta import get_source_meta
 from app.db.models import SourceConnection
 from app.ingest import registry
@@ -17,8 +19,6 @@ from app.ingest.connections import connections, deployment_settings
 from app.ingest.webhooks import PROVIDER_NAME, PROVIDER_NAME_HELP
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
-from app.security.regex import scan_pattern
-from app.services.errors import DomainError
 from app.services.managed_configurations import (
     WITHHELD,
     credential_name,

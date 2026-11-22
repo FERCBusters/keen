@@ -1,9 +1,9 @@
 """Internal readiness probe: DB, broker, owner identity and worker response."""
 
+from myf.core.valkey import get_valkey
 from sqlalchemy import text
 
 from app.core.config import settings
-from app.core.valkey import get_valkey
 from app.db.models import User, UserIdentity
 from app.db.session import SessionLocal
 

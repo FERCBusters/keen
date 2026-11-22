@@ -10,8 +10,8 @@ from app.schemas import (
     UserUpdatePayload,
 )
 from app.services import users
-from app.services.context import ChangeContext
-from app.services.errors import DomainError
+from myf.services.context import ChangeContext
+from myf.services.errors import DomainError
 
 
 @pytest.fixture

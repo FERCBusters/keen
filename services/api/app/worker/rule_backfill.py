@@ -7,10 +7,10 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
+from myf.core.datetime_utils import utc_now_naive
 from sqlalchemy import ColumnElement, and_, func, or_, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     Event,

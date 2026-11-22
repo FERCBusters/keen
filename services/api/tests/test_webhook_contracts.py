@@ -226,7 +226,7 @@ def test_both_provider_editors_refuse_a_name_its_events_could_not_be_stored_unde
     table's source column must hold, so both editors stop at that length."""
     from app.db.models import Event
     from app.services import managed_configurations, source_connections
-    from app.services.errors import DomainError
+    from myf.services.errors import DomainError
 
     room = Event.__table__.c.source.type.length - len("webhook:")
     assert webhooks.PROVIDER_CHARS == room == 56

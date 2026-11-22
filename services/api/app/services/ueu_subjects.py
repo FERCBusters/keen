@@ -13,12 +13,12 @@ from __future__ import annotations
 import secrets
 
 from cryptography.fernet import InvalidToken
+from myf.security.encoding import b64url, unb64url
+from myf.services.errors import DomainError
 
 from app.db.models import UeuSettings
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt, encrypt
-from app.security.encoding import b64url, unb64url
-from app.services.errors import DomainError
 
 
 def public_subject_key(db) -> str:

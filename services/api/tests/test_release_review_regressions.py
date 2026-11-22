@@ -16,9 +16,9 @@ from app.db.models import (
     SourceConnection,
 )
 from app.ingest import connections as sc
-from app.services.context import ChangeContext
-from app.services.errors import DomainError
 from cryptography.fernet import Fernet
+from myf.services.context import ChangeContext
+from myf.services.errors import DomainError
 
 from tests.test_security_sampling_masking import (  # noqa: F401
     grant,
@@ -44,7 +44,7 @@ def queued(monkeypatch):
 @pytest.fixture
 def agent_client(postgres_engine, monkeypatch):
     from app.api.routes import agents as api
-    from app.security import rate_limit
+    from myf.security import rate_limit
 
     from tests.test_keen_agent import setup
 
@@ -406,8 +406,8 @@ def test_a_group_permission_change_waits_for_a_membership_change(
 
     from app.db.models import Group, Permission, User, user_groups
     from app.schemas import GroupPermissionsPayload
-    from app.security.roles import lock_admin_changes
     from app.services import admin
+    from myf.security.roles import lock_admin_changes
     from sqlalchemy import text
     from sqlalchemy.orm import Session
 

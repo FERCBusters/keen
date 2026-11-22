@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import uuid
 
+from myf.core.datetime_utils import utc_now_naive as _utcnow
+from myf.core.identifiers import try_uuid as _try_uuid
+from myf.services.errors import DomainError
+from myf.services.text import clean_text
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive as _utcnow
-from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     IsmsAccessControlMatrixEntry,
     IsmsAccessControlMatrixRole,
@@ -30,8 +32,6 @@ from app.db.models import (
     RiskCategory,
     User,
 )
-from app.services.errors import DomainError
-from app.services.text import clean_text
 
 from .common import _clause_by_ref_or_id, _control_by_ref_or_id
 from .constants import MEETING_LINK_TYPES

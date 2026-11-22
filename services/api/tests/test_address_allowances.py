@@ -8,16 +8,17 @@ The forwarded-address chain reads every X-Forwarded-For field line.
 """
 
 import ast
-from pathlib import Path
 
 import fakeredis
 import pytest
 from app.core.config import settings
-from app.security.client_ip import request_ip
-from app.security.rate_limit import address_allowance, address_window_allow
+from myf.security.client_ip import request_ip
+from myf.security.rate_limit import address_allowance, address_window_allow
 from starlette.requests import Request
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 
 # Where a client address comes from, and the parameter names that carry one.
 _ADDRESS_CALLS = {"request_ip", "client_ip", "_client_ip", "normalise_ip"}
@@ -111,7 +112,7 @@ def test_every_per_address_allowance_goes_through_address_window_allow():
     callers = set()
     for path in APP.rglob("*.py"):
         tree = ast.parse(path.read_text())
-        label = str(path.relative_to(APP))
+        label = str(name_in(path, APP))
         offenders |= _offenders(tree, label)
         if any(
             isinstance(node, ast.Call) and _called(node) == "address_window_allow"

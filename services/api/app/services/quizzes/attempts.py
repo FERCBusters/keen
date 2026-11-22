@@ -19,11 +19,13 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
+from myf.core.datetime_utils import iso_or_none, utc_now_naive
+from myf.services.errors import DomainError
+from myf.services.text import clean_text
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import iso_or_none, utc_now_naive
 from app.db.models import (
     Quiz,
     QuizAnswer,
@@ -33,13 +35,11 @@ from app.db.models import (
     User,
 )
 from app.services.assurance import person_for_user
-from app.services.errors import DomainError
 from app.services.schedules import (
     occurrences_between,
     schedule_date,
     today_for_schedule,
 )
-from app.services.text import clean_text
 
 from .access import own_person
 from .audience import audience_members

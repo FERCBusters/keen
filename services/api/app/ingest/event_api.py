@@ -17,13 +17,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
+from myf.core.datetime_utils import to_utc_naive
+from myf.security.json_shape import decode_json
+from myf.security.redaction import storable, utf8_bytes
+from myf.security.regex import scan_pattern
 
-from app.core.datetime_utils import to_utc_naive
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact
-from app.security.json_shape import decode_json
-from app.security.redaction import storable, utf8_bytes
-from app.security.regex import scan_pattern
 
 MAX_JSON_BYTES = 8 * 1024 * 1024
 # An opaque paging value is stored with its cursor and sent back upstream, so

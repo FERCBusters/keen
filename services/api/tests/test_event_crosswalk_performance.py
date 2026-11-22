@@ -3,7 +3,6 @@
 import uuid
 
 import pytest
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     CrossFrameworkControlLink,
@@ -19,6 +18,7 @@ from app.services.control_inheritance import (
     evidence_pairs,
     page_controls,
 )
+from myf.core.datetime_utils import utc_now_naive
 from sqlalchemy import event as sql_event
 from sqlalchemy import select
 from sqlalchemy.orm import Session

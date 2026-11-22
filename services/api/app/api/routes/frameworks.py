@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from fastapi import Depends
+from myf.security.auth import require_admin
 from sqlalchemy.orm import Session
 
 from app.api.routing import Router
 from app.db.session import get_db
 from app.schemas import FrameworkUpsert
-from app.security.auth import require_admin
 from app.services import frameworks as service
 from app.services.frameworks import FrameworkNodeInput, FrameworkSelectionInput
 

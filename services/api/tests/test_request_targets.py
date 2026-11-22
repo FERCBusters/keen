@@ -12,7 +12,8 @@ import re
 from pathlib import Path
 
 import pytest
-from app.security.request_limits import ENCODED_SLASH_ROUTES, target_traverses
+from app.security.request_policy import ENCODED_SLASH_ROUTES
+from myf.security.request_limits import target_traverses
 from starlette.convertors import PathConvertor
 
 from tests.conftest import contract_db, contract_postgres_engine  # noqa: F401

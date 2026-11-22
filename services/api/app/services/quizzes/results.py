@@ -13,10 +13,11 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
+from myf.core.datetime_utils import iso_or_none
+from myf.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.datetime_utils import iso_or_none
 from app.db.models import (
     IsmsPerson,
     Quiz,
@@ -25,7 +26,6 @@ from app.db.models import (
     QuizRound,
     User,
 )
-from app.services.errors import DomainError
 from app.services.frameworks import framework_parameter
 from app.services.schedules import occurrences_between, today_for_schedule
 

@@ -1,7 +1,8 @@
 """Explicit SWOT audit scope; source access is required before sharing."""
 
+from myf.services.errors import DomainError
+
 from app.db.models import AuditSwotScope, IsmsSwot
-from app.services.errors import DomainError
 from app.services.isms.swot import _lock, require_access
 
 

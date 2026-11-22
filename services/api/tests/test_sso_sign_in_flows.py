@@ -18,12 +18,12 @@ from urllib.parse import parse_qs, urlsplit
 import httpx2
 import pytest
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import AuditLog, OidcLoginState, User, UserIdentity, UserSsoEmail
-from app.security import oidc
-from app.security.auth import cookie_name as session_cookie_name
 from joserfc import jwt
 from joserfc.jwk import RSAKey
+from myf.core.datetime_utils import utc_now_naive
+from myf.security import oidc
+from myf.security.auth import cookie_name as session_cookie_name
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen  # noqa: F401

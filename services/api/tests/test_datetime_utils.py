@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from app.core.datetime_utils import utc_from_timestamp_naive, utc_now_naive
+from myf.core.datetime_utils import utc_from_timestamp_naive, utc_now_naive
+
+from tests.source_tree import SOURCES, name_in
 
 
 def test_utc_now_preserves_naive_utc_storage_contract():
@@ -39,13 +41,14 @@ def test_timestamp_conversion_is_independent_of_host_timezone(monkeypatch, zone)
 def test_no_deprecated_datetime_utc_methods():
     root = Path(__file__).resolve().parents[1]
     offenders = []
-    for directory in ["app", "alembic", "scripts", "tests"]:
-        for path in (root / directory).rglob("*.py"):
+    trees = [SOURCES, *(root / name for name in ("alembic", "scripts", "tests"))]
+    for tree_root in trees:
+        for path in tree_root.rglob("*.py"):
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.Attribute) and node.attr in {
                     "utcnow",
                     "utcfromtimestamp",
                 }:
-                    offenders.append(f"{path.relative_to(root)}:{node.lineno}")
+                    offenders.append(f"{name_in(path, tree_root)}:{node.lineno}")
     assert offenders == [], "\n".join(offenders)

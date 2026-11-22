@@ -5,8 +5,8 @@ import time
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import before_task_publish, task_postrun, task_prerun
+from myf.core import task_deadline
 
-from app.core import task_deadline
 from app.core.config import settings
 from app.ingest.registry import HTTP_QUEUE, IMAP_QUEUE, polled
 from app.worker.sql_trace import connect_task_labels

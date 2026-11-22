@@ -16,18 +16,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import app.api.context as api_context
-import app.services.login as login_operations
 import app.services.me as me_operations
-import app.services.mfa_management as mfa_operations
 import cbor2
 import fakeredis
+import myf.api.context as api_context
+import myf.services.login as login_operations
+import myf.services.mfa_management as mfa_operations
 import pyotp
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from app.api.routes import auth as login_routes
-from app.api.routes import mfa as routes
 from app.core.config import settings
 from app.db.models import (
     AuditLog,
@@ -38,16 +36,18 @@ from app.db.models import (
     User,
 )
 from app.db.session import Base, get_db
-from app.security import auth as identity
-from app.security import encoding, mfa
-from app.security.auth import cookie_name as session_cookie_name
-from app.security.passwords import hash_password
-from app.security.sessions import create_session
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
+from myf.api.routes import auth as login_routes
+from myf.api.routes import mfa as routes
+from myf.security import auth as identity
+from myf.security import encoding, mfa
+from myf.security.auth import cookie_name as session_cookie_name
+from myf.security.passwords import hash_password
+from myf.security.sessions import create_session
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -560,7 +560,7 @@ class LocalMfaTests(unittest.TestCase):
 
     def test_security_mail_login_once_per_ip_after_full_mfa(self):
         from app.db.models import SecurityNotification, UserLoginIP
-        from app.services import security_notifications as mail
+        from myf.services import security_notifications as mail
 
         with self.Session() as db:
             db.get(User, self.uid).email = "alice@example.org"
@@ -607,7 +607,7 @@ class LocalMfaTests(unittest.TestCase):
 
     def test_security_mail_smtp_failure_retries_then_stops(self):
         from app.db.models import SecurityNotification
-        from app.services import security_notifications as mail
+        from myf.services import security_notifications as mail
 
         with self.Session() as db:
             user = db.get(User, self.uid)
@@ -638,7 +638,7 @@ class LocalMfaTests(unittest.TestCase):
 
     def test_security_mail_transaction_and_missing_smtp(self):
         from app.db.models import SecurityNotification
-        from app.services import security_notifications as mail
+        from myf.services import security_notifications as mail
 
         with self.Session() as db:
             user = db.get(User, self.uid)
@@ -659,7 +659,7 @@ class LocalMfaTests(unittest.TestCase):
 
     def test_security_mail_delivery(self):
         from app.db.models import SecurityNotification
-        from app.services import security_notifications as mail
+        from myf.services import security_notifications as mail
 
         with self.Session() as db:
             user = db.get(User, self.uid)
@@ -699,7 +699,7 @@ class LocalMfaTests(unittest.TestCase):
         from app.api.routes import me, users
         from app.db.models import SecurityNotification
         from app.schemas import AdminSetPasswordPayload, ChangePasswordPayload
-        from app.services import security_notifications as mail
+        from myf.services import security_notifications as mail
 
         request = Request(
             {
@@ -1027,7 +1027,7 @@ def test_local_mfa_needs_an_https_public_origin():
 @pytest.fixture
 def ceremony(keen, monkeypatch):  # noqa: F811 - fixture imported above
     """An enrolled TOTP account whose sign-ins stop at the second factor."""
-    from app.services import security_notifications
+    from myf.services import security_notifications
 
     key = Fernet.generate_key()
     monkeypatch.setattr(settings, "mfa_encryption_key", key.decode())

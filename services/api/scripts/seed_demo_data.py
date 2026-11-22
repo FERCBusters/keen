@@ -35,7 +35,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Iterable
 
-from app.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import utc_now_naive
 
 # Make the script tolerant of being copied into services/api/scripts/ and run
 # as `python scripts/seed_demo_data.py` from services/api. It also supports

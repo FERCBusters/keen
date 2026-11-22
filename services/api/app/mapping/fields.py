@@ -3,7 +3,7 @@
 import ipaddress
 import json
 
-from app.security.regex import compile_pattern
+from myf.security.regex import compile_pattern
 
 OPS = {
     "regex",

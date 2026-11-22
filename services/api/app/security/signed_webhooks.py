@@ -12,7 +12,7 @@ import hmac
 import secrets
 import time
 
-from app.security.regex import scan_pattern
+from myf.security.regex import scan_pattern
 
 TIMESTAMP_HEADER = "X-Keen-Timestamp"
 SIGNATURE_HEADER = "X-Keen-Signature"

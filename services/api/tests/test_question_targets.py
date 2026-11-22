@@ -30,9 +30,9 @@ from app.db.models import (
     RiskAssetSubcategory,
     RiskCategory,
 )
-from app.realtime.notifications import notification_bus
 from app.services import questions
 from app.worker import tasks
+from myf.realtime.notifications import notification_bus
 from sqlalchemy import text
 
 # Imported fixture: the assembled application with an in-memory session store.

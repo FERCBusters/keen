@@ -609,7 +609,7 @@ def test_no_source_type_is_a_key_that_redaction_takes_for_a_secret():
     # A source's name is a key of its event provenance and of its run results.
     # One that reads as a secret's name would be replaced there, and with it
     # the collection item a mapping rule selects.
-    from app.security.redaction import redact_obj
+    from myf.security.redaction import redact_obj
 
     from tests.source_types import FIELDS, PAUSABLE_SOURCES
 

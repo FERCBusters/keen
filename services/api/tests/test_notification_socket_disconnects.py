@@ -8,8 +8,8 @@ and the application finishes without an error.
 
 import asyncio
 
-from app.realtime.notifications import notification_hub
-from app.security.auth import cookie_name as session_cookie_name
+from myf.realtime.notifications import notification_hub
+from myf.security.auth import cookie_name as session_cookie_name
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (

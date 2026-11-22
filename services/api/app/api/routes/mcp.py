@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from myf.core.valkey import get_valkey
+from myf.security.auth import require_authenticated
+from myf.security.client_ip import request_ip
+from myf.security.rate_limit import address_window_allow
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData
@@ -19,11 +23,7 @@ from starlette.responses import Response
 from app.api.mcp import runtime
 from app.api.routing import Router
 from app.core.config import settings
-from app.core.valkey import get_valkey
 from app.db.session import get_db
-from app.security.auth import require_authenticated
-from app.security.client_ip import request_ip
-from app.security.rate_limit import address_window_allow
 from app.services import mcp_oauth as service
 from app.services.mcp_oauth import ConsentAnswer, ConsentLookup
 

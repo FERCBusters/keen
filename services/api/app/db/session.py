@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
+from myf.core import task_deadline
+from myf.core.datetime_utils import utc_now_naive
+from myf.db.sql_trace import install_statement_labels
 from sqlalchemy import DateTime, Engine, bindparam, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.core import task_deadline
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
-from app.db.sql_trace import install_statement_labels
 
 engine = create_engine(settings.database_url, pool_pre_ping=True, hide_parameters=True)
 if settings.sql_trace:

@@ -7,9 +7,10 @@ any of that, so the application takes session advisory locks only there.
 """
 
 import re
-from pathlib import Path
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 SESSION_LOCK = re.compile(r"pg_(?:try_)?advisory_(?:lock|unlock)(?:_shared)?\s*\(")
 
 
@@ -19,7 +20,7 @@ def session_lock_calls(source: str) -> int:
 
 def test_session_advisory_locks_are_taken_only_by_the_shared_helper():
     found = {
-        path.relative_to(APP).as_posix(): count
+        name_in(path, APP).as_posix(): count
         for path in sorted(APP.rglob("*.py"))
         if (count := session_lock_calls(path.read_text()))
     }

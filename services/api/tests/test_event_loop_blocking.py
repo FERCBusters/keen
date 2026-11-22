@@ -17,16 +17,16 @@ calls, without such a hand-off:
 
 import ast
 import asyncio
-import pathlib
 
 import pytest
 from app.core.config import settings
 from app.ingest import webhooks
 
 from tests.conftest import contract_db, contract_postgres_engine  # noqa: F401
+from tests.source_tree import SOURCES, name_in
 from tests.test_assembled_authority_regressions import keen  # noqa: F401
 
-APP = pathlib.Path(__file__).resolve().parents[1] / "app"
+APP = SOURCES
 
 # Calls that do synchronous network or disk work wherever they are made.
 BLOCKING_CALLS = frozenset(
@@ -179,7 +179,7 @@ def blocking_calls(source: str, filename: str):
 def test_no_coroutine_blocks_the_event_loop():
     found = []
     for path in sorted(APP.rglob("*.py")):
-        found += blocking_calls(path.read_text(), path.relative_to(APP).as_posix())
+        found += blocking_calls(path.read_text(), name_in(path, APP).as_posix())
     assert found == [], (
         "These coroutines run synchronous database, Valkey, storage or broker "
         "work on the event loop; pass it to run_in_threadpool: "

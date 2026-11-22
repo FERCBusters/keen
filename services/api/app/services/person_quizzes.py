@@ -1,5 +1,6 @@
 """Named quiz assignments and history, restricted to quiz managers."""
 
+from myf.services.errors import DomainError
 from sqlalchemy import and_, or_, select
 
 from app.db.models import (
@@ -11,7 +12,6 @@ from app.db.models import (
     QuizParticipant,
     QuizRound,
 )
-from app.services.errors import DomainError
 from app.services.features import state as feature_state
 from app.services.isms.access import can_read_isms
 from app.services.quizzes.access import require_manage

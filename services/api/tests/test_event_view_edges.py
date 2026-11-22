@@ -19,9 +19,9 @@ from app.security.diary_visibility import (
     LINK_ENTRY_SYSTEM,
     RISK_LINK_ENTRY_PREFIX,
 )
-from app.security.redaction import MASKED_EMAIL, MASKED_IP
 from app.services import events as events_service
 from app.services.event_filters import EventFilters
+from myf.security.redaction import MASKED_EMAIL, MASKED_IP
 from sqlalchemy import event as sql_event
 from sqlalchemy.orm import Session
 

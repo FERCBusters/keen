@@ -415,7 +415,7 @@ def test_real_tls_checks_before_credentials_and_rejects_large_literal(
 
 
 def test_custom_redaction_precedes_body_character_limit(monkeypatch):
-    from app.security import redaction
+    from myf.security import redaction
 
     monkeypatch.setenv("KEEN_SENSITIVE_KEYS", "private_code")
     redaction._sensitive_cfg.cache_clear()

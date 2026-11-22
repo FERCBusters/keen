@@ -7,10 +7,7 @@ import uuid
 from datetime import date, timedelta
 from typing import Any, cast
 
-from app.core import task_deadline
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
-from app.core.task_deadline import TIME_LIMITS
 from app.db.models import IntegrationCollector as Collector
 from app.db.models import IntegrationConnection as Connection
 from app.db.models import IntegrationRevision as Revision
@@ -22,10 +19,13 @@ from app.ingest.common import RecordReader, store_event_with_artifact
 from app.ingest.connections import Connection as SourceOrigin
 from app.ingest.connections import connection_scope
 from app.mapping.rules import evaluate_by_framework, load_rules
-from app.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
-from app.security.redaction import redact_obj, redact_url, storable
 from app.services.ingestion_pause import is_paused
 from cryptography.fernet import InvalidToken
+from myf.core import task_deadline
+from myf.core.datetime_utils import utc_now_naive
+from myf.core.task_deadline import TIME_LIMITS
+from myf.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
+from myf.security.redaction import redact_obj, redact_url, storable
 from sqlalchemy import CursorResult, select, update
 
 from .engine import MAX_LINK_CHARS, collect, external_id, timestamp

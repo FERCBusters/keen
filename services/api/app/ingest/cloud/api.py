@@ -13,10 +13,10 @@ import time
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
+from myf.security.json_shape import decode_json
 
 from app.ingest import http
 from app.ingest.cloud.base import Unavailable
-from app.security.json_shape import decode_json
 
 TIMEOUT = 30.0
 # A throttled request waits at most this long, once, before the read stops.

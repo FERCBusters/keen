@@ -18,10 +18,10 @@ from datetime import datetime, timezone
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from myf.security.encoding import b64url, unb64url
+from myf.security.regex import scan_pattern
 
 from app.agents.ueu.jcs import canonical
-from app.security.encoding import b64url, unb64url
-from app.security.regex import scan_pattern
 
 OPERATIONS = ("otlp-logs", "heartbeat", "renew")
 WINDOW_SECONDS = 300

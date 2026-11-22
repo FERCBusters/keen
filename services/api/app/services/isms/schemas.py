@@ -8,9 +8,8 @@ from datetime import datetime
 from datetime import time as time_type
 from typing import Any
 
+from myf.security.urls import external_url as validate_external_url
 from pydantic import BaseModel, Field, field_validator
-
-from app.security.urls import external_url as validate_external_url
 
 
 class IsmsLinksPayload(BaseModel):

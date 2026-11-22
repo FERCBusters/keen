@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from myf.core.identifiers import try_uuid
+from myf.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -9,12 +11,10 @@ from app.core.config import settings
 from app.core.references import control_justification as _control_justification
 from app.core.references import control_upstream_url as _upstream_url
 from app.core.references import ref_sort_key as _ref_sort_key
-from app.core.references import try_uuid
 from app.db.models import ControlClauseLink, ControlItem, FrameworkClause
 from app.services.control_owners import owners_of
 from app.services.control_refs import clause_summary
 from app.services.entity_changelog import list_entity_changelogs
-from app.services.errors import DomainError
 
 
 def _clean_evidence_title(raw: object, fallback_url: str = "") -> str:
@@ -150,7 +150,7 @@ def clause_changelog(*, clause_id: str, limit: int = 50, offset: int = 0, db: Se
 def clause_controls(*, clause_id: str, limit: int = 5000, offset: int = 0, db: Session):
     limit = max(1, min(int(limit or 5000), 5000))
     offset = max(0, int(offset or 0))
-    from app.core.references import try_uuid as _try_uuid
+    from myf.core.identifiers import try_uuid as _try_uuid
 
     cid = _try_uuid(clause_id)
     if not cid:

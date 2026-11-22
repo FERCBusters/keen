@@ -32,6 +32,7 @@ qrcode = "^8.2"
 cryptography = ">=50"
 regex = "^2026.9.29"
 fastmcp = "^4.1.6"
+myf = {git = "https://github.com/FERCBusters/myf.git", rev = "a0851310544c17c7e4bee359c5f91ba3908ee5f5"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

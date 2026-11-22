@@ -4,10 +4,10 @@ subjects: created once, stored encrypted, and refused when unreadable."""
 import pytest
 from app.db.models import UeuSettings
 from app.integrations.transport import decrypt, encrypt
-from app.security.encoding import b64url, unb64url
-from app.services.errors import DomainError
 from app.services.ueu_subjects import public_subject_key, subject_grant
 from cryptography.fernet import Fernet
+from myf.security.encoding import b64url, unb64url
+from myf.services.errors import DomainError
 
 UNREADABLE = (
     "The public subject key cannot be read with the configured "

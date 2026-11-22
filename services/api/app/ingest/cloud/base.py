@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from app.security.regex import scan_pattern
+from myf.security.regex import scan_pattern
 
 # met: the setting meets the check; attention: it does not; info: reported
 # without a judgement; unknown: KEEN could not read it (see ``reason``).

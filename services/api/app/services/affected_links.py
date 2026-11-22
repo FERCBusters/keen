@@ -12,10 +12,12 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from myf.core.datetime_utils import utc_now_naive
+from myf.services.errors import DomainError
+from myf.services.text import clean_text
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import AffectedLink, IsmsPerson, IsmsVendor, RiskAsset, User
 from app.services import features
 from app.services.affected import (
@@ -28,9 +30,7 @@ from app.services.affected import (
     vendor_option,
 )
 from app.services.assurance import person_named, vendor_named
-from app.services.errors import DomainError
 from app.services.isms.access import can_manage_isms, can_read_isms
-from app.services.text import clean_text
 
 _OPTION_LIMIT = 500
 

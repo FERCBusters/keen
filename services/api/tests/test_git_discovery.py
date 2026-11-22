@@ -10,13 +10,13 @@ from app.mapping.collector import (
     collector_pointer_filter,
     matches_collector,
 )
-from app.services.errors import DomainError
 from app.services.managed_configurations import (
     _collector_key,
     _editable_collector,
     _validate_connector,
 )
 from fastapi import HTTPException
+from myf.services.errors import DomainError
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
 

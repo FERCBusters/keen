@@ -10,10 +10,18 @@ from functools import partial
 from pathlib import Path
 
 from anyio import to_thread
+from myf.core.identifiers import try_uuid as _try_uuid
+from myf.realtime.notifications import notification_bus, notification_hub
+from myf.security.auth import get_current_user_from_headers_cookies
+from myf.security.permissions import has_permission
+from myf.security.roles import is_effective_admin
+from myf.services.activity_log import record_action as _audit_action
+from myf.services.context import ChangeContext, signed_in_user
+from myf.services.errors import DomainError
+from myf.services.uploads import Upload
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.core.references import try_uuid as _try_uuid
 from app.db.models import (
     Artifact,
     Event,
@@ -26,16 +34,8 @@ from app.db.models import (
     User,
 )
 from app.db.session import track_unpublished_object
-from app.realtime.notifications import notification_bus, notification_hub
-from app.security.auth import get_current_user_from_headers_cookies
 from app.security.diary_visibility import is_diary_event_visible
-from app.security.permissions import has_permission
-from app.security.roles import is_effective_admin
-from app.services.activity_log import record_action as _audit_action
-from app.services.context import ChangeContext, signed_in_user
-from app.services.errors import DomainError
 from app.services.event_payloads import without_payloads
-from app.services.uploads import Upload
 from app.storage.filenames import safe_download_ext
 from app.storage.s3 import put_bytes
 
@@ -463,7 +463,7 @@ def _notification_snapshot(headers, cookies, *, counts=False, peer=None):
         )
         if not user:
             return None
-        from app.security.permissions import ensure_session_authorization_current
+        from myf.security.permissions import ensure_session_authorization_current
 
         ensure_session_authorization_current(db, user)
         from app.services.features import state

@@ -360,7 +360,7 @@ def test_scope_coverage_lists_isms_documents_for_isms_readers_only(audits):
 def test_scoping_documents_needs_isms_read_and_refuses_guesses_alike(
     audits, monkeypatch
 ):
-    from app.security import permissions
+    from app.security import permissions as keen_permissions
 
     assembled = audits.keen
     # Audit managers read ISMS records, so they scope documents by title or id,
@@ -388,7 +388,7 @@ def test_scoping_documents_needs_isms_read_and_refuses_guesses_alike(
     # An account that manages audits without ISMS read access (as an audit
     # manager would be without the implication) is refused before any lookup:
     # an existing document and a guess fail alike, and nothing is scoped.
-    monkeypatch.setattr(permissions, "PERMISSION_IMPLICATIONS", {})
+    monkeypatch.setattr(keen_permissions, "PERMISSION_IMPLICATIONS", {})
     outsider = assembled.user("audits.manage")
     client = assembled.client(outsider)
     refused = client.get("/v1/isms/documents")

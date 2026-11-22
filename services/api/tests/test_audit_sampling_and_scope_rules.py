@@ -28,7 +28,7 @@ from app.db.models import (
     IsmsSwot,
 )
 from app.services import features
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 
 # Imported fixtures: the assembled application and two audit workspaces.
 from tests.test_assembled_authority_regressions import keen  # noqa: F401

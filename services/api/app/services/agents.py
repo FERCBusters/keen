@@ -7,6 +7,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.redaction import redact_obj, redact_str
+from myf.services.errors import DomainError
 from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
 
@@ -14,7 +17,6 @@ from app.agents import server_keys
 from app.agents.credentials import live_only, reauthenticate, revoke_keys, view
 from app.agents.schema import Strict, fingerprint
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     AgentKey,
     AgentPostureObservation,
@@ -23,10 +25,8 @@ from app.db.models import (
     KeenAgent,
 )
 from app.ingest.common import store_event_with_artifact
-from app.security.redaction import redact_obj, redact_str
 from app.services import posture_risks
 from app.services.agent_enrollment import lock_agent_name
-from app.services.errors import DomainError
 from app.services.features import state as feature_state
 from app.services.ueu_evidence import catalogue_grant
 from app.services.ueu_evidence import persist as persist_ueu

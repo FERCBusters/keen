@@ -17,7 +17,6 @@ rule and is not listed.
 """
 
 import ast
-import pathlib
 from datetime import date
 
 from app.db.models import (
@@ -29,9 +28,10 @@ from app.db.models import (
 )
 
 from tests.conftest import contract_db, contract_postgres_engine  # noqa: F401
+from tests.source_tree import SOURCES, name_in
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401
 
-APP = pathlib.Path(__file__).resolve().parents[1] / "app"
+APP = SOURCES
 
 # Every function that resolves authority or recipients from a People record's
 # account, and what keeps a moved link from moving authority to its mover.
@@ -102,7 +102,7 @@ def readers_of_the_people_link(source: str, filename: str):
 def _application_readers():
     found = set()
     for path in sorted(APP.rglob("*.py")):
-        rel = path.relative_to(APP).as_posix()
+        rel = name_in(path, APP).as_posix()
         found |= readers_of_the_people_link(path.read_text(), rel)
     return found
 

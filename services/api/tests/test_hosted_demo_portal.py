@@ -22,9 +22,9 @@ import httpx2
 import pytest
 from app import bootstrap_hosted
 from app.core.config import Settings, settings
-from app.security import csrf, oidc
 from joserfc import jwt
 from joserfc.jwk import RSAKey
+from myf.security import csrf, oidc
 from sqlalchemy.orm import sessionmaker
 
 # Imported fixtures: the assembled application with an in-memory session

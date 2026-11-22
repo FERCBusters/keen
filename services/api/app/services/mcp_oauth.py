@@ -16,12 +16,17 @@ from datetime import datetime, timedelta
 from typing import Annotated
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.auth import ROLE_NORMAL
+from myf.security.encoding import digest
+from myf.security.permissions import get_effective_permission_codes
+from myf.services.errors import DomainError
+from myf.services.security_notifications import enqueue as notify
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     McpAuthorizationCode,
     McpClient,
@@ -30,8 +35,6 @@ from app.db.models import (
     McpToken,
     User,
 )
-from app.security.auth import ROLE_NORMAL
-from app.security.encoding import digest
 from app.security.mcp_tokens import (
     ACCESS_PREFIX,
     ACCESS_TOKEN_SECONDS,
@@ -51,9 +54,6 @@ from app.security.mcp_tokens import (
     well_formed,
     with_read_scopes,
 )
-from app.security.permissions import get_effective_permission_codes
-from app.services.errors import DomainError
-from app.services.security_notifications import enqueue as notify
 
 # A registration nobody approved within a day is removed.
 UNUSED_CLIENT_SECONDS = 24 * 3600

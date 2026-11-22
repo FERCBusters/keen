@@ -4,6 +4,7 @@ import json
 import uuid
 from typing import Any, cast
 
+from myf.core.valkey import get_valkey
 from redis.typing import EncodableT, FieldT
 from sqlalchemy import CursorResult, func, text
 from sqlalchemy.orm import Session
@@ -15,7 +16,6 @@ from app.core.cache import (
     json_default,
 )
 from app.core.config import settings
-from app.core.valkey import get_valkey
 from app.db.models import (
     ControlEvidenceStats,
     ControlItem,

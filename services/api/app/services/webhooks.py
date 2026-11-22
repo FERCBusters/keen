@@ -7,11 +7,21 @@ from datetime import date, datetime
 from typing import Any, NoReturn
 
 from cryptography.fernet import InvalidToken
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.rate_limit import address_window_allow
+from myf.security.redaction import (
+    mask_event_data_obj,
+    mask_event_data_str,
+    redact_obj,
+    redact_str,
+    redact_url,
+)
+from myf.services.context import ChangeContext
+from myf.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Event,
     IsmsEffectivenessMeasure,
@@ -21,19 +31,9 @@ from app.db.models import (
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt
 from app.security import signed_webhooks
-from app.security.rate_limit import address_window_allow
-from app.security.redaction import (
-    mask_event_data_obj,
-    mask_event_data_str,
-    redact_obj,
-    redact_str,
-    redact_url,
-)
-from app.security.request_limits import MAX_METRIC_SUBMISSION
+from app.security.request_policy import MAX_METRIC_SUBMISSION
 from app.services import inbox
-from app.services.context import ChangeContext
 from app.services.entity_changelog import record_entity_changelog
-from app.services.errors import DomainError
 from app.services.ingestion_pause import require_receiving
 from app.services.isms.metric_values import (
     inherited_metric_source_type,
@@ -278,7 +278,7 @@ def record_metric(
         and not db.query(Event.id).filter(Event.id == source_event_id).first()
     ):
         raise DomainError(status_code=400, detail="Unknown source_event_id")
-    from app.security.urls import external_url
+    from myf.security.urls import external_url
 
     try:
         source_url = external_url(payload.get("source_url") or payload.get("url"))

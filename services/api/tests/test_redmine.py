@@ -14,9 +14,9 @@ from app.mapping.collector import (
     collector_pointer_filter,
     matches_collector,
 )
-from app.security.redaction import redact_obj
-from app.services.errors import DomainError
 from celery.exceptions import SoftTimeLimitExceeded
+from myf.security.redaction import redact_obj
+from myf.services.errors import DomainError
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge")
 

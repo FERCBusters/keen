@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from myf.core.datetime_utils import utc_now_naive
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import AuditLog
 from app.db.session import SessionLocal
 

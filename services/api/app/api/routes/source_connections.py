@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from fastapi import Depends
+from myf.security.auth import require_admin
 
 from app.api.routing import Router
 from app.db.session import get_db
-from app.security.auth import require_admin
 from app.services import source_connections as service
 from app.services.source_connections import ConnectionInput
 

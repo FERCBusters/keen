@@ -22,6 +22,7 @@ from mcp.server.auth.provider import (
 )
 from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from myf.services.errors import DomainError
 from pydantic import AnyUrl
 from starlette.concurrency import run_in_threadpool
 
@@ -29,7 +30,6 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.security.mcp_tokens import SCOPES
 from app.services import mcp_oauth as service
-from app.services.errors import DomainError
 
 MCP_PATH = "/v1/mcp"
 _GRANT_TYPES = ("authorization_code", "refresh_token")

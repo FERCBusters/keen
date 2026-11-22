@@ -12,7 +12,6 @@ import uuid
 import pytest
 from app import main
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Event,
     IsmsDocument,
@@ -25,6 +24,7 @@ from app.db.models import (
 )
 from app.security import mcp_tokens
 from app.services import mcp_oauth
+from myf.core.datetime_utils import utc_now_naive
 
 from tests.test_mcp_access import FW, MCP_HEADERS, _link_entry, inner
 from tests.test_mcp_access import keen as keen  # noqa: F401 - fixture

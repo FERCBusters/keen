@@ -11,8 +11,6 @@ from unittest.mock import Mock
 import app.services.integrations as integrations_operations
 import pytest
 from app.api.routes import integrations as api
-from app.core import task_deadline
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event
 from app.db.models import IntegrationCollector as Collector
 from app.db.models import IntegrationConnection as Connection
@@ -25,9 +23,11 @@ from app.integrations.engine import collect, external_id, normalize, skipped_sum
 from app.integrations.errors import IntegrationError
 from app.integrations.schema import Definition, pointer
 from app.integrations.templates import templates
-from app.services.errors import DomainError
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
+from myf.core import task_deadline
+from myf.core.datetime_utils import utc_now_naive
+from myf.services.errors import DomainError
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 

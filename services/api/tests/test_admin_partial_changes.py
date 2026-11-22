@@ -23,7 +23,7 @@ from app.db.models import (
     User,
 )
 from app.services import admin as admin_service
-from app.services.uploads import Upload
+from myf.services.uploads import Upload
 from sqlalchemy import event as sql_event
 
 # Imported fixtures: administrator requests through the assembled application.

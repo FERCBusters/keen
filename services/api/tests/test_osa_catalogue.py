@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 from app.api.routes.frameworks import save_framework_node
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     ControlItem,
     CrossFrameworkControlLink,
@@ -22,6 +21,7 @@ from app.services.control_inheritance import (
     inherited_control_ids,
 )
 from app.services.frameworks import FrameworkNodeInput
+from myf.core.datetime_utils import utc_now_naive
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 

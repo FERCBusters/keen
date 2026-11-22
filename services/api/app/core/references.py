@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlsplit
 
 import yaml
+from myf.security.regex import scan_pattern
 
 from app.core.config import settings
-from app.security.regex import scan_pattern
 
 log = logging.getLogger(__name__)
 
@@ -120,21 +119,6 @@ def ref_sort_key(ref: str | None) -> tuple:
     # token component types at the same tuple position.
     token_keys = tuple(_ref_token_key(p) for p in parts)
     return (bucket, token_keys, s.lower())
-
-
-def try_uuid(v: object) -> Optional[uuid.UUID]:
-    """The UUID ``v`` names, written as 36 characters or as 32 hexadecimal digits.
-
-    Python also reads braces, a URN prefix and any number of hyphens anywhere.
-    Those spellings are refused, so a record has one identifier in a route's
-    path and no padding can lengthen a path that still reaches it.
-    """
-    text = str(v)
-    try:
-        parsed = uuid.UUID(text)
-    except ValueError:
-        return None
-    return parsed if text.lower() in (str(parsed), parsed.hex) else None
 
 
 # Control and clause references are stored in columns of this length.

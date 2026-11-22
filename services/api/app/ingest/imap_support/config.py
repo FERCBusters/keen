@@ -1,6 +1,6 @@
 """Validate both database and file-managed IMAP connections before network use."""
 
-from app.security.regex import scan_pattern
+from myf.security.regex import scan_pattern
 
 MAX_BODY_CHARS = 65536
 DEFAULT_BODY_CHARS = 4000

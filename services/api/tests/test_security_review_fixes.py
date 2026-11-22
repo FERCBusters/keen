@@ -6,11 +6,10 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
-import app.services.sso_emails as sso_emails_operations
+import myf.services.sso_emails as sso_emails_operations
 import pytest
-from app.api.routes import questions, sso_emails
+from app.api.routes import questions
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Event,
     EventQuestionPost,
@@ -20,10 +19,12 @@ from app.db.models import (
     UserIdentity,
     UserSsoEmail,
 )
-from app.security import oidc
-from app.security.client_ip import request_ip
-from app.services.errors import DomainError
 from fastapi import HTTPException
+from myf.api.routes import sso_emails
+from myf.core.datetime_utils import utc_now_naive
+from myf.security import oidc
+from myf.security.client_ip import request_ip
+from myf.services.errors import DomainError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 from starlette.responses import Response
@@ -242,9 +243,9 @@ def test_event_questions_and_owner_listing(db, user):
 )
 def test_shared_proxy_interpretation(monkeypatch, peer, xff, expected):
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24")
-    from app.api.context import change_context
     from app.main import _client_ip
-    from app.security.rate_limit import client_ip
+    from myf.api.context import change_context
+    from myf.security.rate_limit import client_ip
 
     for fn in [
         request_ip,
@@ -423,8 +424,8 @@ def test_recent_login(user, monkeypatch, age, identity, allowed):
 def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatch):
     from app import main
     from app.db.session import get_db
-    from app.security.csrf import csrf_cookie_name, csrf_header_name
     from fastapi.testclient import TestClient
+    from myf.security.csrf import csrf_cookie_name, csrf_header_name
     from sqlalchemy.orm import sessionmaker
 
     factory = sessionmaker(bind=db.get_bind())

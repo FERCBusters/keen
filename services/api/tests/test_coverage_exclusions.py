@@ -10,6 +10,8 @@ import re
 import tomllib
 from pathlib import Path
 
+from tests.source_tree import SOURCES, name_in
+
 API = Path(__file__).resolve().parents[1]
 EXCLUSION = re.compile(r"#\s*pragma:\s*no\s*(?:cover|branch)", re.IGNORECASE)
 
@@ -20,8 +22,8 @@ def exclusions(source: str) -> int:
 
 def test_no_application_line_is_excluded_from_coverage():
     found = {
-        path.relative_to(API).as_posix(): count
-        for path in sorted((API / "app").rglob("*.py"))
+        name_in(path, SOURCES).as_posix(): count
+        for path in sorted(SOURCES.rglob("*.py"))
         if (count := exclusions(path.read_text()))
     }
     assert found == {}

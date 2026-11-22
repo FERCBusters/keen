@@ -10,10 +10,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from app.security import oidc
 from joserfc import jwt
 from joserfc.errors import JoseError
 from joserfc.jwk import ECKey, RSAKey
+from myf.security import oidc
 from starlette.requests import Request
 
 

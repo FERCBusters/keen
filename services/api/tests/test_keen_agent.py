@@ -18,12 +18,12 @@ from app.agents import credentials
 from app.agents.otlp import decode_batch
 from app.agents.schema import fingerprint
 from app.api.routes import agents as api
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Artifact, Event, KeenAgent
 from app.ingest import common
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from myf.core.datetime_utils import utc_now_naive
 from sqlalchemy.orm import sessionmaker
 
 from tests.ueu_agent import FakeValkey

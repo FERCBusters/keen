@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, overload
 
+from myf.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -31,7 +32,6 @@ from app.db.models import (
     User,
 )
 from app.services.control_refs import control_summary
-from app.services.errors import DomainError
 
 from .constants import EFFECTIVENESS_METRIC_OTHER_SOURCE_TYPE
 from .metric_values import threshold_status

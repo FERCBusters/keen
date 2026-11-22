@@ -9,6 +9,8 @@ than the record's own page would.
 
 from __future__ import annotations
 
+from myf.services.errors import DomainError
+
 from app.db.models import (
     IsmsDocument,
     IsmsEffectivenessMeasure,
@@ -20,7 +22,6 @@ from app.db.models import (
     Risk,
     RiskAsset,
 )
-from app.services.errors import DomainError
 
 from .access import can_read_isms
 

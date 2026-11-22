@@ -13,6 +13,8 @@ from pathlib import Path
 
 from fastapi.routing import APIRoute, APIWebSocketRoute
 
+from tests.source_tree import SOURCES
+
 POLICY_FILE = (
     Path(__file__).resolve().parents[3] / "tools/security_e2e/access_policy.py"
 )
@@ -80,7 +82,7 @@ def test_rules_cover_every_permission_the_application_checks():
     # A permission code the application checks but the policy does not know
     # would never be granted to the probe account, so its gate would go untested.
     pattern = re.compile(r"[\"']([a-z_]+\.(?:read|manage|admin|create|delete))[\"']")
-    app_dir = Path(__file__).resolve().parents[1] / "app"
+    app_dir = SOURCES
     used = {
         match
         for path in app_dir.rglob("*.py")

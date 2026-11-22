@@ -13,12 +13,13 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
+from myf.core.datetime_utils import utc_now_naive
+from myf.core.email_address import single_mailbox
+from myf.services.mailer import smtp_configured, user_email
 from sqlalchemy import ColumnElement
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
-from app.core.email_address import single_mailbox
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -33,8 +34,6 @@ from app.services import inbox
 from app.services.mailer import (
     send_audit_reminder_email,
     send_scheduled_audit_created_email,
-    smtp_configured,
-    user_email,
 )
 from app.services.schedules import (
     deliver_once,

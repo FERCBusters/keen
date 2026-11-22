@@ -11,7 +11,7 @@ from datetime import datetime, time, timedelta
 from html import escape
 
 from app.db.models import IsmsDocument, IsmsDocumentFolder, IsmsDocumentRevision
-from app.security.rich_text import sanitize_rich_text_html
+from myf.security.rich_text import sanitize_rich_text_html
 
 ISO, SOC2, PCI = "iso_27001_2022", "soc2_tsc", "pci_dss_v4"
 NOTICE = "Fictional demonstration document. Adapt it to the organisation before use."

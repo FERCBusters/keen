@@ -2,6 +2,9 @@
 
 import uuid
 
+from myf.security.permissions import has_permission
+from myf.services.errors import DomainError
+from myf.services.mailer import user_email
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,9 +16,6 @@ from app.db.models import (
     QuizParticipant,
     User,
 )
-from app.security.permissions import has_permission
-from app.services.errors import DomainError
-from app.services.mailer import user_email
 
 # What an account receives through the People record linked to it, and the
 # permission that may move or remove that link. Moving the link moves the

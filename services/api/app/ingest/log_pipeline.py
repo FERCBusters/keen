@@ -7,8 +7,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from app.security.json_shape import json_depth
-from app.security.regex import scan_pattern
+from myf.security.json_shape import json_depth
+from myf.security.regex import scan_pattern
 
 
 def ensure_utc(dt: datetime | None) -> datetime | None:

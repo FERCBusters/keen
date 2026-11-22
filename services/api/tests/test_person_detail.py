@@ -4,9 +4,9 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import IsmsPerson, IsmsVendor, QuizAttempt, QuizRound
 from app.services import features
+from myf.core.datetime_utils import utc_now_naive
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_quizzes_api import world as world

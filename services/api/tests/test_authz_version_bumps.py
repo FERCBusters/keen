@@ -7,9 +7,10 @@ application raises the version only there.
 """
 
 import ast
-from pathlib import Path
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 
 
 def version_raises(source: str) -> list[int]:
@@ -34,7 +35,7 @@ def version_raises(source: str) -> list[int]:
 
 def test_only_the_shared_helper_raises_authorisation_versions():
     found = {
-        path.relative_to(APP).as_posix(): lines
+        name_in(path, APP).as_posix(): lines
         for path in sorted(APP.rglob("*.py"))
         if (lines := version_raises(path.read_text()))
     }

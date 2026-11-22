@@ -11,15 +11,15 @@ import base64
 import json
 from contextlib import contextmanager
 
-import app.services.mfa_management as mfa_operations
+import myf.services.mfa_management as mfa_operations
 import pyotp
 import pytest
 from app.core.config import settings
 from app.db.models import MfaChallenge, MfaCredential, MfaRecoveryCode, User
-from app.security import encoding, mfa
-from app.security.auth import cookie_name as session_cookie_name
-from app.security.passwords import hash_password
 from cryptography.fernet import Fernet
+from myf.security import encoding, mfa
+from myf.security.auth import cookie_name as session_cookie_name
+from myf.security.passwords import hash_password
 from sqlalchemy import event, update
 
 from tests.test_assembled_authority_regressions import (  # noqa: F401 - fixtures

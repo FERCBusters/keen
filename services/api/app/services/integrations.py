@@ -7,12 +7,14 @@ import re
 import uuid
 from urllib.parse import urlsplit
 
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.regex import scan_pattern
+from myf.services.errors import DomainError
 from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import IntegrationCollector as Collector
 from app.db.models import IntegrationConnection as Connection
 from app.db.models import IntegrationRevision as Revision
@@ -22,8 +24,6 @@ from app.integrations.runtime import dispatch, fail, queue_run
 from app.integrations.schema import Definition, Strict, has_dot_segment
 from app.integrations.templates import templates
 from app.integrations.transport import encrypt
-from app.security.regex import scan_pattern
-from app.services.errors import DomainError
 
 
 class ConnectionInput(Strict):
@@ -427,9 +427,10 @@ class SampleInput(Strict):
 
 
 def preview_sample(*, body: SampleInput, db: Session):
+    from myf.security.redaction import redact_obj
+
     from app.integrations.engine import normalize
     from app.integrations.schema import pointer
-    from app.security.redaction import redact_obj
 
     if len(json.dumps(body.response)) > 1024 * 1024:
         raise DomainError(422, "Sample response exceeds 1 MiB")

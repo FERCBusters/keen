@@ -15,9 +15,9 @@ from urllib.parse import urlencode
 import httpx2 as httpx
 import pytest
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Artifact, Event, IngestionCursor
 from app.ingest import github
+from myf.core.datetime_utils import utc_now_naive
 
 TOKEN = "synthetic-github-token-0123456789abcdef"
 

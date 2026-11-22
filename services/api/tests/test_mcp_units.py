@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from app.api.mcp import shaping
 from app.core.config import Settings
-from app.security import encoding, mcp_tokens
+from app.security import mcp_tokens
 from app.security.mcp_tokens import (
     ACCESS_PREFIX,
     SCOPES,
@@ -23,6 +23,7 @@ from app.security.mcp_tokens import (
     well_formed,
     with_read_scopes,
 )
+from myf.security import encoding
 from pydantic import ValidationError
 
 POLICY_FILE = (
@@ -266,7 +267,7 @@ def test_tools_ask_only_the_routes_inner_requests_may_reach():
 
 
 def test_keen_secrets_are_redacted_wherever_they_appear():
-    from app.security.redaction import redact_query_string, redact_str
+    from myf.security.redaction import redact_query_string, redact_str
 
     key = new_secret(mcp_tokens.CONSENT_PREFIX)
     referer = "https://keen.example/mcp-authorize.html?request=" + key
@@ -283,7 +284,7 @@ def test_keen_secrets_are_redacted_wherever_they_appear():
 def test_single_sign_on_returns_to_the_consent_page_with_its_request():
     """Sign-in by OIDC, GitHub or Google starts from the login page with the
     consent page as its return address, and the callback goes back there."""
-    from app.security.oidc import _normalize_next
+    from myf.security.oidc import _normalize_next
 
     target = "/mcp-authorize.html?request=" + new_secret(mcp_tokens.CONSENT_PREFIX)
     assert _normalize_next(target) == target

@@ -11,6 +11,8 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime, timedelta
 
+from myf.security.regex import scan_pattern
+
 from app.core.config import settings
 from app.ingest.cloud.api import JsonApi, items
 from app.ingest.cloud.base import (
@@ -26,7 +28,6 @@ from app.ingest.cloud.base import (
     plural,
     text_field,
 )
-from app.security.regex import scan_pattern
 
 ORIGIN = "https://api.digitalocean.com"
 # Team and account IDs are 40 hexadecimal digits; UUIDs are accepted too.

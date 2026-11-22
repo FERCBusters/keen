@@ -5,12 +5,12 @@ from datetime import timedelta
 
 import app.services.agent_enrollment as agent_enrollment_operations
 import pytest
-from app.api.context import change_context
 from app.api.routes import agent_enrollment as api
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import AgentEnrollmentProfile, AgentKey, AuditLog, KeenAgent
-from app.security.encoding import digest
-from app.services.errors import DomainError
+from myf.api.context import change_context
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.encoding import digest
+from myf.services.errors import DomainError
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -237,7 +237,7 @@ def test_expiry_network_limits_and_limiter_failure(fleet, monkeypatch):
         db.commit()
     # Forwarding headers cannot bypass an untrusted peer.
     assert enroll(c, p).status_code == 403
-    from app.api import context as api_context
+    from myf.api import context as api_context
 
     monkeypatch.setattr(api_context, "request_ip", lambda request: "192.0.2.5")
     assert enroll(c, p).status_code == 201

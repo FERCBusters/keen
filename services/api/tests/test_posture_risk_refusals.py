@@ -10,7 +10,7 @@ import uuid
 import pytest
 from app.db.models import PostureRiskLink, Risk
 from app.services import posture_risks
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe

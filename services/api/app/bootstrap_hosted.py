@@ -3,12 +3,12 @@
 import os
 import secrets
 
+from myf.security.passwords import hash_password
 from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.models import User, UserIdentity
 from app.db.session import SessionLocal
-from app.security.passwords import hash_password
 
 
 def bootstrap(db, *, issuer, subject, email):

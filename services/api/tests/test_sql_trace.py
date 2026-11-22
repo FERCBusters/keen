@@ -5,13 +5,13 @@ import re
 
 import pytest
 from app import main
-from app.api.sql_trace import RequestLabelMiddleware, page_label, route_label
 from app.core.config import Settings
-from app.db.sql_trace import install_statement_labels
 from app.worker.sql_trace import connect_task_labels, disconnect_task_labels
 from celery.signals import task_postrun, task_prerun
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from myf.api.sql_trace import RequestLabelMiddleware, page_label, route_label
+from myf.db.sql_trace import install_statement_labels
 from sqlalchemy import event, text
 
 LABEL = re.compile(r"^/\* keen (req|task)=([0-9a-f]{12}) (.*?) \*/ (.*)$", re.S)

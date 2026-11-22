@@ -10,8 +10,8 @@ import uuid
 
 import pytest
 from app.db.models import IsmsOrgNode, IsmsOrgNodeUser, IsmsPerson
-from app.services.errors import DomainError
 from app.services.person_quizzes import person_quizzes
+from myf.services.errors import DomainError
 
 # Imported fixtures: the assembled application and the quiz world built on it.
 from tests.test_assembled_authority_regressions import keen  # noqa: F401

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from myf.security.permissions import has_permission
+from myf.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 from app.db.models import IsmsPerson, User
-from app.security.permissions import has_permission
 from app.services.assurance import person_for_user
-from app.services.errors import DomainError
 
 READ = "quiz.read"
 MANAGE = "quiz.manage"

@@ -1,13 +1,13 @@
 """Administrator-only installation feature settings."""
 
 from fastapi import Depends, Request
+from myf.security.auth import require_admin
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.api.errors import json_object
 from app.api.routing import Router
 from app.db.session import get_db
-from app.security.auth import require_admin
 from app.services import features
 
 router = Router()

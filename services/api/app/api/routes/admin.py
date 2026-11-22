@@ -5,13 +5,14 @@ from functools import partial
 from typing import Any
 
 from fastapi import Depends, Path, Request
+from myf.api.context import change_context
+from myf.api.uploads import upload_inputs
+from myf.security.auth import require_admin
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.api.context import change_context
 from app.api.errors import json_object
 from app.api.routing import Router
-from app.api.uploads import upload_inputs
 from app.core.config import settings
 from app.db.session import get_db
 from app.schemas import (
@@ -30,7 +31,6 @@ from app.schemas import (
     PermissionOut,
     UpstreamUrlPayload,
 )
-from app.security.auth import require_admin
 from app.services import admin as service
 from app.services import cloud_posture, control_owners
 from app.services.presentation import (

@@ -6,7 +6,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from app.security import redaction as r
+from myf.security import redaction as r
+
+from tests.source_tree import name_in
 
 APP = Path(r.__file__).resolve().parents[1]
 
@@ -513,7 +515,7 @@ def strict_encodes_of_unescaped_json(root):
                 keyword.arg == "ensure_ascii" and ast.unparse(keyword.value) == "False"
                 for keyword in dumped.keywords
             ):
-                found.append(f"{path.relative_to(root)}:{node.lineno}")
+                found.append(f"{name_in(path, root)}:{node.lineno}")
     return found
 
 

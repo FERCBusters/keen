@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from myf.api.routes.auth import router as auth_router
+from myf.api.routes.mfa import router as mfa_router
+from myf.api.routes.sso_emails import router as sso_emails_router
+
 from app.api.routing import Router
 
 from .admin import router as admin_router
@@ -8,7 +12,6 @@ from .agents import router as agents_router
 from .artifacts import router as artifacts_router
 from .assurance import router as assurance_router
 from .audits import router as audits_router
-from .auth import router as auth_router
 from .bookstack_sections import router as bookstack_sections_router
 from .clauses import router as clauses_router
 from .control_links import router as control_links_router
@@ -25,7 +28,6 @@ from .isms import router as isms_router
 from .managed_configurations import router as managed_configurations_router
 from .mcp import router as mcp_router
 from .me import router as me_router
-from .mfa import router as mfa_router
 from .pestle import router as pestle_router
 from .questions import router as questions_router
 from .quizzes import router as quizzes_router
@@ -34,7 +36,6 @@ from .risks import router as risks_router
 from .soa import router as soa_router
 from .source_connections import router as source_connections_router
 from .sources import router as sources_router
-from .sso_emails import router as sso_emails_router
 from .stats import router as stats_router
 from .stories import router as stories_router
 from .ueu import router as ueu_router

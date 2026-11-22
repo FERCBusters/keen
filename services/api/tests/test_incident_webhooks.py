@@ -339,8 +339,8 @@ def test_webhook_text_and_header_configuration_are_bounded_and_tolerant():
 def test_action_records_bound_their_metadata_and_client_details(incident):
     # Semantic action records keep hostile or oversized request details within
     # the audit columns and tolerate metadata that cannot be serialised.
-    from app.services.activity_log import record_action
-    from app.services.context import ChangeContext
+    from myf.services.activity_log import record_action
+    from myf.services.context import ChangeContext
 
     class Unprintable:
         def __str__(self):
@@ -383,8 +383,8 @@ def test_action_records_bound_their_metadata_and_client_details(incident):
 def test_action_records_redact_secrets_in_the_referring_address(incident):
     # A sign-in row's referring address can be an identity provider's redirect
     # carrying tokens; action records redact it as the request audit trail does.
-    from app.services.activity_log import record_action
-    from app.services.context import ChangeContext
+    from myf.services.activity_log import record_action
+    from myf.services.context import ChangeContext
 
     secret = "eyJhbGciOiJIUzI1NiJ9.c2VjcmV0.c2lnbmF0dXJl"
     context = ChangeContext(

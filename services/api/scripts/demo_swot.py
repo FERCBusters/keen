@@ -3,7 +3,6 @@
 from datetime import timedelta
 from uuid import NAMESPACE_URL, uuid5
 
-from app.core.datetime_utils import utc_now_naive as _utcnow
 from app.db.models import (
     ControlItem,
     FrameworkClause,
@@ -19,6 +18,7 @@ from app.db.models import (
 )
 from app.services.isms.common import _record
 from app.services.isms.swot import summary
+from myf.core.datetime_utils import utc_now_naive as _utcnow
 
 # Each tuple explicitly reviews applicability in ISO, Keen Assurance, CE, SOC 2
 # and PCI DSS; None records that no control in that framework applies.

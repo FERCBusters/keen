@@ -5,12 +5,12 @@ from unittest.mock import Mock
 
 import pytest
 from app.db.session import _coordinate_evidence_purge
-from app.services.errors import DomainError
 from app.services.ingestion_pause import (
     is_paused,
     purge_pause_status,
     require_purge_receiving,
 )
+from myf.services.errors import DomainError
 
 
 @pytest.mark.parametrize(

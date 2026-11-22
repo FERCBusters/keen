@@ -540,8 +540,8 @@ class RetentionDatabaseTests(unittest.TestCase):
         self.assertEqual(self.left(), {str(event)})
 
     def test_save_cancels_previous_policy_job_and_rejects_stale_editor(self):
-        from app.services.errors import DomainError
         from app.services.retention_management import SettingsPayload, set_policy
+        from myf.services.errors import DomainError
 
         self.override("source", "test", "disabled")
         self.job("age", 30)
@@ -682,7 +682,7 @@ class RetentionDatabaseTests(unittest.TestCase):
         # storage cleanup does not carry on past it.
         if self.engine is None:
             self.skipTest("needs a libpq PostgreSQL engine")
-        from app.core import task_deadline
+        from myf.core import task_deadline
 
         from tests.task_limits import (
             checked_statements,

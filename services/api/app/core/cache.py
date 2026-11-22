@@ -5,8 +5,8 @@ import json
 from datetime import date, datetime
 from typing import Any, Callable, TypeVar
 
-from app.core.config import settings
-from app.core.valkey import get_valkey
+from myf.core.valkey import get_valkey
+from myf.host.config import settings
 
 T = TypeVar("T")
 

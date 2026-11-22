@@ -14,7 +14,6 @@ from types import SimpleNamespace
 
 import pytest
 from app.api.routes import integrations as api
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Event, SourceIngestionState
 from app.db.models import IntegrationCollector as Collector
 from app.db.models import IntegrationRun as Run
@@ -25,6 +24,7 @@ from app.integrations.engine import skipped_summary
 from app.integrations.errors import IntegrationError
 from app.integrations.schema import Definition
 from cryptography.fernet import InvalidToken
+from myf.core.datetime_utils import utc_now_naive
 
 # Imported fixture: an integration database behind runtime.SessionLocal.
 from tests.test_integration_builder import database  # noqa: F401

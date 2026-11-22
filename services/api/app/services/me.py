@@ -4,14 +4,23 @@ from __future__ import annotations
 
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from myf.core.datetime_utils import utc_now_naive
+from myf.core.identifiers import try_uuid as _try_uuid
+from myf.core.valkey import get_valkey
+from myf.security.auth import ROLE_ADMIN
+from myf.security.passwords import hash_password, verify_password
+from myf.security.permissions import has_permission
+from myf.security.rate_limit import address_window_allow, fixed_window_allow
+from myf.security.regex import scan_pattern
+from myf.security.roles import compute_effective_role, is_effective_admin
+from myf.services.context import ChangeContext, signed_in_user
+from myf.services.errors import DomainError
+from myf.services.mailer import smtp_configured, user_email
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
-from app.core.references import try_uuid as _try_uuid
 from app.core.source_meta import normalize_hex_color
-from app.core.valkey import get_valkey
 from app.db.models import EventQuestionThread, SavedSearch, User
 from app.schemas import (
     ChangePasswordPayload,
@@ -20,16 +29,7 @@ from app.schemas import (
     SavedSearchCreatePayload,
     SavedSearchOut,
 )
-from app.security.auth import ROLE_ADMIN
-from app.security.passwords import hash_password, verify_password
-from app.security.permissions import has_permission
-from app.security.rate_limit import address_window_allow, fixed_window_allow
-from app.security.regex import scan_pattern
-from app.security.roles import compute_effective_role, is_effective_admin
-from app.services.context import ChangeContext, signed_in_user
-from app.services.errors import DomainError
 from app.services.features import state
-from app.services.mailer import smtp_configured, user_email
 from app.services.presentation import ALLOWED_THEMES
 from app.services.presentation import (
     normalize_saved_search_url as _normalize_saved_search_url,
@@ -628,7 +628,7 @@ def change_my_password(
     except ValueError as e:
         raise DomainError(status_code=400, detail=str(e))
 
-    from app.services.security_notifications import enqueue
+    from myf.services.security_notifications import enqueue
 
     enqueue(db, user, "password-changed", ip=context.client_ip)
     db.add(user)
@@ -645,7 +645,7 @@ def end_password_recognition(user_id: str, *, key: str | None = None) -> None:
     Each browser is recognised again after its next correct password. A store
     outage leaves recognition to expire on its own, which grants no access.
     """
-    from app.security import sign_in_throttle as throttle
+    from myf.security import sign_in_throttle as throttle
 
     try:
         r = get_valkey()

@@ -15,10 +15,13 @@ from collections.abc import Iterable
 from functools import partial
 from typing import Any
 
+from myf.core.email_address import single_mailbox
+from myf.services.context import ChangeContext
+from myf.services.errors import DomainError
+from myf.services.mailer import smtp_configured, user_email
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.email_address import single_mailbox
 from app.db.models import (
     IsmsOrgNode,
     IsmsOrgNodeUser,
@@ -32,13 +35,7 @@ from app.db.models import (
 )
 from app.services import inbox
 from app.services.assurance import ensure_person_for_user
-from app.services.context import ChangeContext
-from app.services.errors import DomainError
-from app.services.mailer import (
-    send_quiz_open_email,
-    smtp_configured,
-    user_email,
-)
+from app.services.mailer import send_quiz_open_email
 from app.services.schedules import deliver_once
 
 from .access import require_manage

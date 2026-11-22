@@ -11,6 +11,10 @@ from urllib.parse import urlparse
 
 import httpx2 as httpx
 import yaml
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.redaction import redact_url
+from myf.security.regex import scan_pattern
+from myf.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +22,6 @@ from sqlalchemy.orm import Session
 
 from app.agents.credentials import LOCK_WAIT_SECONDS, bounded_lock_wait
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.core.managed_configuration import load_document
 from app.core.source_meta import get_source_meta
 from app.db.models import (
@@ -46,9 +49,6 @@ from app.mapping.rules import (
     rule_problem,
 )
 from app.security.diary_visibility import diary_filter_condition
-from app.security.redaction import redact_url
-from app.security.regex import scan_pattern
-from app.services.errors import DomainError
 from app.services.event_payloads import payloads, without_payloads
 from app.services.rule_sources import distinct_sources, reads_source, rule_sources
 
@@ -1209,7 +1209,7 @@ def save_evidence_definition(
 
 
 def _validate_regex(pattern: str, key: str):
-    from app.security.regex import validate_pattern
+    from myf.security.regex import validate_pattern
 
     try:
         validate_pattern(pattern)

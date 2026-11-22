@@ -6,18 +6,18 @@ import json
 from datetime import datetime, timezone
 from typing import Any, cast
 
+from myf.core.valkey import get_valkey
+from myf.security.json_shape import decodes_within
+from myf.security.placeholders import is_placeholder
+from myf.security.regex import scan_pattern
 from sqlalchemy import String
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.valkey import get_valkey
 from app.db.models import Event
 from app.ingest.common import store_event_with_artifact
 from app.ingest.connections import current_connection, load_document, namespace
 from app.ingest.registry import Source, register
-from app.security.json_shape import decodes_within
-from app.security.placeholders import is_placeholder
-from app.security.regex import scan_pattern
 
 # The providers defined in the webhooks.yml Keen ships. Each has its own
 # delivery allowance per client address; any other provider name shares one.

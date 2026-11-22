@@ -2,12 +2,12 @@
 
 from functools import wraps
 
+from myf.services.errors import DomainError
 from sqlalchemy import select, text
 
 from app.db.models import SourceIngestionState
 from app.ingest import registry
 from app.ingest.cloud import KEYS as CLOUD_SOURCES
-from app.services.errors import DomainError
 
 
 def pausable_sources() -> frozenset[str]:

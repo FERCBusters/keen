@@ -11,25 +11,26 @@ import ast
 import itertools
 import re
 import tracemalloc
-from pathlib import Path
 
 import pytest
 import regex
 from app.mapping.rules import evaluate_by_framework, parse_rules
-from app.security import regex as regex_boundary
-from app.security.redaction import mask_event_data_str, redact_bytes, redact_str
-from app.security.regex import (
+from app.services.managed_configurations import _validate_regex
+from app.services.rule_sources import reads_source
+from myf.security import regex as regex_boundary
+from myf.security.redaction import mask_event_data_str, redact_bytes, redact_str
+from myf.security.regex import (
     SCAN_REPEATS_HELD,
     check_scan_pattern,
     compile_pattern,
     scan_pattern,
     validate_pattern,
 )
-from app.services.errors import DomainError
-from app.services.managed_configurations import _validate_regex
-from app.services.rule_sources import reads_source
+from myf.services.errors import DomainError
 
-APP = Path(__file__).resolve().parents[1] / "app"
+from tests.source_tree import SOURCES, name_in
+
+APP = SOURCES
 MIB = 1024 * 1024
 # Calls that compile or run a pattern without the boundary's checks.
 DIRECT = {
@@ -53,7 +54,7 @@ def direct_regex_uses(root):
     for path in sorted(root.rglob("*.py")):
         if path == root / "security/regex.py":
             continue
-        where = path.relative_to(root)
+        where = name_in(path, root)
         nodes = sorted(
             (n for n in ast.walk(ast.parse(path.read_text())) if hasattr(n, "lineno")),
             key=lambda n: (n.lineno, n.col_offset),
@@ -174,7 +175,7 @@ def code_patterns(root):
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text())
         values = _module_values(tree)
-        where = path.relative_to(root)
+        where = name_in(path, root)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue

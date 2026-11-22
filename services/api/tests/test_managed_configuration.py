@@ -15,13 +15,13 @@ from app.mapping.collector import (
     event_collector,
 )
 from app.mapping.rules import evaluate_by_framework, parse_rules
-from app.services.errors import DomainError
 from app.services.managed_configurations import (
     _safe_document,
     _save,
     _validate_connector,
     _validate_regex,
 )
+from myf.services.errors import DomainError
 
 
 class ManagedConfigurationTests(unittest.TestCase):

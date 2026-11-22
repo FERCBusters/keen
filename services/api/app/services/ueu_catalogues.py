@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import hashlib
 
+from myf.services.errors import DomainError
+
 from app.agents.ueu import catalogue as catalogues
-from app.services.errors import DomainError
 
 
 def list_catalogues() -> dict:

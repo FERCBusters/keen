@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.db.models import IsmsVendor, PostureRiskLink, Risk, RiskAsset
 from app.ingest.cloud import runner
 from app.services import assurance
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 
 # Imported fixtures: the assembled application and the registers built on it,
 # and AWS posture answered by a test provider.

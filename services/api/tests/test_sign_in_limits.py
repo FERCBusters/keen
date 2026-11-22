@@ -1,6 +1,6 @@
 """Password sign-in limits and equal-cost failures through the assembled application.
 
-The sign-in throttle (app/security/sign_in_throttle.py, shared with OSPMAE)
+The sign-in throttle (myf/security/sign_in_throttle.py, shared with OSPMAE)
 hears a browser that has proved an account's password whatever an attacker
 does elsewhere; every other browser draws on a per-address allowance and the
 account's growing waits, decided before any password is verified, and the
@@ -14,13 +14,13 @@ from urllib.parse import parse_qs
 
 import pytest
 import sqlalchemy
-from app.api.routes import auth as auth_routes
 from app.core.config import settings
 from app.db.models import AuditLog, User
-from app.security import auth, encoding
-from app.security import sign_in_throttle as throttle
-from app.security.auth import cookie_name as session_cookie_name
-from app.security.rate_limit import login_name
+from myf.api.routes import auth as auth_routes
+from myf.security import auth, encoding
+from myf.security import sign_in_throttle as throttle
+from myf.security.auth import cookie_name as session_cookie_name
+from myf.security.rate_limit import login_name
 
 # Imported fixtures: the assembled application with an in-memory session store,
 # and a fake directory server.
@@ -763,7 +763,7 @@ def test_sign_in_attempts_are_audited_without_unmatched_usernames(signin):
 def _deactivate_after_the_password_is_checked(monkeypatch, change):
     """Run ``change(db, account)`` once the password is proven and before the
     session is issued, as an administrator's request arriving then would."""
-    from app.api.routes import auth as auth_routes
+    from myf.api.routes import auth as auth_routes
 
     check = auth_routes.login_service.authenticate_password
 
@@ -1010,7 +1010,7 @@ def test_accounts_that_already_share_a_compared_name_keep_separate_limits(signin
     # did. Each is still one account: the holder of one is not recognised for
     # the other, wrong passwords count against the account they name, and a
     # correct sign-in to one leaves the other's count alone.
-    from app.services.login import sign_in_key
+    from myf.services.login import sign_in_key
 
     dana, other = signin.user(), signin.user()
     dana.username, other.username = "legacy-Dana", "legacy-dana"

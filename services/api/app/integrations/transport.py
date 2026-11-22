@@ -15,10 +15,10 @@ import ssl
 import time
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-from app.core import task_deadline
 from app.ingest.http import budget, budgeted, remaining
-from app.security.json_shape import decode_json
 from cryptography.fernet import Fernet
+from myf.core import task_deadline
+from myf.security.json_shape import decode_json
 
 from .errors import IntegrationError
 

@@ -16,16 +16,12 @@ import pytest
 from app.api.routes import audits as audit_routes
 from app.api.routes.isms import documents as document_routes
 from app.db.models import Framework
-from app.security.request_limits import (
-    MAX_BODY,
-    MAX_FILE_UPLOAD,
-    RequestBodyLimitMiddleware,
-    body_limit,
-)
+from app.security.request_policy import MAX_BODY, MAX_FILE_UPLOAD, body_limit
 from app.services.audits import reports
 from app.services.isms import documents
-from app.services.uploads import upload_size
 from app.storage.s3 import put_file as reports_put_file
+from myf.security.request_limits import RequestBodyLimitMiddleware
+from myf.services.uploads import upload_size
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (

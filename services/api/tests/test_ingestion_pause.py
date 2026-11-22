@@ -9,10 +9,10 @@ from app.api.routes import managed_configurations as routes
 from app.api.routes import webhooks
 from app.db.models import SourceIngestionState, User
 from app.db.session import get_db
-from app.services.errors import DomainError
 from app.services.ingestion_pause import is_paused, pausable
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from myf.services.errors import DomainError
 from sqlalchemy.orm import sessionmaker
 
 from tests.source_types import POLLING_SOURCES

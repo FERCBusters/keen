@@ -13,8 +13,8 @@ import pytest
 from app import main
 from app.core.config import Settings, settings
 from app.db.models import Base, User
-from app.security.passwords import hash_password, verify_password
-from app.security.placeholders import is_placeholder
+from myf.security.passwords import hash_password, verify_password
+from myf.security.placeholders import is_placeholder
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 

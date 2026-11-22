@@ -20,12 +20,13 @@ import fakeredis
 import pytest
 from app.core.config import settings
 from app.db.models import Group, Permission, User
-from app.security import client_ip, permissions, roles
-from app.security import sign_in_throttle as throttle
-from app.security.auth import _remote_user_from_headers, create_user
-from app.security.passwords import hash_password, verify_password
-from app.security.rate_limit import fixed_window_allow, fixed_window_spend
-from app.security.sessions import (
+from app.security import permissions as keen_permissions
+from myf.security import client_ip, permissions, roles
+from myf.security import sign_in_throttle as throttle
+from myf.security.auth import _remote_user_from_headers, create_user
+from myf.security.passwords import hash_password, verify_password
+from myf.security.rate_limit import fixed_window_allow, fixed_window_spend
+from myf.security.sessions import (
     SESSION_PREFIX,
     create_session,
     delete_session,
@@ -334,11 +335,11 @@ def test_no_permission_snapshot_is_written_for_an_unusable_account(
 def test_a_deactivated_administrator_cannot_read_evidence(contract_db):
     user = _account(contract_db, role="admin")
     user.effective_role = "admin"
-    assert permissions.can_read_events(contract_db, user) is True
+    assert keen_permissions.can_read_events(contract_db, user) is True
 
     user.is_active = False
 
-    assert permissions.can_read_events(contract_db, user) is False
+    assert keen_permissions.can_read_events(contract_db, user) is False
 
 
 def test_blank_overlong_and_repeated_permission_codes_are_ignored(keen):  # noqa: F811
@@ -394,7 +395,7 @@ def test_an_untrusted_proxy_is_reported_once_when_two_requests_race(
             return False
 
     monkeypatch.setattr(client_ip, "_report_lock", RacedLock())
-    with caplog.at_level(logging.WARNING, logger="app.security.client_ip"):
+    with caplog.at_level(logging.WARNING, logger="myf.security.client_ip"):
         client_ip._report_untrusted_proxy("10.0.0.9")
 
     assert reported.is_set()

@@ -12,6 +12,8 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime, timedelta, timezone
 
+from myf.security.regex import scan_pattern
+
 from app.core.config import settings
 from app.ingest.cloud.api import JsonApi, items
 from app.ingest.cloud.base import (
@@ -34,7 +36,6 @@ from app.ingest.cloud.base import (
     split_list,
     text_field,
 )
-from app.security.regex import scan_pattern
 
 ORIGIN = "https://api.scaleway.com"
 UUID = scan_pattern(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")

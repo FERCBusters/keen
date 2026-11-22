@@ -12,7 +12,6 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -24,19 +23,14 @@ from app.db.models import (
     SecurityNotification,
     User,
 )
-from app.security.rich_text import rich_text_has_text
-from app.services import (
-    audit_schedules,
-    features,
-    inbox,
-    me,
-    security_notifications,
-    webhooks,
-)
-from app.services.context import ChangeContext
+from app.services import audit_schedules, features, inbox, me, webhooks
 from app.services.quizzes import rounds as rounds_service
 from app.services.schedules import today_for_schedule
 from app.worker import tasks
+from myf.core.datetime_utils import utc_now_naive
+from myf.security.rich_text import rich_text_has_text
+from myf.services import security_notifications
+from myf.services.context import ChangeContext
 
 # Imported fixtures: the assembled application, and the quiz world built on it.
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401

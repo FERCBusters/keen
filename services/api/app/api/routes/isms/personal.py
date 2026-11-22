@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from fastapi import Depends
+from myf.security.auth import require_authenticated
 from sqlalchemy.orm import Session
 
 from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
-from app.security.auth import require_authenticated
 from app.services.isms import personal as service
 
 router = Router()

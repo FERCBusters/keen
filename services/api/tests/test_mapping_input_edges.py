@@ -10,7 +10,7 @@ from datetime import datetime
 
 from app.mapping.fields import observed_fields
 from app.mapping.rules import evaluate_by_framework, load_rules, parse_rules
-from app.security.json_shape import MAX_DEPTH
+from myf.security.json_shape import MAX_DEPTH
 
 
 def _rule(**when):

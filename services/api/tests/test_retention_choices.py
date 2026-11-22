@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 from app.services import retention_management as service
-from app.services.errors import DomainError
+from myf.services.errors import DomainError
 from sqlalchemy import text
 
 

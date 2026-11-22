@@ -9,17 +9,18 @@ risk reopens. ``services.risks.set_treatment_status`` is the only writer.
 import ast
 import uuid
 from datetime import datetime
-from pathlib import Path
 
 from app.db.models import Risk
 from app.services import risks as risk_service
+
+from tests.source_tree import SOURCES, name_in
 
 # Imported fixtures: the assembled application and a signed-in risk manager.
 from tests.test_assembled_authority_regressions import keen  # noqa: F401
 from tests.test_risk_api_workflows import _create, reg  # noqa: F401
 from tests.test_risk_register_api_workflows import _csv, _import, _rating
 
-APP = Path(__file__).resolve().parents[1] / "app"
+APP = SOURCES
 
 
 def clock(monkeypatch, start):
@@ -164,7 +165,7 @@ def status_writes(source: str) -> list[int]:
 
 def test_treatment_status_is_set_only_through_the_shared_setter():
     found = {
-        path.relative_to(APP).as_posix(): lines
+        name_in(path, APP).as_posix(): lines
         for path in sorted(APP.rglob("*.py"))
         if (lines := status_writes(path.read_text()))
     }

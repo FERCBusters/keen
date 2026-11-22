@@ -11,7 +11,7 @@ from unittest.mock import Mock
 import pytest
 from app.core.config import Settings, settings
 from app.db.models import User
-from app.security import auth, encoding, passwords
+from myf.security import auth, encoding, passwords
 from pydantic import ValidationError
 
 # Imported fixture: the assembled application with an in-memory session store.

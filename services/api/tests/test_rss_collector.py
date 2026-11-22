@@ -16,11 +16,11 @@ from unittest.mock import patch
 import httpx2 as httpx
 import pytest
 from app.core.config import settings
-from app.core.datetime_utils import utc_now_naive
 from app.db.models import Artifact, Event, IngestionCursor
 from app.ingest import rss
 from app.ingest.connections import Connection, connection_scope, namespace
 from app.storage.s3 import get_object_stream, parse_s3_uri
+from myf.core.datetime_utils import utc_now_naive
 
 ORIGIN = "https://93.184.216.34"
 FEED_URL = ORIGIN + "/security/feed.xml"

@@ -16,7 +16,7 @@ from app.db.models import (
     SsoEmailChallenge,
     UserSsoEmail,
 )
-from app.services import mailer
+from myf.services import mailer
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401

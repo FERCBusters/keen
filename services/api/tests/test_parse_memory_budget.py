@@ -18,7 +18,7 @@ from xml.etree import ElementTree as ET
 import pytest
 import yaml
 from app.ingest.http import MAX_RESPONSE_BYTES
-from app.security.xml import (
+from myf.security.xml import (
     MAX_DOCUMENT_BYTES,
     MAX_NAMESPACE_NAME,
     parse_untrusted_xml,
@@ -44,7 +44,7 @@ import json, sys
 sys.path.insert(0, {api!r})
 size, kind, shape = {size}, {kind!r}, {shape!r}
 if kind == "xml":
-    from app.security.xml import parse_untrusted_xml as parse
+    from myf.security.xml import parse_untrusted_xml as parse
     if shape == "attributes":
         parts, used, i = [], 6, 0
         while True:

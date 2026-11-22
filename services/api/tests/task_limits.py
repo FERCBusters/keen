@@ -1,16 +1,16 @@
 """Where a worker task's time limit falls, and what the task does then.
 
 Every SQL statement, outbound request and email a task asks for checks the
-task's deadline first (app.core.task_deadline.check). These helpers make the
+task's deadline first (myf.core.task_deadline.check). These helpers make the
 deadline pass at a chosen one of those checks, so a test can place the time
 limit at each point a task reaches in turn and see how the task ends.
 """
 
 from contextlib import contextmanager
 
-from app.core import task_deadline
-from app.core.task_deadline import TIME_LIMITS
 from celery.exceptions import SoftTimeLimitExceeded
+from myf.core import task_deadline
+from myf.core.task_deadline import TIME_LIMITS
 from sqlalchemy import event as sa_event
 
 

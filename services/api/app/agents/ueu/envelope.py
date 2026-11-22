@@ -15,7 +15,7 @@ from typing import Any, NoReturn
 
 from app.agents.ueu import catalogue as catalogues
 from app.agents.ueu.jcs import CanonicalError, parse_canonical
-from app.security.regex import scan_pattern
+from myf.security.regex import scan_pattern
 
 SPEC_VERSION = "0.1-keen"
 MAX_ENVELOPE_BYTES = 65536

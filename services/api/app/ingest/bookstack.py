@@ -7,6 +7,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx2 as httpx
+from myf.security.errors import collection_error
+from myf.security.json_shape import decode_json
+from myf.security.redaction import utf8_bytes
+from myf.security.regex import (
+    MATCH_CONCURRENTLY,
+    MATCH_TIMEOUT_SECONDS,
+    BoundedPattern,
+    compile_pattern,
+    scan_pattern,
+)
 from sqlalchemy.orm import Session
 
 from app.db.models import ControlItem, Event, IngestionCursor, Mapping
@@ -22,16 +32,6 @@ from app.ingest.http import client as ingestion_client
 from app.ingest.http import retained_listing
 from app.ingest.registry import HTTP_QUEUE, Source, register
 from app.mapping.targets import resolve_targets
-from app.security.errors import collection_error
-from app.security.json_shape import decode_json
-from app.security.redaction import utf8_bytes
-from app.security.regex import (
-    MATCH_CONCURRENTLY,
-    MATCH_TIMEOUT_SECONDS,
-    BoundedPattern,
-    compile_pattern,
-    scan_pattern,
-)
 from app.services.ingestion_pause import pausable
 
 # The optional plain-text preview reads at most this much of a page's HTML.

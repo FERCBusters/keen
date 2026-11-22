@@ -24,10 +24,11 @@ import httpx2 as httpx
 import pytest
 from app.ingest import http
 
+from tests.source_tree import SOURCES, name_in
 from tests.test_parse_memory_budget import BUDGET_MIB
 
 API = pathlib.Path(__file__).resolve().parents[1]
-APP = API / "app"
+APP = SOURCES
 
 # Page-keeping loops outside an allowance, and why their memory stays bounded.
 CLOUD = "the provider's own API, bounded by its page limit (SECURITY.md)"
@@ -96,9 +97,7 @@ def test_every_page_keeping_loop_is_bounded():
     found = set()
     for sub in ("ingest", "integrations"):
         for path in sorted((APP / sub).rglob("*.py")):
-            found |= page_keeping_loops(
-                path.read_text(), path.relative_to(APP).as_posix()
-            )
+            found |= page_keeping_loops(path.read_text(), name_in(path, APP).as_posix())
     open_ended = sorted(
         (file, name)
         for file, name, bounded in found

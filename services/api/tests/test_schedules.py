@@ -11,8 +11,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from app.core.config import settings
-from app.services import mailer, schedules
-from app.services.errors import DomainError
+from app.services import schedules
+from myf.services import mailer
+from myf.services.errors import DomainError
 
 
 @pytest.mark.parametrize(
@@ -614,9 +615,9 @@ def test_the_soft_time_limit_ends_delivery_and_releases_the_row_in_hand(
 def test_delivery_past_the_task_deadline_claims_nothing_more(contract_db, monkeypatch):
     """A handler elsewhere that swallowed the worker's one raise cannot keep the
     loop going: the next row checks the task's deadline first."""
-    from app.core import task_deadline
     from app.db.models import Audit, AuditAttendee
     from celery.exceptions import SoftTimeLimitExceeded
+    from myf.core import task_deadline
 
     audit = Audit(title="A", framework_slug="A", status="open", audit_type="internal")
     contract_db.add(audit)
@@ -686,8 +687,8 @@ def test_wherever_the_deadline_falls_no_row_stays_claimed_without_its_email(
     address missing and one delivery failing. Wherever it falls, every row
     whose email did not go out is free for a later run: a release is cleanup,
     and runs even when the deadline passed while the mail server answered."""
-    from app.core import task_deadline
     from app.db.models import Audit, AuditAttendee
+    from myf.core import task_deadline
 
     from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 

@@ -15,9 +15,9 @@ import httpx2 as httpx
 import pytest
 from app.db.models import IngestionCursor
 from app.ingest import bookstack as bs
-from app.security.regex import compile_pattern
-from app.services.errors import DomainError
 from app.services.managed_configurations import _validate_connector
+from myf.security.regex import compile_pattern
+from myf.services.errors import DomainError
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge")
 

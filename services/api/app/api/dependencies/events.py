@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, Request
+from myf.security.auth import require_authenticated
 from sqlalchemy.orm import Session
 
 from app.db.models import User
-from app.security.auth import require_authenticated
 from app.security.permissions import can_read_events
 
 

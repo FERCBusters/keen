@@ -4,10 +4,11 @@ import uuid
 from datetime import date
 from typing import Any
 
+from myf.core.datetime_utils import iso_or_none
+from myf.services.mailer import user_email
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import iso_or_none
 from app.db.models import (
     Audit,
     AuditAttendee,
@@ -25,7 +26,6 @@ from app.db.models import (
 )
 from app.services.audits.references import clause_out, control_out, document_out
 from app.services.audits.samples import audit_sample_entity_reference
-from app.services.mailer import user_email
 
 
 def scope_response(
