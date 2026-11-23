@@ -517,11 +517,12 @@ class LocalMfaTests(unittest.TestCase):
 
     def test_full_application_middleware_boundary(self):
         from app import main
+        from myf import middleware as myf_middleware
 
         main.app.dependency_overrides[get_db] = self.app.dependency_overrides[get_db]
         self.addCleanup(main.app.dependency_overrides.clear)
         with (
-            patch.object(main, "SessionLocal", self.Session),
+            patch.object(myf_middleware, "SessionLocal", self.Session),
             patch.object(settings, "mfa_policy", "all"),
         ):
             client = TestClient(

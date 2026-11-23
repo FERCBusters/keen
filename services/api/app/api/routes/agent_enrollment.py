@@ -7,6 +7,7 @@ from functools import partial
 
 from fastapi import Depends, HTTPException, Request, Response
 from myf.api.context import change_context, mark_machine_credential
+from myf.api.routing import Router
 from myf.security.auth import require_admin
 from myf.services.errors import DomainError
 from pydantic import ValidationError
@@ -14,7 +15,6 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.agents import server_keys
-from app.api.routing import Router
 from app.db.session import get_db
 from app.services import agent_enrollment as service
 from app.services.agent_enrollment import Enrollment, ProfileInput, Renewal

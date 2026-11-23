@@ -12,8 +12,8 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import timezone
 
+from myf.core.datetime_utils import to_utc_naive
 from myf.security.redaction import redact_obj
 from myf.security.regex import scan_pattern
 from myf.services.errors import DomainError
@@ -323,7 +323,7 @@ def store(db, agent, env, doc, changes, signed, chain, batch, received_at):
     subject = doc.get("subject", {}).get("identifier")
     result = store_event_with_artifact(
         db,
-        timestamp=env.event_time.astimezone(timezone.utc).replace(tzinfo=None),
+        timestamp=to_utc_naive(env.event_time),
         source="keen-agent",
         system=agent.name,
         actor=subject,

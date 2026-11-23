@@ -7,11 +7,11 @@ from functools import partial
 
 from fastapi import Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
+from myf.api.routing import Router
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.api.routes.risks import require_risk_manage, require_risk_read
-from app.api.routing import Router
 from app.db.session import get_db
 from app.services import risk_register as service
 from app.services.risk_register import LibraryInput, RegisterRating, RegisterThresholds

@@ -1125,10 +1125,10 @@ def _socket(qa, client):
 
 
 def test_administrators_receive_the_open_count_when_their_socket_opens(qa, monkeypatch):
-    from app import main
     from app.db import session as database
+    from myf import middleware as myf_middleware
 
-    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
     _, client = qa.member("question.create", "risk.read")
     assert qa.ask(client, "risk").status_code == 200
 
@@ -1153,11 +1153,11 @@ def test_administrators_receive_the_open_count_when_their_socket_opens(qa, monke
 def test_the_notification_socket_closes_while_questions_are_switched_off(
     qa, monkeypatch
 ):
-    from app import main
     from app.db import session as database
+    from myf import middleware as myf_middleware
     from starlette.websockets import WebSocketDisconnect
 
-    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
     qa.switch(questions=False)
 
     with pytest.raises(WebSocketDisconnect) as closed:

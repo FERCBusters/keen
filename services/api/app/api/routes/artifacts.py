@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi import Depends, Request
 from fastapi.responses import Response, StreamingResponse
+from myf.api.routing import Router
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.events import require_events_read
-from app.api.routing import Router
 from app.db.session import get_db
 from app.services import artifacts as service
 from app.storage.filenames import attachment_media_type

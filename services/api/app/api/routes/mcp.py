@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from myf.api.routing import Router
 from myf.core.valkey import get_valkey
 from myf.security.auth import require_authenticated
 from myf.security.client_ip import request_ip
@@ -21,7 +22,6 @@ from starlette.datastructures import FormData
 from starlette.responses import Response
 
 from app.api.mcp import runtime
-from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
 from app.services import mcp_oauth as service

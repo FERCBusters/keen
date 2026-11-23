@@ -1,6 +1,6 @@
 """Compose ISMS HTTP adapters in routing order."""
 
-from app.api.routing import Router
+from myf.api.routing import Router
 
 from . import (
     access_control,

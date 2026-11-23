@@ -10,7 +10,6 @@ import base64
 import uuid
 
 import pytest
-from app import main
 from app.core.config import settings
 from app.db.models import (
     Event,
@@ -22,7 +21,7 @@ from app.db.models import (
     PestleItem,
     User,
 )
-from app.security import mcp_tokens
+from app.security import mcp_requests, mcp_tokens
 from app.services import mcp_oauth
 from myf.core.datetime_utils import utc_now_naive
 
@@ -367,7 +366,7 @@ def test_a_non_administrator_cannot_be_granted_mapping_rules(mcpw):
 
 def test_each_connection_has_a_change_allowance(mcpw, monkeypatch):
     mcp = mcpw
-    monkeypatch.setattr(main, "_MCP_WRITES_PER_MINUTE", 1)
+    monkeypatch.setattr(mcp_requests, "_MCP_WRITES_PER_MINUTE", 1)
     token = mcp.connect(mcp.keen.user("isms.manage"), ["isms.manage"]).access_token
     body = OBJECTIVE
     assert inner("/v1/isms/objectives", token, "POST", json=body).status_code == 200

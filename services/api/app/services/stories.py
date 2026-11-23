@@ -27,9 +27,10 @@ its restricted content does not. Adding an item needs the same read access.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Literal
 
+from myf.core.datetime_utils import to_utc_naive
 from myf.core.datetime_utils import utc_now_naive as _utcnow
 from myf.core.identifiers import try_uuid
 from myf.security.permissions import has_permission
@@ -244,11 +245,7 @@ def _text(value, *, max_len, label, required=False) -> str:
 
 
 def _naive(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is not None:
-        value = value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
+    return None if value is None else to_utc_naive(value)
 
 
 # --- Item resolution ----------------------------------------------------------

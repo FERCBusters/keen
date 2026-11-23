@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx2 as httpx
+from myf.core.datetime_utils import parse_iso_datetime_or_none
 from myf.security.errors import collection_error
 from myf.security.json_shape import decode_json
 from myf.security.redaction import utf8_bytes
@@ -44,20 +45,8 @@ def _utcnow() -> datetime:
 
 def _parse_bookstack_ts(v: Any) -> Optional[datetime]:
     """Parse BookStack timestamps like '2020-11-28T14:43:20.000000Z' to naive UTC."""
-    if not isinstance(v, str) or not v.strip():
-        return None
-    s = v.strip()
-    # Python doesn't accept 'Z' in fromisoformat.
-    if s.endswith("Z"):
-        s = s[:-1] + "+00:00"
-    try:
-        dt = datetime.fromisoformat(s)
-    except Exception:
-        return None
-    if dt.tzinfo is None:
-        # Assume UTC if tz is missing
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    # A time without an offset is UTC.
+    return parse_iso_datetime_or_none(v)
 
 
 def _to_iso_z(dt: datetime) -> str:

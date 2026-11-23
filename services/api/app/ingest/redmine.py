@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlsplit
 
 import httpx2 as httpx
+from myf.core.datetime_utils import parse_iso_datetime
 from myf.security.errors import collection_error
 from myf.security.json_shape import decode_json
 from myf.security.regex import scan_pattern
@@ -77,9 +78,8 @@ def validate_config(config):
 
 def _timestamp(value):
     try:
-        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
-    except (ValueError, TypeError):
+        return parse_iso_datetime(str(value))
+    except ValueError:
         raise RedmineError("Redmine record has an invalid timestamp") from None
 
 

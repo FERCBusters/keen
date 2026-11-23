@@ -20,6 +20,7 @@ from urllib.parse import unquote, urlsplit
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
+from myf.core.datetime_utils import to_utc_naive
 from myf.security.json_shape import decode_json
 from myf.security.regex import scan_pattern
 
@@ -1078,8 +1079,7 @@ def trail_entry(event: dict, account: str) -> Activity | None:
     ident = text_field(event.get("EventId"), 64)
     if not isinstance(when, datetime) or not name or not ident:
         return None
-    if when.tzinfo:
-        when = when.astimezone(timezone.utc).replace(tzinfo=None)
+    when = to_utc_naive(when)
     if error:
         facts["error_code"] = error
     who_short = actor.rsplit("/", 1)[-1] if actor else kind or "unknown"

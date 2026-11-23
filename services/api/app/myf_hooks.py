@@ -31,10 +31,10 @@ def sign_in_methods():
     return {"demo": demo_metadata()}
 
 
-def route_class():
-    from app.api.errors import DomainRoute
+def route_dependencies():
+    from app.api.dependencies.features import enforce_features
 
-    return DomainRoute
+    return (enforce_features,)
 
 
 def security_notice(event):
@@ -81,3 +81,34 @@ def issued_secret_pattern():
     from app.security.redaction_policy import ISSUED_SECRET_RE
 
     return ISSUED_SECRET_RE
+
+
+def route_policy():
+    from app.security.route_policy import KEEN_POLICY
+
+    return KEEN_POLICY
+
+
+def json_body_limit(path):
+    from app.security import request_policy
+
+    return request_policy.json_body_limit(path)
+
+
+def json_value_limit(path):
+    from app.security import request_policy
+
+    return request_policy.json_value_limit(path)
+
+
+def inner_request_user(db, request):
+    from app.security import mcp_requests
+
+    return mcp_requests.inner_request_user(db, request)
+
+
+def bootstrap_allowed():
+    # A hosted installation's owner is created explicitly before the API starts.
+    from app.core.config import settings
+
+    return not settings.hosted_mode

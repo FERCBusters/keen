@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import Any, NoReturn
 
 from cryptography.fernet import InvalidToken
-from myf.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import parse_iso_datetime, utc_now_naive
 from myf.security.rate_limit import address_window_allow
 from myf.security.redaction import (
     mask_event_data_obj,
@@ -91,11 +91,9 @@ def _webhook_parse_datetime(value: Any) -> datetime | None:
     # Values come from a decoded JSON body, which holds no datetime objects.
     if value in (None, ""):
         return None
-    text = str(value).strip().replace("Z", "+00:00")
     try:
-        parsed = datetime.fromisoformat(text)
-        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
-    except Exception:
+        return parse_iso_datetime(str(value))
+    except ValueError:
         raise DomainError(status_code=400, detail=f"Invalid datetime value: {value}")
 
 

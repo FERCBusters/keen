@@ -3,7 +3,6 @@ its safe defaults wherever an application leaves a hook out."""
 
 import app.myf_hooks as keen_hooks
 import pytest
-from fastapi.routing import APIRoute
 from myf import host
 from myf.host import hooks
 
@@ -53,7 +52,22 @@ def test_an_unbound_application_is_named_as_the_problem(monkeypatch):
         ("encoded_slash_routes", hooks.encoded_slash_routes, None),
         ("measured_fields", hooks.measured_fields, {}),
         ("issued_secret_pattern", hooks.issued_secret_pattern, None),
-        ("route_class", hooks.route_class, APIRoute),
+        ("route_dependencies", hooks.route_dependencies, ()),
+        ("route_policy", hooks.route_policy, None),
+        ("json_value_limit", lambda: hooks.json_value_limit("/x"), 20_000),
+        (
+            "json_body_limit",
+            lambda: hooks.json_body_limit("/v1/admin/x"),
+            __import__("app.security.request_policy", fromlist=["x"]).body_limit(
+                "/v1/admin/x"
+            ),
+        ),
+        ("bootstrap_allowed", hooks.bootstrap_allowed, True),
+        (
+            "inner_request_user",
+            lambda: hooks.inner_request_user(None, None),
+            hooks.NOT_INNER,
+        ),
         ("user_created", lambda: hooks.user_created(None, None), None),
         (
             "sso_identity_allowed",

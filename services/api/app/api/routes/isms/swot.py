@@ -5,10 +5,10 @@ from uuid import UUID
 
 from fastapi import Depends, Query, Request
 from myf.api.context import change_context
+from myf.api.routing import Router
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.isms import require_isms_manage, require_isms_read
-from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
 from app.services.isms import swot as service

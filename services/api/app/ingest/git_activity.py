@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx2 as httpx
-from myf.core.datetime_utils import to_utc_naive
+from myf.core.datetime_utils import parse_iso_datetime_or_none, to_utc_naive
 from myf.security.xml import parse_untrusted_xml
 
 
@@ -20,12 +20,7 @@ def _parse_iso_ts(value: object) -> datetime | None:
     # Upstream records choose this value; anything other than text has no time.
     if not isinstance(value, str) or not value:
         return None
-    v = value.strip()
-    try:
-        dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        return to_utc_naive(dt)
-    except Exception:
-        return None
+    return parse_iso_datetime_or_none(value)
 
 
 def _parse_rfc822_ts(value: object) -> datetime | None:

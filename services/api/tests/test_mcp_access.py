@@ -171,15 +171,16 @@ def inner(path, token, method="GET", **request):
 @pytest.fixture
 def mcp(keen, monkeypatch):
     from app import main
+    from myf import middleware as myf_middleware
 
     async def nothing():
         return None
 
     monkeypatch.setattr(settings, "mcp_enabled", True)
-    monkeypatch.setattr(provider, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(provider, "SessionLocal", myf_middleware.SessionLocal)
     monkeypatch.setattr(main, "start_notification_listener", nothing)
     monkeypatch.setattr(main, "stop_notification_listener", nothing)
-    monkeypatch.setattr(main, "bootstrap_initial_admin", lambda: None)
+    monkeypatch.setattr(myf_middleware, "bootstrap_initial_admin", lambda: None)
     keen.db.add(Framework(slug=FW, name="ISO"))
     keen.db.add(
         ControlItem(
@@ -752,9 +753,9 @@ def test_each_approval_is_announced_to_the_account(mcp, monkeypatch):
 
 
 def test_each_connection_has_a_read_allowance(mcp, monkeypatch):
-    from app import main
+    from app.security import mcp_requests
 
-    monkeypatch.setattr(main, "_MCP_READS_PER_MINUTE", 1)
+    monkeypatch.setattr(mcp_requests, "_MCP_READS_PER_MINUTE", 1)
     connection = mcp.connect(mcp.keen.user("isms.read"), ["isms.read"])
     assert inner("/v1/isms/swot", connection.access_token).status_code == 200
     limited = inner("/v1/isms/swot", connection.access_token)

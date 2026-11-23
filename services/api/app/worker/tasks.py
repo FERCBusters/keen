@@ -6,6 +6,7 @@ import uuid
 
 from myf.core.datetime_utils import iso_or_none
 from myf.core.task_deadline import TIME_LIMITS
+from myf.services.audit_retention import remove_expired as remove_expired_audit_logs
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -32,7 +33,6 @@ from app.outbound.question_webhooks import (
     send_question_created_webhooks,
     send_question_reply_webhooks,
 )
-from app.services.audit_retention import remove_expired as remove_expired_audit_logs
 from app.services.audit_schedules import (
     materialize_due_scheduled_audits,
     send_audit_reminders,

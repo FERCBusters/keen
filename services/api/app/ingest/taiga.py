@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 import httpx2 as httpx
-from myf.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import parse_iso_datetime, utc_now_naive
 from myf.security.errors import collection_error
 from myf.security.json_shape import decode_json
 from myf.security.regex import scan_pattern
@@ -289,12 +289,8 @@ def ingest_taiga_project_timeline(
         for k in ("created", "created_at", "date"):
             if k in e and e[k]:
                 try:
-                    return (
-                        datetime.fromisoformat(str(e[k]).replace("Z", "+00:00"))
-                        .astimezone(timezone.utc)
-                        .replace(tzinfo=None)
-                    )
-                except Exception:
+                    return parse_iso_datetime(str(e[k]))
+                except ValueError:
                     pass
         return None
 

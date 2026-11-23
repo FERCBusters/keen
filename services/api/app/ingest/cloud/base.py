@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
+from myf.core.datetime_utils import parse_iso_datetime_or_none
 from myf.security.regex import scan_pattern
 
 # met: the setting meets the check; attention: it does not; info: reported
@@ -58,18 +59,9 @@ def split_list(value) -> list[str]:
 
 def parse_time(value) -> datetime | None:
     """Read a vendor timestamp as naive UTC; an unreadable value is None."""
-    text = str(value or "").strip()
-    if not text:
-        return None
-    # Some vendors (e.g. Microsoft Graph) write seven fractional digits.
-    text = scan_pattern(r"(\.\d{6})\d+").sub(r"\1", text.replace("Z", "+00:00"))
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed.replace(tzinfo=None)
+    # Some vendors (e.g. Microsoft Graph) write seven fractional digits, which
+    # the reader truncates.
+    return parse_iso_datetime_or_none(str(value or ""))
 
 
 def api_timestamp(when: datetime) -> str:

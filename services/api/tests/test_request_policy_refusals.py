@@ -18,6 +18,7 @@ import pytest
 from app import main
 from app.core.config import settings
 from app.db.models import AuditLog
+from myf import middleware as myf_middleware
 from myf.security import auth as security_auth
 from myf.security import request_limits
 from myf.security.errors import collection_error
@@ -197,7 +198,7 @@ def test_a_browser_keeps_working_when_its_replacement_csrf_token_cannot_be_made(
     def unavailable(response, token):
         raise OSError("synthetic cookie failure")
 
-    monkeypatch.setattr(main, "set_csrf_cookie", unavailable)
+    monkeypatch.setattr(myf_middleware, "set_csrf_cookie", unavailable)
 
     response = client.get("/v1/me")
 
@@ -297,13 +298,13 @@ def test_an_audit_trail_that_cannot_be_written_leaves_the_response_intact(
 
     event.listen(bind, "before_cursor_execute", unavailable)
     try:
-        with caplog.at_level(logging.WARNING, logger="app.main"):
+        with caplog.at_level(logging.WARNING, logger="myf.middleware"):
             unrecorded = client.get("/v1/users", params={"q": "private-search"})
     finally:
         event.remove(bind, "before_cursor_execute", unavailable)
 
     # The loss is logged, with nothing the request carried.
-    assert [r.getMessage() for r in caplog.records if r.name == "app.main"] == [
+    assert [r.getMessage() for r in caplog.records if r.name == "myf.middleware"] == [
         "A request audit record could not be written (OSError)"
     ]
 

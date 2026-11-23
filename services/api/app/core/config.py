@@ -31,12 +31,6 @@ class Settings(MyfSettings):
     # -----------------------------------------------------------------------------
     # Authentication / sessions
     # -----------------------------------------------------------------------------
-    # Optional first-run credentials. Importing settings must also work for
-    # migrations, workers and existing installations without bootstrap secrets.
-    # Validate credentials at account creation, after checking the user database.
-    bootstrap_admin_username: str = Field(default="")
-    bootstrap_admin_password: str = Field(default="")
-
     # Hosted owner-only v1. This is a security boundary, not UI configuration.
     demo_mode: bool = False
     demo_expires_at: datetime | None = None
@@ -143,14 +137,6 @@ class Settings(MyfSettings):
     # Set to 0 to disable. The data remains exact; it may simply be up to this
     # many seconds behind newly ingested events.
     aggregate_cache_ttl_seconds: int = Field(default=60)
-
-    # Days the audit trail keeps request and action records. The worker deletes
-    # older records daily in short batches; 0 keeps them indefinitely.
-    audit_log_retention_days: int = Field(default=400, ge=0, le=36500)
-
-    # Diagnostics: label each SQL statement with the request or task that ran
-    # it, for tools/keen-perf-trace.sh. Leave off in normal operation.
-    sql_trace: bool = Field(default=False)
 
     # Evidence storage. Existing s3:// objects remain readable after switching
     # the write backend, provided their S3 credentials remain configured.

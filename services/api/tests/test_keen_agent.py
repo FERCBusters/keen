@@ -417,6 +417,7 @@ def test_webhook_artifact_metadata_excludes_all_credential_headers(monkeypatch):
 
 def test_real_middleware_keeps_agent_paths_scoped(setup, monkeypatch):
     from app import main
+    from myf import middleware as myf_middleware
 
     _, factory, headers, _, _, _ = setup
 
@@ -424,8 +425,10 @@ def test_real_middleware_keeps_agent_paths_scoped(setup, monkeypatch):
         with factory() as session:
             yield session
 
-    monkeypatch.setattr(main, "SessionLocal", factory)
-    monkeypatch.setattr(main, "get_current_user_from_request", lambda *a: None)
+    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(
+        myf_middleware, "get_current_user_from_request", lambda *a: None
+    )
     main.app.dependency_overrides[api.get_db] = db
     try:
         client = TestClient(main.app, raise_server_exceptions=False)

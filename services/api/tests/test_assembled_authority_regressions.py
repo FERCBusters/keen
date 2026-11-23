@@ -14,7 +14,6 @@ from unittest.mock import Mock
 
 import fakeredis
 import pytest
-from app.api import errors
 from app.core.config import settings
 from app.db.models import (
     AuditLog,
@@ -31,6 +30,7 @@ from app.db.models import (
 from app.security.request_policy import MAX_JSON_BODY, MAX_JSON_VALUES
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from myf.api import errors
 from myf.core import valkey
 from myf.core.datetime_utils import utc_now_naive
 from myf.security.auth import cookie_name as session_cookie_name
@@ -47,6 +47,7 @@ PASSWORD = "synthetic-password-for-tests"
 def keen(contract_db, tmp_path, monkeypatch):
     from app import main
     from app.db.session import get_db
+    from myf import middleware as myf_middleware
     from sqlalchemy.orm import sessionmaker
 
     server = fakeredis.FakeServer()
@@ -70,7 +71,7 @@ def keen(contract_db, tmp_path, monkeypatch):
         with factory() as session:
             yield session
 
-    monkeypatch.setattr(main, "SessionLocal", factory)
+    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
     main.app.dependency_overrides[get_db] = database
     # Configuration readers open their own short session; point them at the
     # same test database so assembled request paths see the same data.
@@ -744,8 +745,8 @@ def test_public_reads_leave_no_audit_records(keen):
 
 
 def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeypatch):
-    from app import main
     from app.ingest import webhooks
+    from myf import middleware as myf_middleware
 
     first, second = client_from("203.0.113.7"), client_from("203.0.113.8")
     for _ in range(30):
@@ -830,10 +831,10 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
         lambda db, **kw: {"ok": True, "event_id": str(uuid.uuid4())},
     )
     credentials = []
-    record = main._record_request
+    record = myf_middleware.record_request
     monkeypatch.setattr(
-        main,
-        "_record_request",
+        myf_middleware,
+        "record_request",
         lambda request, *args: credentials.append(machine_credential(request)),
     )
     delivery = {"X-Synthetic-Secret": "synthetic-webhook-secret"}
@@ -861,12 +862,12 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
         )
         record(request, "/v1/webhooks/synthetic/a", 200, 1)
     assert audited(keen, path="/v1/webhooks/synthetic/a", client_ip="203.0.113.7") == 3
-    monkeypatch.setattr(main, "_record_request", record)
+    monkeypatch.setattr(myf_middleware, "record_request", record)
 
     # Without Valkey the refusals cannot be counted, so they are not recorded.
     broken = Mock()
     broken.pipeline.side_effect = ConnectionError("synthetic outage")
-    monkeypatch.setattr(main, "get_valkey", lambda: broken)
+    monkeypatch.setattr(myf_middleware, "get_valkey", lambda: broken)
     refused = client_from("203.0.113.9").get("/v1/events")
     assert (refused.status_code, refused.json()) == (
         401,

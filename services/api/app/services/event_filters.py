@@ -20,9 +20,9 @@ the same semantics:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 
-from myf.core.datetime_utils import after_inclusive_date
+from myf.core.datetime_utils import after_inclusive_date, to_utc_naive
 from myf.core.identifiers import try_uuid
 from myf.security.regex import validate_database_pattern
 from myf.services.errors import DomainError
@@ -357,9 +357,7 @@ def norm_ts(ts: datetime) -> datetime:
     drop tzinfo so SQLAlchemy comparisons are consistent.
     """
 
-    if ts.tzinfo is not None:
-        return ts.astimezone(timezone.utc).replace(tzinfo=None)
-    return ts
+    return to_utc_naive(ts)
 
 
 def event_time_filters(filters: EventFilters):

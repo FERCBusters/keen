@@ -78,10 +78,10 @@ def stops_wherever_the_deadline_falls(run, prepare, after_limit, most=400) -> in
 @contextmanager
 def checked_statements(engine):
     """``engine`` checks the deadline before each statement, as the worker's does."""
-    from app.db import session
+    from myf.db.engine import within_task_deadline
 
-    sa_event.listen(engine, "before_cursor_execute", session._within_task_deadline)
+    sa_event.listen(engine, "before_cursor_execute", within_task_deadline)
     try:
         yield engine
     finally:
-        sa_event.remove(engine, "before_cursor_execute", session._within_task_deadline)
+        sa_event.remove(engine, "before_cursor_execute", within_task_deadline)

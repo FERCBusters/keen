@@ -6,7 +6,11 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx2 as httpx
-from myf.core.datetime_utils import to_utc_naive, utc_now_naive
+from myf.core.datetime_utils import (
+    parse_iso_datetime_or_none,
+    to_utc_naive,
+    utc_now_naive,
+)
 from myf.security.errors import collection_error
 from myf.security.json_shape import decode_json
 from myf.security.redaction import redact_url
@@ -59,11 +63,7 @@ def _parse_iso_ts(value: str | None) -> datetime | None:
         return None
     v = value.strip()
     # Common GitHub forms: 2026-01-07T00:09:08Z or with offset
-    try:
-        dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-        return to_utc_naive(dt)
-    except Exception:
-        return None
+    return parse_iso_datetime_or_none(v)
 
 
 _EPOCH = datetime(1970, 1, 1)

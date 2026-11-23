@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 from app import main
+from myf import middleware as myf_middleware
 
 
 @pytest.mark.parametrize(
@@ -26,7 +27,7 @@ def test_lifespan_preserves_bootstrap_and_listener_cleanup(monkeypatch, failure)
             raise RuntimeError("Redis unavailable")
 
     monkeypatch.setattr(main, "start_notification_listener", start)
-    monkeypatch.setattr(main, "bootstrap_initial_admin", bootstrap)
+    monkeypatch.setattr(myf_middleware, "bootstrap_initial_admin", bootstrap)
     monkeypatch.setattr(main, "stop_notification_listener", stop)
 
     async def exercise():

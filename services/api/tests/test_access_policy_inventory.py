@@ -65,10 +65,12 @@ def test_every_served_route_has_an_access_rule():
 
 
 def test_public_rules_match_the_route_policy():
-    from app.security.route_policy import PUBLIC_HTTP_ROUTES
+    from myf.security.route_policy import policy as route_policy
 
     policy = _policy()
-    public = {f"{m} {p}" for m, paths in PUBLIC_HTTP_ROUTES.items() for p in paths}
+    public = {
+        f"{m} {p}" for m, paths in route_policy().public.routes.items() for p in paths
+    }
     declared = {k for k, rule in policy.POLICY.items() if rule.kind == "public"}
     assert declared == public
 

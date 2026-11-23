@@ -243,8 +243,8 @@ def test_event_questions_and_owner_listing(db, user):
 )
 def test_shared_proxy_interpretation(monkeypatch, peer, xff, expected):
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24")
-    from app.main import _client_ip
     from myf.api.context import change_context
+    from myf.middleware import request_ip as _client_ip
     from myf.security.rate_limit import client_ip
 
     for fn in [
@@ -425,15 +425,18 @@ def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatc
     from app import main
     from app.db.session import get_db
     from fastapi.testclient import TestClient
+    from myf import middleware as myf_middleware
     from myf.security.csrf import csrf_cookie_name, csrf_header_name
     from sqlalchemy.orm import sessionmaker
 
     factory = sessionmaker(bind=db.get_bind())
     uid = user.id
-    monkeypatch.setattr(main, "SessionLocal", factory)
-    monkeypatch.setattr(main, "ensure_session_authorization_current", lambda *a: None)
+    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
     monkeypatch.setattr(
-        main, "get_current_user_from_request", lambda request, session: None
+        myf_middleware, "ensure_session_authorization_current", lambda *a: None
+    )
+    monkeypatch.setattr(
+        myf_middleware, "get_current_user_from_request", lambda request, session: None
     )
 
     def dependency():
@@ -450,7 +453,7 @@ def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatc
             {"detail": "Not authenticated"},
         )
         monkeypatch.setattr(
-            main,
+            myf_middleware,
             "get_current_user_from_request",
             lambda request, session: session.get(User, uid),
         )

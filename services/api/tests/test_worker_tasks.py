@@ -606,9 +606,9 @@ def test_audit_log_retention_deletes_expired_records_in_short_batches(
     contract_db, monkeypatch
 ):
     from app.db.models import AuditLog
-    from app.services import audit_retention
     from app.worker.celery_app import celery_app
     from myf.core.datetime_utils import utc_now_naive
+    from myf.services import audit_retention
     from sqlalchemy.orm import sessionmaker
 
     # Each batch commits in its own session, as the worker's would.

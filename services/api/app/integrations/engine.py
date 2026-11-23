@@ -28,7 +28,7 @@ _DETAIL_FIELD = scan_pattern(r"\{([^{}]+)\}")
 def timestamp(value):
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return datetime.fromtimestamp(value, timezone.utc)
-    result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    result = datetime.fromisoformat(str(value))
     if result.tzinfo is None:
         raise IntegrationError(
             "Timestamp must include a timezone (or use Unix seconds)"

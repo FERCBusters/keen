@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request
+from myf.api.routing import Router
 from myf.security.auth import require_admin
 from sqlalchemy.orm import Session
 
-from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
 from app.services import integrations as service

@@ -4,12 +4,11 @@ import time
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import before_task_publish, task_postrun, task_prerun
-from myf.core import task_deadline
+from celery.signals import before_task_publish
+from myf import worker as myf_worker
 
 from app.core.config import settings
 from app.ingest.registry import HTTP_QUEUE, IMAP_QUEUE, polled
-from app.worker.sql_trace import connect_task_labels
 
 
 def _event_counter_refresh_seconds() -> int:
@@ -22,8 +21,8 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=["app.worker.tasks"],
 )
-if settings.sql_trace:
-    connect_task_labels()
+# Each task's deadline, and its statement labels with KEEN_SQL_TRACE on.
+myf_worker.connect(celery_app, sql_trace=settings.sql_trace)
 
 # Internal work runs on the default queue. HTTP polling is routed to its own
 # queue for scheduled, per-connection and manual runs. Each source type
@@ -71,24 +70,6 @@ celery_app.conf.task_annotations = {
 TASK_SECONDS = 3300
 celery_app.conf.task_soft_time_limit = TASK_SECONDS
 celery_app.conf.task_time_limit = TASK_SECONDS + RUN_GRACE_SECONDS
-
-
-def soft_time_limit(task) -> float | None:
-    """The soft limit the worker applies to this run of ``task``."""
-    _, soft = task.request.timelimit or (None, None)
-    return soft or task.soft_time_limit or celery_app.conf.task_soft_time_limit
-
-
-@task_prerun.connect
-def _start_deadline(task=None, **_):
-    # A handler that swallows the worker's one raise of the soft limit cannot
-    # keep the task going: its next request, record or delivery raises it again.
-    task_deadline.start(soft_time_limit(task))
-
-
-@task_postrun.connect
-def _finish_deadline(**_):
-    task_deadline.finish()
 
 
 # Beat schedules. A crontab minute step only divides the hour: "*/110" matches

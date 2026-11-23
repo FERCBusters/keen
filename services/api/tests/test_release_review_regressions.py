@@ -295,7 +295,7 @@ def test_encoded_query_separator_cannot_choose_a_different_write_policy(
     ],
 )
 def test_question_write_exemptions_are_exact(path, method):
-    from app.security.route_policy import is_permission_checked_write
+    from myf.security.route_policy import is_permission_checked_write
 
     from tests.test_security_design_contracts import request
 

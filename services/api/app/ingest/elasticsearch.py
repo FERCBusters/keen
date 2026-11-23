@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote, urlsplit
 
-from myf.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import parse_iso_datetime, utc_now_naive
 from myf.security.errors import collection_error
 from myf.security.json_shape import decode_json
 from myf.security.redaction import utf8_bytes
@@ -172,10 +172,9 @@ def _timestamp(value):
             "The timestamp field must contain a single valid date"
         )
     try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            raise ValueError
-        return dt.astimezone(timezone.utc)
+        return parse_iso_datetime(value, require_timezone=True).replace(
+            tzinfo=timezone.utc
+        )
     except ValueError:
         raise ElasticsearchInputError(
             "The timestamp field must contain a single valid date"

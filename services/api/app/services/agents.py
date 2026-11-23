@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from myf.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import to_utc_naive, utc_now_naive
 from myf.security.redaction import redact_obj, redact_str
 from myf.services.errors import DomainError
 from pydantic import Field, model_validator
@@ -269,7 +269,7 @@ def persist_batch(*, db, auth, authorization, batch):
             payload = stored_record(event)
             store_event_with_artifact(
                 db,
-                timestamp=event.timestamp.astimezone(timezone.utc).replace(tzinfo=None),
+                timestamp=to_utc_naive(event.timestamp),
                 source="keen-agent",
                 system=a.name,
                 actor=redact_obj(event.actor),

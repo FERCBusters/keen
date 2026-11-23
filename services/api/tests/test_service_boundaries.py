@@ -2,9 +2,9 @@
 
 import ast
 
-from app.api.routing import Router
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from myf.api.routing import Router
 from myf.services.errors import DomainError
 
 from tests.source_tree import SOURCES, name_in

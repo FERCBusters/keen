@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from fastapi import Depends, Request
+from myf.api.routing import Router
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.events import require_events_read
-from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
 from app.services import controls as service

@@ -14,6 +14,8 @@ from fastapi import Depends, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from myf.api.context import mark_machine_credential
+from myf.api.errors import DomainRoute
+from myf.api.routing import Router
 from myf.core.valkey import get_valkey
 from myf.security.auth import require_admin
 from myf.security.client_ip import request_ip
@@ -27,8 +29,6 @@ from app.agents import server_keys
 from app.agents.credentials import authenticate, live_only
 from app.agents.otlp import decode_batch
 from app.agents.schema import Health
-from app.api.errors import DomainRoute
-from app.api.routing import Router
 from app.db.session import get_db
 from app.services import agents as service
 from app.services.agents import Assignment, EvidencePolicy, Registration, Rotation

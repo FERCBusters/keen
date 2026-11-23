@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from fastapi import Depends, Response
+from myf.api.routing import Router
 from myf.security.auth import require_authenticated
 
-from app.api.routing import Router
 from app.services import ueu_catalogues as service
 from app.storage.filenames import content_disposition_attachment
 

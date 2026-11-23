@@ -370,17 +370,12 @@ def parse_iso_dt(s: str | None) -> datetime | None:
     """Parse a best-effort ISO8601 timestamp into a timezone-aware datetime."""
     if not s:
         return None
-    txt = str(s).strip()
-    if not txt:
-        return None
-    txt = txt.replace("Z", "+00:00")
     try:
-        dt = datetime.fromisoformat(txt)
-    except Exception:
+        dt = datetime.fromisoformat(str(s).strip())
+    except ValueError:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+    # The offset is kept; a time without one is UTC.
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def normalize_diary_details(details: Any) -> dict | None:

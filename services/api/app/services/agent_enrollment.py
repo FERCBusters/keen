@@ -5,10 +5,10 @@ import ipaddress
 import secrets
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Literal, NoReturn
 
-from myf.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import to_utc_naive, utc_now_naive
 from myf.core.valkey import get_valkey
 from myf.security.encoding import digest
 from myf.security.rate_limit import address_window_allow, fixed_window_allow
@@ -51,7 +51,7 @@ class ProfileInput(Strict):
         if value is not None:
             if value.tzinfo is None:
                 raise ValueError("Include a timezone in the enrollment expiry")
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+            value = to_utc_naive(value)
             if value <= utc_now_naive():
                 raise ValueError("Enrollment expiry must be in the future")
         return value

@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
-from myf.core.datetime_utils import to_utc_naive
+from myf.core.datetime_utils import parse_iso_datetime
 from myf.security.json_shape import decode_json
 from myf.security.redaction import storable, utf8_bytes
 from myf.security.regex import scan_pattern
@@ -173,8 +173,8 @@ def timestamp(value: Any) -> datetime | None:
     if not isinstance(value, str) or not 0 < len(value) <= 64:
         return None
     try:
-        return to_utc_naive(datetime.fromisoformat(value.replace("Z", "+00:00")))
-    except (ValueError, OverflowError):
+        return parse_iso_datetime(value)
+    except ValueError:
         return None
 
 

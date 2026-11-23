@@ -2252,8 +2252,8 @@ webauthn = "^2.8"
 [package.source]
 type = "git"
 url = "https://github.com/FERCBusters/myf.git"
-reference = "69b4a2943e9e9279ffc08a82cfed3098c2e77927"
-resolved_reference = "69b4a2943e9e9279ffc08a82cfed3098c2e77927"
+reference = "91314d022018fbd5b17aa6cd3198cca09eaa839d"
+resolved_reference = "91314d022018fbd5b17aa6cd3198cca09eaa839d"
 
 [[package]]
 name = "mypy"
@@ -4356,4 +4356,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "ad65f6f8d3ca727ff9f5f06d9466b4117c4328913f88bc571c1c1030ceb5d95e"
+content-hash = "acaf58b1041677b1020062209934949d7513f75e3978a03eecfeb4ccd58e2c75"

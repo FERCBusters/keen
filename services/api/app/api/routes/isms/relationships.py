@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from fastapi import Depends
+from myf.api.routing import Router
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.isms import require_isms_read
-from app.api.routing import Router
 from app.core.config import settings
 from app.db.session import get_db
 from app.services.isms import relationships as service

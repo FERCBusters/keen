@@ -19,9 +19,12 @@ repos:
         pass_filenames: false
         files: '^(services/ui/public/.*\.js|services/ui/tests/(eslint\.config\.js|eslint-suppressions\.json|package(-lock)?\.json)|lint-ui\.sh)$'
         exclude: '/(vendor|node_modules|dist)/'
+      # mypy's cache is kept per poetry.lock: a cache written against an
+      # earlier myf commit still lists that commit's modules, and reports
+      # modules a newer myf adds as missing.
       - id: python-types
         name: Check Python types
-        entry: bash -c 'cd services/api && poetry run mypy'
+        entry: bash -c 'cd services/api && poetry run mypy --cache-dir ".mypy_cache/lock-$(sha256sum poetry.lock | cut -c1-16)"'
         language: system
         pass_filenames: false
         files: '^services/api/(app/.*\.py|pyproject\.toml|poetry\.lock)$'

@@ -28,8 +28,9 @@ def test_a_socket_whose_peer_left_releases_its_slot_when_closing_fails(
 ):
     from app import main
     from app.db import session as database
+    from myf import middleware as myf_middleware
 
-    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
     user = keen.user()
     sid = keen.client(user).cookies.get(session_cookie_name())
     scope = {

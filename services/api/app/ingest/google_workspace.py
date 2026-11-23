@@ -32,7 +32,10 @@ from google.oauth2 import service_account
 from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from myf.core.datetime_utils import to_utc_naive, utc_now_naive
+from myf.core.datetime_utils import (
+    parse_iso_datetime_or_none,
+    utc_now_naive,
+)
 from myf.security.errors import collection_error
 from myf.security.provider_logging import suppress_provider_logs
 from myf.security.redaction import utf8_bytes
@@ -61,12 +64,8 @@ def _parse_rfc3339(ts: str | None) -> datetime | None:
     s = str(ts).strip()
     if not s:
         return None
-    try:
-        # e.g. 2010-10-28T10:26:35.000Z
-        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        return to_utc_naive(dt)
-    except Exception:
-        return None
+    # e.g. 2010-10-28T10:26:35.000Z
+    return parse_iso_datetime_or_none(s)
 
 
 def _rfc3339(dt: datetime) -> str:

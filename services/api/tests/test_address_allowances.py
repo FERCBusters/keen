@@ -123,7 +123,7 @@ def test_every_per_address_allowance_goes_through_address_window_allow():
     assert sorted(offenders) == []
     # Every per-address limit the application has is keyed this way.
     assert callers >= {
-        "main.py",
+        "middleware.py",
         "api/routes/auth.py",
         "api/routes/agents.py",
         "security/mfa.py",

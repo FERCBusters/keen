@@ -5,26 +5,13 @@ from datetime import datetime, timedelta
 
 from myf.core import task_deadline
 from myf.core.datetime_utils import utc_now_naive
-from myf.db.sql_trace import install_statement_labels
-from sqlalchemy import DateTime, Engine, bindparam, create_engine, event, text
+from myf.db.engine import application_engine
+from sqlalchemy import DateTime, Engine, bindparam, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
 
-engine = create_engine(settings.database_url, pool_pre_ping=True, hide_parameters=True)
-if settings.sql_trace:
-    install_statement_labels(engine)
-
-
-@event.listens_for(engine, "before_cursor_execute")
-def _within_task_deadline(conn, cursor, statement, parameters, context, executemany):
-    # A worker task past its soft deadline runs no further statement, so no
-    # handler can carry its work on, or write the limit down as a failure.
-    # Undoing a savepoint is no further work: it is how the limit's own raise
-    # leaves a nested block, and refusing it would raise again mid-rollback.
-    if statement.startswith("ROLLBACK TO SAVEPOINT"):
-        return
-    task_deadline.check()
+engine = application_engine(settings.database_url, sql_trace=settings.sql_trace)
 
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

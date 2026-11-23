@@ -15,10 +15,10 @@ import pytest
 import regex as regex_engine
 from app.core.config import settings
 from app.ingest import bookstack
-from app.security.route_policy import PUBLIC_HTTP_ROUTES, is_public_request
 from fastapi.testclient import TestClient
 from myf.security import csrf, oidc, regex, sessions
 from myf.security.auth import cookie_name as session_cookie_name
+from myf.security.route_policy import is_public_request, policy
 from myf.services.context import ChangeContext
 from myf.services.errors import DomainError
 from starlette.requests import Request
@@ -308,6 +308,7 @@ def test_only_the_configured_origin_counts_and_origin_can_be_required(monkeypatc
 def production_client(contract_db, monkeypatch):
     from app import main
     from app.db.models import User
+    from myf import middleware as myf_middleware
     from myf.security import auth, permissions
     from sqlalchemy.orm import sessionmaker
 
@@ -328,7 +329,7 @@ def production_client(contract_db, monkeypatch):
         expire_on_commit=False,
         join_transaction_mode="create_savepoint",
     )
-    monkeypatch.setattr(main, "SessionLocal", factory)
+    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
     monkeypatch.setattr(auth, "get_valkey", lambda: redis)
     monkeypatch.setattr(permissions, "get_valkey", lambda: redis)
     monkeypatch.setattr(settings, "public_base_url", "https://keen.example")
@@ -362,7 +363,8 @@ def test_public_policy_matches_real_routes():
     from app import main
 
     paths = main.app.openapi()["paths"]
-    for method, patterns in PUBLIC_HTTP_ROUTES.items():
+    # myf's own public routes and KEEN's.
+    for method, patterns in policy().public.routes.items():
         for path in patterns:
             assert method.lower() in paths[path], (method, path)
 
@@ -407,12 +409,12 @@ def test_production_body_rejection_has_headers(production_client):
 
 
 def test_websocket_snapshot_releases_database(production_client, monkeypatch):
-    from app import main
     from app.db import session as database
     from app.services.questions import _notification_snapshot
+    from myf import middleware as myf_middleware
 
     client, redis, admin, reader = production_client
-    original = main.SessionLocal
+    original = myf_middleware.SessionLocal
     closed = []
 
     def factory():
@@ -677,13 +679,13 @@ def test_websocket_rejects_cross_origin_before_database(production_client, monke
 
 
 def test_live_websocket_closes_after_logout(production_client, monkeypatch):
-    from app import main
     from app.api.routes import questions
     from app.db import session as database
+    from myf import middleware as myf_middleware
     from starlette.websockets import WebSocketDisconnect
 
     client, redis, admin, reader = production_client
-    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
     monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", 0.01)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
@@ -1237,7 +1239,7 @@ def test_permission_owned_mutations_keep_csrf_and_route_permissions(
     ],
 )
 def test_permission_write_inventory_does_not_exempt_neighbour_paths(path, method):
-    from app.security.route_policy import is_permission_checked_write
+    from myf.security.route_policy import is_permission_checked_write
 
     assert not is_permission_checked_write(request(path, method))
     assert not is_public_request(request(path, method))
@@ -1520,12 +1522,12 @@ ORIGIN = {"Origin": "https://keen.example"}
 
 
 def _notification_client(production_client, monkeypatch, *, recheck=0.01):
-    from app import main
     from app.api.routes import questions
     from app.db import session as database
+    from myf import middleware as myf_middleware
 
     client, redis, admin, reader = production_client
-    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
     monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", recheck)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
@@ -1533,12 +1535,12 @@ def _notification_client(production_client, monkeypatch, *, recheck=0.01):
 
 
 def test_websocket_without_a_session_is_refused(production_client, monkeypatch):
-    from app import main
     from app.db import session as database
+    from myf import middleware as myf_middleware
     from starlette.websockets import WebSocketDisconnect
 
     client, *_ = production_client
-    monkeypatch.setattr(database, "SessionLocal", main.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
 
     with pytest.raises(WebSocketDisconnect) as closed:
         with client.websocket_connect("/ws/notifications", headers=ORIGIN):

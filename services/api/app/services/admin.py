@@ -8,7 +8,7 @@ import os
 import uuid
 from datetime import date, datetime, time, timezone
 
-from myf.core.datetime_utils import utc_now_naive
+from myf.core.datetime_utils import to_utc_naive, utc_now_naive
 from myf.core.identifiers import try_uuid as _try_uuid
 from myf.security.auth import ROLE_ADMIN, ROLE_NORMAL
 from myf.security.permissions import (
@@ -1061,7 +1061,7 @@ def admin_remap_run(
         dt = _parse_iso_dt(txt)
         if not dt:
             return None
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return to_utc_naive(dt)
 
     def _clean_filter(v: str | None) -> str | None:
         txt = str(v or "").strip()
