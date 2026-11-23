@@ -6,10 +6,10 @@ from __future__ import annotations
 from functools import partial
 
 from fastapi import Depends, HTTPException, Request, Response
-from myf.api.context import change_context, mark_machine_credential
-from myf.api.routing import Router
-from myf.security.auth import require_admin
-from myf.services.errors import DomainError
+from mosp.api.context import change_context, mark_machine_credential
+from mosp.api.routing import Router
+from mosp.security.auth import require_admin
+from mosp.services.errors import DomainError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool

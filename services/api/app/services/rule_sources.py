@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from myf.security.regex import UNMATCHABLE, compile_pattern
-from myf.services.errors import DomainError
+from mosp.security.regex import UNMATCHABLE, compile_pattern
+from mosp.services.errors import DomainError
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, aliased
 

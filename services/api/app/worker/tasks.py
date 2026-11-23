@@ -4,9 +4,9 @@ import logging
 import time
 import uuid
 
-from myf.core.datetime_utils import iso_or_none
-from myf.core.task_deadline import TIME_LIMITS
-from myf.services.audit_retention import remove_expired as remove_expired_audit_logs
+from mosp.core.datetime_utils import iso_or_none
+from mosp.core.task_deadline import TIME_LIMITS
+from mosp.services.audit_retention import remove_expired as remove_expired_audit_logs
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -470,7 +470,7 @@ def audit_log_retention_task() -> dict:
 
 @celery_app.task
 def security_notifications_task():
-    from myf.services.security_notifications import deliver_pending
+    from mosp.services.security_notifications import deliver_pending
 
     return deliver_pending()
 

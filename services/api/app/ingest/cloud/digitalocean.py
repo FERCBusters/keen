@@ -11,7 +11,7 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime, timedelta
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 from app.core.config import settings
 from app.ingest.cloud.api import JsonApi, items

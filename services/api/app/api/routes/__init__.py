@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from myf.api.routes.account import router as account_router
-from myf.api.routes.auth import router as auth_router
-from myf.api.routes.mfa import router as mfa_router
-from myf.api.routes.sso_emails import router as sso_emails_router
-from myf.api.routing import Router
+from mosp.api.routes.account import router as account_router
+from mosp.api.routes.auth import router as auth_router
+from mosp.api.routes.mfa import router as mfa_router
+from mosp.api.routes.sso_emails import router as sso_emails_router
+from mosp.api.routing import Router
 
 from .admin import router as admin_router
 from .affected import router as affected_router

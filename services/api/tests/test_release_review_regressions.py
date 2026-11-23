@@ -17,8 +17,8 @@ from app.db.models import (
 )
 from app.ingest import connections as sc
 from cryptography.fernet import Fernet
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 
 from tests.test_security_sampling_masking import (  # noqa: F401
     grant,
@@ -44,7 +44,7 @@ def queued(monkeypatch):
 @pytest.fixture
 def agent_client(postgres_engine, monkeypatch):
     from app.api.routes import agents as api
-    from myf.security import rate_limit
+    from mosp.security import rate_limit
 
     from tests.test_keen_agent import setup
 
@@ -295,7 +295,7 @@ def test_encoded_query_separator_cannot_choose_a_different_write_policy(
     ],
 )
 def test_question_write_exemptions_are_exact(path, method):
-    from myf.security.route_policy import is_permission_checked_write
+    from mosp.security.route_policy import is_permission_checked_write
 
     from tests.test_security_design_contracts import request
 
@@ -407,7 +407,7 @@ def test_a_group_permission_change_waits_for_a_membership_change(
     from app.db.models import Group, Permission, User, user_groups
     from app.schemas import GroupPermissionsPayload
     from app.services import admin
-    from myf.security.roles import lock_admin_changes
+    from mosp.security.roles import lock_admin_changes
     from sqlalchemy import text
     from sqlalchemy.orm import Session
 

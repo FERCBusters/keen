@@ -4,8 +4,8 @@ from datetime import date, datetime
 from typing import Optional
 
 from fastapi import Depends, Query, Request
-from myf.api.context import change_context
-from myf.api.routing import Router
+from mosp.api.context import change_context
+from mosp.api.routing import Router
 from sqlalchemy.orm import Session
 
 from app.core.config import settings

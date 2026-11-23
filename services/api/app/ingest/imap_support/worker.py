@@ -9,8 +9,8 @@ import time
 from email import policy
 from email.parser import BytesHeaderParser
 
-from myf.security.redaction import mask_mail_address_headers, redact_str
-from myf.security.regex import scan_pattern
+from mosp.security.redaction import mask_mail_address_headers, redact_str
+from mosp.security.regex import scan_pattern
 
 from .mime import body_part, decode_body, structure
 from .transport import Client

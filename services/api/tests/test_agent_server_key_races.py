@@ -9,7 +9,7 @@ import pytest
 from app.agents import server_keys
 from app.db.models import AgentServerKey
 from cryptography.fernet import Fernet
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 

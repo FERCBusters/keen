@@ -27,8 +27,8 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from myf.security.request_limits import RequestBodyLimitMiddleware
-from myf.services.errors import DomainError
+from mosp.security.request_limits import RequestBodyLimitMiddleware
+from mosp.services.errors import DomainError
 from pydantic import ValidationError
 from starlette.requests import Request
 

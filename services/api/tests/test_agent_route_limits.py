@@ -18,7 +18,7 @@ import pytest
 from app.agents import server_keys
 from app.api.routes import agents as api
 from app.db.models import AgentServerKey, KeenAgent
-from myf.security import rate_limit
+from mosp.security import rate_limit
 from sqlalchemy import event as sql_event
 from sqlalchemy.exc import OperationalError
 

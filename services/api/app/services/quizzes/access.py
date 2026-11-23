@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from myf.security.permissions import has_permission
-from myf.services.errors import DomainError
+from mosp.security.permissions import has_permission
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 from app.db.models import IsmsPerson, User

@@ -12,9 +12,9 @@ from unittest.mock import Mock
 import pytest
 from app.core.config import Settings, settings
 from app.db.models import Base, User
-from myf import middleware as myf_middleware
-from myf.security.passwords import hash_password, verify_password
-from myf.security.placeholders import is_placeholder
+from mosp import middleware as mosp_middleware
+from mosp.security.passwords import hash_password, verify_password
+from mosp.security.placeholders import is_placeholder
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -59,7 +59,7 @@ def bootstrap_db(contract_db, monkeypatch):
         expire_on_commit=False,
         join_transaction_mode="create_savepoint",
     )
-    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(mosp_middleware, "SessionLocal", factory)
     return factory
 
 
@@ -88,7 +88,7 @@ def test_existing_account_password_is_preserved(
         user_id = user.id
     monkeypatch.setattr(settings, "bootstrap_admin_username", username)
     monkeypatch.setattr(settings, "bootstrap_admin_password", password)
-    myf_middleware.bootstrap_initial_admin()
+    mosp_middleware.bootstrap_initial_admin()
     with bootstrap_db() as db:
         assert db.query(User).count() == 1
         assert db.get(User, user_id).password_hash == original_hash
@@ -116,7 +116,7 @@ def test_invalid_credentials_on_empty_database_fail_without_creating_account(
     monkeypatch.setattr(settings, "bootstrap_admin_username", username)
     monkeypatch.setattr(settings, "bootstrap_admin_password", password)
     with pytest.raises(RuntimeError) as exc:
-        myf_middleware.bootstrap_initial_admin()
+        mosp_middleware.bootstrap_initial_admin()
     assert "synthetic-password" not in str(exc.value)
     assert "short" not in str(exc.value)
     assert not password or password.strip() not in str(exc.value)
@@ -131,8 +131,8 @@ def test_fresh_bootstrap_creates_admin_once(bootstrap_db, monkeypatch):
     monkeypatch.setattr(
         settings, "bootstrap_admin_password", "synthetic-bootstrap-password"
     )
-    myf_middleware.bootstrap_initial_admin()
-    myf_middleware.bootstrap_initial_admin()
+    mosp_middleware.bootstrap_initial_admin()
+    mosp_middleware.bootstrap_initial_admin()
     with bootstrap_db() as db:
         user = db.query(User).one()
         assert user.role == "admin" and user.is_active
@@ -143,17 +143,17 @@ def test_fresh_bootstrap_creates_admin_once(bootstrap_db, monkeypatch):
 
 def test_no_credentials_or_hosted_mode_never_creates_an_account(monkeypatch):
     factory = Mock(side_effect=AssertionError("Unexpected bootstrap database access"))
-    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(mosp_middleware, "SessionLocal", factory)
     monkeypatch.setattr(settings, "hosted_mode", False)
     monkeypatch.setattr(settings, "bootstrap_admin_username", "")
     monkeypatch.setattr(settings, "bootstrap_admin_password", "")
-    myf_middleware.bootstrap_initial_admin()
+    mosp_middleware.bootstrap_initial_admin()
     monkeypatch.setattr(settings, "hosted_mode", True)
     monkeypatch.setattr(settings, "bootstrap_admin_username", "initial-admin")
     monkeypatch.setattr(
         settings, "bootstrap_admin_password", "synthetic-bootstrap-password"
     )
-    myf_middleware.bootstrap_initial_admin()
+    mosp_middleware.bootstrap_initial_admin()
     factory.assert_not_called()
 
 
@@ -180,22 +180,22 @@ def test_api_workers_starting_together_create_one_account(monkeypatch):
         monkeypatch.setattr(
             settings, "bootstrap_admin_password", "synthetic-bootstrap-password"
         )
-        monkeypatch.setattr(myf_middleware, "SessionLocal", sessionmaker(bind=engine))
-        create_user = myf_middleware.create_user
+        monkeypatch.setattr(mosp_middleware, "SessionLocal", sessionmaker(bind=engine))
+        create_user = mosp_middleware.create_user
 
         def slow_create_user(db, **values):
             # Hold the first creation open long enough for the other to start.
             time.sleep(0.5)
             return create_user(db, **values)
 
-        monkeypatch.setattr(myf_middleware, "create_user", slow_create_user)
+        monkeypatch.setattr(mosp_middleware, "create_user", slow_create_user)
         start = threading.Barrier(2)
         failures = []
 
         def worker():
             start.wait()
             try:
-                myf_middleware.bootstrap_initial_admin()
+                mosp_middleware.bootstrap_initial_admin()
             except Exception as error:  # noqa: BLE001 - reported below
                 failures.append(error)
 

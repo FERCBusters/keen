@@ -1,7 +1,7 @@
-"""What KEEN's records hold that myf's redaction (``myf.security.redaction``)
+"""What KEEN's records hold that mosp's redaction (``mosp.security.redaction``)
 needs to know about."""
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 # Tokens, codes and consent keys KEEN issues to MCP clients, wherever they
 # appear (app.security.mcp_tokens): a referrer or a pasted URL can carry one.

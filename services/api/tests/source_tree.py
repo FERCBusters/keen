@@ -1,8 +1,8 @@
-"""KEEN's own modules and the myf modules it runs on, scanned as one tree.
+"""KEEN's own modules and the mosp modules it runs on, scanned as one tree.
 
 Source contracts hold for every module KEEN runs, wherever it lives. A path
 is named relative to its own package root, so ``security/regex.py`` names the
-module whether it sits in ``app`` or in ``myf``.
+module whether it sits in ``app`` or in ``mosp``.
 """
 
 from __future__ import annotations
@@ -10,10 +10,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 
-import myf
+import mosp
 
 API = Path(__file__).resolve().parents[1]
-ROOTS = (API / "app", Path(myf.__file__).resolve().parent)
+ROOTS = (API / "app", Path(mosp.__file__).resolve().parent)
 
 
 class SourceTree:
@@ -42,7 +42,7 @@ SOURCES = SourceTree()
 
 
 def relative(path: Path) -> PurePosixPath:
-    """``path`` named from its package root (``app`` or ``myf``)."""
+    """``path`` named from its package root (``app`` or ``mosp``)."""
     for root in ROOTS:
         if path.is_relative_to(root):
             return PurePosixPath(path.relative_to(root).as_posix())

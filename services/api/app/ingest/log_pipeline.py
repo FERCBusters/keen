@@ -7,8 +7,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from myf.security.json_shape import json_depth
-from myf.security.regex import scan_pattern
+from mosp.security.json_shape import json_depth
+from mosp.security.regex import scan_pattern
 
 
 def ensure_utc(dt: datetime | None) -> datetime | None:

@@ -4,10 +4,10 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
-from myf.core.datetime_utils import iso_or_none
-from myf.core.identifiers import try_uuid
-from myf.services.errors import DomainError
-from myf.services.mailer import user_email
+from mosp.core.datetime_utils import iso_or_none
+from mosp.core.identifiers import try_uuid
+from mosp.services.errors import DomainError
+from mosp.services.mailer import user_email
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, selectinload
 

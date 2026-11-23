@@ -30,11 +30,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.valkey import get_valkey
-from myf.security.encoding import digest
-from myf.security.regex import UNMATCHABLE, compile_pattern, scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.valkey import get_valkey
+from mosp.security.encoding import digest
+from mosp.security.regex import UNMATCHABLE, compile_pattern, scan_pattern
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, exists, func, or_, select, text
 from sqlalchemy.exc import OperationalError

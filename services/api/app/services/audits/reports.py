@@ -4,9 +4,9 @@ import os
 import uuid
 from typing import BinaryIO
 
-from myf.core.datetime_utils import utc_now_naive as utcnow
-from myf.services.errors import DomainError
-from myf.services.uploads import upload_size
+from mosp.core.datetime_utils import utc_now_naive as utcnow
+from mosp.services.errors import DomainError
+from mosp.services.uploads import upload_size
 from sqlalchemy.orm import Session
 
 from app.db.models import User

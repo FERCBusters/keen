@@ -32,9 +32,9 @@ from app.db.models import (
 )
 from app.services import bookstack_sections
 from fastapi.testclient import TestClient
-from myf import middleware as myf_middleware
-from myf.security import auth, csrf, permissions, sessions
-from myf.security.auth import cookie_name as session_cookie_name
+from mosp import middleware as mosp_middleware
+from mosp.security import auth, csrf, permissions, sessions
+from mosp.security.auth import cookie_name as session_cookie_name
 from sqlalchemy.orm import sessionmaker
 
 
@@ -46,7 +46,7 @@ def sampling_client(contract_db, monkeypatch, tmp_path):
         join_transaction_mode="create_savepoint",
     )
     redis = fakeredis.FakeRedis(decode_responses=True)
-    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(mosp_middleware, "SessionLocal", factory)
     monkeypatch.setattr(db_module, "SessionLocal", factory)
     monkeypatch.setattr(auth, "get_valkey", lambda: redis)
     monkeypatch.setattr(permissions, "get_valkey", lambda: redis)
@@ -349,7 +349,7 @@ def test_bookstack_capture_redacts_before_storage_and_checksum(
 
 def test_ipv6_masking_malformed_input_finishes_in_bounded_child():
     # A killable child prevents a regex regression from hanging the test runner.
-    from myf.security import redaction
+    from mosp.security import redaction
 
     source = Path(redaction.__file__).resolve()
     script = """

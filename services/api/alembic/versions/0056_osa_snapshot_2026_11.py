@@ -42,7 +42,7 @@ from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0056_osa_snapshot_2026_11"

@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.db.models import ControlItem, Framework, ManagedConfiguration
 from app.services.control_suggestions import activity_words, rank_controls
 from fastapi import HTTPException
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 

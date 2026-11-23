@@ -7,12 +7,12 @@ import os
 import uuid
 from typing import BinaryIO
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.security.rich_text import sanitize_rich_text_html
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
-from myf.services.uploads import upload_size
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.security.rich_text import sanitize_rich_text_html
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
+from mosp.services.uploads import upload_size
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 

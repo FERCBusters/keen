@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 
-from myf.core.identifiers import try_uuid
-from myf.security.permissions import has_permission
-from myf.security.roles import is_active_user
-from myf.services.errors import DomainError
+from mosp.core.identifiers import try_uuid
+from mosp.security.permissions import has_permission
+from mosp.security.roles import is_active_user
+from mosp.services.errors import DomainError
 from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import Session
 

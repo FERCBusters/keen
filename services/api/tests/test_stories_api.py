@@ -1002,7 +1002,7 @@ def test_list_filters_by_status_and_text(world):
 
 def test_the_service_checks_permissions_itself(world):
     """Callers outside the HTTP adapters meet the same gates."""
-    from myf.services.errors import DomainError
+    from mosp.services.errors import DomainError
 
     author = world.keen.user("stories.manage")
     reader = world.keen.user("stories.read")
@@ -1170,7 +1170,7 @@ def test_a_story_holds_a_bounded_number_of_comments(world):
 
 
 def test_text_and_author_helpers_guard_their_bounds(world):
-    from myf.services.errors import DomainError
+    from mosp.services.errors import DomainError
 
     with pytest.raises(DomainError, match="note is too long"):
         service._text("x" * 11, max_len=10, label="note")

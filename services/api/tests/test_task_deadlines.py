@@ -26,9 +26,9 @@ from app.integrations import transport
 from app.services import schedules
 from app.worker import celery_app as worker
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
-from myf import worker as myf_worker
-from myf.core import task_deadline
-from myf.security.errors import collection_error
+from mosp import worker as mosp_worker
+from mosp.core import task_deadline
+from mosp.security.errors import collection_error
 from sqlalchemy import event as sa_event
 from sqlalchemy import text
 
@@ -83,11 +83,11 @@ def test_the_worker_records_each_tasks_soft_limit_as_it_starts(monkeypatch):
         task = SimpleNamespace(
             request=SimpleNamespace(timelimit=limits), soft_time_limit=annotated
         )
-        assert myf_worker.soft_time_limit(task) == expected
-        myf_worker.start_deadline(task=task)
+        assert mosp_worker.soft_time_limit(task) == expected
+        mosp_worker.start_deadline(task=task)
     assert started == [480, 1500, worker.TASK_SECONDS, worker.TASK_SECONDS]
     with passed_deadline():
-        myf_worker.finish_deadline()
+        mosp_worker.finish_deadline()
         task_deadline.check()
 
 
@@ -206,7 +206,7 @@ def worker_database(postgres_engine):
 
 def test_the_application_engine_checks_the_deadline_before_each_statement():
     from app.db import session
-    from myf.db.engine import within_task_deadline
+    from mosp.db.engine import within_task_deadline
 
     assert sa_event.contains(
         session.engine, "before_cursor_execute", within_task_deadline

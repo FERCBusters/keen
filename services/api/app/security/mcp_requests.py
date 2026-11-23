@@ -1,14 +1,14 @@
-"""The account an MCP tool's in-process request acts as (myf's
+"""The account an MCP tool's in-process request acts as (mosp's
 ``hooks.inner_request_user``)."""
 
 from __future__ import annotations
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from myf.core.valkey import get_valkey
-from myf.host import hooks
-from myf.security.auth import ROLE_ADMIN
-from myf.security.rate_limit import fixed_window_allow
+from mosp.core.valkey import get_valkey
+from mosp.host import hooks
+from mosp.security.auth import ROLE_ADMIN
+from mosp.security.rate_limit import fixed_window_allow
 
 from app.core.config import settings
 from app.db.models import User

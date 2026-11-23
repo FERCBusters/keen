@@ -25,8 +25,8 @@ from app.db.models import (
 )
 from app.ingest.cloud import KEYS, aws, providers, runner
 from app.ingest.cloud.base import Activity, Check, Identity, ScopeResult, Unavailable
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 from sqlalchemy.exc import IntegrityError
 
 from tests.test_assembled_authority_regressions import keen as keen

@@ -21,7 +21,7 @@ from app.security.diary_visibility import (
 )
 from app.services import events as events_service
 from app.services.event_filters import EventFilters
-from myf.security.redaction import MASKED_EMAIL, MASKED_IP
+from mosp.security.redaction import MASKED_EMAIL, MASKED_IP
 from sqlalchemy import event as sql_event
 from sqlalchemy.orm import Session
 

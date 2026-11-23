@@ -3,7 +3,7 @@
 import os
 import secrets
 
-from myf.security.passwords import hash_password
+from mosp.security.passwords import hash_password
 from sqlalchemy import text
 
 from app.core.config import settings

@@ -46,11 +46,11 @@ from app.services import agent_enrollment
 from app.worker import celery_app as worker
 from app.worker.celery_app import SCHEDULED_COLLECTION_EXPIRY, TASK_SECONDS, celery_app
 from fastapi import HTTPException
-from myf.core.datetime_utils import utc_now_naive
-from myf.security import auth, mfa
-from myf.security.encoding import digest
-from myf.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
-from myf.security.redaction import (
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security import auth, mfa
+from mosp.security.encoding import digest
+from mosp.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY, json_depth
+from mosp.security.redaction import (
     REDACTED,
     mask_event_data_bytes,
     mask_event_data_obj,
@@ -58,7 +58,7 @@ from myf.security.redaction import (
     redact_obj,
     storable,
 )
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.responses import Response

@@ -4,8 +4,8 @@ import ast
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from myf.api.routing import Router
-from myf.services.errors import DomainError
+from mosp.api.routing import Router
+from mosp.services.errors import DomainError
 
 from tests.source_tree import SOURCES, name_in
 

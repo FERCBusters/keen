@@ -15,11 +15,11 @@ from collections.abc import Iterable
 from datetime import timedelta
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.identifiers import try_uuid
-from myf.services.errors import DomainError
-from myf.services.mailer import smtp_configured, user_email
-from myf.services.security_notifications import pending_for, queue_email
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.identifiers import try_uuid
+from mosp.services.errors import DomainError
+from mosp.services.mailer import smtp_configured, user_email
+from mosp.services.security_notifications import pending_for, queue_email
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session

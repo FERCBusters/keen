@@ -17,10 +17,10 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
-from myf.core.datetime_utils import parse_iso_datetime
-from myf.security.json_shape import decode_json
-from myf.security.redaction import storable, utf8_bytes
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import parse_iso_datetime
+from mosp.security.json_shape import decode_json
+from mosp.security.redaction import storable, utf8_bytes
+from mosp.security.regex import scan_pattern
 
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact

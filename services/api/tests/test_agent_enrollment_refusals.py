@@ -18,9 +18,9 @@ from app.core.config import settings
 from app.db.models import AgentEnrollmentProfile, AgentKey, KeenAgent, UeuSettings
 from app.services.ueu_subjects import public_subject_key
 from cryptography.fernet import Fernet
-from myf.security.encoding import digest
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.security.encoding import digest
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import sessionmaker
 
 from tests.test_agent_enrollment import enroll, firewall
@@ -255,7 +255,7 @@ def test_requests_without_a_credential_do_not_spend_a_fleets_allowances(
     # counted in their own allowance, so however many arrive from the address,
     # a device holding the profile's key still enrols and still reads the
     # server-key document.
-    from myf.security import rate_limit
+    from mosp.security import rate_limit
 
     c, f, p, _ = fleet
     store = fakeredis.FakeRedis(decode_responses=True)

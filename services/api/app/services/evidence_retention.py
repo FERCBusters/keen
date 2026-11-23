@@ -9,8 +9,8 @@ import time
 import uuid
 from datetime import timedelta
 
-from myf.core.datetime_utils import utc_now_naive as now
-from myf.core.task_deadline import TIME_LIMITS
+from mosp.core.datetime_utils import utc_now_naive as now
+from mosp.core.task_deadline import TIME_LIMITS
 from sqlalchemy import text
 
 from app.db.session import SessionLocal, queue_stored_objects

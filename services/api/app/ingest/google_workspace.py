@@ -32,14 +32,14 @@ from google.oauth2 import service_account
 from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from myf.core.datetime_utils import (
+from mosp.core.datetime_utils import (
     parse_iso_datetime_or_none,
     utc_now_naive,
 )
-from myf.security.errors import collection_error
-from myf.security.provider_logging import suppress_provider_logs
-from myf.security.redaction import utf8_bytes
-from myf.security.regex import scan_pattern
+from mosp.security.errors import collection_error
+from mosp.security.provider_logging import suppress_provider_logs
+from mosp.security.redaction import utf8_bytes
+from mosp.security.regex import scan_pattern
 from sqlalchemy.orm import Session
 
 from app.db.models import IngestionCursor

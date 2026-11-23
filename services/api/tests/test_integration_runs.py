@@ -24,7 +24,7 @@ from app.integrations.engine import skipped_summary
 from app.integrations.errors import IntegrationError
 from app.integrations.schema import Definition
 from cryptography.fernet import InvalidToken
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 # Imported fixture: an integration database behind runtime.SessionLocal.
 from tests.test_integration_builder import database  # noqa: F401

@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 from app.core.config import settings
 from app.core.managed_configuration import load_documents

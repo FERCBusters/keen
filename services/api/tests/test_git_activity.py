@@ -5,7 +5,7 @@ from datetime import datetime
 import httpx2 as httpx
 import pytest
 from app.ingest import git_activity as collector
-from myf.core.datetime_utils import to_utc_naive
+from mosp.core.datetime_utils import to_utc_naive
 
 
 def test_feed_namespaces_content_and_item_limit():

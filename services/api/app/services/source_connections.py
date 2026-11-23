@@ -6,9 +6,9 @@ import uuid
 from urllib.parse import urlsplit
 
 from cryptography.fernet import InvalidToken
-from myf.core.email_address import single_mailbox
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.email_address import single_mailbox
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 

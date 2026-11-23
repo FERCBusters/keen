@@ -14,8 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from myf.core.datetime_utils import parse_iso_datetime_or_none
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import parse_iso_datetime_or_none
+from mosp.security.regex import scan_pattern
 
 # met: the setting meets the check; attention: it does not; info: reported
 # without a judgement; unknown: KEEN could not read it (see ``reason``).

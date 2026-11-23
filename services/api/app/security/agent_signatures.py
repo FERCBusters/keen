@@ -18,8 +18,8 @@ from datetime import datetime, timezone
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from myf.security.encoding import b64url, unb64url
-from myf.security.regex import scan_pattern
+from mosp.security.encoding import b64url, unb64url
+from mosp.security.regex import scan_pattern
 
 from app.agents.ueu.jcs import canonical
 

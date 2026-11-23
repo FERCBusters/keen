@@ -10,7 +10,7 @@ import math
 from collections import Counter
 from typing import Any
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 _STOP = set(
     "a an and are as at be been being by can could do does for from had has have how if in into is it its may might no not of on or our should that the their them there these they this to was we were what when which who will with without would you your lack failure loss risk risks security information management process processes system systems organisation organization company business ensure use using".split()

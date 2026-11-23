@@ -16,7 +16,7 @@ from app.ingest.common import store_event_with_artifact
 from app.mapping.rules import evaluate_by_framework, parse_rules
 from celery.exceptions import SoftTimeLimitExceeded
 from cryptography.fernet import Fernet
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 
 from tests.source_types import INPUT_SECTIONS
 

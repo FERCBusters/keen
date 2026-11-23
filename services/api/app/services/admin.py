@@ -8,23 +8,23 @@ import os
 import uuid
 from datetime import date, datetime, time, timezone
 
-from myf.core.datetime_utils import to_utc_naive, utc_now_naive
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.security.auth import ROLE_ADMIN, ROLE_NORMAL
-from myf.security.permissions import (
+from mosp.core.datetime_utils import to_utc_naive, utc_now_naive
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.security.auth import ROLE_ADMIN, ROLE_NORMAL
+from mosp.security.permissions import (
     bump_authz_versions,
     normalize_group_description,
     normalize_group_name,
     normalize_permission_codes,
 )
-from myf.security.roles import (
+from mosp.security.roles import (
     count_effective_admins,
     is_effective_admin,
     lock_admin_changes,
     normalize_role,
 )
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from sqlalchemy import desc, distinct, func
 from sqlalchemy.orm import Session
 

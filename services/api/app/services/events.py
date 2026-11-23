@@ -11,17 +11,17 @@ from functools import partial
 from types import SimpleNamespace
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.security.csv import spreadsheet_cell
-from myf.security.permissions import has_permission
-from myf.security.redaction import mask_event_data_obj as _mask_event_data_obj
-from myf.security.redaction import redact_obj as _redact_obj
-from myf.security.redaction import redact_str as _redact_str
-from myf.security.roles import is_effective_admin
-from myf.services.activity_log import record_action as _audit_action
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.security.csv import spreadsheet_cell
+from mosp.security.permissions import has_permission
+from mosp.security.redaction import mask_event_data_obj as _mask_event_data_obj
+from mosp.security.redaction import redact_obj as _redact_obj
+from mosp.security.redaction import redact_str as _redact_str
+from mosp.security.roles import is_effective_admin
+from mosp.services.activity_log import record_action as _audit_action
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session, load_only
 

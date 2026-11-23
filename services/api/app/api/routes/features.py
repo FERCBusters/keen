@@ -1,9 +1,9 @@
 """Administrator-only installation feature settings."""
 
 from fastapi import Depends, Request
-from myf.api.errors import json_object
-from myf.api.routing import Router
-from myf.security.auth import require_admin
+from mosp.api.errors import json_object
+from mosp.api.routing import Router
+from mosp.security.auth import require_admin
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 

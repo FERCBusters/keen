@@ -153,7 +153,7 @@ def test_malformed_mime_attachment_metadata_fails_closed(raw, message):
 def test_partial_custom_secret_redaction_also_protects_json_artifact(monkeypatch, tail):
     import json
 
-    from myf.security import redaction
+    from mosp.security import redaction
 
     monkeypatch.setenv("KEEN_SENSITIVE_KEYS", "private_code")
     redaction._sensitive_cfg.cache_clear()

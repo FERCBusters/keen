@@ -822,8 +822,8 @@ def test_administrators_reset_local_passwords_only(keen, admin_client):  # noqa:
 )
 def test_account_operations_fail_closed_without_a_signed_in_user(operation, arguments):
     from app.services import me as account
-    from myf.services.context import ChangeContext
-    from myf.services.errors import DomainError
+    from mosp.services.context import ChangeContext
+    from mosp.services.errors import DomainError
 
     call = getattr(account, operation)
     extra = {} if operation == "get_my_preferences" else {"db": None}
@@ -841,7 +841,7 @@ def test_password_changes_stop_while_the_rate_limit_store_is_unavailable(
     keen,  # noqa: F811 - fixture imported above
     monkeypatch,
 ):
-    from myf.services import account
+    from mosp.services import account
 
     user = keen.user()
     client = keen.client(user)

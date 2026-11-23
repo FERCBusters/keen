@@ -28,9 +28,9 @@ from typing import Annotated, Any, Literal
 import anyio
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token
-from myf.core.valkey import get_valkey
-from myf.security.regex import scan_pattern
-from myf.security.rich_text import plain_text_html
+from mosp.core.valkey import get_valkey
+from mosp.security.regex import scan_pattern
+from mosp.security.rich_text import plain_text_html
 from pydantic import BaseModel, Field, ValidationError
 
 from app.api.mcp import tools

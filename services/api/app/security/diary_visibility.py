@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import uuid
 
-from myf.security.permissions import has_any_permission
-from myf.security.roles import is_active_user
+from mosp.security.permissions import has_any_permission
+from mosp.security.roles import is_active_user
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 

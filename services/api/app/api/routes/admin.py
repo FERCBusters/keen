@@ -5,11 +5,11 @@ from functools import partial
 from typing import Any
 
 from fastapi import Depends, Path, Request
-from myf.api.context import change_context
-from myf.api.errors import json_object
-from myf.api.routing import Router
-from myf.api.uploads import upload_inputs
-from myf.security.auth import require_admin
+from mosp.api.context import change_context
+from mosp.api.errors import json_object
+from mosp.api.routing import Router
+from mosp.api.uploads import upload_inputs
+from mosp.security.auth import require_admin
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 

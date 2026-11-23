@@ -4,7 +4,7 @@ import base64
 import binascii
 import quopri
 
-from myf.security.redaction import redact_str
+from mosp.security.redaction import redact_str
 
 # A parsed BODYSTRUCTURE: nested lists of strings, with NIL as None.
 BodyStructure = list["BodyStructure"] | str | None

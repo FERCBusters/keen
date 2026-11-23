@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from myf.config import MyfSettings
+from mosp.config import MospSettings
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 
-class Settings(MyfSettings):
+class Settings(MospSettings):
     model_config = SettingsConfigDict(env_prefix="KEEN_", case_sensitive=False)
 
-    # KEEN's names for the settings myf defines (myf.config.MyfSettings).
+    # KEEN's names for the settings mosp defines (mosp.config.MospSettings).
     session_cookie_name: str = Field(default="keen_session")
     csrf_cookie_name: str = Field(default="keen_csrf")
     smtp_from_name: str = Field(default="Keen")
@@ -38,7 +38,7 @@ class Settings(MyfSettings):
 
     def check_application(self) -> None:
         # KEEN's demo and hosted profiles explain a refused configuration
-        # better than myf's own checks, so they run first.
+        # better than mosp's own checks, so they run first.
         self.validate_demo()
         self.validate_hosted_security()
         super().check_application()

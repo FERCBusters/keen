@@ -10,9 +10,9 @@ from datetime import timedelta
 import pytest
 from app.core.config import settings
 from app.db.models import SecurityNotification, SsoEmailChallenge
-from myf.core import task_deadline
-from myf.core.datetime_utils import utc_now_naive
-from myf.services import mailer, security_notifications
+from mosp.core import task_deadline
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services import mailer, security_notifications
 
 from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 

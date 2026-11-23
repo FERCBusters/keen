@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 

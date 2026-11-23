@@ -6,7 +6,7 @@ import pytest
 from app.db.models import ManagedConfiguration, ManagedConfigurationRevision
 from app.security.feature_policy import requirements
 from app.services import features
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -317,7 +317,7 @@ def test_every_router_has_an_availability_decision():
     from fastapi.routing import APIRoute
 
     core = {
-        # The account's own password (myf).
+        # The account's own password (mosp).
         "account",
         "admin",
         "agent_enrollment",
@@ -349,11 +349,11 @@ def test_every_router_has_an_availability_decision():
     def walk(routes):
         for route in routes:
             if isinstance(route, APIRoute):
-                # myf's routes (sign-in, second factors, SSO addresses) are
+                # mosp's routes (sign-in, second factors, SSO addresses) are
                 # named as KEEN's own were.
                 owner = route.endpoint.__module__.removeprefix(
                     "app.api.routes."
-                ).removeprefix("myf.api.routes.")
+                ).removeprefix("mosp.api.routes.")
                 if owner.startswith("isms."):
                     assert set(ISMS_OWNERS) | {
                         "overview",

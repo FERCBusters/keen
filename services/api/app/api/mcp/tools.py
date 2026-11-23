@@ -18,7 +18,7 @@ import anyio
 import httpx2 as httpx
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token, get_http_request
-from myf.security.client_ip import request_ip
+from mosp.security.client_ip import request_ip
 from pydantic import Field
 
 from app.api.mcp import runtime

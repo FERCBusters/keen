@@ -14,8 +14,8 @@ from app.db.models import (
     Mapping,
 )
 from fastapi import HTTPException
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 
 # Imported fixtures are discovered by pytest by name.
 from tests.test_integration_builder import database as database

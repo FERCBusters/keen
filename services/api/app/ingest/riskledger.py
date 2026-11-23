@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
-from myf.core.task_deadline import TIME_LIMITS
-from myf.security.json_shape import decode_json
-from myf.security.redaction import (
+from mosp.core.task_deadline import TIME_LIMITS
+from mosp.security.json_shape import decode_json
+from mosp.security.redaction import (
     mask_event_data_obj,
     redact_obj,
     storable_text,

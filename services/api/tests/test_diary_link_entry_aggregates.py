@@ -85,7 +85,7 @@ def entries(keen, monkeypatch):  # noqa: F811 - fixture imported above
 
 
 def _now(db):
-    from myf.core.datetime_utils import utc_now_naive
+    from mosp.core.datetime_utils import utc_now_naive
 
     return utc_now_naive()
 

@@ -301,11 +301,11 @@ def _deliver(client, body: bytes):
 
 
 def test_webhook_storage_and_authentication_run_off_the_event_loop(hook, monkeypatch):
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
 
     seen = {}
     store = webhooks._store_webhook_event
-    authenticate = myf_middleware.authenticate
+    authenticate = mosp_middleware.authenticate
 
     def stored(*args, **kwargs):
         seen["store"] = _off_the_loop()
@@ -316,7 +316,7 @@ def test_webhook_storage_and_authentication_run_off_the_event_loop(hook, monkeyp
         return authenticate(request)
 
     monkeypatch.setattr(webhooks, "_store_webhook_event", stored)
-    monkeypatch.setattr(myf_middleware, "authenticate", authenticated)
+    monkeypatch.setattr(mosp_middleware, "authenticate", authenticated)
     client = hook.client()
     assert _deliver(client, b'{"alert": "synthetic"}').status_code == 200
     refused = client.get("/v1/me")
@@ -398,7 +398,7 @@ def _form_parse_threads(monkeypatch):
     import threading
 
     from fastapi import FastAPI, File, Request, UploadFile
-    from myf.api.routing import Router
+    from mosp.api.routing import Router
     from starlette import formparsers
 
     threads = {"parse": [], "handler": []}
@@ -477,7 +477,7 @@ def test_every_body_route_uses_the_shared_route_class():
     """Routes outside DomainRoute would parse JSON and forms on the event loop."""
     from app import main
     from fastapi.routing import APIRoute
-    from myf.api.errors import DomainRoute
+    from mosp.api.errors import DomainRoute
 
     def routes(items):
         for route in items:

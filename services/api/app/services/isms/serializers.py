@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, overload
 
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

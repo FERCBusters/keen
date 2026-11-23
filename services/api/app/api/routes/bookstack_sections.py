@@ -6,8 +6,8 @@ import uuid
 
 from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from myf.api.routing import Router
-from myf.security.auth import require_authenticated
+from mosp.api.routing import Router
+from mosp.security.auth import require_authenticated
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.isms import require_isms_manage, require_isms_read

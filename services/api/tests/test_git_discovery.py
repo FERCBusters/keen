@@ -16,7 +16,7 @@ from app.services.managed_configurations import (
     _validate_connector,
 )
 from fastapi import HTTPException
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
 

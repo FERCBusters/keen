@@ -1,10 +1,10 @@
-"""KEEN's binding to myf: KEEN names itself, plays every role, and myf keeps
+"""KEEN's binding to mosp: KEEN names itself, plays every role, and mosp keeps
 its safe defaults wherever an application leaves a hook out."""
 
-import app.myf_hooks as keen_hooks
+import app.mosp_hooks as keen_hooks
 import pytest
-from myf import host
-from myf.host import hooks
+from mosp import host
+from mosp.host import hooks
 
 
 def test_keen_is_bound_under_its_own_name():
@@ -21,7 +21,7 @@ def test_a_binding_cannot_be_changed_once_made():
         host.bind(name="keen", title="Keen", models="other.models")
     with pytest.raises(RuntimeError, match="application name is already 'keen'"):
         host.bind(name="other", title="Keen")
-    with pytest.raises(ValueError, match="Unknown myf host roles: storage"):
+    with pytest.raises(ValueError, match="Unknown mosp host roles: storage"):
         host.bind(name="keen", title="Keen", storage="x")
     with pytest.raises(ValueError, match="lower-case identifier"):
         host._identity.clear()
@@ -33,10 +33,10 @@ def test_a_binding_cannot_be_changed_once_made():
 
 def test_an_unbound_application_is_named_as_the_problem(monkeypatch):
     monkeypatch.delitem(host._bound, "db")
-    with pytest.raises(RuntimeError, match="No application is bound to myf's 'db'"):
+    with pytest.raises(RuntimeError, match="No application is bound to mosp's 'db'"):
         host.module("db")
     monkeypatch.setattr(host, "_identity", {})
-    with pytest.raises(RuntimeError, match="call myf.host.bind"):
+    with pytest.raises(RuntimeError, match="call mosp.host.bind"):
         host.name()
 
 
@@ -76,7 +76,7 @@ def test_an_unbound_application_is_named_as_the_problem(monkeypatch):
         ),
     ],
 )
-def test_a_hook_an_application_leaves_out_keeps_myfs_default(
+def test_a_hook_an_application_leaves_out_keeps_mosps_default(
     monkeypatch, name, call, default
 ):
     monkeypatch.delattr(keen_hooks, name)

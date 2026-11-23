@@ -2,7 +2,7 @@
 
 from functools import wraps
 
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy import select, text
 
 from app.db.models import SourceIngestionState

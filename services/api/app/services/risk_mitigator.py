@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload, selectinload
 

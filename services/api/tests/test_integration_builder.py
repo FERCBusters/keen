@@ -25,9 +25,9 @@ from app.integrations.schema import Definition, pointer
 from app.integrations.templates import templates
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
-from myf.core import task_deadline
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core import task_deadline
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 

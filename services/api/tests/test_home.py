@@ -27,8 +27,8 @@ from app.db.models import (
 )
 from app.db.session import Base
 from fastapi import Request
-from myf.api.context import change_context
-from myf.core.datetime_utils import utc_now_naive
+from mosp.api.context import change_context
+from mosp.core.datetime_utils import utc_now_naive
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 

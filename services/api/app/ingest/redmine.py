@@ -9,10 +9,10 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlsplit
 
 import httpx2 as httpx
-from myf.core.datetime_utils import parse_iso_datetime
-from myf.security.errors import collection_error
-from myf.security.json_shape import decode_json
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import parse_iso_datetime
+from mosp.security.errors import collection_error
+from mosp.security.json_shape import decode_json
+from mosp.security.regex import scan_pattern
 
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact

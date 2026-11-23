@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from myf.security.auth import ROLE_NORMAL
+from mosp.security.auth import ROLE_NORMAL
 from pydantic import BaseModel, Field
 
 from app.services.framework_catalogue import FrameworkListItem as FrameworkListItem

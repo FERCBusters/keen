@@ -13,11 +13,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from myf.core.datetime_utils import iso_utc, utc_now_naive
-from myf.security.auth import ROLE_ADMIN
-from myf.security.permissions import has_permission
-from myf.security.roles import compute_effective_role
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import iso_utc, utc_now_naive
+from mosp.security.auth import ROLE_ADMIN
+from mosp.security.permissions import has_permission
+from mosp.security.roles import compute_effective_role
+from mosp.services.errors import DomainError
 from pydantic import Field
 from sqlalchemy import func
 

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.security.rich_text import sanitize_rich_text_html
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.security.rich_text import sanitize_rich_text_html
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy.orm import Session
 
 from app.db.models import ControlItem, FrameworkClause, User
@@ -35,7 +35,7 @@ def _clean_isms_section(section: str | None) -> str | None:
 def _clean_minutes_html(raw: str | None) -> str:
     # Trim/length-check the raw input, then apply the shared server-side
     # rich-text allowlist sanitiser (single source of truth for all Keen
-    # rich-text fields; see myf.security.rich_text).
+    # rich-text fields; see mosp.security.rich_text).
     value = clean_text(raw, max_len=50000)
     cleaned = sanitize_rich_text_html(value)
     if len(cleaned) > 50000:

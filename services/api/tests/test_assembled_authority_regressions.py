@@ -30,12 +30,12 @@ from app.db.models import (
 from app.security.request_policy import MAX_JSON_BODY, MAX_JSON_VALUES
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from myf.api import errors
-from myf.core import valkey
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.auth import cookie_name as session_cookie_name
-from myf.security.passwords import hash_password
-from myf.services.errors import DomainError
+from mosp.api import errors
+from mosp.core import valkey
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.auth import cookie_name as session_cookie_name
+from mosp.security.passwords import hash_password
+from mosp.services.errors import DomainError
 
 from tests.timing import measured
 
@@ -47,7 +47,7 @@ PASSWORD = "synthetic-password-for-tests"
 def keen(contract_db, tmp_path, monkeypatch):
     from app import main
     from app.db.session import get_db
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
     from sqlalchemy.orm import sessionmaker
 
     server = fakeredis.FakeServer()
@@ -71,7 +71,7 @@ def keen(contract_db, tmp_path, monkeypatch):
         with factory() as session:
             yield session
 
-    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(mosp_middleware, "SessionLocal", factory)
     main.app.dependency_overrides[get_db] = database
     # Configuration readers open their own short session; point them at the
     # same test database so assembled request paths see the same data.
@@ -381,7 +381,7 @@ def test_sign_out_fails_closed_when_revocation_fails(
 def _age_session(keen, sid, seconds):
     from datetime import datetime, timedelta, timezone
 
-    from myf.security.sessions import session_key
+    from mosp.security.sessions import session_key
 
     key = session_key(sid)
     payload = json.loads(keen.store.get(key))
@@ -394,7 +394,7 @@ def _age_session(keen, sid, seconds):
 def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
     keen, monkeypatch, auth_method
 ):
-    from myf.security.sessions import create_session, session_key
+    from mosp.security.sessions import create_session, session_key
 
     monkeypatch.setattr(settings, "session_max_age_seconds", 3600)
     # A provider's session lasts only while its provider is enabled.
@@ -430,7 +430,7 @@ def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
 
 
 def test_a_session_without_a_readable_start_is_refused(keen):
-    from myf.security.sessions import session_key
+    from mosp.security.sessions import session_key
 
     client = keen.client(keen.user())
     sid = client.cookies.get(session_cookie_name())
@@ -748,7 +748,7 @@ def test_public_reads_leave_no_audit_records(keen):
 
 def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeypatch):
     from app.ingest import webhooks
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
 
     first, second = client_from("203.0.113.7"), client_from("203.0.113.8")
     for _ in range(30):
@@ -811,7 +811,7 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
 
     # A delivery whose secret verified names its credential, and a request
     # carrying a verified machine credential is recorded whatever the count.
-    from myf.api.context import machine_credential
+    from mosp.api.context import machine_credential
     from starlette.requests import Request as StarletteRequest
 
     monkeypatch.setenv("SYNTHETIC_WEBHOOK_SECRET", "synthetic-webhook-secret")
@@ -833,9 +833,9 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
         lambda db, **kw: {"ok": True, "event_id": str(uuid.uuid4())},
     )
     credentials = []
-    record = myf_middleware.record_request
+    record = mosp_middleware.record_request
     monkeypatch.setattr(
-        myf_middleware,
+        mosp_middleware,
         "record_request",
         lambda request, *args: credentials.append(machine_credential(request)),
     )
@@ -864,12 +864,12 @@ def test_anonymous_requests_are_audited_sixty_a_minute_per_address(keen, monkeyp
         )
         record(request, "/v1/webhooks/synthetic/a", 200, 1)
     assert audited(keen, path="/v1/webhooks/synthetic/a", client_ip="203.0.113.7") == 3
-    monkeypatch.setattr(myf_middleware, "record_request", record)
+    monkeypatch.setattr(mosp_middleware, "record_request", record)
 
     # Without Valkey the refusals cannot be counted, so they are not recorded.
     broken = Mock()
     broken.pipeline.side_effect = ConnectionError("synthetic outage")
-    monkeypatch.setattr(myf_middleware, "get_valkey", lambda: broken)
+    monkeypatch.setattr(mosp_middleware, "get_valkey", lambda: broken)
     refused = client_from("203.0.113.9").get("/v1/events")
     assert (refused.status_code, refused.json()) == (
         401,
@@ -1093,7 +1093,7 @@ def test_collected_evidence_with_nul_characters_is_stored(contract_db, monkeypat
     from types import SimpleNamespace
 
     from app.ingest import common
-    from myf.security.redaction import prepare_event_fields
+    from mosp.security.redaction import prepare_event_fields
 
     monkeypatch.setattr(
         common,

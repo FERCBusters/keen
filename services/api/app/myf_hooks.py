@@ -1,4 +1,4 @@
-"""KEEN's part in myf's sign-in, session and routing flows (``myf.host.hooks``).
+"""KEEN's part in mosp's sign-in, session and routing flows (``mosp.host.hooks``).
 
 Each hook imports its KEEN module when called, so tests that replace those
 modules' functions reach the hooks too.

@@ -13,14 +13,14 @@ from functools import partial
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from myf.api.context import mark_machine_credential
-from myf.api.errors import DomainRoute
-from myf.api.routing import Router
-from myf.core.valkey import get_valkey
-from myf.security.auth import require_admin
-from myf.security.client_ip import request_ip
-from myf.security.rate_limit import address_window_allow, fixed_window_allow
-from myf.services.errors import DomainError
+from mosp.api.context import mark_machine_credential
+from mosp.api.errors import DomainRoute
+from mosp.api.routing import Router
+from mosp.core.valkey import get_valkey
+from mosp.security.auth import require_admin
+from mosp.security.client_ip import request_ip
+from mosp.security.rate_limit import address_window_allow, fixed_window_allow
+from mosp.services.errors import DomainError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 from app.db.models import (

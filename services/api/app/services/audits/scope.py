@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 
-from myf.core.datetime_utils import utc_now_naive as utcnow
-from myf.core.identifiers import try_uuid
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive as utcnow
+from mosp.core.identifiers import try_uuid
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 from app.db.models import (

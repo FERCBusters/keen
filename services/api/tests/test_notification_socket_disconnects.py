@@ -8,8 +8,8 @@ and the application finishes without an error.
 
 import asyncio
 
-from myf.realtime.notifications import notification_hub
-from myf.security.auth import cookie_name as session_cookie_name
+from mosp.realtime.notifications import notification_hub
+from mosp.security.auth import cookie_name as session_cookie_name
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -28,9 +28,9 @@ def test_a_socket_whose_peer_left_releases_its_slot_when_closing_fails(
 ):
     from app import main
     from app.db import session as database
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
 
-    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", mosp_middleware.SessionLocal)
     user = keen.user()
     sid = keen.client(user).cookies.get(session_cookie_name())
     scope = {

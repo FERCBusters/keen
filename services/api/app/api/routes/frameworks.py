@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from fastapi import Depends
-from myf.api.routing import Router
-from myf.security.auth import require_admin
+from mosp.api.routing import Router
+from mosp.security.auth import require_admin
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db

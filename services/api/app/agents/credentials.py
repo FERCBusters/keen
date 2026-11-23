@@ -11,11 +11,11 @@ from contextlib import contextmanager
 from datetime import timedelta
 
 from fastapi import HTTPException
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.valkey import get_valkey
-from myf.security.encoding import digest
-from myf.security.rate_limit import fixed_window_allow
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.valkey import get_valkey
+from mosp.security.encoding import digest
+from mosp.security.rate_limit import fixed_window_allow
+from mosp.security.regex import scan_pattern
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 

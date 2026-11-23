@@ -13,7 +13,7 @@ import time
 from urllib.parse import urlsplit
 
 import httpx2 as httpx
-from myf.security.json_shape import decode_json
+from mosp.security.json_shape import decode_json
 
 from app.ingest import http
 from app.ingest.cloud.base import Unavailable

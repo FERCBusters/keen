@@ -10,7 +10,7 @@ import pytest
 from app import bootstrap_hosted
 from app.core.config import settings
 from app.db.models import IsmsPerson, User, UserIdentity
-from myf.security.passwords import hash_password, verify_password
+from mosp.security.passwords import hash_password, verify_password
 from sqlalchemy.orm import sessionmaker
 
 ISSUER = "https://idp.example"

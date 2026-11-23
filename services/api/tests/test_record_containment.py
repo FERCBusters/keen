@@ -25,7 +25,7 @@ import pytest
 from app.ingest import common
 from app.ingest import jenkins as jk
 from celery.exceptions import SoftTimeLimitExceeded
-from myf.security import json_shape
+from mosp.security import json_shape
 
 from tests.source_tree import SOURCES, name_in
 
@@ -317,7 +317,7 @@ def test_every_ingester_decodes_upstream_json_without_a_depth_limit():
         entry for entry in found if (entry[0], entry[1]) not in DECODED_OTHERWISE
     )
     assert not undecoded, (
-        f"Decode upstream JSON with myf.security.json_shape.decode_json: {undecoded}"
+        f"Decode upstream JSON with mosp.security.json_shape.decode_json: {undecoded}"
     )
     assert set(DECODED_OTHERWISE) <= {(f, n) for f, n, _ in found}
 

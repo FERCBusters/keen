@@ -282,7 +282,7 @@ def test_recover_jobs_returns_queued_and_stale_running_jobs_only(setup):
     # job still making progress and finished jobs are left alone.
     from datetime import timedelta
 
-    from myf.core.datetime_utils import utc_now_naive
+    from mosp.core.datetime_utils import utc_now_naive
 
     db, controls, event, mapping, job, clear = setup
     now = utc_now_naive()

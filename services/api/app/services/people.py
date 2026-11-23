@@ -2,9 +2,9 @@
 
 import uuid
 
-from myf.security.permissions import has_permission
-from myf.services.errors import DomainError
-from myf.services.mailer import user_email
+from mosp.security.permissions import has_permission
+from mosp.services.errors import DomainError
+from mosp.services.mailer import user_email
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 

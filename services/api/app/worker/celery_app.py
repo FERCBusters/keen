@@ -5,7 +5,7 @@ import time
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import before_task_publish
-from myf import worker as myf_worker
+from mosp import worker as mosp_worker
 
 from app.core.config import settings
 from app.ingest.registry import HTTP_QUEUE, IMAP_QUEUE, polled
@@ -22,7 +22,7 @@ celery_app = Celery(
     include=["app.worker.tasks"],
 )
 # Each task's deadline, and its statement labels with KEEN_SQL_TRACE on.
-myf_worker.connect(celery_app, sql_trace=settings.sql_trace)
+mosp_worker.connect(celery_app, sql_trace=settings.sql_trace)
 
 # Internal work runs on the default queue. HTTP polling is routed to its own
 # queue for scheduled, per-connection and manual runs. Each source type

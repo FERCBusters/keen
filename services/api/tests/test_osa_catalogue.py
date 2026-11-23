@@ -21,7 +21,7 @@ from app.services.control_inheritance import (
     inherited_control_ids,
 )
 from app.services.frameworks import FrameworkNodeInput
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 

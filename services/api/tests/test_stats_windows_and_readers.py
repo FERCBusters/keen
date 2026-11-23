@@ -14,8 +14,8 @@ import pytest
 from app.core.config import settings
 from app.db.models import ControlItem, Event, Framework, Mapping
 from app.services import home as home_service
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.context import ChangeContext
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.context import ChangeContext
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_inherited_dashboard_counts import TGT

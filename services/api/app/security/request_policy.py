@@ -1,7 +1,7 @@
 """KEEN's request size classes and routes whose path parameters may hold "/";
-myf's request limits (``myf.security.request_limits``) apply them."""
+mosp's request limits (``mosp.security.request_limits``) apply them."""
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 from app.core.config import settings
 
@@ -29,8 +29,8 @@ _FILE_UPLOADS = scan_pattern(r"/v1/(?:isms/documents/[^/]+/file|audits/[^/]+/rep
 
 
 def body_limit(path):
-    """KEEN's limit for a path; myf's own sign-in, password and second-factor
-    routes take myf's limits (myf.host.hooks.body_limit) before this is asked."""
+    """KEEN's limit for a path; mosp's own sign-in, password and second-factor
+    routes take mosp's limits (mosp.host.hooks.body_limit) before this is asked."""
     if path in {"/v1/agents/enroll", "/v1/agents/renew"}:
         return 16 * 1024
     # keen-agent requests are encrypted to KEEN, which adds a fixed overhead

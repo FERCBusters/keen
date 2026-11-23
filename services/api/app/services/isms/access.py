@@ -2,8 +2,8 @@
 
 import uuid
 
-from myf.security.permissions import has_any_permission, has_permission
-from myf.security.roles import is_active_user
+from mosp.security.permissions import has_any_permission, has_permission
+from mosp.security.roles import is_active_user
 from sqlalchemy import CompoundSelect, select
 from sqlalchemy.orm import Session
 

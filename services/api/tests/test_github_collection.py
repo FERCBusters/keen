@@ -17,7 +17,7 @@ import pytest
 from app.core.config import settings
 from app.db.models import Artifact, Event, IngestionCursor
 from app.ingest import github
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 TOKEN = "synthetic-github-token-0123456789abcdef"
 

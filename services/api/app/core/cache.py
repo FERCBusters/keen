@@ -5,8 +5,8 @@ import json
 from datetime import date, datetime
 from typing import Any, Callable, TypeVar
 
-from myf.core.valkey import get_valkey
-from myf.host.config import settings
+from mosp.core.valkey import get_valkey
+from mosp.host.config import settings
 
 T = TypeVar("T")
 

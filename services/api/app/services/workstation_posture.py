@@ -17,9 +17,9 @@ import uuid
 from datetime import timedelta
 from types import SimpleNamespace
 
-from myf.core.datetime_utils import iso_utc, utc_now_naive
-from myf.security.permissions import has_permission
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import iso_utc, utc_now_naive
+from mosp.security.permissions import has_permission
+from mosp.services.errors import DomainError
 from pydantic import Field
 
 from app.agents.ueu.catalogue import KEEN_VERSIONS

@@ -15,9 +15,9 @@ import statistics
 from collections import Counter
 from datetime import datetime, timedelta
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

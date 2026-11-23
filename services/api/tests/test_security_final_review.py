@@ -8,8 +8,8 @@ from unittest.mock import Mock
 import httpx2
 import httpx2 as httpx
 import pytest
-from myf.security import redaction, sso_http
-from myf.security.errors import collection_error
+from mosp.security import redaction, sso_http
+from mosp.security.errors import collection_error
 
 
 @pytest.mark.parametrize(
@@ -256,7 +256,7 @@ def test_sso_provider_error_cannot_escape_as_traceback(monkeypatch):
 
     from authlib.oauth2.rfc6749.errors import OAuth2Error
     from fastapi import HTTPException
-    from myf.security import oidc
+    from mosp.security import oidc
     from starlette.requests import Request
 
     provider = SimpleNamespace(key="oidc", kind="oidc")

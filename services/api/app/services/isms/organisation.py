@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.security.permissions import has_permission
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.security.permissions import has_permission
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy.orm import Session
 
 from app.db.models import IsmsOrgNode, IsmsOrgNodeUser, QuizAudience, Risk, User

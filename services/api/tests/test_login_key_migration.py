@@ -3,7 +3,7 @@
 import uuid
 
 from alembic import command
-from myf.security.names import login_key
+from mosp.security.names import login_key
 from sqlalchemy import text
 
 from tests.test_link_migrations import release

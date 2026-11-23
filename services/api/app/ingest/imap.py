@@ -8,9 +8,9 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.task_deadline import TIME_LIMITS
-from myf.security.redaction import mask_mail_address_headers
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.task_deadline import TIME_LIMITS
+from mosp.security.redaction import mask_mail_address_headers
 
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, store_event_with_artifact

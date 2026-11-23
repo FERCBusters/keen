@@ -1,6 +1,6 @@
 """Validate parent changes under a transaction-scoped hierarchy lock."""
 
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy import text
 
 from app.db.models import IsmsDocumentFolder, IsmsOrgNode

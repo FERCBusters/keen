@@ -17,8 +17,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from app.ingest.http import budget, budgeted, remaining
 from cryptography.fernet import Fernet
-from myf.core import task_deadline
-from myf.security.json_shape import decode_json
+from mosp.core import task_deadline
+from mosp.security.json_shape import decode_json
 
 from .errors import IntegrationError
 

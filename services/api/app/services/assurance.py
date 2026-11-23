@@ -6,8 +6,8 @@ import uuid
 from datetime import date
 from urllib.parse import urlparse
 
-from myf.services.errors import DomainError
-from myf.services.text import clean_email, clean_text
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_email, clean_text
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload

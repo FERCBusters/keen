@@ -7,7 +7,7 @@ from functools import partial
 
 from fastapi import Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
-from myf.api.routing import Router
+from mosp.api.routing import Router
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 

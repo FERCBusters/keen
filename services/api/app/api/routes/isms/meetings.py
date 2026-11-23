@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from fastapi import Depends, Request
-from myf.api.routing import Router
-from myf.security.auth import require_authenticated
-from myf.services.context import ChangeContext
+from mosp.api.routing import Router
+from mosp.security.auth import require_authenticated
+from mosp.services.context import ChangeContext
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.isms import require_isms_manage, require_isms_read

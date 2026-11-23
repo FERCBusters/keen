@@ -13,10 +13,10 @@ import json
 import uuid
 from dataclasses import dataclass
 
-from myf.core.datetime_utils import to_utc_naive
-from myf.security.redaction import redact_obj
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import to_utc_naive
+from mosp.security.redaction import redact_obj
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 
 from app.agents.ueu import catalogue as catalogues
 from app.agents.ueu.custody import enrolled_asset_type, redact, withhold_payload

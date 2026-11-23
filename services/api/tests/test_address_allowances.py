@@ -12,8 +12,8 @@ import ast
 import fakeredis
 import pytest
 from app.core.config import settings
-from myf.security.client_ip import request_ip
-from myf.security.rate_limit import address_allowance, address_window_allow
+from mosp.security.client_ip import request_ip
+from mosp.security.rate_limit import address_allowance, address_window_allow
 from starlette.requests import Request
 
 from tests.source_tree import SOURCES, name_in

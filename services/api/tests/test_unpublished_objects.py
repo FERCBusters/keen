@@ -10,7 +10,7 @@ import logging
 
 import pytest
 from app.db.session import track_unpublished_object
-from myf.core.task_deadline import TIME_LIMITS
+from mosp.core.task_deadline import TIME_LIMITS
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 

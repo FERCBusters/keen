@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import Depends
-from myf.api.routing import Router
+from mosp.api.routing import Router
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.isms import require_isms_read

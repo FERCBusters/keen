@@ -11,7 +11,7 @@ import runpy
 import pytest
 from app import bootstrap_hosted, hosted_health, main
 from app.core.config import settings
-from myf.api.sql_trace import RequestLabelMiddleware
+from mosp.api.sql_trace import RequestLabelMiddleware
 
 
 @pytest.mark.parametrize(

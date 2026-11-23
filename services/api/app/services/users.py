@@ -4,23 +4,23 @@ from __future__ import annotations
 
 import uuid
 
-from myf.security.auth import ROLE_ADMIN, ROLE_INHERIT, ROLE_NORMAL, create_user
-from myf.security.passwords import hash_password
-from myf.security.permissions import (
+from mosp.security.auth import ROLE_ADMIN, ROLE_INHERIT, ROLE_NORMAL, create_user
+from mosp.security.passwords import hash_password
+from mosp.security.permissions import (
     bump_authz_versions,
     get_effective_permission_codes,
     normalize_permission_codes,
 )
-from myf.security.roles import (
+from mosp.security.roles import (
     compute_effective_role,
     count_effective_admins,
     is_effective_admin,
     lock_admin_changes,
     normalize_role,
 )
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.text import clean_email
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_email
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -395,14 +395,14 @@ def set_user_password_admin(
     except ValueError as e:
         raise DomainError(status_code=400, detail=str(e))
 
-    from myf.services.security_notifications import enqueue
+    from mosp.services.security_notifications import enqueue
 
     enqueue(db, target, "password-reset", ip=context.client_ip)
     db.add(target)
     bump_authz_versions(db, [target.id])
     db.commit()
-    from myf.services.account import end_password_recognition
-    from myf.services.login import sign_in_key
+    from mosp.services.account import end_password_recognition
+    from mosp.services.login import sign_in_key
 
     end_password_recognition(str(target.id), key=sign_in_key(db, target.username))
     return {"ok": True}

@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from myf.security.permissions import has_permission
-from myf.security.roles import attach_effective_role
-from myf.services.context import ChangeContext
+from mosp.security.permissions import has_permission
+from mosp.security.roles import attach_effective_role
+from mosp.services.context import ChangeContext
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

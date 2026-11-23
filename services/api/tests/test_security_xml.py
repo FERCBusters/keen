@@ -12,7 +12,7 @@ import ast
 from xml.etree import ElementTree as ET
 
 import pytest
-from myf.security.xml import MAX_NAMESPACE_NAME, parse_untrusted_xml
+from mosp.security.xml import MAX_NAMESPACE_NAME, parse_untrusted_xml
 
 from tests.source_tree import SOURCES, name_in
 
@@ -267,7 +267,7 @@ def test_the_boundary_check_finds_direct_parser_use(tmp_path):
 def test_a_document_over_the_size_bound_is_refused_before_parsing(monkeypatch):
     # A tree costs many times its text whatever the document's shape, so size
     # is the bound; the parser never sees a larger document.
-    from myf.security import xml
+    from mosp.security import xml
 
     def unreachable(*args, **kwargs):
         raise AssertionError("parsed a document over the size bound")

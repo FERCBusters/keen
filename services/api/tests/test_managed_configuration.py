@@ -21,7 +21,7 @@ from app.services.managed_configurations import (
     _validate_connector,
     _validate_regex,
 )
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 
 
 class ManagedConfigurationTests(unittest.TestCase):

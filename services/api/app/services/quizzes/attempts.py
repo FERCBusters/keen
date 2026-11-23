@@ -19,9 +19,9 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
-from myf.core.datetime_utils import iso_or_none, utc_now_naive
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.datetime_utils import iso_or_none, utc_now_naive
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session

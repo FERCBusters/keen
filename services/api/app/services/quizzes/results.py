@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from myf.core.datetime_utils import iso_or_none
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import iso_or_none
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 

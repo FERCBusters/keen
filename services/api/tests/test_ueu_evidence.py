@@ -23,8 +23,8 @@ from app.security import agent_signatures as signatures
 from app.services import ueu_evidence
 from app.services.ueu_evidence import display_payload, evidence_record
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from myf.core.datetime_utils import utc_now_naive
-from myf.security import encoding
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security import encoding
 
 from tests.test_keen_agent import setup as setup
 from tests.ueu_agent import FakeValkey, SimAgent, b64url, key_id, stamp
@@ -1159,7 +1159,7 @@ def test_a_stored_envelope_whose_event_type_is_not_text_is_displayed(event_type)
 
 
 def test_duplicate_json_names_cannot_hide_a_secret():
-    from myf.security.redaction import redact_str
+    from mosp.security.redaction import redact_str
 
     out = redact_str('{"password":"hunter2","password":"REDACTED"}')
     assert "hunter2" not in out

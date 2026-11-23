@@ -4,9 +4,9 @@ import uuid
 from datetime import date, datetime, timezone
 from datetime import time as dtime
 
-from myf.core.datetime_utils import to_utc_naive
-from myf.core.datetime_utils import utc_now_naive as utcnow
-from myf.db.accounts import (
+from mosp.core.datetime_utils import to_utc_naive
+from mosp.core.datetime_utils import utc_now_naive as utcnow
+from mosp.db.accounts import (
     AuditLogMixin,
     GroupMixin,
     MfaChallengeMixin,
@@ -702,7 +702,7 @@ class EntityChangelog(Base):
 # -----------------------------------------------------------------------------
 
 # Many-to-many user <-> group
-# The account tables' links (myf.db.accounts).
+# The account tables' links (mosp.db.accounts).
 user_groups, user_permissions, group_permissions = association_tables(Base.metadata)
 
 # Many-to-many user <-> permission (explicit grants)
@@ -719,7 +719,7 @@ class Permission(Base, PermissionMixin):
 
 
 class User(Base, UserMixin):
-    # Lets the request-scoped attributes myf declares be annotated without
+    # Lets the request-scoped attributes mosp declares be annotated without
     # mapping them.
     __allow_unmapped__ = True
 

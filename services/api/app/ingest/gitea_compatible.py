@@ -19,11 +19,11 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
-from myf.core.datetime_utils import to_utc_naive, utc_now_naive
-from myf.security.errors import collection_error
-from myf.security.json_shape import decode_json
-from myf.security.redaction import redact_url
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import to_utc_naive, utc_now_naive
+from mosp.security.errors import collection_error
+from mosp.security.json_shape import decode_json
+from mosp.security.redaction import redact_url
+from mosp.security.regex import scan_pattern
 from sqlalchemy.orm import Session
 
 from app.db.models import IngestionCursor

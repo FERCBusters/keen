@@ -16,9 +16,9 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
-from myf.core import task_deadline
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core import task_deadline
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 

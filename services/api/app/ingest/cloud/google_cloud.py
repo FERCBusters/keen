@@ -13,7 +13,7 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime, timedelta, timezone
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 from app.core.config import settings
 from app.ingest.cloud import google

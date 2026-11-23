@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from myf.core.datetime_utils import utc_from_timestamp_naive, utc_now_naive
+from mosp.core.datetime_utils import utc_from_timestamp_naive, utc_now_naive
 
 from tests.source_tree import SOURCES, name_in
 

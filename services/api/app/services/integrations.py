@@ -7,9 +7,9 @@ import re
 import uuid
 from urllib.parse import urlsplit
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -427,7 +427,7 @@ class SampleInput(Strict):
 
 
 def preview_sample(*, body: SampleInput, db: Session):
-    from myf.security.redaction import redact_obj
+    from mosp.security.redaction import redact_obj
 
     from app.integrations.engine import normalize
     from app.integrations.schema import pointer

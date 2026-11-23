@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import NoReturn
 
 from fastapi import Depends, HTTPException, Request
-from myf.api.context import change_context, mark_machine_credential
-from myf.api.routing import Router
-from myf.core.valkey import get_valkey
-from myf.security.client_ip import request_ip
-from myf.security.rate_limit import fixed_window_spend
+from mosp.api.context import change_context, mark_machine_credential
+from mosp.api.routing import Router
+from mosp.core.valkey import get_valkey
+from mosp.security.client_ip import request_ip
+from mosp.security.rate_limit import fixed_window_spend
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 

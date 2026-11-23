@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from myf.core.identifiers import try_uuid
-from myf.services.errors import DomainError
+from mosp.core.identifiers import try_uuid
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -150,7 +150,7 @@ def clause_changelog(*, clause_id: str, limit: int = 50, offset: int = 0, db: Se
 def clause_controls(*, clause_id: str, limit: int = 5000, offset: int = 0, db: Session):
     limit = max(1, min(int(limit or 5000), 5000))
     offset = max(0, int(offset or 0))
-    from myf.core.identifiers import try_uuid as _try_uuid
+    from mosp.core.identifiers import try_uuid as _try_uuid
 
     cid = _try_uuid(clause_id)
     if not cid:

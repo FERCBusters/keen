@@ -4,9 +4,9 @@ import json
 from typing import Any, cast
 
 import httpx2 as httpx
-from myf.core.datetime_utils import to_utc_naive, utc_from_timestamp_naive
-from myf.security.errors import collection_error
-from myf.security.json_shape import decode_json
+from mosp.core.datetime_utils import to_utc_naive, utc_from_timestamp_naive
+from mosp.security.errors import collection_error
+from mosp.security.json_shape import decode_json
 from sqlalchemy import Table
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session

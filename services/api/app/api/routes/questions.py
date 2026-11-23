@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from fastapi import Depends, Request, WebSocket
-from myf.api.context import change_context
-from myf.api.errors import json_object
-from myf.api.routing import Router
-from myf.api.uploads import upload_inputs
-from myf.realtime import sockets
-from myf.security.auth import require_admin, require_authenticated
-from myf.security.redaction import storable
+from mosp.api.context import change_context
+from mosp.api.errors import json_object
+from mosp.api.routing import Router
+from mosp.api.uploads import upload_inputs
+from mosp.realtime import sockets
+from mosp.security.auth import require_admin, require_authenticated
+from mosp.security.redaction import storable
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -157,7 +157,7 @@ async def admin_set_question_status(
 
 @router.websocket("/ws/notifications")
 async def ws_notifications(websocket: WebSocket):
-    """myf's notification socket, opening with the account's question counts."""
+    """mosp's notification socket, opening with the account's question counts."""
     # Looked up at each call, so the counts follow this module's snapshot.
     await sockets.serve(
         websocket, lambda *args, **kwargs: _notification_snapshot(*args, **kwargs)

@@ -18,7 +18,7 @@ from app.services import record_imports
 from app.services.isms import link_diary
 from app.services.record_imports import import_rows, row_payload
 from app.services.risks import RiskUpsertPayload
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 

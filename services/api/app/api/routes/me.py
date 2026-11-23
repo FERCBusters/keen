@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from fastapi import Depends, Request
-from myf.api.context import change_context
-from myf.api.routing import Router
-from myf.security.auth import require_authenticated
+from mosp.api.context import change_context
+from mosp.api.routing import Router
+from mosp.security.auth import require_authenticated
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db

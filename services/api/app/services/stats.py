@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
-from myf.core.datetime_utils import after_inclusive_date, to_utc_naive, utc_now_naive
-from myf.security.roles import is_active_user
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import after_inclusive_date, to_utc_naive, utc_now_naive
+from mosp.security.roles import is_active_user
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

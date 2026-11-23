@@ -15,10 +15,10 @@ from collections.abc import Iterable
 from functools import partial
 from typing import Any
 
-from myf.core.email_address import single_mailbox
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.mailer import smtp_configured, user_email
+from mosp.core.email_address import single_mailbox
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.mailer import smtp_configured, user_email
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

@@ -5,8 +5,8 @@ from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime
 from typing import Any, NamedTuple, Optional, TypeVar, cast
 
-from myf.core import task_deadline
-from myf.security.redaction import (
+from mosp.core import task_deadline
+from mosp.security.redaction import (
     combine_redaction_status,
     mask_event_data_bytes,
     mask_event_data_obj,

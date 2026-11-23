@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.agents.ueu.catalogue import EventType
-from myf.security.redaction import REDACTED, redact_str, should_redact_value
+from mosp.security.redaction import REDACTED, redact_str, should_redact_value
 
 SAFE_TYPES = {"boolean", "integer", "timestamp"}
 # Members whose values the profile validator has already restricted to fixed

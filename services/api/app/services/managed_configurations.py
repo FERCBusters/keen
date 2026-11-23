@@ -11,10 +11,10 @@ from urllib.parse import urlparse
 
 import httpx2 as httpx
 import yaml
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.redaction import redact_url
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.redaction import redact_url
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
@@ -1209,7 +1209,7 @@ def save_evidence_definition(
 
 
 def _validate_regex(pattern: str, key: str):
-    from myf.security.regex import validate_pattern
+    from mosp.security.regex import validate_pattern
 
     try:
         validate_pattern(pattern)

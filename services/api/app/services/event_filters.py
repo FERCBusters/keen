@@ -22,10 +22,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from myf.core.datetime_utils import after_inclusive_date, to_utc_naive
-from myf.core.identifiers import try_uuid
-from myf.security.regex import validate_database_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import after_inclusive_date, to_utc_naive
+from mosp.core.identifiers import try_uuid
+from mosp.security.regex import validate_database_pattern
+from mosp.services.errors import DomainError
 from sqlalchemy import ColumnElement, and_, exists, false, or_, select, text
 from sqlalchemy.exc import DataError, OperationalError
 from sqlalchemy.orm import Session, aliased

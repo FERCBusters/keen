@@ -11,9 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 from app.mapping.rules import evaluate_by_framework, event_fields, parse_rules
-from myf.core.datetime_utils import iso_or_none, iso_utc, to_utc_naive
-from myf.security import encoding
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import iso_or_none, iso_utc, to_utc_naive
+from mosp.security import encoding
+from mosp.security.regex import scan_pattern
 
 from tests.source_tree import SOURCES, name_in
 

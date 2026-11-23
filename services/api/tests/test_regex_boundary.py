@@ -17,16 +17,16 @@ import regex
 from app.mapping.rules import evaluate_by_framework, parse_rules
 from app.services.managed_configurations import _validate_regex
 from app.services.rule_sources import reads_source
-from myf.security import regex as regex_boundary
-from myf.security.redaction import mask_event_data_str, redact_bytes, redact_str
-from myf.security.regex import (
+from mosp.security import regex as regex_boundary
+from mosp.security.redaction import mask_event_data_str, redact_bytes, redact_str
+from mosp.security.regex import (
     SCAN_REPEATS_HELD,
     check_scan_pattern,
     compile_pattern,
     scan_pattern,
     validate_pattern,
 )
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 
 from tests.source_tree import SOURCES, name_in
 

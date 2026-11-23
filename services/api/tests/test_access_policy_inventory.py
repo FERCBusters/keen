@@ -65,7 +65,7 @@ def test_every_served_route_has_an_access_rule():
 
 
 def test_public_rules_match_the_route_policy():
-    from myf.security.route_policy import policy as route_policy
+    from mosp.security.route_policy import policy as route_policy
 
     policy = _policy()
     public = {

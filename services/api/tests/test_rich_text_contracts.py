@@ -3,7 +3,7 @@
 from html.parser import HTMLParser
 
 import pytest
-from myf.security.rich_text import plain_text_html, sanitize_rich_text_html
+from mosp.security.rich_text import plain_text_html, sanitize_rich_text_html
 
 
 class Tags(HTMLParser):

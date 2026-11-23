@@ -1,6 +1,6 @@
 """Changes to who holds what invalidate permissions through one helper.
 
-myf.security.permissions.bump_authz_versions raises each affected account's
+mosp.security.permissions.bump_authz_versions raises each affected account's
 authorisation version, which makes its sessions recompute their permissions
 on their next request. A second copy of that update could drift, so the
 application raises the version only there.

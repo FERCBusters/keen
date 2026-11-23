@@ -20,9 +20,9 @@ from urllib.parse import unquote, urlsplit
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
-from myf.core.datetime_utils import to_utc_naive
-from myf.security.json_shape import decode_json
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import to_utc_naive
+from mosp.security.json_shape import decode_json
+from mosp.security.regex import scan_pattern
 
 from app.core.config import settings
 from app.ingest.cloud.base import (

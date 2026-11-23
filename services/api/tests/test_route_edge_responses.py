@@ -10,11 +10,11 @@ from urllib.parse import urlencode
 
 from app.core.config import settings
 from app.db.models import User, UserIdentity
-from myf.api.routes import auth as auth_routes
-from myf.security import ldap
-from myf.security.auth import cookie_name as session_cookie_name
-from myf.security.passwords import hash_password
-from myf.security.sessions import create_session, session_key
+from mosp.api.routes import auth as auth_routes
+from mosp.security import ldap
+from mosp.security.auth import cookie_name as session_cookie_name
+from mosp.security.passwords import hash_password
+from mosp.security.sessions import create_session, session_key
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (

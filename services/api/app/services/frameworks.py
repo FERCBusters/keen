@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from urllib.parse import urlsplit
 
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 

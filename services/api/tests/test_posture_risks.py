@@ -20,7 +20,7 @@ from app.db.models import (
 from app.services import posture_risks
 from app.services import risks as risk_service
 from cryptography.fernet import Fernet
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe

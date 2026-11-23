@@ -1,8 +1,8 @@
-"""KEEN's audit and quiz emails, sent through myf's mailer."""
+"""KEEN's audit and quiz emails, sent through mosp's mailer."""
 
 from __future__ import annotations
 
-from myf.services.mailer import (
+from mosp.services.mailer import (
     build_calendar_invite,
     send_with_invite,
     sender_name,

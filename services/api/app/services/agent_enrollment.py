@@ -8,13 +8,13 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Literal, NoReturn
 
-from myf.core.datetime_utils import to_utc_naive, utc_now_naive
-from myf.core.valkey import get_valkey
-from myf.security.encoding import digest
-from myf.security.rate_limit import address_window_allow, fixed_window_allow
-from myf.security.regex import scan_pattern
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import to_utc_naive, utc_now_naive
+from mosp.core.valkey import get_valkey
+from mosp.security.encoding import digest
+from mosp.security.rate_limit import address_window_allow, fixed_window_allow
+from mosp.security.regex import scan_pattern
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from pydantic import Field, field_validator
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session

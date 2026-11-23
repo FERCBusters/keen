@@ -13,9 +13,9 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.email_address import single_mailbox
-from myf.services.mailer import smtp_configured, user_email
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.email_address import single_mailbox
+from mosp.services.mailer import smtp_configured, user_email
 from sqlalchemy import ColumnElement
 from sqlalchemy.orm import Session
 

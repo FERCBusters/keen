@@ -18,8 +18,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from fastapi import HTTPException
-from myf.security import auth, ldap, passwords
-from myf.services.errors import DomainError
+from mosp.security import auth, ldap, passwords
+from mosp.services.errors import DomainError
 
 
 @pytest.mark.parametrize("scheme", ["ldaps", "ldap"])
@@ -249,7 +249,7 @@ def test_admin_group_cannot_remove_all_inherited_admins(contract_db, operation):
     from app.db.models import Group, User, user_groups
     from app.schemas import GroupMembersPayload, GroupUpdatePayload
     from app.services import admin
-    from myf.security.roles import count_effective_admins
+    from mosp.security.roles import count_effective_admins
 
     db = contract_db
     users = [

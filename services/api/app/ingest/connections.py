@@ -16,10 +16,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from myf.core import task_deadline
-from myf.core.task_deadline import TIME_LIMITS
-from myf.core.valkey import get_valkey
-from myf.security.regex import scan_pattern
+from mosp.core import task_deadline
+from mosp.core.task_deadline import TIME_LIMITS
+from mosp.core.valkey import get_valkey
+from mosp.security.regex import scan_pattern
 from sqlalchemy import select, text
 
 from app.core.config import settings as deployment_settings
@@ -401,7 +401,7 @@ def connection_runs(source):
                                     # spans the collector's first remote wait.
                                     db.commit()
                                 rows = function(db, *args, **kwargs)
-                        from myf.security.redaction import redact_obj
+                        from mosp.security.redaction import redact_obj
 
                         results.extend(
                             redact_obj({**row, **identity()}) for row in rows

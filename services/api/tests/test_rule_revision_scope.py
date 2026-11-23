@@ -14,7 +14,7 @@ from app.db.models import (
     ManagedConfigurationRevision,
 )
 from app.services.managed_configurations import RestoreInput
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 

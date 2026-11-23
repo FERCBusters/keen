@@ -6,10 +6,10 @@ import math
 import operator
 import uuid
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

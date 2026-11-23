@@ -7,17 +7,17 @@ from datetime import date, datetime
 from typing import Any, NoReturn
 
 from cryptography.fernet import InvalidToken
-from myf.core.datetime_utils import parse_iso_datetime, utc_now_naive
-from myf.security.rate_limit import address_window_allow
-from myf.security.redaction import (
+from mosp.core.datetime_utils import parse_iso_datetime, utc_now_naive
+from mosp.security.rate_limit import address_window_allow
+from mosp.security.redaction import (
     mask_event_data_obj,
     mask_event_data_str,
     redact_obj,
     redact_str,
     redact_url,
 )
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -276,7 +276,7 @@ def record_metric(
         and not db.query(Event.id).filter(Event.id == source_event_id).first()
     ):
         raise DomainError(status_code=400, detail="Unknown source_event_id")
-    from myf.security.urls import external_url
+    from mosp.security.urls import external_url
 
     try:
         source_url = external_url(payload.get("source_url") or payload.get("url"))

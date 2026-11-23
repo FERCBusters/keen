@@ -13,7 +13,7 @@ import pytest
 from app.db.models import KeenAgent, UeuSettings
 from app.integrations.transport import decrypt
 from cryptography.fernet import Fernet
-from myf.security.encoding import unb64url
+from mosp.security.encoding import unb64url
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (

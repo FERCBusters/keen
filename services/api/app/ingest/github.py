@@ -6,15 +6,15 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx2 as httpx
-from myf.core.datetime_utils import (
+from mosp.core.datetime_utils import (
     parse_iso_datetime_or_none,
     to_utc_naive,
     utc_now_naive,
 )
-from myf.security.errors import collection_error
-from myf.security.json_shape import decode_json
-from myf.security.redaction import redact_url
-from myf.security.xml import parse_untrusted_xml
+from mosp.security.errors import collection_error
+from mosp.security.json_shape import decode_json
+from mosp.security.redaction import redact_url
+from mosp.security.xml import parse_untrusted_xml
 from sqlalchemy.orm import Session
 
 from app.db.models import IngestionCursor

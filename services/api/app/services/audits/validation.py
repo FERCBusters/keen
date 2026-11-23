@@ -5,11 +5,11 @@ import uuid
 from datetime import date
 from urllib.parse import parse_qs, urlsplit
 
-from myf.core.identifiers import try_uuid
-from myf.security.regex import scan_pattern
-from myf.security.rich_text import sanitize_rich_text_html
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.identifiers import try_uuid
+from mosp.security.regex import scan_pattern
+from mosp.security.rich_text import sanitize_rich_text_html
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy import func
 
 from app.core.config import settings

@@ -21,11 +21,11 @@ from app.ingest.connections import connection_scope
 from app.mapping.rules import evaluate_by_framework, load_rules
 from app.services.ingestion_pause import is_paused
 from cryptography.fernet import InvalidToken
-from myf.core import task_deadline
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.task_deadline import TIME_LIMITS
-from myf.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
-from myf.security.redaction import redact_obj, redact_url, storable
+from mosp.core import task_deadline
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.task_deadline import TIME_LIMITS
+from mosp.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
+from mosp.security.redaction import redact_obj, redact_url, storable
 from sqlalchemy import CursorResult, select, update
 
 from .engine import MAX_LINK_CHARS, collect, external_id, timestamp

@@ -6,7 +6,7 @@ network is used; the tests read the message the server would have received.
 
 from app.core.config import settings
 from app.services import mailer as keen_mailer
-from myf.services import mailer
+from mosp.services import mailer
 
 # Imported fixture: SMTP classes replaced by a recorder, with mail configured.
 from tests.test_mailer import smtp  # noqa: F401

@@ -34,7 +34,7 @@ from app.services.control_inheritance import (
     evidenced_control_ids,
     mapped_event_count,
 )
-from myf.services.context import ChangeContext
+from mosp.services.context import ChangeContext
 from sqlalchemy import func, select
 
 from tests.crosswalk_reference import reference_evidence_pairs, reference_pair_set

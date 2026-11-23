@@ -24,7 +24,7 @@ from app import bootstrap_hosted
 from app.core.config import Settings, settings
 from joserfc import jwt
 from joserfc.jwk import RSAKey
-from myf.security import csrf, oidc
+from mosp.security import csrf, oidc
 from sqlalchemy.orm import sessionmaker
 
 # Imported fixtures: the assembled application with an in-memory session
@@ -354,7 +354,7 @@ def test_a_live_notification_socket_closes_when_the_demo_ends(
     production_client,  # noqa: F811 - fixture imported above
     monkeypatch,
 ):
-    from myf.realtime.notifications import notification_hub
+    from mosp.realtime.notifications import notification_hub
     from starlette.websockets import WebSocketDisconnect
 
     client, _ = _notification_client(production_client, monkeypatch, recheck=60)

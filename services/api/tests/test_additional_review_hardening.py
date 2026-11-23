@@ -9,8 +9,8 @@ import pytest
 from app.services import questions
 from app.services.audits import reports
 from app.services.isms import documents
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from starlette.datastructures import UploadFile
 
 # Real sessions and permissions are exercised by the shared assembled fixture.
@@ -45,7 +45,7 @@ def test_later_oversized_question_attachment_prevents_all_storage_writes(monkeyp
         UploadFile(io.BytesIO(b"%PDF-1.7\n"), filename="ok.pdf"),
         UploadFile(io.BytesIO(b"%PDF-1.7\n" + b"x" * 40), filename="large.pdf"),
     ]
-    from myf.api.uploads import upload_inputs
+    from mosp.api.uploads import upload_inputs
 
     store = Mock()
     monkeypatch.setattr(questions, "put_bytes", store)

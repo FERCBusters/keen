@@ -26,7 +26,7 @@ from app.services import rule_suggestions as suggestions
 from app.services.rule_suggestions import SuggestionApplyInput, SuggestionStatusInput
 from app.worker import tasks
 from app.worker.celery_app import celery_app
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from psycopg2 import errors
 from pydantic import ValidationError
 from sqlalchemy import func, select, text

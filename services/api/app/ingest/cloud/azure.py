@@ -12,8 +12,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import httpx2 as httpx
-from myf.security.json_shape import decode_json
-from myf.security.regex import scan_pattern
+from mosp.security.json_shape import decode_json
+from mosp.security.regex import scan_pattern
 
 from app.core.config import settings
 from app.ingest.cloud.api import JsonApi, items

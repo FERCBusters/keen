@@ -21,12 +21,12 @@ import pytest
 from app.core.config import settings
 from app.db.models import Group, Permission, User
 from app.security import permissions as keen_permissions
-from myf.security import client_ip, permissions, roles
-from myf.security import sign_in_throttle as throttle
-from myf.security.auth import _remote_user_from_headers, create_user
-from myf.security.passwords import hash_password, verify_password
-from myf.security.rate_limit import fixed_window_allow, fixed_window_spend
-from myf.security.sessions import (
+from mosp.security import client_ip, permissions, roles
+from mosp.security import sign_in_throttle as throttle
+from mosp.security.auth import _remote_user_from_headers, create_user
+from mosp.security.passwords import hash_password, verify_password
+from mosp.security.rate_limit import fixed_window_allow, fixed_window_spend
+from mosp.security.sessions import (
     SESSION_PREFIX,
     create_session,
     delete_session,
@@ -395,7 +395,7 @@ def test_an_untrusted_proxy_is_reported_once_when_two_requests_race(
             return False
 
     monkeypatch.setattr(client_ip, "_report_lock", RacedLock())
-    with caplog.at_level(logging.WARNING, logger="myf.security.client_ip"):
+    with caplog.at_level(logging.WARNING, logger="mosp.security.client_ip"):
         client_ip._report_untrusted_proxy("10.0.0.9")
 
     assert reported.is_set()

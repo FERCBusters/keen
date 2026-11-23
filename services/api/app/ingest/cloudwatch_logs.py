@@ -5,9 +5,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import boto3
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.errors import collection_error
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.errors import collection_error
+from mosp.security.regex import scan_pattern
 from sqlalchemy.orm import Session
 
 from app.db.models import IngestionCursor

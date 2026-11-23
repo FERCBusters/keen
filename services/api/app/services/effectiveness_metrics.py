@@ -6,9 +6,9 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from myf.core.datetime_utils import add_months
-from myf.core.datetime_utils import utc_now_naive as utcnow
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import add_months
+from mosp.core.datetime_utils import utc_now_naive as utcnow
+from mosp.security.regex import scan_pattern
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 

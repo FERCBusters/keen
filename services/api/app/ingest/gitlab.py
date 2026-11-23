@@ -5,9 +5,9 @@ import json
 from datetime import timedelta
 from urllib.parse import quote
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.errors import collection_error
-from myf.security.json_shape import decode_json
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.errors import collection_error
+from mosp.security.json_shape import decode_json
 
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, is_safe_url, store_event_with_artifact

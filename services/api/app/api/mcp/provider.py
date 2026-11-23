@@ -22,7 +22,7 @@ from mcp.server.auth.provider import (
 )
 from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from pydantic import AnyUrl
 from starlette.concurrency import run_in_threadpool
 

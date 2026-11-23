@@ -2,8 +2,8 @@
 
 A recipient reaches an SMTP To header, where a comma or semicolon starts another
 address, and smtplib sends to every address the header lists. One helper
-(myf.core.email_address.single_mailbox) decides what an address is; request
-values pass through myf.services.text.clean_email, identity-provider and
+(mosp.core.email_address.single_mailbox) decides what an address is; request
+values pass through mosp.services.text.clean_email, identity-provider and
 directory addresses through the helper itself, and the mailer checks again and
 names its one envelope recipient. The sweep below refuses a hand-rolled email
 check anywhere else, so a new field cannot accept a list of addresses.
@@ -14,10 +14,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from myf.core.email_address import compared_mailbox, single_mailbox
-from myf.services import mailer, security_notifications
-from myf.services.errors import DomainError
-from myf.services.text import clean_email
+from mosp.core.email_address import compared_mailbox, single_mailbox
+from mosp.services import mailer, security_notifications
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_email
 
 from tests.source_tree import SOURCES, name_in
 
@@ -177,8 +177,8 @@ def test_no_email_check_outside_the_shared_helper():
         relative = str(name_in(path, APP))
         offenders += _email_checks(path.read_text(), relative)
     assert offenders == [], (
-        "Validate addresses with myf.services.text.clean_email or "
-        "myf.core.email_address.single_mailbox"
+        "Validate addresses with mosp.services.text.clean_email or "
+        "mosp.core.email_address.single_mailbox"
     )
     # The sweep finds the checks that let a list of addresses through.
     assert _email_checks('ok = "@" in value', "services/x.py") == [
@@ -190,8 +190,8 @@ def test_no_email_check_outside_the_shared_helper():
 
 
 def test_every_smtp_send_names_its_envelope_recipients():
-    # myf's mailer holds the SMTP sends; KEEN's own invites go through it.
-    from myf.services import mailer
+    # mosp's mailer holds the SMTP sends; KEEN's own invites go through it.
+    from mosp.services import mailer
 
     tree = ast.parse(Path(mailer.__file__).read_text())
     sends = [

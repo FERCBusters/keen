@@ -22,8 +22,8 @@ from app.services.audits import operations as audit_operations
 from app.services.audits import reports
 from app.services.isms import documents
 from app.services.isms.schemas import DocumentPayload
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 

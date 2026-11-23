@@ -11,16 +11,16 @@ from fastapi.openapi.docs import (
     get_swagger_ui_oauth2_redirect_html,
 )
 from fastapi.openapi.utils import get_openapi
-from myf import middleware
-from myf.api.errors import domain_error_response, validation_error_response
-from myf.api.sql_trace import RequestLabelMiddleware
-from myf.realtime.notifications import (
+from mosp import middleware
+from mosp.api.errors import domain_error_response, validation_error_response
+from mosp.api.sql_trace import RequestLabelMiddleware
+from mosp.realtime.notifications import (
     start_notification_listener,
     stop_notification_listener,
 )
-from myf.security.headers import SecurityHeadersMiddleware
-from myf.security.request_limits import RequestBodyLimitMiddleware
-from myf.services.errors import DomainError
+from mosp.security.headers import SecurityHeadersMiddleware
+from mosp.security.request_limits import RequestBodyLimitMiddleware
+from mosp.services.errors import DomainError
 from starlette.concurrency import run_in_threadpool
 
 from app.api.mcp import server as mcp_server
@@ -157,7 +157,7 @@ def redoc_v1():
 
 app.include_router(api_router, prefix="")
 
-# Authentication, CSRF and the audit trail (myf), inside the middleware below.
+# Authentication, CSRF and the audit trail (mosp), inside the middleware below.
 middleware.install(app)
 
 # Outermost guard also covers auth-exempt integrations and WebSockets.

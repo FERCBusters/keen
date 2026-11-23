@@ -13,7 +13,7 @@ import pytest
 from app.core.config import settings
 from app.db.models import Group, user_groups
 from app.services.me import me as account_summary
-from myf.services.context import ChangeContext
+from mosp.services.context import ChangeContext
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401

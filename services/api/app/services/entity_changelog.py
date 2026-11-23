@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Iterable
 
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 

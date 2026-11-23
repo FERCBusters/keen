@@ -19,11 +19,11 @@ from xml.etree import ElementTree as ET
 
 import httpx2 as httpx
 from dateutil import parser as dtparser
-from myf.core.datetime_utils import to_utc_naive, utc_now_naive
-from myf.security.errors import collection_error
-from myf.security.redaction import redact_url
-from myf.security.regex import scan_pattern
-from myf.security.xml import parse_untrusted_xml
+from mosp.core.datetime_utils import to_utc_naive, utc_now_naive
+from mosp.security.errors import collection_error
+from mosp.security.redaction import redact_url
+from mosp.security.regex import scan_pattern
+from mosp.security.xml import parse_untrusted_xml
 from sqlalchemy.orm import Session
 
 from app.core.config import settings as deployment_settings

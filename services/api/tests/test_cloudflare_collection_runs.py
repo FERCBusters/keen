@@ -26,7 +26,7 @@ from app.mapping.collector import (
     event_collector,
 )
 from celery.exceptions import SoftTimeLimitExceeded
-from myf.core import task_deadline
+from mosp.core import task_deadline
 
 from tests.task_limits import checked_statements, stops_wherever_the_deadline_falls
 from tests.transactions import open_while_answering

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 

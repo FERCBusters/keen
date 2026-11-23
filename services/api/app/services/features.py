@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from threading import RLock
 from weakref import WeakKeyDictionary
 
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import IntegrityError
 

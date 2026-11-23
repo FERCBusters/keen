@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from myf.core.identifiers import try_uuid
-from myf.services.errors import DomainError
+from mosp.core.identifiers import try_uuid
+from mosp.services.errors import DomainError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

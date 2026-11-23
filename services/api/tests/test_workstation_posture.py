@@ -16,8 +16,8 @@ from app.db.models import (
 from app.services import workstation_posture as posture
 from app.services.people import ensure_person_for_user
 from cryptography.fernet import Fernet
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.auth import create_user
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.auth import create_user
 from sqlalchemy import event as sa_event
 
 from tests.test_assembled_authority_regressions import keen as keen

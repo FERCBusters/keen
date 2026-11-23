@@ -10,7 +10,7 @@ from app.services.ingestion_pause import (
     purge_pause_status,
     require_purge_receiving,
 )
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 
 
 @pytest.mark.parametrize(

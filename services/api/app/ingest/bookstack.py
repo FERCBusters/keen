@@ -7,11 +7,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx2 as httpx
-from myf.core.datetime_utils import parse_iso_datetime_or_none
-from myf.security.errors import collection_error
-from myf.security.json_shape import decode_json
-from myf.security.redaction import utf8_bytes
-from myf.security.regex import (
+from mosp.core.datetime_utils import parse_iso_datetime_or_none
+from mosp.security.errors import collection_error
+from mosp.security.json_shape import decode_json
+from mosp.security.redaction import utf8_bytes
+from mosp.security.regex import (
     MATCH_CONCURRENTLY,
     MATCH_TIMEOUT_SECONDS,
     BoundedPattern,

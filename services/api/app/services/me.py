@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.security.auth import ROLE_ADMIN
-from myf.security.permissions import has_permission
-from myf.security.regex import scan_pattern
-from myf.security.roles import compute_effective_role, is_effective_admin
-from myf.services.context import ChangeContext, signed_in_user
-from myf.services.errors import DomainError
-from myf.services.mailer import smtp_configured, user_email
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.security.auth import ROLE_ADMIN
+from mosp.security.permissions import has_permission
+from mosp.security.regex import scan_pattern
+from mosp.security.roles import compute_effective_role, is_effective_admin
+from mosp.services.context import ChangeContext, signed_in_user
+from mosp.services.errors import DomainError
+from mosp.services.mailer import smtp_configured, user_email
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 

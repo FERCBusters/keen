@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx2 as httpx
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.errors import collection_error
-from myf.security.json_shape import decode_json
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.errors import collection_error
+from mosp.security.json_shape import decode_json
 from sqlalchemy.orm import Session
 
 from app.db.models import IngestionCursor

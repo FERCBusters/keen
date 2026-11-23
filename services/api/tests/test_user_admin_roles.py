@@ -14,9 +14,9 @@ import pytest
 from app.db.models import Group, User, user_groups
 from app.schemas import UserAccessUpdatePayload
 from app.services import users
-from myf.security.roles import count_effective_admins
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.security.roles import count_effective_admins
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import keen, unsafe  # noqa: F401

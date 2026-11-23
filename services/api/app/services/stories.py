@@ -30,12 +30,12 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from myf.core.datetime_utils import to_utc_naive
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.core.identifiers import try_uuid
-from myf.security.permissions import has_permission
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import to_utc_naive
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.core.identifiers import try_uuid
+from mosp.security.permissions import has_permission
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session

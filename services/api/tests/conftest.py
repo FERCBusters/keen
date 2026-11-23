@@ -5,7 +5,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
-import app  # noqa: F401  (binds myf to KEEN before any test imports myf)
+import app  # noqa: F401  (binds mosp to KEEN before any test imports mosp)
 import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session

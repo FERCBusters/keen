@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings

@@ -6,11 +6,11 @@ import json
 import uuid
 
 import httpx2 as httpx
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.permissions import has_permission
-from myf.security.redaction import prepare_event_fields, utf8_bytes
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.permissions import has_permission
+from mosp.security.redaction import prepare_event_fields, utf8_bytes
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 

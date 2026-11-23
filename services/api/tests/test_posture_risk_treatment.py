@@ -24,7 +24,7 @@ from app.ingest.cloud import runner
 from app.ingest.cloud.base import Check, ScopeResult, attention_record
 from app.services import posture_risks, workstation_posture
 from app.services import risks as risk_service
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe

@@ -10,7 +10,7 @@ import yaml
 from alembic import op
 from app.core.config import settings
 from app.core.evidence_migration import unify
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 revision = "0002_release_seed"
 down_revision = "0001_release_schema"

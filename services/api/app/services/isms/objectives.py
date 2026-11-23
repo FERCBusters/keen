@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 

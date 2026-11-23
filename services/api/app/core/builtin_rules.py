@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 import sqlalchemy as sa
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 FRAMEWORK = "KEEN-AF:1.0"
 

@@ -13,8 +13,8 @@ from __future__ import annotations
 import secrets
 
 from cryptography.fernet import InvalidToken
-from myf.security.encoding import b64url, unb64url
-from myf.services.errors import DomainError
+from mosp.security.encoding import b64url, unb64url
+from mosp.services.errors import DomainError
 
 from app.db.models import UeuSettings
 from app.integrations.errors import IntegrationError

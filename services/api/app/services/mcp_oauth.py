@@ -16,12 +16,12 @@ from datetime import datetime, timedelta
 from typing import Annotated
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.auth import ROLE_NORMAL
-from myf.security.encoding import digest
-from myf.security.permissions import get_effective_permission_codes
-from myf.services.errors import DomainError
-from myf.services.security_notifications import enqueue as notify
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.auth import ROLE_NORMAL
+from mosp.security.encoding import digest
+from mosp.security.permissions import get_effective_permission_codes
+from mosp.services.errors import DomainError
+from mosp.services.security_notifications import enqueue as notify
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session

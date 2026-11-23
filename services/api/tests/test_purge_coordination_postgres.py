@@ -10,8 +10,8 @@ import pytest
 from app.db.models import Base, Event, SourceIngestionState
 from app.services import evidence_retention as retention
 from app.services.ingestion_pause import is_paused, require_receiving
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 from sqlalchemy import DefaultClause, MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 

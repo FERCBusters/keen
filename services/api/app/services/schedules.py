@@ -20,11 +20,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from myf.core import task_deadline
-from myf.core.datetime_utils import add_months, utc_now_naive
-from myf.core.task_deadline import TIME_LIMITS
-from myf.services.errors import DomainError
-from myf.services.mailer import smtp_configured
+from mosp.core import task_deadline
+from mosp.core.datetime_utils import add_months, utc_now_naive
+from mosp.core.task_deadline import TIME_LIMITS
+from mosp.services.errors import DomainError
+from mosp.services.mailer import smtp_configured
 from sqlalchemy.orm import Session
 
 from app.core.config import settings

@@ -14,7 +14,7 @@ import unicodedata
 from collections import Counter
 from functools import lru_cache
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 from app.services.evidence_taxonomy import CONCEPTS
 

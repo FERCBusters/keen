@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote, urljoin, urlsplit
 
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 from .errors import IntegrationError, UnusableRecord
 from .schema import Definition, has_dot_segment, pointer

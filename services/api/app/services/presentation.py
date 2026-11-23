@@ -9,9 +9,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
 import yaml
-from myf.security.redaction import redact_url
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.security.redaction import redact_url
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 
 from app.core.config import settings
 from app.core.references import CONTROL_JUSTIFICATION_IDS, CONTROL_JUSTIFICATIONS

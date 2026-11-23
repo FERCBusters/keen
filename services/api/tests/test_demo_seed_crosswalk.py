@@ -9,7 +9,7 @@ from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 from tests.conftest import migrated_schema
 from tests.crosswalk_reference import reference_pair_set

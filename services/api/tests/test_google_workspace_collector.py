@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from app.ingest import google_workspace as gws
-from myf.core.datetime_utils import to_utc_naive
+from mosp.core.datetime_utils import to_utc_naive
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge")
 

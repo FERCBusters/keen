@@ -10,18 +10,18 @@ from unittest.mock import AsyncMock, Mock
 import app.services.artifacts as artifacts_operations
 import app.services.questions as questions_operations
 import fakeredis
-import myf.services.login as login_operations
+import mosp.services.login as login_operations
 import pytest
 import regex as regex_engine
 from app.core.config import settings
 from app.ingest import bookstack
 from fastapi.testclient import TestClient
-from myf.realtime import sockets
-from myf.security import csrf, oidc, regex, sessions
-from myf.security.auth import cookie_name as session_cookie_name
-from myf.security.route_policy import is_public_request, policy
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
+from mosp.realtime import sockets
+from mosp.security import csrf, oidc, regex, sessions
+from mosp.security.auth import cookie_name as session_cookie_name
+from mosp.security.route_policy import is_public_request, policy
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
 from starlette.requests import Request
 
 from tests.source_tree import SOURCES
@@ -309,8 +309,8 @@ def test_only_the_configured_origin_counts_and_origin_can_be_required(monkeypatc
 def production_client(contract_db, monkeypatch):
     from app import main
     from app.db.models import User
-    from myf import middleware as myf_middleware
-    from myf.security import auth, permissions
+    from mosp import middleware as mosp_middleware
+    from mosp.security import auth, permissions
     from sqlalchemy.orm import sessionmaker
 
     redis = fakeredis.FakeRedis(decode_responses=True)
@@ -330,7 +330,7 @@ def production_client(contract_db, monkeypatch):
         expire_on_commit=False,
         join_transaction_mode="create_savepoint",
     )
-    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(mosp_middleware, "SessionLocal", factory)
     monkeypatch.setattr(auth, "get_valkey", lambda: redis)
     monkeypatch.setattr(permissions, "get_valkey", lambda: redis)
     monkeypatch.setattr(settings, "public_base_url", "https://keen.example")
@@ -364,7 +364,7 @@ def test_public_policy_matches_real_routes():
     from app import main
 
     paths = main.app.openapi()["paths"]
-    # myf's own public routes and KEEN's.
+    # mosp's own public routes and KEEN's.
     for method, patterns in policy().public.routes.items():
         for path in patterns:
             assert method.lower() in paths[path], (method, path)
@@ -412,10 +412,10 @@ def test_production_body_rejection_has_headers(production_client):
 def test_websocket_snapshot_releases_database(production_client, monkeypatch):
     from app.db import session as database
     from app.services.questions import _notification_snapshot
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
 
     client, redis, admin, reader = production_client
-    original = myf_middleware.SessionLocal
+    original = mosp_middleware.SessionLocal
     closed = []
 
     def factory():
@@ -439,7 +439,7 @@ def test_websocket_snapshot_releases_database(production_client, monkeypatch):
 
 
 def test_notification_connection_limits_and_cleanup():
-    from myf.realtime.notifications import NotificationHub
+    from mosp.realtime.notifications import NotificationHub
 
     async def run():
         hub = NotificationHub()
@@ -547,7 +547,7 @@ def test_bookstack_lookup_isolated_between_connections():
 
 
 def test_sso_start_rate_limit_rejects_before_creating_state(monkeypatch):
-    from myf.core import valkey
+    from mosp.core import valkey
 
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(valkey, "get_valkey", lambda: redis)
@@ -681,11 +681,11 @@ def test_websocket_rejects_cross_origin_before_database(production_client, monke
 
 def test_live_websocket_closes_after_logout(production_client, monkeypatch):
     from app.db import session as database
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
     from starlette.websockets import WebSocketDisconnect
 
     client, redis, admin, reader = production_client
-    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", mosp_middleware.SessionLocal)
     monkeypatch.setattr(sockets, "RECHECK_SECONDS", 0.01)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
@@ -906,8 +906,8 @@ def test_deactivation_permanently_revokes_all_session_methods(
 def test_login_issuers_capture_account_session_version(
     production_client, contract_db, monkeypatch, method
 ):
-    from myf.api.routes import auth as routes
-    from myf.services import security_notifications
+    from mosp.api.routes import auth as routes
+    from mosp.services import security_notifications
 
     _, redis, _, user = production_client
     user.session_version = 7
@@ -945,8 +945,8 @@ def test_login_completion_replaces_the_old_session_and_tolerates_a_failed_revoca
     # in the one commit that records the sign-in, so the account row stays
     # locked from the active check until the session exists.
     from app.db.models import User
-    from myf.core.datetime_utils import utc_now_naive
-    from myf.services import security_notifications
+    from mosp.core.datetime_utils import utc_now_naive
+    from mosp.services import security_notifications
 
     _, redis, _, user = production_client
     monkeypatch.setattr(login_operations, "get_valkey", lambda: redis)
@@ -1093,7 +1093,7 @@ def test_logout_requires_intent_and_get_never_revokes(
 ):
     from app import main
     from app.db.session import get_db
-    from myf.api.routes import auth as routes
+    from mosp.api.routes import auth as routes
 
     client, redis, _, reader = production_client
     monkeypatch.setattr(routes, "get_valkey", lambda: redis)
@@ -1243,7 +1243,7 @@ def test_permission_owned_mutations_keep_csrf_and_route_permissions(
     ],
 )
 def test_permission_write_inventory_does_not_exempt_neighbour_paths(path, method):
-    from myf.security.route_policy import is_permission_checked_write
+    from mosp.security.route_policy import is_permission_checked_write
 
     assert not is_permission_checked_write(request(path, method))
     assert not is_public_request(request(path, method))
@@ -1527,10 +1527,10 @@ ORIGIN = {"Origin": "https://keen.example"}
 
 def _notification_client(production_client, monkeypatch, *, recheck=0.01):
     from app.db import session as database
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
 
     client, redis, admin, reader = production_client
-    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", mosp_middleware.SessionLocal)
     monkeypatch.setattr(sockets, "RECHECK_SECONDS", recheck)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
@@ -1539,11 +1539,11 @@ def _notification_client(production_client, monkeypatch, *, recheck=0.01):
 
 def test_websocket_without_a_session_is_refused(production_client, monkeypatch):
     from app.db import session as database
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
     from starlette.websockets import WebSocketDisconnect
 
     client, *_ = production_client
-    monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
+    monkeypatch.setattr(database, "SessionLocal", mosp_middleware.SessionLocal)
 
     with pytest.raises(WebSocketDisconnect) as closed:
         with client.websocket_connect("/ws/notifications", headers=ORIGIN):

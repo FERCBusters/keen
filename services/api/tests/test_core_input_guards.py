@@ -7,7 +7,7 @@ checks, as a changed parser could.
 
 import pytest
 from app.core.config import Settings
-from myf.core import email_address
+from mosp.core import email_address
 from pydantic import ValidationError
 
 

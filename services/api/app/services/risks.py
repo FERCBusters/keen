@@ -6,13 +6,13 @@ import uuid
 from datetime import date
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.security.permissions import has_any_permission, has_permission
-from myf.security.roles import is_active_user
-from myf.services.context import ChangeContext
-from myf.services.errors import DomainError
-from myf.services.text import clean_text, split_filter_values, uuid_filter_values
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.security.permissions import has_any_permission, has_permission
+from mosp.security.roles import is_active_user
+from mosp.services.context import ChangeContext
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text, split_filter_values, uuid_filter_values
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session

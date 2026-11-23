@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
-import myf.services.sso_emails as sso_emails_operations
+import mosp.services.sso_emails as sso_emails_operations
 import pytest
 from app.api.routes import questions
 from app.core.config import settings
@@ -20,11 +20,11 @@ from app.db.models import (
     UserSsoEmail,
 )
 from fastapi import HTTPException
-from myf.api.routes import sso_emails
-from myf.core.datetime_utils import utc_now_naive
-from myf.security import oidc
-from myf.security.client_ip import request_ip
-from myf.services.errors import DomainError
+from mosp.api.routes import sso_emails
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security import oidc
+from mosp.security.client_ip import request_ip
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 from starlette.responses import Response
@@ -243,9 +243,9 @@ def test_event_questions_and_owner_listing(db, user):
 )
 def test_shared_proxy_interpretation(monkeypatch, peer, xff, expected):
     monkeypatch.setattr(settings, "security_trusted_proxy_cidrs", "10.0.0.0/24")
-    from myf.api.context import change_context
-    from myf.middleware import request_ip as _client_ip
-    from myf.security.rate_limit import client_ip
+    from mosp.api.context import change_context
+    from mosp.middleware import request_ip as _client_ip
+    from mosp.security.rate_limit import client_ip
 
     for fn in [
         request_ip,
@@ -425,18 +425,18 @@ def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatc
     from app import main
     from app.db.session import get_db
     from fastapi.testclient import TestClient
-    from myf import middleware as myf_middleware
-    from myf.security.csrf import csrf_cookie_name, csrf_header_name
+    from mosp import middleware as mosp_middleware
+    from mosp.security.csrf import csrf_cookie_name, csrf_header_name
     from sqlalchemy.orm import sessionmaker
 
     factory = sessionmaker(bind=db.get_bind())
     uid = user.id
-    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(mosp_middleware, "SessionLocal", factory)
     monkeypatch.setattr(
-        myf_middleware, "ensure_session_authorization_current", lambda *a: None
+        mosp_middleware, "ensure_session_authorization_current", lambda *a: None
     )
     monkeypatch.setattr(
-        myf_middleware, "get_current_user_from_request", lambda request, session: None
+        mosp_middleware, "get_current_user_from_request", lambda request, session: None
     )
 
     def dependency():
@@ -453,7 +453,7 @@ def test_http_self_service_requires_authentication_and_csrf(db, user, monkeypatc
             {"detail": "Not authenticated"},
         )
         monkeypatch.setattr(
-            myf_middleware,
+            mosp_middleware,
             "get_current_user_from_request",
             lambda request, session: session.get(User, uid),
         )

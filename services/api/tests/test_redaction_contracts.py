@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from myf.security import redaction as r
+from mosp.security import redaction as r
 
 from tests.source_tree import name_in
 

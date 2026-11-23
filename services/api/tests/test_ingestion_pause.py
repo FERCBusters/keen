@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.services.ingestion_pause import is_paused, pausable
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import sessionmaker
 
 from tests.source_types import POLLING_SOURCES

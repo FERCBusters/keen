@@ -13,8 +13,8 @@ from app.core.config import settings
 from app.db import session as live_session
 from app.worker import celery_app as live_worker
 from celery.signals import task_postrun, task_prerun
-from myf import worker as worker_trace
-from myf.db import sql_trace as db_trace
+from mosp import worker as worker_trace
+from mosp.db import sql_trace as db_trace
 from sqlalchemy import event
 from sqlalchemy.orm import Session, SessionEvents
 

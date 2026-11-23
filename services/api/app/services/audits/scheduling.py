@@ -4,10 +4,10 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive as utcnow
-from myf.services.errors import DomainError
-from myf.services.mailer import user_email
-from myf.services.text import clean_email, clean_text
+from mosp.core.datetime_utils import utc_now_naive as utcnow
+from mosp.services.errors import DomainError
+from mosp.services.mailer import user_email
+from mosp.services.text import clean_email, clean_text
 from sqlalchemy.orm import Session
 
 from app.db.models import Audit, AuditAttendee, User

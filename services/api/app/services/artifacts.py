@@ -10,9 +10,9 @@ from collections import OrderedDict
 from pathlib import Path
 from threading import BoundedSemaphore, Lock
 
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.security.redaction import is_textual_content_type, mask_event_data_bytes
-from myf.services.errors import DomainError
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.security.redaction import is_textual_content_type, mask_event_data_bytes
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings

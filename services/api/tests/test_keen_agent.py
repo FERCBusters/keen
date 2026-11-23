@@ -23,7 +23,7 @@ from app.ingest import common
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 from sqlalchemy.orm import sessionmaker
 
 from tests.ueu_agent import FakeValkey
@@ -417,7 +417,7 @@ def test_webhook_artifact_metadata_excludes_all_credential_headers(monkeypatch):
 
 def test_real_middleware_keeps_agent_paths_scoped(setup, monkeypatch):
     from app import main
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
 
     _, factory, headers, _, _, _ = setup
 
@@ -425,9 +425,9 @@ def test_real_middleware_keeps_agent_paths_scoped(setup, monkeypatch):
         with factory() as session:
             yield session
 
-    monkeypatch.setattr(myf_middleware, "SessionLocal", factory)
+    monkeypatch.setattr(mosp_middleware, "SessionLocal", factory)
     monkeypatch.setattr(
-        myf_middleware, "get_current_user_from_request", lambda *a: None
+        mosp_middleware, "get_current_user_from_request", lambda *a: None
     )
     main.app.dependency_overrides[api.get_db] = db
     try:

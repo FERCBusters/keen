@@ -18,8 +18,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 from sqlalchemy.orm import Session
 
 from app.db.models import (

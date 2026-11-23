@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from myf.core import task_deadline
-from myf.core.datetime_utils import utc_now_naive
-from myf.db.engine import application_engine
+from mosp.core import task_deadline
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.db.engine import application_engine
 from sqlalchemy import DateTime, Engine, bindparam, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 

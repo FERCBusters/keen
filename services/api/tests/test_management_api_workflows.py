@@ -871,7 +871,7 @@ def test_serializers_tolerate_missing_rows_and_refuse_unknown_entity_types():
     # refuses a type it does not know.
     from app.services.control_refs import control_summary
     from app.services.isms import serializers
-    from myf.services.errors import DomainError
+    from mosp.services.errors import DomainError
 
     assert control_summary(None) == {}
     assert serializers._clause_out(None) == {}

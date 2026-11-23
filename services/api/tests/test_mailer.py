@@ -10,7 +10,7 @@ from datetime import date
 import pytest
 from app.core.config import settings
 from app.services import mailer as keen_mailer
-from myf.services import mailer
+from mosp.services import mailer
 
 
 class FakeSMTP:

@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import yaml
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 from app.core.config import settings
 

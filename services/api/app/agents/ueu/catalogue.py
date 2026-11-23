@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agents.ueu.jcs import MAX_SAFE_INTEGER
-from myf.security.regex import scan_pattern
+from mosp.security.regex import scan_pattern
 
 MAX_STRING = 1024
 MAX_LIST_ITEMS = 64

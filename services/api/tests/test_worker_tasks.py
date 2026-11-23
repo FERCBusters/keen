@@ -607,8 +607,8 @@ def test_audit_log_retention_deletes_expired_records_in_short_batches(
 ):
     from app.db.models import AuditLog
     from app.worker.celery_app import celery_app
-    from myf.core.datetime_utils import utc_now_naive
-    from myf.services import audit_retention
+    from mosp.core.datetime_utils import utc_now_naive
+    from mosp.services import audit_retention
     from sqlalchemy.orm import sessionmaker
 
     # Each batch commits in its own session, as the worker's would.
@@ -678,7 +678,7 @@ def test_audit_log_retention_deletes_expired_records_in_short_batches(
 
 def test_security_notifications_task():
     with patch(
-        "myf.services.security_notifications.deliver_pending", return_value=[1]
+        "mosp.services.security_notifications.deliver_pending", return_value=[1]
     ) as deliver:
         assert wt.security_notifications_task() == [1]
     deliver.assert_called_once()

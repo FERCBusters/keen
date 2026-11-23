@@ -18,13 +18,13 @@ import pytest
 from app import main
 from app.core.config import settings
 from app.db.models import AuditLog
-from myf import middleware as myf_middleware
-from myf.security import auth as security_auth
-from myf.security import request_limits
-from myf.security.errors import collection_error
-from myf.security.regex import compile_pattern, validate_pattern
-from myf.security.request_limits import RequestBodyLimitMiddleware, screen_cookies
-from myf.security.rich_text import sanitize_rich_text_html
+from mosp import middleware as mosp_middleware
+from mosp.security import auth as security_auth
+from mosp.security import request_limits
+from mosp.security.errors import collection_error
+from mosp.security.regex import compile_pattern, validate_pattern
+from mosp.security.request_limits import RequestBodyLimitMiddleware, screen_cookies
+from mosp.security.rich_text import sanitize_rich_text_html
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import event
 
@@ -198,7 +198,7 @@ def test_a_browser_keeps_working_when_its_replacement_csrf_token_cannot_be_made(
     def unavailable(response, token):
         raise OSError("synthetic cookie failure")
 
-    monkeypatch.setattr(myf_middleware, "set_csrf_cookie", unavailable)
+    monkeypatch.setattr(mosp_middleware, "set_csrf_cookie", unavailable)
 
     response = client.get("/v1/me")
 
@@ -298,13 +298,13 @@ def test_an_audit_trail_that_cannot_be_written_leaves_the_response_intact(
 
     event.listen(bind, "before_cursor_execute", unavailable)
     try:
-        with caplog.at_level(logging.WARNING, logger="myf.middleware"):
+        with caplog.at_level(logging.WARNING, logger="mosp.middleware"):
             unrecorded = client.get("/v1/users", params={"q": "private-search"})
     finally:
         event.remove(bind, "before_cursor_execute", unavailable)
 
     # The loss is logged, with nothing the request carried.
-    assert [r.getMessage() for r in caplog.records if r.name == "myf.middleware"] == [
+    assert [r.getMessage() for r in caplog.records if r.name == "mosp.middleware"] == [
         "A request audit record could not be written (OSError)"
     ]
 

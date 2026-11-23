@@ -11,8 +11,8 @@ import pytest
 from app.core.config import Settings, settings
 from app.db.models import UserIdentity
 from fastapi.testclient import TestClient
-from myf.security import auth, sessions
-from myf.security.auth import cookie_name as session_cookie_name
+from mosp.security import auth, sessions
+from mosp.security.auth import cookie_name as session_cookie_name
 from pydantic import ValidationError
 from starlette.datastructures import Headers
 

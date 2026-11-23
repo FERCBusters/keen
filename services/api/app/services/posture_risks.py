@@ -15,9 +15,9 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.permissions import has_permission
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.permissions import has_permission
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 

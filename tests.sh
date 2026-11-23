@@ -44,7 +44,7 @@ PY
 
 result=0
 # Every statement and branch of the API is tested, so any untested line or
-# branch fails the run. myf's own suite covers every branch of myf, including
+# branch fails the run. MOSP's own suite covers every branch of MOSP, including
 # the parts only MIDENA or OSPMAE use.
 poetry run python -m pytest tests -ra --tb=short \
   --junitxml="$report_dir/pytest.xml" \

@@ -491,8 +491,8 @@ def test_a_new_quiz_is_a_draft_with_its_own_measure(world):
 
 def test_a_quiz_measure_changes_only_through_its_quiz(world):
     from app.services import webhooks
-    from myf.services.context import ChangeContext
-    from myf.services.errors import DomainError
+    from mosp.services.context import ChangeContext
+    from mosp.services.errors import DomainError
 
     quiz = world.create(controls=["A.6.3"])
     isms = world.keen.client(world.keen.user("isms.manage"))

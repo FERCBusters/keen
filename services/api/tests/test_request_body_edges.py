@@ -16,10 +16,10 @@ from app.db.models import Event, Mapping
 from app.db.session import get_db
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.testclient import TestClient
-from myf.api import errors, forms
-from myf.api.errors import json_object
-from myf.api.routing import Router
-from myf.services.errors import DomainError
+from mosp.api import errors, forms
+from mosp.api.errors import json_object
+from mosp.api.routing import Router
+from mosp.services.errors import DomainError
 from pydantic import BaseModel
 
 # Imported fixture: the assembled application with an in-memory session store.

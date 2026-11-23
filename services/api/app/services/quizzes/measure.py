@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.context import ChangeContext
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.context import ChangeContext
 from sqlalchemy.orm import Session
 
 from app.db.models import (

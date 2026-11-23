@@ -12,8 +12,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx2 as httpx
-from myf.core.datetime_utils import parse_iso_datetime_or_none, to_utc_naive
-from myf.security.xml import parse_untrusted_xml
+from mosp.core.datetime_utils import parse_iso_datetime_or_none, to_utc_naive
+from mosp.security.xml import parse_untrusted_xml
 
 
 def _parse_iso_ts(value: object) -> datetime | None:

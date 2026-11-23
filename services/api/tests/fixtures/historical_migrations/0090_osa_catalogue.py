@@ -10,7 +10,7 @@ from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 revision = "0090_osa_catalogue"
 down_revision = "0089_hipaa_soc2"

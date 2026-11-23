@@ -5,8 +5,8 @@ from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.services.errors import DomainError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, text
 

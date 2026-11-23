@@ -13,8 +13,8 @@ from app.security import request_policy
 from cryptography.exceptions import InvalidSignature, InvalidTag
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 
 from tests.test_keen_agent import setup as setup
 from tests.ueu_agent import (
@@ -678,7 +678,7 @@ def test_wrong_codes_cannot_spend_an_agents_enrolment_allowance(keen, monkeypatc
     # wrong code; they are refused without spending the allowance that the
     # holder of the right code draws on.
     import fakeredis
-    from myf.security import rate_limit
+    from mosp.security import rate_limit
 
     store = fakeredis.FakeRedis()
     monkeypatch.setattr(enrollment_operations, "get_valkey", lambda: store)

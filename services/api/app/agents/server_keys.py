@@ -35,10 +35,10 @@ from cryptography.hazmat.primitives import hpke
 from cryptography.hazmat.primitives.asymmetric import mlkem, x25519
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.encoding import b64url, unb64url
-from myf.security.regex import scan_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.encoding import b64url, unb64url
+from mosp.security.regex import scan_pattern
+from mosp.services.errors import DomainError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Query, Session

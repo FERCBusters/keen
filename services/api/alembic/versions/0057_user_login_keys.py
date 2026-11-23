@@ -10,7 +10,7 @@ username.
 
 import sqlalchemy as sa
 from alembic import op
-from myf.security.names import login_key
+from mosp.security.names import login_key
 
 revision = "0057_user_login_keys"
 down_revision = "0056_osa_snapshot_2026_11"

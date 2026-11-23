@@ -5,7 +5,7 @@ import argparse
 
 from app.db.models import User
 from app.db.session import SessionLocal
-from myf.security.mfa import operator_reset
+from mosp.security.mfa import operator_reset
 
 
 def main():

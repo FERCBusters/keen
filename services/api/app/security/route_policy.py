@@ -1,13 +1,13 @@
-"""KEEN's routes in myf's route policy (``myf.security.route_policy``).
+"""KEEN's routes in mosp's route policy (``mosp.security.route_policy``).
 
-myf declares its own routes (signing in and out, single sign-on, second
+mosp declares its own routes (signing in and out, single sign-on, second
 factors, SSO addresses); these are KEEN's. Every other HTTP route is
 authenticated, and every write without a rule below needs an administrator.
 Machine endpoints authenticate their own credentials. Keep the contract tests
 aligned with this small inventory.
 """
 
-from myf.security.route_policy import (
+from mosp.security.route_policy import (
     PrefixRule,
     RouteCodes,
     RoutePolicy,

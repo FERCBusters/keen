@@ -35,8 +35,8 @@ from app.security import mcp_tokens
 from app.security.mcp_tokens import INNER_TOKEN
 from app.services import mcp_oauth
 from fastapi.testclient import TestClient
-from myf.core.datetime_utils import utc_now_naive
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.services.errors import DomainError
 
 from tests.test_assembled_authority_regressions import BASE, PASSWORD
 from tests.test_assembled_authority_regressions import (
@@ -171,16 +171,16 @@ def inner(path, token, method="GET", **request):
 @pytest.fixture
 def mcp(keen, monkeypatch):
     from app import main
-    from myf import middleware as myf_middleware
+    from mosp import middleware as mosp_middleware
 
     async def nothing():
         return None
 
     monkeypatch.setattr(settings, "mcp_enabled", True)
-    monkeypatch.setattr(provider, "SessionLocal", myf_middleware.SessionLocal)
+    monkeypatch.setattr(provider, "SessionLocal", mosp_middleware.SessionLocal)
     monkeypatch.setattr(main, "start_notification_listener", nothing)
     monkeypatch.setattr(main, "stop_notification_listener", nothing)
-    monkeypatch.setattr(myf_middleware, "bootstrap_initial_admin", lambda: None)
+    monkeypatch.setattr(mosp_middleware, "bootstrap_initial_admin", lambda: None)
     keen.db.add(Framework(slug=FW, name="ISO"))
     keen.db.add(
         ControlItem(
@@ -1067,7 +1067,7 @@ def test_the_server_is_built_only_while_enabled(monkeypatch):
 
 def test_the_connection_email_names_where_to_revoke_it(mcp, monkeypatch):
     from app.db.models import SecurityNotification
-    from myf.services import security_notifications
+    from mosp.services import security_notifications
 
     monkeypatch.setattr(security_notifications, "smtp_configured", lambda: True)
     user = mcp.keen.user("isms.read")

@@ -7,8 +7,8 @@ import pickle
 from dataclasses import dataclass
 from typing import Any, Literal, overload
 
-from myf.security.json_shape import MAX_DEPTH
-from myf.security.regex import UNMATCHABLE, scan_pattern
+from mosp.security.json_shape import MAX_DEPTH
+from mosp.security.regex import UNMATCHABLE, scan_pattern
 
 from app.core.config import settings
 from app.mapping.collector import matches_collector
@@ -77,7 +77,7 @@ def rule_rationale(rule_id: str, framework_slug: str) -> str:
 def _match_regex(pat: str | None, val: str | None) -> bool:
     if not pat:
         return True
-    from myf.security.regex import compile_pattern
+    from mosp.security.regex import compile_pattern
 
     return bool(compile_pattern(pat).search(val or ""))
 
@@ -246,7 +246,7 @@ def _collector(value: str) -> None:
 
 
 def _condition(when: Any) -> Condition:
-    from myf.security.regex import validate_pattern
+    from mosp.security.regex import validate_pattern
 
     if not isinstance(when, dict):
         raise _Invalid("when must be an object of conditions")

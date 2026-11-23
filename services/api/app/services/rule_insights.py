@@ -19,9 +19,9 @@ from datetime import datetime, timedelta
 from itertools import accumulate
 from typing import Any
 
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.regex import scan_pattern, validate_pattern
-from myf.services.errors import DomainError
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.regex import scan_pattern, validate_pattern
+from mosp.services.errors import DomainError
 from sqlalchemy import BigInteger, cast, extract, func, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, aliased

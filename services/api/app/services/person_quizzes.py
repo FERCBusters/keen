@@ -1,6 +1,6 @@
 """Named quiz assignments and history, restricted to quiz managers."""
 
-from myf.services.errors import DomainError
+from mosp.services.errors import DomainError
 from sqlalchemy import and_, or_, select
 
 from app.db.models import (

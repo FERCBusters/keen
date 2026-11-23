@@ -19,7 +19,7 @@ from app.ingest import op_events as onepassword
 from app.ingest.connections import Connection, connection_scope, namespace
 from app.mapping.collector import collector_id, event_collector
 from celery.exceptions import SoftTimeLimitExceeded
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 from tests.transactions import open_while_answering
 

@@ -14,9 +14,9 @@ import hashlib
 from datetime import timedelta
 
 import httpx2 as httpx
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.errors import collection_error
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.errors import collection_error
+from mosp.security.regex import scan_pattern
 
 from app.db.models import IngestionCursor
 from app.ingest.common import RecordReader, store_event_with_artifact

@@ -33,7 +33,7 @@ from app.db.models import (
 )
 from app.ingest import registry
 from app.services import admin as admin_service
-from myf.core.datetime_utils import utc_now_naive
+from mosp.core.datetime_utils import utc_now_naive
 
 # Imported fixture: the assembled application with an in-memory session store.
 from tests.test_assembled_authority_regressions import (
@@ -230,7 +230,7 @@ def test_audit_views_are_for_administrators(keen):  # noqa: F811
 
 
 def test_audit_views_check_access_in_the_operation_itself(keen):  # noqa: F811
-    from myf.services.errors import DomainError
+    from mosp.services.errors import DomainError
 
     for reader in (keen.user("isms.read"), keen.user("audittrail.read")):
         for operation in (

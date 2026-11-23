@@ -13,10 +13,10 @@ import hashlib
 from datetime import timedelta
 
 import httpx2 as httpx
-from myf.core.datetime_utils import utc_now_naive
-from myf.security.errors import collection_error
-from myf.security.redaction import REDACTED, is_sensitive_key
-from myf.security.regex import scan_pattern
+from mosp.core.datetime_utils import utc_now_naive
+from mosp.security.errors import collection_error
+from mosp.security.redaction import REDACTED, is_sensitive_key
+from mosp.security.regex import scan_pattern
 
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.event_api import (

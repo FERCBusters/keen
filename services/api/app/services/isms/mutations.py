@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 
-from myf.core.datetime_utils import utc_now_naive as _utcnow
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.services.errors import DomainError
-from myf.services.text import clean_text
+from mosp.core.datetime_utils import utc_now_naive as _utcnow
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.services.errors import DomainError
+from mosp.services.text import clean_text
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

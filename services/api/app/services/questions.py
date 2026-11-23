@@ -10,15 +10,15 @@ from functools import partial
 from pathlib import Path
 
 from anyio import to_thread
-from myf.core.identifiers import try_uuid as _try_uuid
-from myf.realtime.notifications import notification_bus, notification_hub
-from myf.security.auth import get_current_user_from_headers_cookies
-from myf.security.permissions import has_permission
-from myf.security.roles import is_effective_admin
-from myf.services.activity_log import record_action as _audit_action
-from myf.services.context import ChangeContext, signed_in_user
-from myf.services.errors import DomainError
-from myf.services.uploads import Upload
+from mosp.core.identifiers import try_uuid as _try_uuid
+from mosp.realtime.notifications import notification_bus, notification_hub
+from mosp.security.auth import get_current_user_from_headers_cookies
+from mosp.security.permissions import has_permission
+from mosp.security.roles import is_effective_admin
+from mosp.services.activity_log import record_action as _audit_action
+from mosp.services.context import ChangeContext, signed_in_user
+from mosp.services.errors import DomainError
+from mosp.services.uploads import Upload
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -463,7 +463,7 @@ def _notification_snapshot(headers, cookies, *, counts=False, peer=None):
         )
         if not user:
             return None
-        from myf.security.permissions import ensure_session_authorization_current
+        from mosp.security.permissions import ensure_session_authorization_current
 
         ensure_session_authorization_current(db, user)
         from app.services.features import state

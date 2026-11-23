@@ -22,8 +22,8 @@ from google.oauth2 import service_account
 from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from myf.core import task_deadline
-from myf.security.provider_logging import suppress_provider_logs
+from mosp.core import task_deadline
+from mosp.security.provider_logging import suppress_provider_logs
 
 from app.ingest.cloud.base import Unavailable
 

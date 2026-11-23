@@ -82,7 +82,7 @@ def test_ref_sort_key_natural_order():
 def test_try_uuid():
     import uuid
 
-    from myf.core.identifiers import try_uuid
+    from mosp.core.identifiers import try_uuid
 
     parsed = try_uuid("7f6cc9e2-4372-4b4b-b8d6-dfa10c001234")
     assert isinstance(parsed, uuid.UUID)

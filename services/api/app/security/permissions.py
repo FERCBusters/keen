@@ -1,10 +1,10 @@
-"""KEEN's permission catalogue and the checks that depend on it; myf holds the
-permission mechanism (``myf.security.permissions``)."""
+"""KEEN's permission catalogue and the checks that depend on it; mosp holds the
+permission mechanism (``mosp.security.permissions``)."""
 
 from __future__ import annotations
 
-from myf.security.permissions import has_any_permission, has_permission
-from myf.security.roles import is_active_user, is_effective_admin
+from mosp.security.permissions import has_any_permission, has_permission
+from mosp.security.roles import is_active_user, is_effective_admin
 from sqlalchemy.orm import Session
 
 from app.db.models import User

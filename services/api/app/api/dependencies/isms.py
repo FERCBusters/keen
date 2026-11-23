@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request
-from myf.security.auth import require_authenticated
+from mosp.security.auth import require_authenticated
 from sqlalchemy.orm import Session
 
 from app.db.models import User
