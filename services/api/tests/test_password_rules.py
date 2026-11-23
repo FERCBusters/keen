@@ -267,15 +267,17 @@ def test_a_rehash_never_undoes_a_password_changed_meanwhile(keen):  # noqa: F811
     row = keen.db.get(User, user.id)
     row.password_hash = legacy_hash(PASSWORD)
     keen.db.commit()
-    verified = keen.db.get(User, user.id)
-    assert verified.password_hash == legacy_hash(PASSWORD)
+    account = keen.db.get(User, user.id)
+    verified = account.password_hash
+    assert verified == legacy_hash(PASSWORD)
     # Another request changes the password after this one verified the old one.
     changed = passwords.hash_password("a-newer-synthetic-passphrase")
     keen.db.query(User).filter(User.id == user.id).update(
         {User.password_hash: changed}, synchronize_session=False
     )
+    keen.db.commit()
 
-    auth._raise_work_factor(keen.db, verified, PASSWORD)
+    assert auth._raise_work_factor(keen.db, account, verified, PASSWORD) is None
 
     keen.db.expire_all()
     assert keen.db.get(User, user.id).password_hash == changed

@@ -177,11 +177,11 @@ def _burst(signin, monkeypatch, username, cookie, size):
         responses.append(None)
         responses[position] = signin.attempt(username, "wrong", client=browser)
 
-    def in_flight(db, context, *, recognised, **credentials):
-        heard[recognised] += 1
+    def in_flight(db, context, *, recognised_by, **credentials):
+        heard[recognised_by is not None] += 1
         if len(responses) < size:
             guess()
-        return real(db, context, recognised=recognised, **credentials)
+        return real(db, context, recognised_by=recognised_by, **credentials)
 
     monkeypatch.setattr(auth_routes.login_service, "authenticate_password", in_flight)
     guess()

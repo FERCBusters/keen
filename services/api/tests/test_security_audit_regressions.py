@@ -155,6 +155,8 @@ def test_failed_login_performs_one_real_password_derivation(monkeypatch, kind):
             is_active=kind != "inactive",
             auth_backend="ldap" if kind == "ldap" else "local",
             password_hash=stored,
+            session_version=0,
+            mfa_version=0,
         )
     )
     db = Mock()
@@ -178,10 +180,14 @@ def test_valid_local_login_still_succeeds():
         is_active=True,
         auth_backend="local",
         password_hash=passwords.hash_password("synthetic-password"),
+        session_version=0,
+        mfa_version=0,
     )
     db = Mock()
     db.query.return_value.filter.return_value.one_or_none.return_value = user
     assert auth.authenticate_user(db, "alice", "synthetic-password") is user
+    # The account carries what the password check proved.
+    assert user.verified_credential == (user.password_hash, 0, 0)
 
 
 @pytest.mark.parametrize(
