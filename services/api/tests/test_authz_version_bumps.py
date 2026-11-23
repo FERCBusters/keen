@@ -1,6 +1,6 @@
 """Changes to who holds what invalidate permissions through one helper.
 
-services.users.bump_authz_versions raises each affected account's
+myf.security.permissions.bump_authz_versions raises each affected account's
 authorisation version, which makes its sessions recompute their permissions
 on their next request. A second copy of that update could drift, so the
 application raises the version only there.
@@ -40,7 +40,7 @@ def test_only_the_shared_helper_raises_authorisation_versions():
         if (lines := version_raises(path.read_text()))
     }
     assert {path: len(lines) for path, lines in found.items()} == {
-        "services/users.py": 1
+        "security/permissions.py": 1
     }
 
 

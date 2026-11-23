@@ -3,9 +3,9 @@
 
 import argparse
 
-from app.db.models import MfaChallenge, MfaCredential, MfaRecoveryCode, User
+from app.db.models import User
 from app.db.session import SessionLocal
-from myf.security.mfa import audit
+from myf.security.mfa import operator_reset
 
 
 def main():
@@ -25,15 +25,7 @@ def main():
         )
         if user is None:
             parser.error("User not found")
-        for model in (MfaCredential, MfaRecoveryCode, MfaChallenge):
-            db.query(model).filter(model.user_id == user.id).delete(
-                synchronize_session=False
-            )
-        user.mfa_enabled = False
-        user.mfa_totp_secret = None
-        user.mfa_totp_last_step = -1
-        user.mfa_version += 1
-        audit(db, user, "operator-reset")
+        operator_reset(db, user)
         db.commit()
     print(
         "Local authenticators and recovery codes reset; local sessions revoked. Required MFA enrolment applies at next sign-in."

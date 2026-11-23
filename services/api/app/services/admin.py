@@ -12,6 +12,7 @@ from myf.core.datetime_utils import to_utc_naive, utc_now_naive
 from myf.core.identifiers import try_uuid as _try_uuid
 from myf.security.auth import ROLE_ADMIN, ROLE_NORMAL
 from myf.security.permissions import (
+    bump_authz_versions,
     normalize_group_description,
     normalize_group_name,
     normalize_permission_codes,
@@ -90,7 +91,6 @@ from app.services.presentation import parse_iso_dt as _parse_iso_dt
 from app.services.presentation import (
     validate_control_justification as _validate_control_justification,
 )
-from app.services.users import bump_authz_versions
 from app.storage.s3 import attempt_key, put_bytes
 
 

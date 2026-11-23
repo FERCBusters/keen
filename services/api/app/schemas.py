@@ -9,11 +9,6 @@ from pydantic import BaseModel, Field
 from app.services.framework_catalogue import FrameworkListItem as FrameworkListItem
 
 
-class ChangePasswordPayload(BaseModel):
-    current_password: str
-    new_password: str
-
-
 class PreferencesOut(BaseModel):
     use_local_timezone: bool = Field(default=False)
     timezone: str | None = Field(default=None)

@@ -156,6 +156,7 @@ def test_a_hosted_workspace_admits_only_its_owners_sign_in(
     client, redis, admin, reader = production_client
     issuer, subject = "https://tenant.auth0.example/", "email|owner"
     monkeypatch.setattr(settings, "hosted_mode", True)
+    monkeypatch.setattr(settings, "oidc_enabled", True)
     monkeypatch.setattr(settings, "oidc_issuer", issuer)
     monkeypatch.setattr(settings, "hosted_owner_subject", subject)
     contract_db.add(

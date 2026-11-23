@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from myf.api.routes.account import router as account_router
 from myf.api.routes.auth import router as auth_router
 from myf.api.routes.mfa import router as mfa_router
 from myf.api.routes.sso_emails import router as sso_emails_router
@@ -147,6 +148,7 @@ router.include_router(agents_router, tags=["Keen Agent"])
 router.include_router(evidence_retention_router, tags=["Admin"])
 router.include_router(mfa_router, tags=["Auth"])
 router.include_router(home_router, tags=["Home"])
+router.include_router(account_router, tags=["Me"])
 router.include_router(sso_emails_router, tags=["Me"])
 router.include_router(source_connections_router, tags=["Admin"])
 router.include_router(features_router, tags=["Admin"])

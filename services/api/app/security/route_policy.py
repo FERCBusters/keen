@@ -113,7 +113,7 @@ KEEN_POLICY = RoutePolicy(
     self_service=RouteSet(
         dict.fromkeys(
             ("POST", "PUT", "PATCH", "DELETE"),
-            ("/v1/me/password", "/v1/me/preferences"),
+            ("/v1/me/preferences",),
         )
     ),
     self_service_prefixes=("/v1/me/saved-searches",),

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas import (
-    ChangePasswordPayload,
     PreferencesOut,
     PreferencesUpdatePayload,
     SavedSearchCreatePayload,
@@ -77,15 +76,6 @@ def delete_my_saved_search(
 ) -> dict:
     return service.delete_my_saved_search(
         saved_search_id=saved_search_id, context=change_context(request), db=db
-    )
-
-
-@router.post("/v1/me/password")
-def change_my_password(
-    payload: ChangePasswordPayload, request: Request, db: Session = Depends(get_db)
-) -> dict:
-    return service.change_my_password(
-        payload=payload, context=change_context(request), db=db
     )
 
 

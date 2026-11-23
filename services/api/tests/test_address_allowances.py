@@ -128,7 +128,7 @@ def test_every_per_address_allowance_goes_through_address_window_allow():
         "api/routes/agents.py",
         "security/mfa.py",
         "security/oidc.py",
-        "services/me.py",
+        "services/account.py",
         "services/agent_enrollment.py",
         "services/webhooks.py",
     }

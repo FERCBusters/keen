@@ -43,11 +43,12 @@ engine.dispose()
 PY
 
 result=0
-# Every statement and branch of the API, and of the myf modules it runs on, is
-# tested, so any untested line or branch fails the run.
+# Every statement and branch of the API is tested, so any untested line or
+# branch fails the run. myf's own suite covers every branch of myf, including
+# the parts only MIDENA or OSPMAE use.
 poetry run python -m pytest tests -ra --tb=short \
   --junitxml="$report_dir/pytest.xml" \
-  --cov=app --cov=myf --cov-branch --cov-fail-under=100 --cov-report=term:skip-covered \
+  --cov=app --cov-branch --cov-fail-under=100 --cov-report=term:skip-covered \
   --cov-report="xml:$report_dir/backend-coverage.xml" \
   --cov-report="json:$report_dir/backend-coverage.json" \
   --cov-report="html:$report_dir/backend-coverage" || result=1

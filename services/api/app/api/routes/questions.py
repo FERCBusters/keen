@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import Depends, Request, WebSocket
 from myf.api.context import change_context
 from myf.api.errors import json_object
 from myf.api.routing import Router
 from myf.api.uploads import upload_inputs
-from myf.realtime.notifications import notification_hub
-from myf.security import auth
+from myf.realtime import sockets
 from myf.security.auth import require_admin, require_authenticated
-from myf.security.client_ip import request_ip
-from myf.security.rate_limit import address_window_allow
 from myf.security.redaction import storable
 from sqlalchemy.orm import Session
 
@@ -23,8 +18,6 @@ from app.services.questions import (
 )
 
 router = Router()
-
-_NOTIFICATION_RECHECK_SECONDS = 30
 
 
 @router.get("/v1/events/{event_id}/questions")
@@ -162,86 +155,13 @@ async def admin_set_question_status(
     )
 
 
-# WebSocket handshakes each client address may start a minute.
-_HANDSHAKES_PER_MINUTE = 30
-
-
-def _handshake_allowed(websocket: WebSocket) -> bool:
-    # The allowance lives in the store that holds the sessions (auth's Valkey
-    # connection), and fails closed: without it no session can be checked either.
-    allowed, _ = address_window_allow(
-        auth.get_valkey(),
-        "ws-handshake",
-        request_ip(websocket),
-        _HANDSHAKES_PER_MINUTE,
-        60,
-        fail_closed=True,
-    )
-    return allowed
-
-
 @router.websocket("/ws/notifications")
 async def ws_notifications(websocket: WebSocket):
-    """Bounded notification connections with periodic session revalidation."""
-    from myf.security.csrf import request_origin_allowed
-    from starlette.concurrency import run_in_threadpool
-
-    if not request_origin_allowed(websocket, require_origin=True):
-        await websocket.close(code=1008, reason="Origin not allowed")
-        return
-    # Each handshake costs a session lookup and a database read, so every
-    # client address (an IPv6 /64 counts as one) gets a small allowance first.
-    if not await run_in_threadpool(_handshake_allowed, websocket):
-        await websocket.close(code=1008, reason="Too many connection attempts")
-        return
-    initial = await run_in_threadpool(
-        _notification_snapshot,
-        websocket.headers,
-        websocket.cookies,
-        counts=True,
-        peer=getattr(websocket.client, "host", None),
+    """myf's notification socket, opening with the account's question counts."""
+    # Looked up at each call, so the counts follow this module's snapshot.
+    await sockets.serve(
+        websocket, lambda *args, **kwargs: _notification_snapshot(*args, **kwargs)
     )
-    if initial is None:
-        await websocket.close(code=1008)
-        return
-    identity, payloads = initial
-    if not await notification_hub.connect(
-        websocket, user_id=identity[0], is_admin=identity[1]
-    ):
-        await websocket.close(code=1008, reason="Too many notification connections")
-        return
-    try:
-        await websocket.accept()
-        for payload in payloads:
-            await asyncio.wait_for(websocket.send_json(payload), timeout=5)
-        loop = asyncio.get_running_loop()
-        next_check = loop.time() + _NOTIFICATION_RECHECK_SECONDS
-        while True:
-            try:
-                message = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=max(0, next_check - loop.time())
-                )
-                if len(message) > 1024:
-                    break
-            except asyncio.TimeoutError:
-                current = await run_in_threadpool(
-                    _notification_snapshot,
-                    websocket.headers,
-                    websocket.cookies,
-                    peer=getattr(websocket.client, "host", None),
-                )
-                if current is None or current[0] != identity:
-                    break
-                await asyncio.wait_for(websocket.send_json({"type": "ping"}), timeout=5)
-                next_check = loop.time() + _NOTIFICATION_RECHECK_SECONDS
-    except Exception:
-        pass
-    finally:
-        await notification_hub.disconnect(websocket)
-        try:
-            await websocket.close(code=1008)
-        except Exception:
-            pass
 
 
 async def question_input(request: Request):

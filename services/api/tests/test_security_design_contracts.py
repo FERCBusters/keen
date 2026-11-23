@@ -16,6 +16,7 @@ import regex as regex_engine
 from app.core.config import settings
 from app.ingest import bookstack
 from fastapi.testclient import TestClient
+from myf.realtime import sockets
 from myf.security import csrf, oidc, regex, sessions
 from myf.security.auth import cookie_name as session_cookie_name
 from myf.security.route_policy import is_public_request, policy
@@ -679,14 +680,13 @@ def test_websocket_rejects_cross_origin_before_database(production_client, monke
 
 
 def test_live_websocket_closes_after_logout(production_client, monkeypatch):
-    from app.api.routes import questions
     from app.db import session as database
     from myf import middleware as myf_middleware
     from starlette.websockets import WebSocketDisconnect
 
     client, redis, admin, reader = production_client
     monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
-    monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", 0.01)
+    monkeypatch.setattr(sockets, "RECHECK_SECONDS", 0.01)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
     with client.websocket_connect(
@@ -698,7 +698,7 @@ def test_live_websocket_closes_after_logout(production_client, monkeypatch):
             for _ in range(10):
                 socket.receive_json()
     assert (closed.value.code, closed.value.reason) == (1008, "")
-    assert questions.notification_hub._user_sockets == {}
+    assert sockets.notification_hub._user_sockets == {}
 
 
 def test_production_mfa_requires_verified_current_security_version(
@@ -834,12 +834,16 @@ def test_enabled_metric_webhook_requires_a_signature(production_client, monkeypa
 
 @pytest.mark.parametrize("method", ["local", "ldap", "google", "github", "oidc"])
 def test_deactivation_permanently_revokes_all_session_methods(
-    production_client, contract_db, method
+    production_client, contract_db, method, monkeypatch
 ):
     from app import main
     from app.db.session import get_db
 
     client, redis, admin, reader = production_client
+    # A provider's session lasts only while its provider is enabled.
+    if method in ("google", "github", "oidc"):
+        flag = "oidc_enabled" if method == "oidc" else f"{method}_sso_enabled"
+        monkeypatch.setattr(settings, flag, True)
     admin_sid = sessions.create_session(redis, user_id=str(admin.id), ttl_seconds=300)
     old_sid = sessions.create_session(
         redis, user_id=str(reader.id), ttl_seconds=300, auth_method=method
@@ -1522,13 +1526,12 @@ ORIGIN = {"Origin": "https://keen.example"}
 
 
 def _notification_client(production_client, monkeypatch, *, recheck=0.01):
-    from app.api.routes import questions
     from app.db import session as database
     from myf import middleware as myf_middleware
 
     client, redis, admin, reader = production_client
     monkeypatch.setattr(database, "SessionLocal", myf_middleware.SessionLocal)
-    monkeypatch.setattr(questions, "_NOTIFICATION_RECHECK_SECONDS", recheck)
+    monkeypatch.setattr(sockets, "RECHECK_SECONDS", recheck)
     sid = sessions.create_session(redis, user_id=str(reader.id), ttl_seconds=300)
     client.cookies.set(session_cookie_name(), sid)
     return client, reader
@@ -1554,7 +1557,6 @@ def test_each_user_has_a_bounded_number_of_notification_sockets(
 ):
     from contextlib import ExitStack
 
-    from app.api.routes import questions
     from starlette.websockets import WebSocketDisconnect
 
     client, reader = _notification_client(production_client, monkeypatch, recheck=60)
@@ -1571,14 +1573,13 @@ def test_each_user_has_a_bounded_number_of_notification_sockets(
             1008,
             "Too many notification connections",
         )
-        assert len(questions.notification_hub._user_sockets[str(reader.id)]) == 5
-    assert questions.notification_hub._user_sockets == {}
+        assert len(sockets.notification_hub._user_sockets[str(reader.id)]) == 5
+    assert sockets.notification_hub._user_sockets == {}
 
 
 def test_live_websockets_are_pinged_until_the_users_access_changes(
     production_client, monkeypatch, contract_db
 ):
-    from app.api.routes import questions
     from starlette.websockets import WebSocketDisconnect
 
     client, reader = _notification_client(production_client, monkeypatch)
@@ -1592,13 +1593,12 @@ def test_live_websockets_are_pinged_until_the_users_access_changes(
             for _ in range(50):
                 assert socket.receive_json() == {"type": "ping"}
     assert (closed.value.code, closed.value.reason) == (1008, "")
-    assert questions.notification_hub._user_sockets == {}
+    assert sockets.notification_hub._user_sockets == {}
 
 
 def test_oversized_websocket_messages_close_the_connection(
     production_client, monkeypatch
 ):
-    from app.api.routes import questions
     from starlette.websockets import WebSocketDisconnect
 
     client, _ = _notification_client(production_client, monkeypatch, recheck=60)
@@ -1609,7 +1609,7 @@ def test_oversized_websocket_messages_close_the_connection(
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_json()
     assert (closed.value.code, closed.value.reason) == (1008, "")
-    assert questions.notification_hub._user_sockets == {}
+    assert sockets.notification_hub._user_sockets == {}
 
 
 def test_websocket_handshakes_are_bounded_per_address(production_client, monkeypatch):
@@ -1619,7 +1619,7 @@ def test_websocket_handshakes_are_bounded_per_address(production_client, monkeyp
     client, *_ = production_client
     snapshot = Mock(return_value=None)
     monkeypatch.setattr(questions, "_notification_snapshot", snapshot)
-    monkeypatch.setattr(questions, "_HANDSHAKES_PER_MINUTE", 2)
+    monkeypatch.setattr(sockets, "HANDSHAKES_PER_MINUTE", 2)
     reasons = []
     for _ in range(3):
         with pytest.raises(WebSocketDisconnect) as closed:

@@ -16,7 +16,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import app.services.me as me_operations
 import cbor2
 import fakeredis
 import myf.api.context as api_context
@@ -339,7 +338,10 @@ class LocalMfaTests(unittest.TestCase):
             self.assertIs(
                 mfa.local_session_allowed(db, user, {"auth_method": "local"}), True
             )
-            with patch.object(settings, "mfa_policy", "all"):
+            with (
+                patch.object(settings, "mfa_policy", "all"),
+                patch.object(settings, "oidc_enabled", True),
+            ):
                 self.assertIs(
                     mfa.local_session_allowed(db, user, {"auth_method": "local"}),
                     False,
@@ -697,9 +699,12 @@ class LocalMfaTests(unittest.TestCase):
             self.assertEqual(row.body, "")
 
     def test_password_routes_enqueue_security_alerts(self):
-        from app.api.routes import me, users
+        from app.api.routes import users
         from app.db.models import SecurityNotification
-        from app.schemas import AdminSetPasswordPayload, ChangePasswordPayload
+        from app.schemas import AdminSetPasswordPayload
+        from myf.api.routes import account
+        from myf.api.schemas import ChangePasswordPayload
+        from myf.services import account as account_operations
         from myf.services import security_notifications as mail
 
         request = Request(
@@ -719,9 +724,9 @@ class LocalMfaTests(unittest.TestCase):
             request.state.user = user
             with (
                 patch.object(mail, "smtp_configured", return_value=True),
-                patch.object(me_operations, "get_valkey", return_value=self.redis),
+                patch.object(account_operations, "get_valkey", return_value=self.redis),
             ):
-                me.change_my_password(
+                account.change_password(
                     ChangePasswordPayload(
                         current_password=self.password,
                         new_password="a-new-password-12345",

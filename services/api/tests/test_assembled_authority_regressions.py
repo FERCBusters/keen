@@ -397,6 +397,8 @@ def test_a_session_ends_at_its_absolute_lifetime_however_recently_used(
     from myf.security.sessions import create_session, session_key
 
     monkeypatch.setattr(settings, "session_max_age_seconds", 3600)
+    # A provider's session lasts only while its provider is enabled.
+    monkeypatch.setattr(settings, "oidc_enabled", True)
     user = keen.user()
     sid = create_session(
         keen.store,

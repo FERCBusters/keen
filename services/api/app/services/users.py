@@ -7,6 +7,7 @@ import uuid
 from myf.security.auth import ROLE_ADMIN, ROLE_INHERIT, ROLE_NORMAL, create_user
 from myf.security.passwords import hash_password
 from myf.security.permissions import (
+    bump_authz_versions,
     get_effective_permission_codes,
     normalize_permission_codes,
 )
@@ -41,21 +42,6 @@ from app.schemas import (
     UserUpdatePayload,
 )
 from app.services.audit_schedules import end_attendee_mail
-
-
-def bump_authz_versions(db: Session, user_ids) -> None:
-    """Make each account's sessions recompute their permissions on next use.
-
-    Every change to who holds which role, group or permission calls this in the
-    transaction that makes the change.
-    """
-    ids = sorted({uid for uid in (user_ids or []) if uid})
-    if not ids:
-        return
-    db.query(User).filter(User.id.in_(ids)).update(
-        {User.authz_version: User.authz_version + 1},
-        synchronize_session=False,
-    )
 
 
 def _require_admin_actor(context: ChangeContext, db: Session) -> User:
@@ -415,9 +401,8 @@ def set_user_password_admin(
     db.add(target)
     bump_authz_versions(db, [target.id])
     db.commit()
+    from myf.services.account import end_password_recognition
     from myf.services.login import sign_in_key
-
-    from app.services.me import end_password_recognition
 
     end_password_recognition(str(target.id), key=sign_in_key(db, target.username))
     return {"ok": True}

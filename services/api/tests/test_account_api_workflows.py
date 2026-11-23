@@ -818,7 +818,6 @@ def test_administrators_reset_local_passwords_only(keen, admin_client):  # noqa:
         ("list_my_saved_searches", {}),
         ("upsert_my_saved_search", {"payload": None}),
         ("delete_my_saved_search", {"saved_search_id": "any"}),
-        ("change_my_password", {"payload": None}),
     ],
 )
 def test_account_operations_fail_closed_without_a_signed_in_user(operation, arguments):
@@ -842,7 +841,7 @@ def test_password_changes_stop_while_the_rate_limit_store_is_unavailable(
     keen,  # noqa: F811 - fixture imported above
     monkeypatch,
 ):
-    from app.services import me as account
+    from myf.services import account
 
     user = keen.user()
     client = keen.client(user)

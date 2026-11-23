@@ -354,7 +354,7 @@ def test_a_live_notification_socket_closes_when_the_demo_ends(
     production_client,  # noqa: F811 - fixture imported above
     monkeypatch,
 ):
-    from app.api.routes import questions
+    from myf.realtime.notifications import notification_hub
     from starlette.websockets import WebSocketDisconnect
 
     client, _ = _notification_client(production_client, monkeypatch, recheck=60)
@@ -369,11 +369,11 @@ def test_a_live_notification_socket_closes_when_the_demo_ends(
             socket.receive_json()
     assert closed.value.code == 1008
     assert 0.5 < timing.seconds < 10
-    assert not questions.notification_hub._user_sockets
+    assert not notification_hub._user_sockets
 
     # After the end, a new socket is closed before it reaches the application.
     with pytest.raises(WebSocketDisconnect) as refused:
         with client.websocket_connect("/ws/notifications", headers=ORIGIN):
             pass
     assert refused.value.code == 1008
-    assert not questions.notification_hub._user_sockets
+    assert not notification_hub._user_sockets

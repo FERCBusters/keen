@@ -317,6 +317,8 @@ def test_every_router_has_an_availability_decision():
     from fastapi.routing import APIRoute
 
     core = {
+        # The account's own password (myf).
+        "account",
         "admin",
         "agent_enrollment",
         "agents",

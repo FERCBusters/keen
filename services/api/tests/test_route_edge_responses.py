@@ -122,6 +122,7 @@ def test_provider_sign_out_fails_closed_when_the_session_cannot_be_read(
     keen,  # noqa: F811 - fixture imported above
     monkeypatch,
 ):
+    monkeypatch.setattr(settings, "oidc_enabled", True)
     client = keen.client(keen.user())
     sid = _oidc_session(keen, client, "synthetic.id.token")
 

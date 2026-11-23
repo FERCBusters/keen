@@ -29,14 +29,14 @@ _FILE_UPLOADS = scan_pattern(r"/v1/(?:isms/documents/[^/]+/file|audits/[^/]+/rep
 
 
 def body_limit(path):
-    if path in {"/v1/auth/login", "/v1/agents/enroll", "/v1/agents/renew"}:
+    """KEEN's limit for a path; myf's own sign-in, password and second-factor
+    routes take myf's limits (myf.host.hooks.body_limit) before this is asked."""
+    if path in {"/v1/agents/enroll", "/v1/agents/renew"}:
         return 16 * 1024
     # keen-agent requests are encrypted to KEEN, which adds a fixed overhead
     # (app.agents.server_keys.SEALED_OVERHEAD) to the plaintext limits.
     if path == "/v1/agents/heartbeat":
         return 32 * 1024 + _SEALED_OVERHEAD
-    if path.startswith("/v1/auth/mfa/"):
-        return 256 * 1024
     if path == "/v1/otlp/logs":
         return 1024 * 1024 + _SEALED_OVERHEAD
     # Signed metric submissions are small; the body is read before its signature
