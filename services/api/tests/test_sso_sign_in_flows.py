@@ -1078,7 +1078,11 @@ def test_a_github_token_response_without_an_access_token_cannot_sign_in(github):
     )
     assert not _sets_session(refused) and _signed_in_as(browser) is None
     # Keen asks GitHub for no profile without a token to present.
-    assert [url for _, url in github.provider.requests if "api.github.com" in url] == []
+    assert [
+        url
+        for _, url in github.provider.requests
+        if urlsplit(url).hostname == "api.github.com"
+    ] == []
 
 
 @pytest.mark.parametrize(

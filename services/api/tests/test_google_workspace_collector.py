@@ -313,7 +313,13 @@ def test_stream_ingests_and_updates_cursor(db):
     assert call["raw_pointer"]["google_workspace"]["stream"] == "Logins"
     assert "victim" not in str(call["raw_pointer"])
     assert call["captured_by"] == "keen:google_workspace"
-    assert b"target=victim@example.com" in call["artifact_bytes"] or True
+    # The evidence artifact keeps the activity as fetched, the subject included,
+    # while the pointer above leaves it out.
+    artifact = json.loads(call["artifact_bytes"])
+    assert artifact["activity"]["events"][0]["parameters"][0] == {
+        "name": "USER_EMAIL",
+        "value": "victim@example.com",
+    }
     cursor = db.add.call_args_list[1].args[0]
     assert cursor.last_ts == datetime(2026, 10, 9, 12)
     db.commit.assert_called_once_with()
