@@ -32,7 +32,7 @@ qrcode = "^8.2"
 cryptography = ">=50"
 regex = "^2026.9.29"
 fastmcp = "^4.1.6"
-mosp = { git = "https://github.com/FERCBusters/mosp.git", rev = "1391aa3d7db2db54ead5b19ae84cdb2991a01f48" }
+mosp = { git = "https://github.com/FERCBusters/mosp.git", rev = "1128d65729a380e7e4a605923055f946ce39f583" }
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

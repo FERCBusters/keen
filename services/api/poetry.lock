@@ -2252,8 +2252,8 @@ webauthn = "^2.8"
 [package.source]
 type = "git"
 url = "https://github.com/FERCBusters/mosp.git"
-reference = "1391aa3d7db2db54ead5b19ae84cdb2991a01f48"
-resolved_reference = "1391aa3d7db2db54ead5b19ae84cdb2991a01f48"
+reference = "1128d65729a380e7e4a605923055f946ce39f583"
+resolved_reference = "1128d65729a380e7e4a605923055f946ce39f583"
 
 [[package]]
 name = "mypy"
@@ -4356,4 +4356,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "8b07e44ff743c29424b30e167c527ca1bc3a812f6d519b3e36964900768572ee"
+content-hash = "3905a73710453aef2695a05fd0b525d16ffbe35bebe8d26ad7f155989f0ad44d"
