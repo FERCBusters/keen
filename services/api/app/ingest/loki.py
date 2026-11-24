@@ -57,11 +57,21 @@ def load_loki_queries(path: str) -> dict[str, Any]:
     return load_document("loki", path)
 
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+# Loki refuses a limit above its max_entries_limit_per_query, 5000 by default.
+LOKI_MAX_LIMIT = 5000
+
+
 def _to_ns(dt: datetime) -> int:
-    # Loki expects ns timestamps for start/end in query_range.
+    # Loki expects ns timestamps for start/end in query_range. Integer
+    # arithmetic keeps every microsecond exact.
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return int(dt.timestamp() * 1_000_000_000)
+    return (dt - _EPOCH) // timedelta(microseconds=1) * 1000
+
+
+def _from_ns(ns: int) -> datetime:
+    return _EPOCH + timedelta(microseconds=ns // 1000)
 
 
 def _summarize_json(
@@ -180,13 +190,6 @@ def _positive_int(value: Any, fallback: int, minimum: int = 0) -> int:
     return parsed
 
 
-def _normalize_loki_direction(value: Any) -> str:
-    direction = str(value or "forward").strip().lower()
-    if direction not in {"forward", "backward"}:
-        return "forward"
-    return direction
-
-
 def ingest_loki_once(
     db: Session,
     query_name: str,
@@ -224,9 +227,6 @@ def ingest_loki_once(
 
     limit = _positive_int(
         _setting_from_query(query_config, defaults, "limit", 5000), 5000, minimum=1
-    )
-    direction = _normalize_loki_direction(
-        _setting_from_query(query_config, defaults, "direction", "forward")
     )
     step_seconds = _positive_int(
         _setting_from_query(query_config, defaults, "step_seconds", 0), 0, minimum=0
@@ -286,6 +286,19 @@ def ingest_loki_once(
         if cur_last_ts
         else (now - timedelta(minutes=initial_lookback_minutes))
     )
+    # The cursor's exact next start, in Loki's nanoseconds, where a run has
+    # kept one; an older cursor resumes a microsecond after its time. A cursor
+    # time set since, as by an administrator's reset, wins.
+    kept_ns = (cur.meta or {}).get("next_ns") if cur_last_ts else None
+    start_ns = (
+        int(kept_ns)
+        if isinstance(kept_ns, str)
+        and kept_ns.isdigit()
+        and cur_last_ts
+        and int(kept_ns) // 1000 * 1000 == _to_ns(cur_last_ts)
+        else _to_ns(start)
+    )
+    start = _from_ns(start_ns)
     final_end = now
     max_range = (
         timedelta(hours=max_query_range_hours) if max_query_range_hours > 0 else None
@@ -303,6 +316,7 @@ def ingest_loki_once(
         and overlong_strategy == "reset"
     ):
         meta = dict(cur.meta or {})
+        meta.pop("next_ns", None)
         meta.update(
             {
                 "last_reset_at": now.isoformat(),
@@ -341,21 +355,34 @@ def ingest_loki_once(
     processed_chunks = 0
 
     # Loki query_range endpoint. When the cursor is far behind and strategy is
-    # "chunk", each pass asks Loki for only one bounded window. If the response
-    # hits the Loki limit, advance only to the newest seen timestamp; otherwise
-    # advance to the end of that chunk so empty trailing periods are not re-read.
+    # "chunk", each pass asks Loki for only one bounded window. A response that
+    # hits the limit may have stopped part-way through the lines sharing its
+    # newest timestamp, so the next pass starts at that timestamp again, and
+    # lines already stored are recognised. A response with no line later than
+    # its start is asked again at once with Loki's largest limit, as part of
+    # the same chunk; more lines than that at one instant, or a server that
+    # refuses that limit, pass the instant, and the run and the cursor say so.
+    # A response under the limit was read in full, so the cursor moves to the
+    # end of its window.
+    widened = False
+    skipped_instants: list[str] = []
     with _loki_client() as client:
         while start < final_end and processed_chunks < max_catchup_chunks:
             end = final_end
             if max_range is not None:
                 end = min(start + max_range, final_end)
+            end_ns = _to_ns(end)
+            chunk_limit = LOKI_MAX_LIMIT if widened else limit
 
             params = {
                 "query": logql,
-                "start": str(_to_ns(start)),
-                "end": str(_to_ns(end)),
-                "limit": str(limit),
-                "direction": direction,
+                "start": str(start_ns),
+                "end": str(end_ns),
+                "limit": str(chunk_limit),
+                # The cursor resumes after the newest line of a chunk that hit
+                # the limit, which is right only when Loki returned the oldest
+                # lines, so every query reads forward whatever its settings say.
+                "direction": "forward",
             }
             if step_seconds > 0:
                 params["step"] = str(step_seconds)
@@ -363,14 +390,17 @@ def ingest_loki_once(
             if not new_cursor:
                 db.commit()  # No database transaction spans the remote wait.
             resp = client.get("/loki/api/v1/query_range", params=params)
-            resp.raise_for_status()
-            data = decode_json(resp.content)
-
-            results = (data.get("data", {}) or {}).get("result", []) or []
+            refused = widened and resp.status_code == 400
+            if refused:
+                # The server's own limit is below LOKI_MAX_LIMIT.
+                results: list[Any] = []
+            else:
+                resp.raise_for_status()
+                data = decode_json(resp.content)
+                results = (data.get("data", {}) or {}).get("result", []) or []
             chunk_created_events = 0
             chunk_created_artifacts = 0
             chunk_created_mappings = 0
-            chunk_max_seen_ts: datetime | None = None
 
             # Each line is read by itself: a line whose value Keen cannot
             # read is counted, and the lines around it are still collected.
@@ -381,13 +411,21 @@ def ingest_loki_once(
                 for value in _stream_values(stream)
             ]
             chunk_returned_values = len(entries)
-            if chunk_returned_values > limit:
+            if chunk_returned_values > chunk_limit:
                 # A server that returns more lines than the query asked for
                 # has its oldest stored; the cursor stops at the newest of
                 # those, so the next run asks for the rest.
                 entries = sorted(entries, key=lambda entry: _line_order(entry[1]))[
-                    :limit
+                    :chunk_limit
                 ]
+            newest_ns = max(
+                (
+                    order
+                    for kind, order in (_line_order(entry[1]) for entry in entries)
+                    if kind == 0
+                ),
+                default=None,
+            )
 
             def read(entry):
                 labels, (ts_ns, line) = entry
@@ -463,17 +501,27 @@ def ingest_loki_once(
                     created_mappings += stored["mappings"]
                     chunk_created_mappings += stored["mappings"]
 
-                ts = event["timestamp"].replace(tzinfo=timezone.utc)
-                if (chunk_max_seen_ts is None) or (ts > chunk_max_seen_ts):
-                    chunk_max_seen_ts = ts
-
-            hit_limit = chunk_returned_values >= limit
-            advance_to = chunk_max_seen_ts if (hit_limit and chunk_max_seen_ts) else end
-            cur.last_ts = advance_to
+            hit_limit = refused or chunk_returned_values >= chunk_limit
+            skipped_before = len(skipped_instants)
+            if refused:
+                skipped_instants.append(str(start_ns))
+                next_ns, widened = start_ns + 1, False
+            elif not hit_limit or newest_ns is None:
+                next_ns, widened = end_ns, False
+            elif newest_ns > start_ns:
+                next_ns, widened = newest_ns, False
+            elif not widened and chunk_limit < LOKI_MAX_LIMIT:
+                next_ns, widened = start_ns, True
+            else:
+                # More lines than Loki returns at once share this instant.
+                skipped_instants.append(str(start_ns))
+                next_ns, widened = start_ns + 1, False
+            cur.last_ts = _from_ns(next_ns).replace(tzinfo=None)
             cur.updated_at = utc_now_naive()
             meta = dict(cur.meta or {})
             meta.update(
                 {
+                    "next_ns": str(next_ns),
                     "last_run_at": now.isoformat(),
                     "last_run_strategy": overlong_strategy,
                     "last_run_hit_limit": hit_limit,
@@ -481,6 +529,13 @@ def ingest_loki_once(
                     "last_run_chunk_end": end.isoformat(),
                 }
             )
+            if len(skipped_instants) > skipped_before:
+                # Kept with the cursor, so a passed instant stays visible.
+                kept = meta.get("instants_over_limit")
+                meta["instants_over_limit"] = [
+                    *(kept if isinstance(kept, list) else []),
+                    str(start_ns),
+                ][-20:]
             cur.meta = meta
             db.add(cur)
             db.commit()
@@ -501,9 +556,11 @@ def ingest_loki_once(
                 }
             )
 
-            processed_chunks += 1
-            next_start_base = ensure_utc(cur.last_ts) or end
-            start = next_start_base + timedelta(microseconds=1)
+            # The widened read of an instant is part of the same chunk.
+            if not widened:
+                processed_chunks += 1
+            start_ns = next_ns
+            start = _from_ns(start_ns)
 
     caught_up = start >= final_end
     return {
@@ -522,6 +579,15 @@ def ingest_loki_once(
         "max_query_range_hours": max_query_range_hours,
         "catchup_chunks_per_run": max_catchup_chunks,
         "chunks": chunks,
+        **(
+            {
+                "error": "Loki returned no more lines than its limit at an instant "
+                "that holds at least that many; any beyond those were not collected",
+                "instants_over_limit": skipped_instants,
+            }
+            if skipped_instants
+            else {}
+        ),
     }
 
 

@@ -32,7 +32,7 @@ from app.db.models import (
 from app.ingest.cloud import KEYS
 from app.ingest.cloud import provider as cloud_provider
 from app.ingest.cloud.base import REASONS, held_record
-from app.ingest.cloud.runner import enabled, scope_asset
+from app.ingest.cloud.runner import activity_read_to, enabled, scope_asset
 from app.services import posture_risks
 from app.services.event_payloads import without_payloads
 from app.services.features import state as feature_state
@@ -237,6 +237,7 @@ def vendor_posture(*, db, user, vendor_id):
             .all()
         )
         people = _people(db, scopes)
+        read_to = activity_read_to(db, provider) if provider.activity else None
         out.append(
             {
                 "provider": provider.key,
@@ -249,6 +250,16 @@ def vendor_posture(*, db, user, vendor_id):
                 "stale": bool(row.checked_at and now - row.checked_at > 2 * interval),
                 "reads_activity": provider.activity is not None,
                 "activity_at": iso_utc(row.activity_at),
+                "activity_read_to": iso_utc(read_to),
+                # Activity is read a lag behind the present, once a poll
+                # interval; a cursor further back than that is catching up.
+                "activity_behind": bool(
+                    read_to
+                    and now - read_to
+                    > provider.activity_lag
+                    + timedelta(seconds=settings.cloud_activity_poll_seconds)
+                    + timedelta(hours=1)
+                ),
                 "activity_error": REASONS.get(row.activity_error, "")
                 if row.activity_error
                 else "",

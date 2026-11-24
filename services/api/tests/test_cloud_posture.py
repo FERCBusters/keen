@@ -78,7 +78,11 @@ def cloud(keen, monkeypatch):
         state.setdefault("windows", []).append((since, until))
         if isinstance(state["activity"], Exception):
             raise state["activity"]
-        return state["activity"]
+        if callable(state["activity"]):
+            return state["activity"](since, until)
+        entries, complete = state["activity"]
+        # A provider answers for the window it is asked about.
+        return [e for e in entries if since <= e.at < until], complete
 
     monkeypatch.setattr(
         aws,
@@ -322,7 +326,13 @@ def entry(ident, at, outcome="success"):
     )
 
 
-def test_activity_is_read_from_the_cursor_and_recorded_once(keen, cloud):
+def _activity_cursor(db):
+    return (
+        db.query(IngestionCursor).filter(IngestionCursor.name.like("env:aws:%")).one()
+    )
+
+
+def test_activity_is_read_from_the_cursor_and_recorded_once(keen, cloud, monkeypatch):
     db = keen.db
     now = utc_now_naive()
     cloud["activity"] = ([entry("a", now - timedelta(hours=2))], True)
@@ -332,33 +342,92 @@ def test_activity_is_read_from_the_cursor_and_recorded_once(keen, cloud):
         "invalid_records": 0,
         "complete": True,
     }
-    since, until = cloud["windows"][0]
-    assert until - since == runner.MAX_WINDOW or until - since <= runner.FIRST_LOOKBACK
+    # A first read looks back a day, in windows of at most MAX_WINDOW.
+    windows = cloud["windows"]
+    assert all(until - since <= runner.MAX_WINDOW for since, until in windows)
+    assert all(a[1] == b[0] for a, b in zip(windows, windows[1:]))
     stored = db.query(Event).filter_by(source="aws", action="ConsoleLogin").one()
     assert stored.actor.endswith("user/alice") and stored.connection_id == "env:aws"
     assert stored.normalized_payload["mfa_used"] is True
-    cursor = (
-        db.query(IngestionCursor).filter(IngestionCursor.name.like("env:aws:%")).one()
-    )
-    assert cursor.last_ts == until
+    until = windows[-1][1]
+    assert _activity_cursor(db).last_ts == until
     row = db.get(CloudProvider, "aws")
     assert row.vendor_id is not None and row.activity_truncated is False
 
     # The next read starts where the last ended; repeated entries are deduped.
-    cloud["activity"] = ([entry("a", now - timedelta(hours=2)), entry("b", now)], False)
+    later = now + timedelta(minutes=5)
+    monkeypatch.setattr(runner, "utc_now_naive", lambda: later)
+    cloud["windows"].clear()
+    cloud["activity"] = ([entry("a", until - timedelta(seconds=1))], True)
     runner.collect_activity(db, "aws")
-    assert cloud["windows"][1][0] == until
-    assert db.query(Event).filter_by(source="aws", action="ConsoleLogin").count() == 2
-    db.expire_all()
-    assert db.get(CloudProvider, "aws").activity_truncated is True
+    assert cloud["windows"][0][0] == until
+    assert db.query(Event).filter_by(source="aws", action="ConsoleLogin").count() == 1
 
     cloud["activity"] = Unavailable("permission_denied")
+    monkeypatch.setattr(runner, "utc_now_naive", lambda: later + timedelta(minutes=5))
     assert runner.collect_activity(db, "aws")["error"] == "permission_denied"
     db.expire_all()
     assert db.get(CloudProvider, "aws").activity_error == "permission_denied"
 
 
-def test_a_long_gap_reads_at_most_a_day_back_in_bounded_windows(keen, cloud):
+def test_an_incomplete_window_is_read_again_narrower_not_passed(keen, cloud):
+    db = keen.db
+    now = utc_now_naive()
+    written = entry("iam-write", now - timedelta(hours=23, minutes=30))
+    # Read-only noise fills any window wider than ten minutes, so a provider
+    # cannot read such a window in full.
+    cloud["activity"] = lambda since, until: (
+        [written] if since <= written.at < until else [],
+        until - since <= timedelta(minutes=10),
+    )
+    result = runner.collect_activity(db, "aws")
+    windows = cloud["windows"]
+    assert result["complete"] is True
+    assert min(u - s for s, u in windows) < timedelta(minutes=10)
+    # The cursor moved only past windows read in full, and never past the
+    # write while it was unread.
+    cursor = _activity_cursor(db)
+    stored = db.query(Event).filter_by(source="aws", action="ConsoleLogin").all()
+    if cursor.last_ts > written.at:
+        assert [e.timestamp for e in stored] == [written.at]
+    assert db.query(Event).filter_by(action="activity_gap").count() == 0
+    for _ in range(10):
+        if cursor.last_ts > written.at:
+            break
+        runner.collect_activity(db, "aws", force=True)
+        db.expire_all()
+        cursor = _activity_cursor(db)
+    (stored,) = db.query(Event).filter_by(source="aws", action="ConsoleLogin").all()
+    assert stored.timestamp == written.at
+
+
+def test_a_minute_that_cannot_be_read_in_full_is_recorded_as_a_gap(keen, cloud):
+    db = keen.db
+    cloud["activity"] = ([], False)
+    runner.collect_activity(db, "aws")
+    gaps = db.query(Event).filter_by(source="aws", action="activity_gap").all()
+    assert gaps and all("more entries than one read holds" in g.summary for g in gaps)
+    # Only minutes are recorded as gaps; wider windows were read again.
+    gap_starts = {g.timestamp for g in gaps}
+    assert all(
+        until - since == runner.MIN_WINDOW
+        for since, until in cloud["windows"]
+        if since in gap_starts and until - since <= runner.MIN_WINDOW
+    )
+    assert len(gaps) == sum(
+        1 for since, until in cloud["windows"] if until - since == runner.MIN_WINDOW
+    )
+    db.expire_all()
+    row = db.get(CloudProvider, "aws")
+    assert row.activity_truncated is True
+    # The cursor moves past the gap, so a busy provider does not stall.
+    assert _activity_cursor(db).last_ts == max(g.timestamp for g in gaps) + (
+        runner.MIN_WINDOW
+    )
+    assert len(cloud["windows"]) == runner.MAX_READS
+
+
+def test_a_long_gap_reads_at_most_a_day_back_and_records_what_it_skips(keen, cloud):
     db = keen.db
     with runner.connection_scope(runner.connection(aws.PROVIDER)):
         name = runner.namespace("cloud-activity:aws")
@@ -368,6 +437,97 @@ def test_a_long_gap_reads_at_most_a_day_back_in_bounded_windows(keen, cloud):
     since, until = cloud["windows"][0]
     assert since >= utc_now_naive() - timedelta(days=1, minutes=30)
     assert until - since <= runner.MAX_WINDOW
+    (gap,) = db.query(Event).filter_by(source="aws", action="activity_gap").all()
+    assert gap.timestamp == datetime(2020, 1, 1)
+    assert "no read ran for over a day, so it was not read" in gap.summary
+
+
+def test_a_narrowed_window_is_kept_for_the_next_run(keen, cloud):
+    db = keen.db
+    cloud["activity"] = lambda since, until: (
+        [],
+        until - since <= timedelta(minutes=10),
+    )
+    runner.collect_activity(db, "aws")
+    kept = _activity_cursor(db).meta["window_seconds"]
+    assert 60 <= kept < runner.MAX_WINDOW.total_seconds()
+    # The next run starts at the kept width, not at MAX_WINDOW, and grows it
+    # only after a read of that width in full.
+    cloud["windows"].clear()
+    runner.collect_activity(db, "aws", force=True)
+    first = cloud["windows"][0]
+    assert first[1] - first[0] <= timedelta(seconds=kept)
+
+
+def test_a_read_narrowing_cannot_help_records_the_window_whole(keen, cloud):
+    db = keen.db
+    cloud["activity"] = ([], "subscriptions not read: x (permission_denied)")
+    result = runner.collect_activity(db, "aws")
+    assert result["complete"] is False
+    windows = cloud["windows"]
+    gaps = db.query(Event).filter_by(source="aws", action="activity_gap").all()
+    # Each window was read once, at full width, and recorded as a gap.
+    assert len(gaps) == len(windows)
+    assert all(u - s == runner.MAX_WINDOW for s, u in windows[:-1])
+    assert all("subscriptions not read: x" in g.summary for g in gaps)
+    assert _activity_cursor(db).meta["window_seconds"] == (
+        runner.MAX_WINDOW.total_seconds()
+    )
+
+
+def test_a_run_that_stops_while_narrowing_keeps_the_width(keen, cloud, monkeypatch):
+    monkeypatch.setattr(runner, "MAX_READS", 2)
+    cloud["activity"] = lambda since, until: (
+        [],
+        until - since <= timedelta(minutes=10),
+    )
+    runner.collect_activity(keen.db, "aws")
+    # Nothing was read in full, and the next run starts at the width reached.
+    cursor = _activity_cursor(keen.db)
+    assert cursor.last_ts is None
+    assert cursor.meta["window_seconds"] == runner.MAX_WINDOW.total_seconds() / 4
+
+
+def test_a_window_grows_back_after_a_reason_narrowing_cannot_help(keen, cloud):
+    def read(since, until):
+        if until - since > timedelta(minutes=30):
+            return [], False
+        return [], "subscriptions not read: x (permission_denied)"
+
+    cloud["activity"] = read
+    runner.collect_activity(keen.db, "aws")
+    widths = [u - s for s, u in cloud["windows"]]
+    narrowest = min(widths)
+    assert narrowest <= timedelta(minutes=30)
+    # Once narrow enough, a reason says nothing of volume, so the width grows
+    # back instead of staying at the narrowest.
+    after = widths[widths.index(narrowest) + 1 :]
+    assert after and max(after) > narrowest
+
+
+def test_a_slow_provider_leaves_time_for_the_others(keen, cloud, monkeypatch):
+    clock = iter([0.0, 0.0, runner.READ_SECONDS + 1.0])
+    monkeypatch.setattr(runner.time, "monotonic", lambda: next(clock))
+    runner.collect_activity(keen.db, "aws")
+    # One read, then no other once the provider's time has passed.
+    assert len(cloud["windows"]) == 1
+    assert _activity_cursor(keen.db).last_ts == cloud["windows"][0][1]
+
+
+def test_a_failed_read_keeps_the_windows_already_read(keen, cloud):
+    db = keen.db
+    reads = []
+
+    def flaky(since, until):
+        reads.append(until)
+        if len(reads) == 2:
+            raise RuntimeError("upstream reset")
+        return [], True
+
+    cloud["activity"] = flaky
+    result = runner.collect_activity(db, "aws")
+    assert result == {"provider": "aws", "error": "unavailable", "records": 0}
+    assert _activity_cursor(db).last_ts == reads[0]
 
 
 # --- the Vendor page --------------------------------------------------------------

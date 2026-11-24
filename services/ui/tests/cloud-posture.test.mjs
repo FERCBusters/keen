@@ -315,6 +315,8 @@ test('warnings, failures and empty states explain themselves', async (t) => {
     activity: [],
     activity_error: 'KEEN was refused.',
     activity_truncated: true,
+    activity_behind: true,
+    activity_read_to: '2026-10-01T00:00:00Z',
     reads_activity: false,
   });
   const { host, controller } = await fixture(t, {
@@ -335,7 +337,11 @@ test('warnings, failures and empty states explain themselves', async (t) => {
   assert.equal(host.querySelector('img'), null);
   assert.match(host.textContent, /Not refreshed yet · No accounts read yet/);
   assert.match(host.textContent, /The last activity read failed: KEEN was refused\./);
-  assert.match(host.textContent, /oldest in that window were skipped/);
+  assert.match(host.textContent, /could not be read in full/);
+  assert.match(
+    host.querySelector('[data-cloud-behind]').textContent,
+    /is read up to .+ and is catching up/,
+  );
   assert.match(host.textContent, /No activity recorded\. View all AWS activity/);
 });
 

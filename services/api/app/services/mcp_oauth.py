@@ -62,7 +62,7 @@ LAST_USED_RESOLUTION = timedelta(minutes=5)
 # Each cleanup removes at most this many rows of each kind.
 _CLEANUP_BATCH = 500
 # Registrations waiting for a first approval. Anyone can register a client, so
-# past this many Keen accepts no more until approvals or expiry make room.
+# past this many Keen makes room by removing one waiting, never by refusing.
 UNAPPROVED_CLIENT_LIMIT = 1000
 
 
@@ -166,11 +166,44 @@ def register_client(db: Session, *, client_id: str, name: str, info: dict) -> No
         .count()
     )
     if waiting >= UNAPPROVED_CLIENT_LIMIT:
-        raise DomainError(
-            429, "Too many clients are waiting for approval; try again later"
-        )
+        _evict_waiting_client(db)
     db.add(McpClient(client_id=client_id, client_name=name, info=info))
     db.commit()
+
+
+def _evict_waiting_client(db: Session) -> None:
+    """Remove one registration nobody approved, to make room for another.
+
+    A stale one goes first: older than a consent request lasts, with none
+    pending. Otherwise the oldest goes, even one in consent: anyone can start
+    a consent request without signing in, so neither registrations nor
+    consent requests may keep other clients out. A client that has just
+    registered is the newest, so it stays while its app opens the consent
+    page; pushing it out takes a thousand registrations within its ten
+    minutes.
+    """
+    waiting = ~McpClient.id.in_(db.query(McpGrant.client_pk))
+    stale = (
+        McpClient.created_at
+        <= utc_now_naive() - timedelta(seconds=CONSENT_REQUEST_SECONDS)
+    ) & ~McpClient.id.in_(db.query(McpConsentRequest.client_pk))
+    for condition in (waiting & stale, waiting):
+        oldest = (
+            db.query(McpClient.id)
+            .filter(condition)
+            .order_by(McpClient.created_at, McpClient.id)
+            .limit(1)
+            .scalar()
+        )
+        if oldest is not None:
+            db.query(McpConsentRequest).filter_by(client_pk=oldest).delete(
+                synchronize_session=False
+            )
+            # A grant committed meanwhile approves the client, which then stays.
+            db.query(McpClient).filter(McpClient.id == oldest, waiting).delete(
+                synchronize_session=False
+            )
+            return
 
 
 def client_info(db: Session, client_id: str) -> dict | None:

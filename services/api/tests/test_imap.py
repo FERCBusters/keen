@@ -13,12 +13,13 @@ from app.core.config import settings
 from app.db.models import Event, IngestionCursor
 from app.ingest import connections as sc
 from app.ingest import imap
-from app.ingest.imap_support import transport, worker
+from app.ingest.imap_support import mime, transport, worker
 from app.ingest.imap_support.config import configuration
 from app.ingest.imap_support.mime import body_part, decode_body, structure
 
 from tests.test_assembled_authority_regressions import keen as keen
 from tests.test_assembled_authority_regressions import unsafe
+from tests.timing import measured
 
 pytestmark = pytest.mark.usefixtures("no_evidence_purge", "no_competing_run")
 
@@ -225,6 +226,25 @@ def test_child_timeout_kills_and_reaps_without_inheriting_secrets(monkeypatch):
         0.1,
     )
     assert processes[0].poll() is not None
+
+
+@pytest.mark.parametrize(
+    "script,raised",
+    [
+        ('import sys;print(\'{"error":"x","failed_uid":5}\');sys.exit(1)', 5),
+        ('import sys;print(\'{"error":"x"}\');sys.exit(1)', None),
+    ],
+)
+def test_a_failed_worker_names_the_message_it_was_reading(monkeypatch, script, raised):
+    real = subprocess.Popen
+    monkeypatch.setattr(
+        imap.subprocess,
+        "Popen",
+        lambda *a, **kw: real([sys.executable, "-c", script], **kw),
+    )
+    with pytest.raises(ValueError) as failed:
+        imap.fetch({}, None)
+    assert getattr(failed.value, "uid", None) == raised
 
 
 def test_collection_isolation_redaction_and_uid_reset(contract_db, monkeypatch):
@@ -465,6 +485,209 @@ def test_failure_preserves_checkpoint_and_enforces_backoff(contract_db, monkeypa
     assert imap.ingest_imap_all(contract_db)[0]["skipped"]
 
 
+class Mailbox(Peer):
+    """Messages 2 to 4; ``poison`` names the message an outside sender made
+    oversized, and ``broken`` one whose metadata no session survives."""
+
+    poison: dict = {}
+    broken = None
+
+    def response(self, key):
+        return key, [b"7" if key == "UIDVALIDITY" else b"5"]
+
+    def uid(self, command, *args):
+        if command == "SEARCH":
+            self.commands.append((command, *args))
+            return "OK", [b"2 3 4"]
+        uid = int(args[0])
+        if command == "FETCH" and uid in (self.broken or ()):
+            raise ValueError("IMAP response line exceeds limit")
+        if command == "FETCH" and "BODYSTRUCTURE" in args[1]:
+            self.commands.append((command, *args))
+            parts = PLAIN * 100 if uid in self.poison.get("parts", ()) else PLAIN
+            return "OK", [
+                f"1 (UID {uid} RFC822.SIZE 100 BODYSTRUCTURE (".encode()
+                + parts
+                + b' "MIXED"))'
+            ]
+        if command == "FETCH" and args[1] == "(UID RFC822.SIZE)":
+            self.commands.append((command, *args))
+            return "OK", [f"1 (UID {uid} RFC822.SIZE 100)".encode()]
+        if command == "FETCH" and "HEADER.FIELDS" in args[1]:
+            self.commands.append((command, *args))
+            data = self.poison.get(uid) or f"Subject: Message {uid}\r\n\r\n".encode()
+            section = args[1].split("BODY.PEEK[", 1)[1].split("]", 1)[0]
+            return "OK", [
+                (f"1 (UID {uid} BODY[{section}]<0> {{{len(data)}}}".encode(), data),
+                b")",
+            ]
+        return super().uid(command, *args)
+
+
+@pytest.mark.parametrize(
+    "poison",
+    [
+        {3: b"To: x@example.test,\r\n" * 201},
+        # A server returns the first 16 KiB of the fields Keen asks for.
+        {3: b"Subject: " + b"A" * (16384 - 9)},
+        {"parts": (3,)},
+    ],
+    ids=["folded-recipients", "long-subject", "too-many-parts"],
+)
+def test_one_oversized_message_is_recorded_and_the_mail_after_it_read(
+    monkeypatch, poison
+):
+    monkeypatch.setattr(Mailbox, "poison", poison)
+    monkeypatch.setattr(worker, "Client", Mailbox)
+    config = {**MAILBOX, "fetch_body": "parts" in poison}
+    result = worker.collect(config, CURSOR, "")
+    assert [i["uid"] for i in result["items"]] == [2, 3, 4]
+    assert result["last_uid"] == 4
+    omitted = result["items"][1]
+    assert omitted == worker.omitted(3, "message_exceeds_limits")
+    assert result["items"][2]["headers"]["subject"] == "Message 4"
+
+
+def test_a_message_that_ends_every_run_is_passed_after_three(contract_db, monkeypatch):
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    peer = sc.Connection(
+        "poisoned",
+        "imap",
+        "Poisoned",
+        {"host": "mail.example", "username": "reader"},
+        {"password": "p"},
+        {},
+    )
+    monkeypatch.setattr(sc, "connections", lambda *a: [peer])
+    monkeypatch.setattr(
+        imap, "fetch", lambda *a: {"uidvalidity": 7, "last_uid": 1, "items": []}
+    )
+    assert imap.ingest_imap_all(contract_db)[0]["ok"]
+
+    from datetime import timedelta
+
+    monkeypatch.setattr(Mailbox, "broken", (3,))
+    monkeypatch.setattr(worker, "Client", Mailbox)
+    cursors = []
+
+    def run_worker(config, cursor):
+        # The worker in process: a failure reports only the message's UID.
+        cursors.append(dict(cursor))
+        try:
+            return worker.collect(config, cursor, "")
+        except Exception:
+            raise imap.MessageFailed(worker.PROGRESS["uid"]) from None
+
+    monkeypatch.setattr(imap, "fetch", run_worker)
+    clock = imap.utc_now_naive()
+    results = []
+    for _ in range(4):
+        clock += timedelta(hours=2)
+        monkeypatch.setattr(imap, "utc_now_naive", lambda at=clock: at)
+        (result,) = imap.ingest_imap_all(contract_db)
+        results.append(result)
+    assert [r["ok"] for r in results] == [False, False, False, True]
+    assert "while reading message UID 3" in results[0]["error"]
+    assert [c.get("skip_uids") for c in cursors] == [None, None, None, [3]]
+    contract_db.expire_all()
+    cursor = contract_db.query(IngestionCursor).one()
+    assert cursor.meta["last_uid"] == 4 and "failed_uid" not in cursor.meta
+    assert "skip_uids" not in cursor.meta
+    stored = contract_db.query(Event).filter_by(source="imap").all()
+    assert sorted(e.summary for e in stored) == [
+        "Email UID 3 recorded without its content: reading it failed 3 runs in a row",
+        "Email: Message 2",
+        "Email: Message 4",
+    ]
+
+
+def test_every_message_that_ends_runs_is_passed_not_only_the_first(
+    contract_db, monkeypatch
+):
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    peer = sc.Connection(
+        "twice",
+        "imap",
+        "Twice",
+        {"host": "mail.example", "username": "reader"},
+        {"password": "p"},
+        {},
+    )
+    monkeypatch.setattr(sc, "connections", lambda *a: [peer])
+    monkeypatch.setattr(
+        imap, "fetch", lambda *a: {"uidvalidity": 7, "last_uid": 1, "items": []}
+    )
+    assert imap.ingest_imap_all(contract_db)[0]["ok"]
+    from datetime import timedelta
+
+    monkeypatch.setattr(Mailbox, "broken", (2, 3))
+    monkeypatch.setattr(worker, "Client", Mailbox)
+
+    def run_worker(config, cursor):
+        try:
+            return worker.collect(config, cursor, "")
+        except Exception:
+            raise imap.MessageFailed(worker.PROGRESS["uid"]) from None
+
+    monkeypatch.setattr(imap, "fetch", run_worker)
+    clock = imap.utc_now_naive()
+    outcomes = []
+    for _ in range(7):
+        clock += timedelta(hours=2)
+        monkeypatch.setattr(imap, "utc_now_naive", lambda at=clock: at)
+        outcomes.append(imap.ingest_imap_all(contract_db)[0]["ok"])
+    # Three runs end at each message in turn; then both are passed.
+    assert outcomes == [False] * 6 + [True]
+    contract_db.expire_all()
+    assert contract_db.query(IngestionCursor).one().meta["last_uid"] == 4
+
+
+def test_a_failure_at_another_message_starts_the_count_again(contract_db, monkeypatch):
+    monkeypatch.setattr(settings, "imap_enabled", True)
+    monkeypatch.setattr(settings, "demo_mode", False)
+    peer = sc.Connection(
+        "moving",
+        "imap",
+        "Moving",
+        {"host": "mail.example", "username": "reader"},
+        {"password": "p"},
+        {},
+    )
+    monkeypatch.setattr(sc, "connections", lambda *a: [peer])
+    monkeypatch.setattr(
+        imap, "fetch", lambda *a: {"uidvalidity": 7, "last_uid": 1, "items": []}
+    )
+    imap.ingest_imap_all(contract_db)
+    from datetime import timedelta
+
+    clock = imap.utc_now_naive()
+    for uid in (3, 3, 4, 200, None):
+
+        def failing(*a, uid=uid):
+            if uid is None:
+                raise ValueError("connection refused")
+            raise imap.MessageFailed(uid)
+
+        clock += timedelta(hours=2)
+        monkeypatch.setattr(imap, "utc_now_naive", lambda at=clock: at)
+        monkeypatch.setattr(imap, "fetch", failing)
+        imap.ingest_imap_all(contract_db)
+        contract_db.expire_all()
+        meta = contract_db.query(IngestionCursor).one().meta
+        if uid == 4:
+            assert (meta["failed_uid"], meta["failed_runs"]) == (4, 1)
+        if uid in (3, 4):
+            # A run that ended at a message is due again at the usual
+            # interval, without a growing backoff.
+            assert meta.get("failures", 0) == 0 and "retry_after" not in meta
+    # A UID outside the window or a failure at no message counts for nothing,
+    # and is backed off as any failed poll.
+    assert "failed_uid" not in meta and meta["last_uid"] == 1
+    assert meta["failures"] == 2 and "retry_after" in meta
+
+
 def test_the_task_time_limit_ends_the_poll_without_a_backoff(contract_db, monkeypatch):
     """A time limit is the run's, not the mailbox's: it is not recorded as a
     failed poll, so the mailbox is not backed off for it."""
@@ -621,6 +844,60 @@ def hostile_peer(**replies):
 
 
 @pytest.mark.parametrize(
+    "to",
+    [
+        b"a@example.test, :",
+        b",\t:",
+        # A structured parse of this takes seconds of the worker's CPU time.
+        b"\r\n ".join([b".." * 40] * 190),
+    ],
+    ids=["unparseable", "empty-groups", "dotted"],
+)
+def test_address_headers_are_masked_without_being_parsed(monkeypatch, to):
+    monkeypatch.setattr(Mailbox, "poison", {3: b"To: " + to + b"\r\n\r\n"})
+    monkeypatch.setattr(worker, "Client", Mailbox)
+    with measured() as timing:
+        result = worker.collect(MAILBOX, CURSOR, "")
+    assert timing.seconds < 2
+    assert [i["uid"] for i in result["items"]] == [2, 3, 4]
+    assert result["items"][1]["headers"]["to"] == "[MASKED_EMAIL]"
+
+
+def test_an_encoded_subject_is_decoded_and_a_broken_one_kept(monkeypatch):
+    monkeypatch.setattr(
+        Mailbox,
+        "poison",
+        {
+            2: b"Subject: =?utf-8?q?Caf=C3=A9_report?=\r\n\r\n",
+            3: b"Subject: =?x-unknown?q?abc?=\r\n\r\n",
+        },
+    )
+    monkeypatch.setattr(worker, "Client", Mailbox)
+    items = worker.collect(MAILBOX, CURSOR, "")["items"]
+    assert items[0]["headers"]["subject"] == "Caf\u00e9 report"
+    assert items[1]["headers"]["subject"] == "=?x-unknown?q?abc?="
+
+
+def test_headers_that_cannot_be_read_are_recorded_without_them(monkeypatch):
+    def unreadable(value):
+        if "Message 3" in value:
+            raise UnicodeError("unreadable")
+        return value
+
+    monkeypatch.setattr(worker, "redact_str", unreadable)
+    monkeypatch.setattr(worker, "Client", Mailbox)
+    items = worker.collect(MAILBOX, CURSOR, "")["items"]
+    assert items[1] == worker.omitted(3, "message_exceeds_limits")
+
+
+def test_another_messages_unsolicited_flags_are_ignored(monkeypatch):
+    meta = [b"7 (FLAGS (\\Seen))", b"1 (UID 2 RFC822.SIZE 100)"]
+    monkeypatch.setattr(worker, "Client", hostile_peer(meta=meta))
+    result = worker.collect(MAILBOX, CURSOR, "")
+    assert result["items"][0]["message_size"] == 100
+
+
+@pytest.mark.parametrize(
     "replies,detail",
     [
         ({"uidnext": b"1"}, "IMAP UIDNEXT moved backwards"),
@@ -633,12 +910,10 @@ def hostile_peer(**replies):
             "Unsupported IMAP metadata response",
         ),
         ({"meta": [b"UID 2 RFC822.SIZE 100"]}, "Invalid IMAP metadata response"),
-        ({"meta": [b"1 (UID 2)"]}, "Invalid IMAP metadata fields"),
+        ({"meta": [b"1 (UID 2 RFC822.SIZE)"]}, "Invalid IMAP metadata fields"),
         ({"meta": [b"1 (UID 9 RFC822.SIZE 100)"]}, "IMAP metadata UID mismatch"),
         ({"meta": [b"1 (UID 2 RFC822.SIZE NIL)"]}, "Invalid IMAP message size"),
         ({"meta": [b'1 (UID 2 RFC822.SIZE "1e3")']}, "Invalid IMAP message size"),
-        ({"header": b"X: y\r\n" * 201}, "IMAP headers exceed limit"),
-        ({"header": b"x" * 16384}, "IMAP headers exceed limit"),
     ],
 )
 def test_hostile_mailbox_replies_end_the_collection(monkeypatch, replies, detail):
@@ -794,6 +1069,12 @@ def _run_worker_main(monkeypatch, raw, collect):
         worker.resource, "setrlimit", lambda kind, value: limits.append((kind, value))
     )
     monkeypatch.setattr(worker.signal, "alarm", alarms.append)
+    handlers = {}
+    monkeypatch.setattr(
+        worker.signal,
+        "signal",
+        lambda signum, handler: handlers.update({signum: handler}),
+    )
     monkeypatch.setattr(worker.sys, "stdin", _Stdin(raw))
     monkeypatch.setattr(worker.sys, "stdout", out)
     monkeypatch.setattr(worker, "collect", collect)
@@ -802,6 +1083,7 @@ def _run_worker_main(monkeypatch, raw, collect):
         worker.main()
     except SystemExit as stop:
         code = stop.code
+    assert handlers == {worker.signal.SIGXCPU: worker.cpu_spent}
     return code, "".join(out.text), limits, alarms
 
 
@@ -830,7 +1112,7 @@ def test_worker_process_limits_itself_then_relays_a_bounded_result(monkeypatch):
     assert dict(limits) == {
         worker.resource.RLIMIT_CORE: (0, 0),
         worker.resource.RLIMIT_AS: (256 * 1024 * 1024, 256 * 1024 * 1024),
-        worker.resource.RLIMIT_CPU: (8, 8),
+        worker.resource.RLIMIT_CPU: (8, 10),
         worker.resource.RLIMIT_NOFILE: (32, 32),
     }
     assert alarms == [50, worker.COLLECTION_TIMEOUT, 5]
@@ -846,6 +1128,65 @@ def test_worker_refuses_oversized_input_without_collecting(monkeypatch):
         "error": "IMAP collection failed a connection, protocol or resource check"
     }
     assert alarms == [50]
+
+
+def test_a_worker_failure_names_only_the_message_it_was_reading(monkeypatch):
+    request = json.dumps(
+        {"configuration": {}, "cursor": None, "allowed_cidrs": []}
+    ).encode()
+
+    def failing(*args):
+        worker.PROGRESS["uid"] = 42
+        raise worker.MessageUnreadable("server said: password secret-DO-NOT-LEAK")
+
+    code, output, _, _ = _run_worker_main(monkeypatch, request, failing)
+    assert code == 1 and "DO-NOT-LEAK" not in output
+    assert json.loads(output)["failed_uid"] == 42
+    assert imap._failed_uid(output.encode()) == 42
+
+
+@pytest.mark.parametrize(
+    "error, counted",
+    [
+        (lambda: transport.ResponseLimit("IMAP response line exceeds limit"), True),
+        # A server's refusal or another fault is not the message's doing.
+        (lambda: ValueError("IMAP command rejected"), False),
+        (lambda: TimeoutError("IMAP deadline"), False),
+    ],
+)
+def test_only_a_messages_own_data_counts_against_it(monkeypatch, error, counted):
+    request = json.dumps(
+        {"configuration": {}, "cursor": None, "allowed_cidrs": []}
+    ).encode()
+
+    def failing(*args):
+        worker.PROGRESS["uid"] = 42
+        raise error()
+
+    code, output, _, _ = _run_worker_main(monkeypatch, request, failing)
+    assert code == 1
+    assert ("failed_uid" in json.loads(output)) is counted
+
+
+def test_a_timeout_names_no_message(monkeypatch):
+    request = json.dumps(
+        {"configuration": {}, "cursor": None, "allowed_cidrs": []}
+    ).encode()
+
+    def stalled(*args):
+        worker.PROGRESS["uid"] = 42
+        raise TimeoutError("read timed out")
+
+    code, output, _, _ = _run_worker_main(monkeypatch, request, stalled)
+    assert code == 1 and "failed_uid" not in json.loads(output)
+
+
+@pytest.mark.parametrize(
+    "output",
+    [b'{"failed_uid": "3"}', b'{"failed_uid": 0}', b"[3]", b"not json", b"x" * 300],
+)
+def test_only_a_plain_uid_is_read_from_a_failed_worker(output):
+    assert imap._failed_uid(output) is None
 
 
 def test_worker_failures_and_oversized_output_report_only_a_generic_error(
@@ -1046,3 +1387,63 @@ def test_a_cursor_removed_during_the_poll_is_recreated(monkeypatch):
     (result,) = imap.ingest_imap_all(db)
     assert result["ok"] is False and "UIDVALIDITY changed" in result["error"]
     assert len(db.added) == 2 and db.added[1].meta["reset_required"] is True
+
+
+@pytest.mark.parametrize("uid", [3, None])
+def test_spent_cpu_time_is_reported_however_the_message_is_read(monkeypatch, uid):
+    # Raised from inside a content handler, an exception could be swallowed;
+    # the report is written and the process ends instead.
+    written, ended = [], []
+    monkeypatch.setattr(worker.os, "write", lambda fd, data: written.append((fd, data)))
+    monkeypatch.setattr(worker.os, "_exit", ended.append)
+    monkeypatch.setitem(worker.PROGRESS, "uid", uid)
+    worker.cpu_spent(None, None)
+    assert ended == [1] and written[0][0] == 1
+    assert imap._failed_uid(written[0][1]) == uid
+
+
+def test_cpu_time_spent_while_decoding_a_body_still_names_the_message(monkeypatch):
+    def spin(*args):
+        worker.cpu_spent(None, None)
+
+    reports = []
+
+    def ended(code):
+        raise SystemExit(code)
+
+    monkeypatch.setattr(worker, "decode_body", spin)
+    monkeypatch.setattr(worker.os, "write", lambda fd, data: reports.append(data))
+    monkeypatch.setattr(worker.os, "_exit", ended)
+    monkeypatch.setattr(worker, "Client", Mailbox)
+    with pytest.raises(SystemExit):
+        worker.collect({**MAILBOX, "fetch_body": True}, CURSOR, "")
+    assert imap._failed_uid(reports[0]) == 2
+
+
+def test_the_mail_before_a_message_no_session_survives_is_kept(monkeypatch):
+    def unreadable(data, uid, **kw):
+        if uid == 3:
+            raise ValueError("Invalid IMAP metadata fields")
+        return original(data, uid, **kw)
+
+    original = worker.metadata
+    monkeypatch.setattr(worker, "metadata", unreadable)
+    monkeypatch.setattr(worker, "Client", Mailbox)
+    result = worker.collect(MAILBOX, CURSOR, "")
+    # The next run starts at UID 3, where the count towards passing it begins.
+    assert [i["uid"] for i in result["items"]] == [2]
+    assert result["last_uid"] == 2
+    assert worker.PROGRESS["uid"] is None
+
+
+def test_a_long_body_is_redacted_only_as_far_as_it_can_show():
+    part = {"encoding": "7bit", "charset": "utf-8"}
+    calls = []
+    original = mime.redact_str
+    try:
+        mime.redact_str = lambda text: calls.append(len(text)) or text
+        text, truncated = decode_body(b"a" * 100_000, part, 100)
+    finally:
+        mime.redact_str = original
+    assert (len(text), truncated) == (100, True)
+    assert calls == [100 + 4096]

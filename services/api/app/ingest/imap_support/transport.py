@@ -39,6 +39,11 @@ def addresses(host, port, allowed_cidrs):
     return values
 
 
+class ResponseLimit(ValueError):
+    """A response line or literal passes its bound. A message's own data, such
+    as its MIME structure, can do so, and the session is then out of step."""
+
+
 class Client(imaplib.IMAP4_SSL):
     def __init__(self, host, port, allowed_cidrs, deadline):
         self.deadline = deadline
@@ -74,7 +79,7 @@ class Client(imaplib.IMAP4_SSL):
     def read(self, size):
         # imaplib calls this BEFORE allocating a server-declared literal.
         if self.literal_limit <= 0 or size > min(self.literal_limit, MAX_LITERAL):
-            raise ValueError("IMAP literal exceeds requested limit")
+            raise ResponseLimit("IMAP literal exceeds requested limit")
         self.budget(size)
         # Consume the allowance even for an empty literal; extra literals in
         # this command must be rejected before their payload is read.
@@ -90,6 +95,6 @@ class Client(imaplib.IMAP4_SSL):
             raise ValueError("Too many IMAP response lines")
         result = self.file.readline(32769)
         if len(result) > 32768:
-            raise ValueError("IMAP response line exceeds limit")
+            raise ResponseLimit("IMAP response line exceeds limit")
         self.received += len(result)
         return result

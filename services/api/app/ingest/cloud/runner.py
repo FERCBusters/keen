@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta
 
@@ -52,6 +53,13 @@ KEEP_DAYS = 30
 # and one read covers at most this window.
 FIRST_LOOKBACK = timedelta(days=1)
 MAX_WINDOW = timedelta(hours=6)
+# A window a provider cannot read in full is halved down to this; one read in
+# a run catches up at most this many windows.
+MIN_WINDOW = timedelta(minutes=1)
+MAX_READS = 12
+# A provider's activity run starts no read after this long, so a slow one
+# leaves the task's time to the providers read after it.
+READ_SECONDS = 180
 ARTIFACT_LIMIT = 256 * 1024
 
 
@@ -412,8 +420,54 @@ def activity_event(provider, entry: base.Activity) -> dict:
     )
 
 
+def gap_event(provider, since: datetime, until: datetime, reason: str) -> dict:
+    """The record of activity Keen could not read in full, so the gap is part
+    of the evidence instead of passing unseen."""
+    span = f"{since.isoformat()}Z to {until.isoformat()}Z"
+    summary = f"{provider.label} activity from {span} was not read in full: {reason}"
+    detail = {"since": since.isoformat(), "until": until.isoformat(), "reason": reason}
+    gap_id = f"gap:{since.isoformat()}:{until.isoformat()}"
+    return dict(
+        timestamp=since,
+        source=provider.key,
+        system=f"{provider.key}:activity",
+        actor=None,
+        action="activity_gap",
+        outcome="unknown",
+        severity=None,
+        summary=base.clip(summary, 512),
+        raw_pointer={"provider": provider.key, "gap": detail},
+        normalized_payload={"provider": provider.key, "gap": detail},
+        external_id=f"activity:{provider.key}:{gap_id}",
+        artifact_kind="cloud_activity",
+        artifact_bytes=_json(detail),
+        artifact_content_type="application/json",
+        artifact_key=f"cloud/{provider.key}/activity/{_digest(gap_id)}.json",
+        captured_by="keen-cloud-activity",
+        commit=False,
+    )
+
+
+def activity_read_to(db, provider) -> datetime | None:
+    """How far the provider's activity has been read."""
+    with connection_scope(connection(provider)):
+        name = namespace("cloud-activity:" + provider.key)
+    cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
+    return cursor.last_ts if cursor else None
+
+
 def collect_activity(db, key: str, *, force: bool = False) -> dict:
-    """Read one provider's activity since the last read and record it."""
+    """Read one provider's activity since the last read and record it.
+
+    The cursor passes only windows that were read in full. A provider that
+    reports a window holding more than one read keeps has it halved and read
+    again, down to MIN_WINDOW, and the narrower window is kept, across runs
+    too, until one reads in full. A minute that still cannot be read in full,
+    or a window the provider could not read in full for a reason a narrower
+    window does not change, is stored as far as it was read and recorded as a
+    gap event; so is a span older than FIRST_LOOKBACK that a long outage left
+    unread, which is recorded without being read.
+    """
     provider = cloud_provider(key)
     if provider.activity is None:
         return {"provider": key, "skipped": True, "reason": "no activity"}
@@ -428,59 +482,137 @@ def collect_activity(db, key: str, *, force: bool = False) -> dict:
                 return {"provider": key, "skipped": True, "reason": "running"}
             cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
             now = utc_now_naive()
-            until = now - provider.activity_lag
-            since = max(
-                (
-                    cursor.last_ts
-                    if cursor and cursor.last_ts
-                    else until - FIRST_LOOKBACK
-                ),
-                until - FIRST_LOOKBACK,
+            # Whole seconds, as providers send their bounds: a fraction they
+            # dropped would leave an entry out of both windows around it.
+            end = (now - provider.activity_lag).replace(microsecond=0)
+            # A run a little late after a day's poll interval is no outage.
+            lookback = max(
+                FIRST_LOOKBACK,
+                timedelta(seconds=settings.cloud_activity_poll_seconds, hours=1),
             )
-            until = min(until, since + MAX_WINDOW)
+            since = (
+                cursor.last_ts.replace(microsecond=0)
+                if cursor and cursor.last_ts
+                else end - lookback
+            )
+            unread = None
+            if since < end - lookback:
+                unread = (since, end - lookback)
+                since = end - lookback
             db.rollback()
-            if until <= since:
+            if end <= since:
                 return {"provider": key, "records": 0}
-            try:
-                (entries, complete), failure = _activity(provider, since, until), ""
-            except base.Unavailable as exc:
-                failure = exc.reason
-            except Exception as exc:
-                log.warning(
-                    "Cloud activity read failed for %s: %s", key, type(exc).__name__
-                )
-                failure = "unavailable"
-            if failure:
-                row = provider_row(db, provider)
-                link_vendor(db, provider, row)
-                row.activity_error = failure
-                db.commit()
-                return {"provider": key, "error": failure}
             reader = RecordReader()
-            try:
-                for event in reader.each(
-                    entries[: base.MAX_ACTIVITY],
-                    lambda entry: activity_event(provider, entry),
-                ):
-                    store_event_with_artifact(db, **event)
+            records, complete, gaps, window = 0, True, [], MAX_WINDOW
+            kept = (cursor.meta or {}).get("window_seconds") if cursor else None
+            if type(kept) is int and MIN_WINDOW <= timedelta(seconds=kept) <= window:
+                window = timedelta(seconds=kept)
+            narrowed = False
+            started = time.monotonic()
+            for _ in range(MAX_READS):
+                if since >= end or time.monotonic() - started > READ_SECONDS:
+                    break
+                until = min(end, since + window)
+                try:
+                    (entries, read_all), failure = (
+                        _activity(provider, since, until),
+                        "",
+                    )
+                except base.Unavailable as exc:
+                    failure = exc.reason
+                except Exception as exc:
+                    log.warning(
+                        "Cloud activity read failed for %s: %s",
+                        key,
+                        type(exc).__name__,
+                    )
+                    failure = "unavailable"
+                if failure:
+                    # Windows already read keep their progress.
+                    row = provider_row(db, provider)
+                    link_vendor(db, provider, row)
+                    row.activity_error = failure
+                    db.commit()
+                    return {"provider": key, "error": failure, "records": records}
+                if read_all is False and until - since > MIN_WINDOW:
+                    window = max(
+                        MIN_WINDOW,
+                        timedelta(seconds=int((until - since).total_seconds()) // 2),
+                    )
+                    narrowed = True
+                    continue
+                # A window grows back only once one of its size reads in full
+                # without having been narrowed.
+                # A reason that narrowing cannot help says nothing of volume.
+                if read_all is not False and not narrowed:
+                    window = min(MAX_WINDOW, window * 2)
+                try:
+                    gaps_here = []
+                    if unread:
+                        gaps_here.append(
+                            (*unread, "no read ran for over a day, so it was not read")
+                        )
+                    if read_all is not True:
+                        gaps.append((since, until))
+                        complete = False
+                        gaps_here.append(
+                            (
+                                since,
+                                until,
+                                "more entries than one read holds"
+                                if read_all is False
+                                else base.clip(str(read_all), 200),
+                            )
+                        )
+                    for event in reader.each(
+                        [*gaps_here, *entries[: base.MAX_ACTIVITY]],
+                        lambda record: (
+                            gap_event(provider, *record)
+                            if isinstance(record, tuple)
+                            else activity_event(provider, record)
+                        ),
+                    ):
+                        store_event_with_artifact(db, **event)
+                    cursor = (
+                        db.query(IngestionCursor).filter_by(name=name).one_or_none()
+                    )
+                    if cursor is None:
+                        cursor = IngestionCursor(name=name, meta={})
+                        db.add(cursor)
+                    cursor.last_ts = until
+                    cursor.meta = {
+                        **(cursor.meta or {}),
+                        "window_seconds": int(window.total_seconds()),
+                    }
+                    cursor.updated_at = now
+                    row = provider_row(db, provider)
+                    link_vendor(db, provider, row)
+                    row.activity_at = now
+                    row.activity_error = ""
+                    row.activity_truncated = bool(gaps or unread)
+                    db.commit()
+                except DomainError:
+                    db.rollback()
+                    return {"provider": key, "skipped": True, "reason": "paused"}
+                unread = None
+                records += len(entries)
+                since = until
+                narrowed = False
+            if narrowed:
+                # A run that stopped while narrowing keeps the width it
+                # reached, so the next continues from there.
                 cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
                 if cursor is None:
                     cursor = IngestionCursor(name=name, meta={})
                     db.add(cursor)
-                cursor.last_ts = until
-                cursor.updated_at = now
-                row = provider_row(db, provider)
-                link_vendor(db, provider, row)
-                row.activity_at = now
-                row.activity_error = ""
-                row.activity_truncated = not complete
+                cursor.meta = {
+                    **(cursor.meta or {}),
+                    "window_seconds": int(window.total_seconds()),
+                }
                 db.commit()
-            except DomainError:
-                db.rollback()
-                return {"provider": key, "skipped": True, "reason": "paused"}
     return {
         "provider": key,
-        "records": len(entries),
+        "records": records,
         "invalid_records": reader.invalid,
         "complete": complete,
     }

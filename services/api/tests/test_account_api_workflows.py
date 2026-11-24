@@ -763,6 +763,39 @@ def test_access_changes_cannot_remove_the_last_administrator(keen):  # noqa: F81
     )
 
 
+def test_a_reset_ends_sessions_opened_through_sso(
+    keen,  # noqa: F811
+    admin_client,  # noqa: F811
+    monkeypatch,
+):
+    from mosp.security.auth import cookie_name
+    from mosp.security.sessions import create_session
+
+    monkeypatch.setattr(settings, "oidc_enabled", True)
+    _admin, client = admin_client
+    target = keen.user()
+    sso = keen.client()
+    sso.cookies.set(
+        cookie_name(),
+        create_session(
+            keen.store,
+            user_id=str(target.id),
+            ttl_seconds=600,
+            auth_method="oidc",
+            session_version=target.session_version,
+        ),
+    )
+    assert sso.get("/v1/auth/check").status_code == 204
+    assert _json(
+        client.post(
+            f"/v1/users/{target.id}/password",
+            headers=unsafe(client),
+            json={"new_password": "reset-synthetic-passphrase"},
+        )
+    ) == {"ok": True}
+    assert sso.get("/v1/auth/check").status_code == 401
+
+
 def test_administrators_reset_local_passwords_only(keen, admin_client):  # noqa: F811
     _admin, client = admin_client
     h = unsafe(client)

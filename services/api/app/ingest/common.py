@@ -4,6 +4,7 @@ import hashlib
 from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime
 from typing import Any, NamedTuple, Optional, TypeVar, cast
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from mosp.core import task_deadline
 from mosp.security.redaction import (
@@ -14,6 +15,7 @@ from mosp.security.redaction import (
     redact_bytes,
     redact_obj,
     redact_str,
+    redact_url,
     storable,
 )
 from sqlalchemy import String, text
@@ -31,6 +33,33 @@ from app.mapping.rules import (
 )
 from app.mapping.targets import Target, resolve_targets
 from app.storage.s3 import attempt_key, put_bytes
+
+
+def masked_link(url: str) -> str:
+    """``url`` with secrets removed and email and IP addresses masked in its
+    host, its path, and its query and fragment values read decoded, where a
+    percent-encoded address would not read as one."""
+    # A link redaction cannot read comes back as REDACTED, which splits.
+    parts = urlsplit(redact_url(url))
+
+    def mask(text: str) -> str:
+        return mask_event_data_str(text) or ""
+
+    def values(text: str) -> str:
+        if "=" not in text:
+            return mask(text)
+        pairs = parse_qsl(text, keep_blank_values=True)
+        return urlencode([(mask(k), mask(v)) for k, v in pairs])
+
+    return urlunsplit(
+        (
+            parts.scheme,
+            mask(parts.netloc),
+            mask(parts.path),
+            values(parts.query),
+            values(parts.fragment),
+        )
+    )
 
 
 def is_safe_url(url: str) -> bool:
@@ -237,6 +266,17 @@ def normalise_ingested_fields(
     so both apply the same secret redaction and event-data masking.
     """
 
+    masking = (settings.event_data_masking or "false") == "true"
+    if masking:
+        # Masked before redaction too: redaction re-encodes a link's query
+        # string, where an address percent-encoded no longer reads as one.
+        system, actor, action, outcome, summary = (
+            mask_event_data_str(value)
+            for value in (system, actor, action, outcome, summary)
+        )
+        raw_pointer = mask_event_data_obj(raw_pointer) or {}
+        normalized_payload = mask_event_data_obj(normalized_payload) or {}
+
     # --- hardening: redact secrets BEFORE persisting anything ---
     system, actor, action, outcome, summary = (
         redact_str(value) for value in (system, actor, action, outcome, summary)
@@ -258,7 +298,7 @@ def normalise_ingested_fields(
     # Optional privacy masking at ingestion time.  The "samples" mode is
     # intentionally not applied here; it is applied dynamically during evidence
     # PDF/ZIP export so the main Keen UI retains the original event data.
-    if (settings.event_data_masking or "false") == "true":
+    if masking:
         system = mask_event_data_str(system)
         actor = mask_event_data_str(actor)
         action = mask_event_data_str(action)

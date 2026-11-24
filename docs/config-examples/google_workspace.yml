@@ -23,7 +23,23 @@ since_minutes: 120
 # Small overlap reduces the chance of missing slightly delayed/out-of-order events.
 overlap_seconds: 180
 
-# Safety cap per run, per stream (prevents giant backfills on first run).
+# How long Google can take to report activity. Each run reads this span
+# before the present again, so activity reported late is still collected and
+# what was stored already is recognised; what it reads again counts towards
+# max_items only past ten times that limit. Omitted, it follows Google's
+# published lag times: 10 minutes for most applications, 3 hours for
+# calendar, groups and user_accounts, and 4 hours for token. Activity reported
+# later than this is missed.
+# report_lag_seconds: 600
+
+# Most activities read per listing (per named event when a stream lists
+# event_names). A busier period is read in narrower time windows, and the
+# narrower width is kept until a window of it reads in full. A run that has
+# not reached the present reports caught_up: false and how far behind it is
+# (behind_seconds), and the next run continues, so a stream busier than this
+# each poll can run behind. A minute holding more than this is stored as far
+# as it was read, reported as an error and listed in the cursor's
+# minutes_over_limit; later runs read it again within the report lag.
 max_items: 2000
 
 streams:

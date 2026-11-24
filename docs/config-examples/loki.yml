@@ -138,7 +138,6 @@ queries:
 # Default query_range settings (can override per query later)
 defaults:
   limit: 5000
-  direction: "forward"   # forward or backward
   step_seconds: 0        # leave 0 to omit step
   # Keep each Loki query_range call below the Loki server's query length limit.
   # 720h = 30d, which is safely below common limits such as 30d1h.

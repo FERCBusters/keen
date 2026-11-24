@@ -311,6 +311,17 @@ def test_activity_reads_sign_ins_and_events_in_the_window(use):
     ]
 
 
+def test_sign_ins_past_what_a_read_lists_are_not_narrowed_in_vain(use):
+    data = default_data()
+    data["/v4/account/logins"] = [
+        {**data["/v4/account/logins"][0], "id": n} for n in range(1, 13)
+    ]
+    use(Api(data, page_size=1))
+    entries, complete = ln.activity(NOW - timedelta(hours=6), NOW)
+    assert complete == "the account's sign-ins outnumber what one read lists"
+    assert sum(e.id.startswith("login:") for e in entries) == 10
+
+
 def test_refusals_carry_reasons_without_the_token(use):
     use(Api(status={"/v4/account": 401}))
     with pytest.raises(Unavailable) as caught:

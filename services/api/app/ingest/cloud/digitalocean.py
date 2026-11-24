@@ -354,9 +354,11 @@ def action_entry(action: dict, scope: str) -> Activity | None:
     )
 
 
-def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
+def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool | str]:
     """Resource actions started in [since, until). The listing runs newest
-    first, so reading stops at the first page older than the window."""
+    first from the present, so reading stops at the first page older than the
+    window; one that reaches no such page is incomplete however narrow the
+    window."""
     with connect() as api:
         key = team(api)[0]
         found: list[Activity] = []
@@ -380,7 +382,9 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
     out = sorted(found, key=lambda e: e.at)
     if len(out) > MAX_ACTIVITY:
         return out[-MAX_ACTIVITY:], False
-    return out, complete
+    if not complete:
+        return out, "actions since then outnumber what one read lists"
+    return out, True
 
 
 PROVIDER = Provider(

@@ -1000,7 +1000,15 @@ def test_the_pin_workflow_reads_registries_before_any_token_and_never_merges():
     # repository, opened by the App, counts as the proposal: another could
     # otherwise suppress it, or be named as superseding earlier proposals.
     assert "--json number,state,isCrossRepository,author" in propose["run"]
-    assert "select((.isCrossRepository | not) and .author.is_bot)" in propose["run"]
+    assert propose["env"]["APP_SLUG"] == "${{ steps.app.outputs.app-slug }}"
+    assert ': "${APP_SLUG:?' in propose["run"]
+    run = " ".join(propose["run"].split())
+    assert (
+        "select(.isCrossRepository == false and .author.is_bot and (.author.login"
+        ' | ltrimstr("app/") | rtrimstr("[bot]")) == $app)'
+    ) in run
+    # Earlier proposals are closed only when the App opened them here too.
+    assert propose["run"].count('rtrimstr("[bot]")) == $app') == 2
     # A maintainer merges; nothing here approves, merges or enables auto-merge.
     scripts = "\n".join(step.get("run", "") for step in job["steps"]).lower()
     for action in ("pr merge", "pr review", "--auto", "/merge", "automerge"):

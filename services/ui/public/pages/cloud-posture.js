@@ -53,9 +53,13 @@ function activityTable(provider, framework) {
     notes.push(
       `<p class="text-warning mb-1">The last activity read failed: ${esc(provider.activity_error)}</p>`,
     );
+  if (provider.activity_behind)
+    notes.push(
+      `<p class="text-warning mb-1" data-cloud-behind>Activity is read up to ${esc(fmtTs(provider.activity_read_to))} and is catching up.</p>`,
+    );
   if (provider.activity_truncated)
     notes.push(
-      '<p class="text-warning mb-1">The last activity read held more entries than one read keeps; the oldest in that window were skipped.</p>',
+      '<p class="text-warning mb-1">Some activity in the last read could not be read in full. Each such period is recorded as an <code>activity_gap</code> event in the provider\'s activity.</p>',
     );
   if (!provider.activity?.length)
     return `${notes.join('')}<p class="small-muted mb-0" data-cloud-activity>${provider.reads_activity ? 'No activity recorded yet.' : 'No activity recorded.'} ${link}</p>`;

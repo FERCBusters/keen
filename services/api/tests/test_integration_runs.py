@@ -578,3 +578,74 @@ def test_a_record_that_cannot_be_read_is_skipped_and_the_rest_stored(
     )
     assert {e.summary for e in db.query(Event).all()} == {"Record 1", "Record 3"}
     assert db.get(Run, run_id).result["skipped"]["count"] == 1
+
+
+@pytest.mark.parametrize("preview", [False, True], ids=["stored", "preview"])
+def test_event_data_masking_reaches_a_measurements_copy_of_the_record(
+    database,  # noqa: F811 - fixture imported above
+    monkeypatch,
+    preview,
+):
+    # The measurement keeps its own copy of the upstream record, and a preview
+    # keeps samples; with masking on, both are masked as the event is.
+    db, _ = database
+    monkeypatch.setattr(runtime.settings, "event_data_masking", "true")
+    measure = Measure(framework_slug="test", summary="Uptime", target_unit="%")
+    db.add(measure)
+    db.commit()
+    fields = Definition().model_dump()["fields"]
+    db.get(Collector, "collector").draft = Definition(
+        output="measurement",
+        measure_id=str(measure.id),
+        unit="%",
+        fields={
+            **fields,
+            "url": {"path": "/link"},
+            "value": {"value": 99.9},
+            "period_start": {"value": "2026-01-01"},
+            "period_end": {"value": "2026-01-31"},
+        },
+    ).model_dump()
+    db.commit()
+    api.action_collector("collector", "publish", api.Action(version=1), db)
+    run_id = runtime.queue_run(db, db.get(Collector, "collector"), preview=preview).id
+    db.commit()
+    page = [
+        {
+            "id": 1,
+            "created_at": "2026-01-01T12:00:00Z",
+            "title": "Checked",
+            "owner": "ada@example.org",
+            "seen_from": "203.0.113.7",
+            "link": "https://ci.example/checks?by=ada@example.org&from=203.0.113.7",
+        }
+    ]
+    monkeypatch.setattr(
+        runtime, "collect", partial(engine.collect, fetch=lambda *a, **k: (page, {}))
+    )
+    import app.ingest.common as common
+
+    monkeypatch.setattr(
+        common,
+        "put_bytes",
+        lambda **k: SimpleNamespace(
+            uri="test://artifact", sha256="0" * 64, size_bytes=50
+        ),
+    )
+    monkeypatch.setattr(common, "apply_rules", lambda *a: 0)
+    db.get(Collector, "collector").cursor = "2025-12-31T00:00:00+00:00"
+    db.commit()
+
+    runtime.run_job(run_id)
+
+    if preview:
+        (sample,) = db.get(Run, run_id).result["samples"]
+        copy = sample["evidence"]["normalized_payload"]
+    else:
+        copy = db.query(Metric).one().raw_payload
+        assert db.query(Metric).one().source_url == (
+            "https://ci.example/checks?by=%5BMASKED_EMAIL%5D&from=%5BMASKED_IP%5D"
+        )
+    # Not even percent-encoded, as redaction writes a link's query string.
+    assert "ada" not in str(copy) and "203.0.113.7" not in str(copy)
+    assert (copy["owner"], copy["seen_from"]) == ("[MASKED_EMAIL]", "[MASKED_IP]")

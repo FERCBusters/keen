@@ -960,6 +960,36 @@ def test_activity_reports_truncation(monkeypatch, credentials):
     assert complete is False and len(entries) == 3
 
 
+def test_an_unreadable_subscription_leaves_activity_incomplete(
+    monkeypatch, credentials
+):
+    data = default_data()
+    data.pop(("arm", f"/subscriptions/{OTHER}"), None)
+    monkeypatch.setattr(settings, "azure_subscriptions", f"{SUB},{OTHER}")
+    use(monkeypatch, Api(data, page_size=10))
+    now = NOW.replace(tzinfo=None)
+    entries, complete = az.activity(now - timedelta(hours=6), now)
+    assert isinstance(complete, str) and complete.startswith(
+        f"subscriptions not read: {OTHER} ("
+    )
+    assert {e.scope for e in entries if e.id.startswith("activity:")} == {SUB}
+
+
+def test_a_subscription_left_unread_for_volume_leaves_activity_incomplete(
+    monkeypatch, credentials
+):
+    # Rows Keen does not keep, such as Started ones, still count towards the
+    # read; the subscriptions after the one that filled it are not read.
+    data = default_data()
+    data[("arm", f"/subscriptions/{OTHER}")] = data[("arm", f"/subscriptions/{SUB}")]
+    monkeypatch.setattr(settings, "azure_subscriptions", f"{SUB},{OTHER}")
+    monkeypatch.setattr(az, "MAX_ACTIVITY", 0)
+    use(monkeypatch, Api(data, page_size=10))
+    now = NOW.replace(tzinfo=None)
+    _, complete = az.activity(now - timedelta(hours=6), now)
+    assert complete is False
+
+
 def test_connect_hands_the_settings_to_one_session(monkeypatch, credentials):
     monkeypatch.setattr(az, "Azure", lambda *args: args)
     assert az.connect() == (TENANT, CLIENT, SECRET)
@@ -1121,8 +1151,10 @@ def test_activity_skips_subscriptions_outside_the_tenant(monkeypatch, credential
     api = Api(data, page_size=10)
     use(monkeypatch, api)
     now = NOW.replace(tzinfo=None)
-    entries, _ = az.activity(now - timedelta(hours=6), now)
+    entries, complete = az.activity(now - timedelta(hours=6), now)
     assert {e.scope for e in entries if e.id.startswith("activity:")} == {SUB}
+    # The window is not read in full, and the subscription left out is named.
+    assert complete == f"subscriptions not read: {OTHER} (not_configured)"
     assert not any(
         OTHER in r.url.path and "eventtypes" in r.url.path for r in api.requests
     )

@@ -10,9 +10,14 @@ from mosp.security.redaction import redact_str
 BodyStructure = list["BodyStructure"] | str | None
 
 
+class ContentLimit(ValueError):
+    """One message's own content passes a bound. The sender chooses it, so the
+    message is recorded without its content and later messages are still read."""
+
+
 def structure(raw):
     if len(raw) > 32768:
-        raise ValueError("IMAP structure exceeds limit")
+        raise ContentLimit("IMAP structure exceeds limit")
     position = 0
     count = 0
 
@@ -20,7 +25,7 @@ def structure(raw):
         nonlocal position, count
         count += 1
         if depth > 16 or count > 2048:
-            raise ValueError("IMAP structure complexity exceeds limit")
+            raise ContentLimit("IMAP structure complexity exceeds limit")
         while position < len(raw) and raw[position : position + 1] == b" ":
             position += 1
         if position >= len(raw):
@@ -101,7 +106,7 @@ def body_part(tree):
         nonlocal visited
         visited += 1
         if visited > 100 or depth > 12:
-            raise ValueError("Too many MIME parts")
+            raise ContentLimit("Too many MIME parts")
         if not isinstance(node, list) or len(node) < 2:
             raise ValueError("Invalid MIME structure")
         if isinstance(node[0], list):
@@ -203,6 +208,8 @@ def decode_body(raw, part, max_chars):
     if charset not in {"utf-8", "ascii", "latin-1", "cp1252"}:
         raise ValueError("Unsupported body charset")
     text = raw.decode(charset, "replace")
-    # Redact the bounded decoded input before a display limit can split a value.
-    text = redact_str(text)
-    return text[:max_chars], len(text) > max_chars
+    over = len(text) > max_chars
+    # Redact before the display limit can split a value, over a slice reaching
+    # past it, so a long body costs no more redaction than it can show.
+    text = redact_str(text[: max_chars + 4096])
+    return text[:max_chars], over or len(text) > max_chars

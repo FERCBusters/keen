@@ -10,6 +10,7 @@ from pathlib import Path
 
 from mosp.core.datetime_utils import utc_now_naive
 from mosp.core.task_deadline import TIME_LIMITS
+from mosp.security.json_shape import decode_json
 from mosp.security.redaction import mask_mail_address_headers
 
 from app.db.models import IngestionCursor
@@ -25,6 +26,26 @@ from app.ingest.registry import IMAP_QUEUE, Source, register
 from app.services.ingestion_pause import pausable
 
 WORKER_TIMEOUT = 55
+# A message that ends this many runs in a row is recorded without its content
+# and passed, so one message cannot hold back the mail after it.
+FAILED_MESSAGE_RUNS = 3
+
+
+# Messages recorded by UID alone, and why.
+OMITTED = {
+    "message_exceeds_limits": "its headers or structure exceed Keen's limits",
+    "message_failed_repeatedly": f"reading it failed {FAILED_MESSAGE_RUNS} runs in a row",
+}
+
+
+class MessageFailed(ValueError):
+    """A run ended while reading message ``uid``."""
+
+    def __init__(self, uid: int):
+        super().__init__(
+            "IMAP collection failed a connection, protocol or resource check"
+        )
+        self.uid = uid
 
 
 def fetch(config, cursor):
@@ -62,10 +83,24 @@ def fetch(config, cursor):
             proc.communicate()
             raise
         if proc.returncode or len(output) > 5 * 1024 * 1024:
+            uid = _failed_uid(output) if proc.returncode else None
+            if uid is not None:
+                raise MessageFailed(uid)
             raise ValueError(
                 "IMAP collection failed a connection, protocol or resource check"
             )
     return json.loads(output)
+
+
+def _failed_uid(output: bytes) -> int | None:
+    """The message a failed worker was reading, from its fixed error report."""
+    if len(output) > 256:
+        return None
+    try:
+        uid = decode_json(output).get("failed_uid")
+    except (ValueError, AttributeError):
+        return None
+    return uid if type(uid) is int and uid > 0 else None
 
 
 @pausable("imap")
@@ -123,6 +158,15 @@ def ingest_imap_all(db):
         if "uidvalidity" in meta
         else None
     )
+    # Messages whose reading ended FAILED_MESSAGE_RUNS runs in a row are
+    # recorded by UID alone and passed, however many there are in the window.
+    skip_uids = [
+        uid
+        for uid in meta.get("skip_uids") or []
+        if type(uid) is int and state and uid > state["last_uid"]
+    ][:10]
+    if state and skip_uids:
+        state["skip_uids"] = skip_uids
     # Persist admission under the connection run lock before any network work.
     # Failures in collection or storage must not bypass the polling interval.
     meta["last_poll_at"] = now.isoformat()
@@ -136,27 +180,49 @@ def ingest_imap_all(db):
     except TIME_LIMITS:
         # The task's time limit ends the run; it is no failed poll to back off.
         raise
-    except Exception:
+    except Exception as exc:
         db.rollback()
         cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
         if cursor is None:
             cursor = IngestionCursor(name=name, meta={})
             db.add(cursor)
         failures = min(int(meta.get("failures", 0)) + 1, 8)
+        failed = {}
+        error = "IMAP collection failed a connection, protocol or resource check"
+        uid = exc.uid if isinstance(exc, MessageFailed) else None
+        if (
+            state
+            and uid is not None
+            and state["last_uid"] < uid <= state["last_uid"] + 100
+        ):
+            # Runs that end at the same message count towards passing it.
+            runs = meta.get("failed_runs", 0) if meta.get("failed_uid") == uid else 0
+            failed = {"failed_uid": uid, "failed_runs": runs + 1}
+            if runs + 1 >= FAILED_MESSAGE_RUNS and uid not in skip_uids:
+                failed = {}
+                skip_uids = [*skip_uids, uid][-10:]
+            error += f" while reading message UID {uid}"
+        kept = ("failed_uid", "failed_runs", "skip_uids", "retry_after")
+        # A run that ended at a message moves its count on; the next is due
+        # at the usual interval, so a few such messages cost a few polls.
+        counted = bool(failed) or uid in skip_uids
         cursor.meta = {
-            **meta,
-            "failures": failures,
-            "retry_after": (
-                now + timedelta(seconds=min(3600, 60 * 2**failures))
-            ).isoformat(),
+            **{k: v for k, v in meta.items() if k not in kept},
+            **failed,
+            **({"skip_uids": skip_uids} if skip_uids else {}),
+            "failures": int(meta.get("failures", 0)) if counted else failures,
+            **(
+                {}
+                if counted
+                else {
+                    "retry_after": (
+                        now + timedelta(seconds=min(3600, 60 * 2**failures))
+                    ).isoformat()
+                }
+            ),
         }
         db.commit()
-        return [
-            {
-                "ok": False,
-                "error": "IMAP collection failed a connection, protocol or resource check; retry is delayed",
-            }
-        ]
+        return [{"ok": False, "error": error + "; retry is delayed"}]
     cursor = db.query(IngestionCursor).filter_by(name=name).one_or_none()
     if cursor is None:
         cursor = IngestionCursor(name=name, meta={})
@@ -191,7 +257,12 @@ def ingest_imap_all(db):
             action="mail.received",
             outcome="info",
             severity=3,
-            summary=("Email: " + (item["headers"]["subject"] or "(no subject)"))[:512],
+            summary=(
+                f"Email UID {item['uid']} recorded without its content: "
+                + OMITTED[item["body_omitted_reason"]]
+                if item.get("body_omitted_reason") in OMITTED
+                else "Email: " + (item["headers"]["subject"] or "(no subject)")
+            )[:512],
             raw_pointer={
                 "imap": {
                     "uid": item["uid"],
@@ -213,11 +284,13 @@ def ingest_imap_all(db):
     for event in reader.each(result["items"], read):
         stored = store_event_with_artifact(db, **event)
         created += not stored.get("deduped", False)
+    skip_uids = [uid for uid in skip_uids if uid > result["last_uid"]]
     cursor.meta = {
         "uidvalidity": result["uidvalidity"],
         "last_uid": result["last_uid"],
         "failures": 0,
         "last_poll_at": meta["last_poll_at"],
+        **({"skip_uids": skip_uids} if skip_uids else {}),
     }
     cursor.last_ts = now
     db.commit()

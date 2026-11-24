@@ -391,7 +391,10 @@ def set_user_password_admin(
         target.password_hash = hash_password(
             payload.new_password or "", username=target.username
         )
+        # Every session ends, however it was opened: one opened through SSO
+        # is checked against the session version, not the second-factor one.
         target.mfa_version += 1
+        target.session_version += 1
     except ValueError as e:
         raise DomainError(status_code=400, detail=str(e))
 

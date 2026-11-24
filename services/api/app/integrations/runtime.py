@@ -15,7 +15,7 @@ from app.db.models import IntegrationRun as Run
 from app.db.models import IsmsEffectivenessMeasure as Measure
 from app.db.models import IsmsEffectivenessMetricEntry as Metric
 from app.db.session import SessionLocal
-from app.ingest.common import RecordReader, store_event_with_artifact
+from app.ingest.common import RecordReader, masked_link, store_event_with_artifact
 from app.ingest.connections import Connection as SourceOrigin
 from app.ingest.connections import connection_scope
 from app.mapping.rules import evaluate_by_framework, load_rules
@@ -25,7 +25,12 @@ from mosp.core import task_deadline
 from mosp.core.datetime_utils import utc_now_naive
 from mosp.core.task_deadline import TIME_LIMITS
 from mosp.security.json_shape import MAX_DEPTH, NESTED_TOO_DEEPLY
-from mosp.security.redaction import redact_obj, redact_url, storable
+from mosp.security.redaction import (
+    mask_event_data_obj,
+    redact_obj,
+    redact_url,
+    storable,
+)
 from sqlalchemy import CursorResult, select, update
 
 from .engine import MAX_LINK_CHARS, collect, external_id, timestamp
@@ -64,6 +69,14 @@ def scrub(value, secrets):
         return item
 
     return walk(value, 1)
+
+
+def masked(value):
+    """``value`` with email and IP addresses masked when event-data masking is
+    on, as the shared ingestion path masks a stored event."""
+    if (settings.event_data_masking or "false") == "true":
+        return mask_event_data_obj(value)
+    return value
 
 
 def skipped_message(skipped):
@@ -227,18 +240,21 @@ def run_job(run_id):
                 # Made storable here as well as when the event is stored:
                 # the preview keeps samples and a measurement keeps the record
                 # without passing through event storage.
-                normalized_payload=storable(redact_obj(item["record"])),
+                # Masked before redaction re-encodes its links' query strings.
+                normalized_payload=storable(redact_obj(masked(item["record"]))),
             )
             if preview:
                 sample = {
-                    "evidence": storable(
-                        redact_obj(
-                            {
-                                **event,
-                                "timestamp": f["timestamp"],
-                                "connection_id": connection_key,
-                                "connection_name": connection_name,
-                            }
+                    "evidence": masked(
+                        storable(
+                            redact_obj(
+                                {
+                                    **event,
+                                    "timestamp": f["timestamp"],
+                                    "connection_id": connection_key,
+                                    "connection_name": connection_name,
+                                }
+                            )
                         )
                     ),
                     "matches": evaluate_by_framework(
@@ -273,10 +289,17 @@ def run_job(run_id):
                     period_start=date.fromisoformat(f["period_start"]),
                     period_end=date.fromisoformat(f["period_end"]),
                     metric_value=f["value"],
-                    source_url=storable(redact_url(f["url"]))[:MAX_LINK_CHARS]
+                    # The measurement's link and copy of the record are stored
+                    # apart from the event, so they are masked here as the
+                    # event's are.
+                    source_url=storable(
+                        masked_link(f["url"])
+                        if (settings.event_data_masking or "false") == "true"
+                        else redact_url(f["url"])
+                    )[:MAX_LINK_CHARS]
                     if f.get("url")
                     else None,
-                    raw_payload=event["normalized_payload"],
+                    raw_payload=masked(event["normalized_payload"]),
                 )
             return index, None, stored, metric
 

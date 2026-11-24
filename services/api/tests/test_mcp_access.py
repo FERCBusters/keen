@@ -361,15 +361,36 @@ def test_an_administrator_listed_redirect_registers(mcp, monkeypatch):
     )
 
 
-def test_registrations_waiting_for_approval_are_capped(mcp, monkeypatch):
+def test_registration_at_the_cap_makes_room_instead_of_refusing(mcp, monkeypatch):
     monkeypatch.setattr(mcp_oauth, "UNAPPROVED_CLIENT_LIMIT", 2)
-    assert [mcp.register().status_code for _ in range(2)] == [201, 201]
-    refused = mcp.register()
-    assert refused.status_code == 400
-    assert refused.json()["error"] == "invalid_client_metadata"
-    assert "waiting for approval" in refused.json()["error_description"]
-    # An approved client no longer counts against the cap.
-    approved = mcp.db.query(McpClient).first()
+
+    def waiting():
+        mcp.db.expire_all()
+        return {c.client_id for c in mcp.db.query(McpClient)}
+
+    first = mcp.register().json()["client_id"]
+    second = mcp.register().json()["client_id"]
+    mcp.consent_key(first)
+    # Both have waited longer than a consent request lasts; only the first is
+    # in consent, so the second is stale and makes room.
+    mcp.db.query(McpClient).update(
+        {McpClient.created_at: utc_now_naive() - timedelta(minutes=30)},
+        synchronize_session=False,
+    )
+    mcp.db.commit()
+    third = mcp.register()
+    assert third.status_code == 201
+    third = third.json()["client_id"]
+    assert waiting() == {first, third}
+    assert second not in waiting()
+    # With no stale client the oldest goes, even in consent with its request,
+    # and the client that has just registered stays while its app opens the
+    # consent page.
+    fourth = mcp.register().json()["client_id"]
+    assert waiting() == {third, fourth}
+    assert mcp.db.query(McpConsentRequest).count() == 0
+    # An approved client counts for nothing.
+    approved = mcp.db.query(McpClient).filter_by(client_id=third).one()
     mcp.db.add(
         McpGrant(
             user_id=mcp.keen.user().id,
@@ -381,7 +402,20 @@ def test_registrations_waiting_for_approval_are_capped(mcp, monkeypatch):
         )
     )
     mcp.db.commit()
-    assert mcp.register().status_code == 201
+    fifth = mcp.register().json()["client_id"]
+    assert waiting() == {third, fourth, fifth}
+
+
+def test_registrations_nobody_approves_are_removed_after_a_day(mcp):
+    stale = mcp.register().json()["client_id"]
+    mcp.db.query(McpClient).update(
+        {McpClient.created_at: utc_now_naive() - timedelta(hours=25)},
+        synchronize_session=False,
+    )
+    mcp.db.commit()
+    mcp.register()
+    mcp.db.expire_all()
+    assert mcp.db.query(McpClient).filter_by(client_id=stale).count() == 0
 
 
 def test_each_address_has_its_own_registration_allowance(mcp, monkeypatch):
@@ -1242,3 +1276,23 @@ def test_a_cached_page_is_served_only_to_the_authority_it_was_computed_for(
     again, _ = mcp_oauth.scoped_user(mcp.db, narrow)
     assert cache.user_cache_scope(again) == as_connection
     assert cache.user_cache_scope(None) == "anonymous"
+
+
+def test_making_room_with_nothing_waiting_removes_nothing(mcp):
+    # Every client is approved, so none is pushed out to make room.
+    mcp.register()
+    client = mcp.db.query(McpClient).one()
+    mcp.db.add(
+        McpGrant(
+            user_id=mcp.keen.user().id,
+            client_pk=client.id,
+            scopes=[],
+            session_version=0,
+            mfa_version=0,
+            expires_at=utc_now_naive() + timedelta(days=1),
+        )
+    )
+    mcp.db.commit()
+    mcp_oauth._evict_waiting_client(mcp.db)
+    mcp.db.commit()
+    assert mcp.db.query(McpClient).count() == 1

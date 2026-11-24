@@ -28,6 +28,7 @@ from app.db.models import (
     IsmsEffectivenessMeasureSecret,
     IsmsEffectivenessMetricEntry,
 )
+from app.ingest.common import masked_link
 from app.integrations.errors import IntegrationError
 from app.integrations.transport import decrypt
 from app.security import signed_webhooks
@@ -282,19 +283,25 @@ def record_metric(
         source_url = external_url(payload.get("source_url") or payload.get("url"))
     except (ValueError, TypeError, AttributeError):
         raise DomainError(400, "Use an HTTP or HTTPS source URL") from None
+    # Extracted columns, the link, the payload copy and the changelog receive
+    # the same protection as the shared ingestion path.
+    mask = (settings.event_data_masking or "false") == "true"
     if source_url:
         # Validation rejects embedded credentials; recognised secret query and
         # fragment parameters are removed like other ingested URLs.
-        source_url = redact_url(source_url)
-    # Extracted columns, the payload copy and the changelog receive the same
-    # protection as the shared ingestion path.
-    mask = (settings.event_data_masking or "false") == "true"
+        # A masked address can be longer than the address it replaces.
+        source_url = (masked_link(source_url) if mask else redact_url(source_url))[
+            :2048
+        ]
 
     def protect(value: str) -> str:
+        # Masked before redaction re-encodes a link's query string, too.
+        if mask:
+            value = mask_event_data_str(value) or ""
         value = redact_str(value) or ""
         return (mask_event_data_str(value) or "") if mask else value
 
-    raw_payload = redact_obj(payload) or {}
+    raw_payload = redact_obj(mask_event_data_obj(payload) if mask else payload) or {}
     if mask:
         raw_payload = mask_event_data_obj(raw_payload) or {}
     row = IsmsEffectivenessMetricEntry(

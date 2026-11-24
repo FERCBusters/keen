@@ -372,7 +372,8 @@ def test_the_next_run_continues_after_the_cursor_and_skips_lines_already_stored(
     assert result["created_events"] == 0
     assert len(lk.events()) == 1
     start, end = lk.upstream.window()
-    assert abs(start - (_ns(NOW) + 1000)) < 1000
+    # A window read in full ends the cursor; the next starts exactly there.
+    assert start == _ns(NOW)
     assert abs(end - _ns(NOW + timedelta(minutes=5))) < 1000
     assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == NOW + timedelta(
         minutes=5
@@ -398,12 +399,13 @@ def test_a_full_page_moves_the_cursor_only_to_the_newest_line_seen(lk):
 
     assert result["chunks"][0]["hit_limit"] is True
     assert dict(lk.upstream.requests[0].url.params)["limit"] == "2"
-    # Lines after the newest one returned are read on the next run.
+    # Lines at and after the newest one returned are read on the next run:
+    # the limit may have cut through lines sharing its time.
     assert lk.cursor().last_ts.replace(tzinfo=timezone.utc) == newest
     lk.clock.now = NOW + timedelta(minutes=1)
     lk.run()
     start, _ = lk.upstream.window()
-    assert abs(start - (_ns(newest) + 1000)) < 1000
+    assert start == _ns(newest)
 
 
 def test_a_long_gap_is_read_in_bounded_chunks(lk):
@@ -462,10 +464,11 @@ def test_query_settings_override_defaults_and_invalid_values_fall_back(lk):
     first, second = (dict(r.url.params) for r in lk.upstream.requests)
     assert (first["limit"], first["direction"], first["step"]) == (
         "250",
-        "backward",
+        "forward",
         "30",
     )
-    # An invalid limit uses the built-in default; an unknown direction reads forward.
+    # An invalid limit uses the built-in default; every query reads forward,
+    # which the cursor relies on.
     assert (second["query"], second["limit"], second["direction"]) == (
         '{app="web"}',
         "5000",
@@ -970,7 +973,7 @@ def test_lines_beyond_the_query_limit_are_left_for_the_next_run(lk):
     lk.upstream.replies.append([{"stream": {"app": "sshd"}, "values": lines[::2]}])
     (again,) = lk.run()
     start, _ = lk.upstream.window()
-    assert abs(start - (_ns(NOW - timedelta(minutes=7)) + 1000)) < 1000
+    assert start == _ns(NOW - timedelta(minutes=7))
     assert again["created_events"] == 2
     assert [e.normalized_payload["line"] for e in lk.events()] == [
         "line 9",
@@ -1175,3 +1178,143 @@ def test_wherever_the_time_limit_falls_no_line_is_lost_or_stored_twice(lk, monke
     # at least once after a line's object was stored but before its event was.
     assert set(stopped) == {0, 1, 2, 3} and checks > 10
     assert queued_once
+
+
+def test_lines_sharing_the_time_where_the_limit_cut_are_all_read(lk):
+    # Logs stamped to the second share times. The limit cuts through the
+    # lines at 12:02; the next chunk starts at 12:02 again, so the rest of
+    # them, the target included, are read, and those already stored are
+    # recognised.
+    lk.configure(lk.query(limit=3, catchup_chunks_per_run=2))
+    first, tied = NOW - timedelta(minutes=8), NOW - timedelta(minutes=6)
+    lines = [
+        _line(first, "first"),
+        _line(tied, "tied 1"),
+        _line(tied, "tied 2"),
+        _line(tied, "target"),
+    ]
+    lk.upstream.replies.extend(
+        [
+            [{"stream": {"app": "web"}, "values": lines[:3]}],
+            [{"stream": {"app": "web"}, "values": lines[1:]}],
+        ]
+    )
+    (result,) = lk.run()
+    assert sorted(e.normalized_payload["line"] for e in lk.events()) == [
+        "first",
+        "target",
+        "tied 1",
+        "tied 2",
+    ]
+    assert lk.upstream.window(1)[0] == _ns(tied)
+    assert "error" not in result
+
+
+def test_more_lines_at_one_instant_than_loki_returns_are_passed_and_reported(
+    lk, monkeypatch
+):
+    monkeypatch.setattr(loki, "LOKI_MAX_LIMIT", 3)
+    lk.configure(lk.query(limit=2))
+    at = NOW - timedelta(minutes=5)
+    crowd = [_line(at, f"crowd {n}") for n in range(4)]
+    after = _line(NOW - timedelta(minutes=4), "after")
+    lk.upstream.replies.extend(
+        [
+            [{"stream": {"app": "web"}, "values": crowd[:2]}],
+            # Asked again at that instant with Loki's largest limit.
+            [{"stream": {"app": "web"}, "values": crowd[:2]}],
+            [{"stream": {"app": "web"}, "values": crowd[:3]}],
+            [{"stream": {"app": "web"}, "values": [after]}],
+        ]
+    )
+    lk.configure(lk.query(limit=2, catchup_chunks_per_run=10))
+    (result,) = lk.run()
+    limits = [r.url.params["limit"] for r in lk.upstream.requests]
+    assert limits == ["2", "2", "3", "2"]
+    assert result["error"] == (
+        "Loki returned no more lines than its limit at an instant that holds at "
+        "least that many; any beyond those were not collected"
+    )
+    assert result["instants_over_limit"] == [str(_ns(at))]
+    assert lk.cursor().meta["instants_over_limit"] == [str(_ns(at))]
+    assert lk.upstream.window(3)[0] == _ns(at) + 1
+    assert "after" in {e.normalized_payload["line"] for e in lk.events()}
+
+
+def test_lines_filling_the_limit_at_one_instant_are_read_within_one_chunk(lk):
+    # With one chunk a run, the widened read of a crowded instant is part of
+    # that chunk, so the query moves on instead of asking the same each run.
+    lk.configure(lk.query(limit=2))
+    at = NOW - timedelta(minutes=5)
+    crowd = [_line(at, f"crowd {n}") for n in range(2)]
+    lk.upstream.replies.extend(
+        [
+            [{"stream": {"app": "web"}, "values": crowd}],
+            [{"stream": {"app": "web"}, "values": crowd}],
+            [{"stream": {"app": "web"}, "values": crowd}],
+        ]
+    )
+    lk.run()
+    assert lk.upstream.window(0)[0] < _ns(at)
+    lk.run()
+    # The instant was read with the largest limit, held only those two lines,
+    # and the cursor moved past it.
+    assert [r.url.params["limit"] for r in lk.upstream.requests] == ["2", "2", "5000"]
+    assert lk.cursor().meta["next_ns"] == str(_ns(NOW))
+    later = _line(NOW + timedelta(seconds=30), "later")
+    lk.clock.now = NOW + timedelta(minutes=1)
+    lk.upstream.replies.append([{"stream": {"app": "web"}, "values": [later]}])
+    lk.run()
+    assert "later" in {e.normalized_payload["line"] for e in lk.events()}
+
+
+def test_a_server_refusing_the_largest_limit_passes_the_instant(lk):
+    lk.configure(lk.query(limit=2, catchup_chunks_per_run=5))
+    at = NOW - timedelta(minutes=5)
+    crowd = [_line(at, f"crowd {n}") for n in range(2)]
+    lk.upstream.replies.extend(
+        [
+            [{"stream": {"app": "web"}, "values": crowd}],
+            [{"stream": {"app": "web"}, "values": crowd}],
+            httpx.Response(400, text="max entries limit per query exceeded"),
+        ]
+    )
+    (result,) = lk.run()
+    assert result["instants_over_limit"] == [str(_ns(at))]
+    assert lk.upstream.window(3)[0] == _ns(at) + 1
+
+
+def test_a_cursor_time_set_since_wins_over_the_kept_position(lk):
+    lk.run()
+    assert lk.cursor().meta["next_ns"] == str(_ns(NOW))
+    # An administrator's reset moves the time and leaves the kept position.
+    reset = NOW + timedelta(hours=2)
+    cursor = lk.cursor()
+    cursor.last_ts = reset.replace(tzinfo=None)
+    lk.db.commit()
+    lk.clock.now = NOW + timedelta(hours=3)
+    lk.run()
+    assert lk.upstream.window()[0] == _ns(reset) + 1000
+
+
+def test_the_reset_strategy_lets_later_runs_collect_again(lk):
+    lk.configure(lk.query(max_query_range_hours=1, overlong_range_strategy="reset"))
+    lk.run()
+    lk.clock.now = NOW + timedelta(hours=3)
+    (result,) = lk.run()
+    assert result["skipped"] is True
+    lk.clock.now = NOW + timedelta(hours=3, minutes=5)
+    new = _line(NOW + timedelta(hours=3, minutes=1), "new")
+    lk.upstream.replies.append([{"stream": {"app": "web"}, "values": [new]}])
+    (result,) = lk.run()
+    assert "skipped" not in result
+    assert "new" in {e.normalized_payload["line"] for e in lk.events()}
+
+
+def test_a_cursor_from_before_nanoseconds_were_kept_resumes_after_its_time(lk):
+    behind = NOW - timedelta(minutes=30)
+    lk.db.add(IngestionCursor(name=lk.cursor_name(), last_ts=behind, meta={}))
+    lk.db.commit()
+    lk.run()
+    assert lk.upstream.window()[0] == _ns(behind) + 1000
+    assert lk.cursor().meta["next_ns"] == str(_ns(NOW))

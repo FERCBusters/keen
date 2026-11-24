@@ -1044,13 +1044,14 @@ def _graph_window(api, path, field, since, until):
     return api.listing("graph", path, params=params, limit=MAX_ACTIVITY // 1000 + 1)
 
 
-def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
+def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool | str]:
     """Entra sign-ins and directory audits, and each subscription's activity
-    log, in [since, until)."""
+    log, in [since, until). A subscription Keen cannot read leaves the window
+    incomplete, and names it, however narrow the window is."""
     api = connect()
     try:
         found: list[Activity | None] = []
-        complete = True
+        complete, unread = True, []
         for path, field, parse in (
             ("/v1.0/auditLogs/signIns", "createdDateTime", sign_in_entry),
             ("/v1.0/auditLogs/directoryAudits", "activityDateTime", audit_entry),
@@ -1060,6 +1061,7 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
             found.extend(parse(r, api.tenant) for r in rows)
         for sub, _name, reason in subscriptions(api):
             if reason:
+                unread.append(f"{sub} ({reason})")
                 continue
             rows, done = api.listing(
                 "arm",
@@ -1074,6 +1076,8 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
             complete = complete and done
             found.extend(activity_entry(r, sub) for r in rows)
             if len(found) > MAX_ACTIVITY:
+                # The subscriptions after this one are left unread.
+                complete = False
                 break
     finally:
         api.close()
@@ -1081,9 +1085,11 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
         (e for e in found if e is not None and since <= e.at < until),
         key=lambda e: e.at,
     )
-    if len(entries) > MAX_ACTIVITY:
+    if len(entries) > MAX_ACTIVITY or not complete:
         return entries[-MAX_ACTIVITY:], False
-    return entries, complete
+    if unread:
+        return entries, "subscriptions not read: " + ", ".join(unread)
+    return entries, True
 
 
 PROVIDER = Provider(

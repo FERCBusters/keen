@@ -209,9 +209,14 @@ class Provider:
     scope_noun: str  # "account", "subscription", ...
     checks: dict  # check key -> label
     collect: Callable[[], list[ScopeResult]]
-    # activity(since, until) -> (entries in [since, until), oldest first;
-    # whether every entry in the window was read). At most MAX_ACTIVITY.
-    activity: Callable[[datetime, datetime], tuple[list[Activity], bool]] | None = None
+    # activity(since, until) -> (entries in [since, until), oldest first, at
+    # most MAX_ACTIVITY; True when every entry in the window was read,
+    # False when it held more than one read keeps, so a narrower window may be
+    # read in full, or the reason, such as a subscription Keen cannot read,
+    # that it was not read in full whatever its width).
+    activity: (
+        Callable[[datetime, datetime], tuple[list[Activity], bool | str]] | None
+    ) = None
     # How long the vendor takes to make an activity entry readable.
     activity_lag: timedelta = timedelta(minutes=5)
     aliases: tuple = ()

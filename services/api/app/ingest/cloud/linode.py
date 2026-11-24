@@ -438,8 +438,10 @@ def event_entry(event: dict, account: str) -> Activity | None:
     )
 
 
-def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
-    """Cloud Manager sign-ins and account events in [since, until)."""
+def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool | str]:
+    """Cloud Manager sign-ins and account events in [since, until). Sign-ins
+    are listed whole, so a longer list than one read holds leaves the window
+    incomplete however narrow it is."""
     with connect() as api:
         account = clip(api.get("/v4/account").get("euuid"), 64).upper()
         logins, done_logins = api.listing("/v4/account/logins", limit=10)
@@ -460,9 +462,11 @@ def activity(since: datetime, until: datetime) -> tuple[list[Activity], bool]:
         (e for e in found if e is not None and since <= e.at < until),
         key=lambda e: e.at,
     )
-    if len(out) > MAX_ACTIVITY:
+    if len(out) > MAX_ACTIVITY or not done_events:
         return out[-MAX_ACTIVITY:], False
-    return out, done_logins and done_events
+    if not done_logins:
+        return out, "the account's sign-ins outnumber what one read lists"
+    return out, True
 
 
 PROVIDER = Provider(

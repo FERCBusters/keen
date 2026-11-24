@@ -450,7 +450,7 @@ def _jenkins_run(builds, cursor):
 
     def handler(request):
         # Served as Jenkins writes it, NaN included.
-        body = json.dumps({"builds": builds}).encode()
+        body = json.dumps({"allBuilds": builds}).encode()
         return httpx.Response(
             200, content=body, headers={"content-type": "application/json"}
         )
@@ -486,12 +486,14 @@ def test_one_unreadable_build_neither_stops_nor_freezes_the_job(poison):
     cursor = MagicMock(last_ts=None)
     for run in range(2):
         result, stored = _jenkins_run(builds, cursor)
-        assert result["invalid_records"] == 1
+        # The next run reads past the builds collected, the unreadable one too.
+        assert result["invalid_records"] == (1 if run == 0 else 0)
         assert [s["summary"] for s in stored] == (
             ["jenkins deploy build #1 SUCCESS", "jenkins deploy build #3 SUCCESS"]
             if run == 0
             else []
         )
+        assert cursor.meta == {"last_number": 3, "pending": []}
         # The cursor moves past the unreadable build, to the newest stored.
         assert cursor.last_ts == datetime.fromtimestamp(
             1_760_000_003, timezone.utc

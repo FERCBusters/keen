@@ -1,22 +1,45 @@
 """Short-lived constrained network process. No database, storage or Keen secrets."""
 
 import json
+import os
 import re
 import resource
 import signal
 import sys
 import time
 from email import policy
+from email.header import decode_header, make_header
 from email.parser import BytesHeaderParser
 
 from mosp.security.redaction import mask_mail_address_headers, redact_str
 from mosp.security.regex import scan_pattern
 
-from .mime import body_part, decode_body, structure
-from .transport import Client
+from .mime import ContentLimit, body_part, decode_body, structure
+from .transport import Client, ResponseLimit
 
 COLLECTION_TIMEOUT = 45
 MAX_OUTPUT_BYTES = 5 * 1024 * 1024
+
+
+FAILED = "IMAP collection failed a connection, protocol or resource check"
+
+
+class MessageUnreadable(ValueError):
+    """A message's own data ended the run: its metadata could not be read.
+    Runs that end so at the same message count towards passing it."""
+
+
+def report(uid=None):
+    """The fixed failure report: never server responses, credentials, message
+    text or tracebacks, and the message being read by UID alone."""
+    return json.dumps({"error": FAILED, **({"failed_uid": uid} if uid else {})})
+
+
+def cpu_spent(signum, frame):
+    # Reading a message used up the worker's CPU time. No handler that reads
+    # content may catch this, so the report is written and the process ends.
+    os.write(1, report(PROGRESS["uid"]).encode())
+    os._exit(1)
 
 
 def checked(result):
@@ -103,8 +126,109 @@ def metadata(data, uid, *, include_body=True):
     return int(size), values.get("BODYSTRUCTURE")
 
 
+# The message being read, for the error a failed run reports.
+PROGRESS: dict = {"uid": None}
+
+
+def omitted(uid, reason):
+    """A message recorded by its UID alone, without its headers or body."""
+    return {
+        "uid": uid,
+        "message_size": None,
+        "headers": dict.fromkeys(("subject", "from", "to", "date", "message-id"), ""),
+        "body": None,
+        "body_omitted_reason": reason,
+        "body_truncated": False,
+        "attachments_fetched": False,
+    }
+
+
+def message(client, uid, config):
+    """One message's metadata, selected headers and, optionally, inline body."""
+    client.literal_limit = 0
+    attributes = (
+        "(UID RFC822.SIZE BODYSTRUCTURE)"
+        if config["fetch_body"]
+        else "(UID RFC822.SIZE)"
+    )
+    meta = checked(client.uid("FETCH", str(uid), attributes))
+    # A server may add an unsolicited FETCH of another message's flags.
+    meta = [
+        row for row in meta if isinstance(row, bytes) and b"RFC822.SIZE" in row.upper()
+    ]
+    if len(meta) != 1:
+        raise ValueError("Unsupported IMAP metadata response")
+    try:
+        size, tree = metadata(meta[0], uid, include_body=config["fetch_body"])
+    except ValueError as error:
+        raise MessageUnreadable(str(error)) from None
+    try:
+        part = body_part(tree) if config["fetch_body"] else None
+    except ValueError as error:
+        # The sender chose the message's MIME structure; the session is in step.
+        raise ContentLimit(str(error)) from None
+    header = literal(
+        client, uid, "HEADER.FIELDS (SUBJECT FROM TO DATE MESSAGE-ID)", 16384
+    )
+    if len(header) >= 16384 or header.count(b"\n") > 200:
+        raise ContentLimit("IMAP headers exceed limit")
+    try:
+        # Read as plain text: the address headers are masked whole, and a
+        # structured parse of a sender's address list can take seconds.
+        parsed = BytesHeaderParser(policy=policy.compat32).parsebytes(header)
+        fields = {
+            name: " ".join(str(parsed.get(name, "")).split())
+            for name in ("subject", "from", "to", "date", "message-id")
+        }
+        try:
+            fields["subject"] = str(make_header(decode_header(fields["subject"])))
+        except Exception:
+            pass  # An undecodable subject is kept as written.
+        # Address headers are masked before the character limit can split an
+        # address, whether or not optional event-data masking is enabled.
+        headers = mask_mail_address_headers(
+            {name: redact_str(value) for name, value in fields.items()}
+        )
+    except Exception:
+        # The sender wrote these fields; a parser that cannot read them must
+        # not hold back the mail after this message.
+        raise ContentLimit("Unreadable IMAP headers") from None
+    item = {
+        "uid": uid,
+        "message_size": size,
+        "headers": {name: value[:2048] for name, value in headers.items()},
+        "body": None,
+        "body_omitted_reason": "disabled",
+        "body_truncated": False,
+        "attachments_fetched": False,
+    }
+    if config["fetch_body"]:
+        item["body_omitted_reason"] = "no_supported_inline_body"
+        if part:
+            # Wire bound independent of server size, with enough bytes for common encodings.
+            limit = min(1024 * 1024, config["body_max_chars"] * 12 + 16)
+            raw_body = literal(client, uid, part["section"], limit)
+            try:
+                text, truncated = decode_body(raw_body, part, config["body_max_chars"])
+            except ValueError:
+                # Identity/transport checks above remain fatal. Bad content
+                # cannot trap every later message behind the same UID.
+                item["body_omitted_reason"] = "invalid_or_unsupported_body_encoding"
+            else:
+                item.update(
+                    body=text,
+                    body_content_type=part["content_type"],
+                    body_truncated=truncated
+                    or len(raw_body) >= limit
+                    or part["size"] > len(raw_body),
+                    body_omitted_reason=None,
+                )
+    return item
+
+
 def collect(config, cursor, allowed_cidrs):
     client = None
+    PROGRESS["uid"] = None
     try:
         client = Client(
             config["host"],
@@ -149,9 +273,15 @@ def collect(config, cursor, allowed_cidrs):
         uids = sorted(set(int(x) for x in tokens))
         if any(not last < uid <= end for uid in uids):
             raise ValueError("IMAP returned UID outside requested window")
-        items = []
+        items: list[dict] = []
         output_bytes = 4096  # Reserve the small result envelope and separators.
         # At most ten messages per run; remaining identifiers are picked up next run.
+        skip = cursor.get("skip_uids") if isinstance(cursor, dict) else None
+        skip = (
+            {uid for uid in skip if type(uid) is int}
+            if isinstance(skip, list)
+            else set()
+        )
         for uid in uids[:10]:
             reserve = (
                 min(1024 * 1024, config["body_max_chars"] * 12 + 16)
@@ -160,65 +290,28 @@ def collect(config, cursor, allowed_cidrs):
             )
             if client.received + reserve + 131072 > 4 * 1024 * 1024:
                 break
-            client.literal_limit = 0
-            attributes = (
-                "(UID RFC822.SIZE BODYSTRUCTURE)"
-                if config["fetch_body"]
-                else "(UID RFC822.SIZE)"
-            )
-            meta = checked(client.uid("FETCH", str(uid), attributes))
-            if len(meta) != 1 or not isinstance(meta[0], bytes):
-                raise ValueError("Unsupported IMAP metadata response")
-            size, tree = metadata(meta[0], uid, include_body=config["fetch_body"])
-            part = body_part(tree) if config["fetch_body"] else None
-            header = literal(
-                client, uid, "HEADER.FIELDS (SUBJECT FROM TO DATE MESSAGE-ID)", 16384
-            )
-            if len(header) >= 16384 or header.count(b"\n") > 200:
-                raise ValueError("IMAP headers exceed limit")
-            parsed = BytesHeaderParser(policy=policy.default).parsebytes(header)
-            # Address headers are masked before the character limit can split an
-            # address, whether or not optional event-data masking is enabled.
-            headers = mask_mail_address_headers(
-                {
-                    name: redact_str(str(parsed.get(name, "")))
-                    for name in ("subject", "from", "to", "date", "message-id")
-                }
-            )
-            item = {
-                "uid": uid,
-                "message_size": size,
-                "headers": {name: value[:2048] for name, value in headers.items()},
-                "body": None,
-                "body_omitted_reason": "disabled",
-                "body_truncated": False,
-                "attachments_fetched": False,
-            }
-            if config["fetch_body"]:
-                item["body_omitted_reason"] = "no_supported_inline_body"
-                if part:
-                    # Wire bound independent of server size, with enough bytes for common encodings.
-                    limit = min(1024 * 1024, config["body_max_chars"] * 12 + 16)
-                    raw_body = literal(client, uid, part["section"], limit)
-                    try:
-                        text, truncated = decode_body(
-                            raw_body, part, config["body_max_chars"]
-                        )
-                    except ValueError:
-                        # Identity/transport checks above remain fatal. Bad content
-                        # cannot trap every later message behind the same UID.
-                        item["body_omitted_reason"] = (
-                            "invalid_or_unsupported_body_encoding"
-                        )
-                    else:
-                        item.update(
-                            body=text,
-                            body_content_type=part["content_type"],
-                            body_truncated=truncated
-                            or len(raw_body) >= limit
-                            or part["size"] > len(raw_body),
-                            body_omitted_reason=None,
-                        )
+            PROGRESS["uid"] = uid
+            if uid in skip:
+                # This message failed every run that reached it, in a way no
+                # session survives; it is recorded without its content.
+                item = omitted(uid, "message_failed_repeatedly")
+            else:
+                try:
+                    item = message(client, uid, config)
+                except ContentLimit:
+                    # Its sender chose content past a bound; one message must
+                    # not hold back the mail after it.
+                    item = omitted(uid, "message_exceeds_limits")
+                except (MessageUnreadable, ResponseLimit):
+                    if not items:
+                        raise
+                    # The mail before it is kept; the next run starts at it.
+                    PROGRESS["uid"] = None
+                    return {
+                        "uidvalidity": validity,
+                        "last_uid": items[-1]["uid"],
+                        "items": items,
+                    }
             # JSON escaping can expand a valid bounded Unicode body considerably.
             # Keep a resumable batch rather than rejecting all its messages later.
             item_bytes = len(json.dumps(item, ensure_ascii=True).encode()) + 2
@@ -226,6 +319,7 @@ def collect(config, cursor, allowed_cidrs):
                 break
             output_bytes += item_bytes
             items.append(item)
+        PROGRESS["uid"] = None
         return {
             "uidvalidity": validity,
             "last_uid": (items[-1]["uid"] if items else last)
@@ -242,9 +336,13 @@ def collect(config, cursor, allowed_cidrs):
 def main():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
-    resource.setrlimit(resource.RLIMIT_CPU, (8, 8))
+    # The soft limit names the message being read and ends the process; the
+    # hard one ends it if even that cannot run.
+    signal.signal(signal.SIGXCPU, cpu_spent)
+    resource.setrlimit(resource.RLIMIT_CPU, (8, 10))
     resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
     signal.alarm(50)
+    PROGRESS["uid"] = None
     try:
         raw = sys.stdin.buffer.read(32769)
         if len(raw) > 32768:
@@ -261,11 +359,13 @@ def main():
         if len(output) > MAX_OUTPUT_BYTES:
             raise ValueError("Worker output exceeds limit")
         sys.stdout.buffer.write(output)
-    except Exception:
-        # Never return server responses, credentials, message text or tracebacks.
-        sys.stdout.write(
-            '{"error":"IMAP collection failed a connection, protocol or resource check"}'
-        )
+    except Exception as error:
+        # The message being read, by UID alone, lets repeated failures at one
+        # message be told apart from a connection or server fault. Only a
+        # message's own data counts; a timeout, a lost connection or a
+        # server's refusal is no reason to pass the message it reached.
+        counted = isinstance(error, (MessageUnreadable, ResponseLimit))
+        sys.stdout.write(report(PROGRESS["uid"] if counted else None))
         sys.exit(1)
 
 

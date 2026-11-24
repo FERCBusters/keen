@@ -328,6 +328,16 @@ def test_unreadable_actions_are_skipped_and_activity_is_bounded(use, monkeypatch
     assert [e.id for e in entries] == ["action:9"] and complete is False
 
 
+def test_actions_past_what_a_read_lists_are_not_narrowed_in_vain(use, monkeypatch):
+    # The listing runs from the present, so a narrower window would read the
+    # same pages: the read names the reason instead.
+    monkeypatch.setattr(do, "PAGE_SIZE", 2000)
+    use(Api(page_size=1))
+    entries, complete = do.activity(NOW - timedelta(hours=6), NOW)
+    assert [e.id for e in entries] == ["action:9"]
+    assert complete == "actions since then outnumber what one read lists"
+
+
 def test_help_documents_scopes_checks_and_settings():
     from pathlib import Path
 

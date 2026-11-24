@@ -42,7 +42,7 @@ from mosp.security.redaction import utf8_bytes
 from mosp.security.regex import scan_pattern
 from sqlalchemy.orm import Session
 
-from app.db.models import IngestionCursor
+from app.db.models import Event, IngestionCursor
 from app.ingest.common import RecordReader, fingerprint, store_event_with_artifact
 from app.ingest.connections import connection_runs, load_document, namespace, settings
 from app.ingest.registry import HTTP_QUEUE, Source, register
@@ -170,6 +170,24 @@ def _reports_service(impersonate: str):
     )
 
 
+# The narrowest window a listing over max_items is split into, and the most
+# windows one run reads.
+MIN_WINDOW = timedelta(minutes=1)
+MAX_READS = 12
+# How long Google can take to report an application's activity, from its
+# published lag times; a stream's report_lag_seconds overrides it. The span
+# this close to the present is read on every run, so an activity reported
+# late is still collected, and those already stored are recognised.
+REPORT_LAG_SECONDS = {
+    "calendar": 3 * 3600,
+    "groups": 3 * 3600,
+    "groups_enterprise": 3 * 3600,
+    "user_accounts": 3 * 3600,
+    "token": 4 * 3600,
+}
+DEFAULT_REPORT_LAG_SECONDS = 600
+
+
 def _iter_activities(
     service,
     *,
@@ -273,15 +291,35 @@ def _summarize_activity(
     return " ".join(s.split())[:240]
 
 
-def _external_id(
-    cursor_name: str, application: str, activity: dict[str, Any], payload: bytes
-) -> str:
+def _unique_id(application: str, activity: dict[str, Any]) -> str | None:
     aid = activity.get("id") or {}
     uq = (aid.get("uniqueQualifier") or "").strip() if isinstance(aid, dict) else ""
     if uq:
         return hashlib.sha256(f"{application}|{uq}".encode("utf-8")).hexdigest()[:32]
-    # fallback to content-based fingerprint
-    return fingerprint([cursor_name, application], payload)
+    return None
+
+
+def _external_id(cursor_name: str, application: str, activity: dict[str, Any]) -> str:
+    # Without Google's own ID, the activity's content identifies it, so the
+    # same activity read again is recognised.
+    return _unique_id(application, activity) or fingerprint(
+        [cursor_name, application],
+        utf8_bytes(json.dumps(activity, sort_keys=True, separators=(",", ":"))),
+    )
+
+
+def _stored(db: Session, ids: list[str]) -> set[str]:
+    """Which of these activity IDs are stored already, asked in batches."""
+    found: set[str] = set()
+    for start in range(0, len(ids), 1000):
+        found.update(
+            row[0]
+            for row in db.query(Event.external_id).filter(
+                Event.source == "google_workspace",
+                Event.external_id.in_(ids[start : start + 1000]),
+            )
+        )
+    return found
 
 
 def ingest_google_workspace_stream(
@@ -305,6 +343,15 @@ def ingest_google_workspace_stream(
         cfg.get("overlap_seconds") or defaults.get("overlap_seconds") or 180
     )
     max_items = int(cfg.get("max_items") or defaults.get("max_items") or 2000)
+    lag_setting = next(
+        (
+            v
+            for v in (cfg.get("report_lag_seconds"), defaults.get("report_lag_seconds"))
+            if v is not None
+        ),
+        REPORT_LAG_SECONDS.get(application, DEFAULT_REPORT_LAG_SECONDS),
+    )
+    report_lag = timedelta(seconds=max(0, int(lag_setting)))
 
     # event_names can be omitted to ingest everything
     event_names = cfg.get("event_names") or []
@@ -342,48 +389,8 @@ def ingest_google_workspace_stream(
     if cursor_last and cursor_last.tzinfo is not None:
         cursor_last = cursor_last.replace(tzinfo=None)
 
-    if cursor_last:
-        start_dt = cursor_last.replace(tzinfo=timezone.utc) - timedelta(
-            seconds=overlap_seconds
-        )
-    else:
-        start_dt = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-
-    start_time = _rfc3339(start_dt)
     if not new_cursor:
         db.commit()  # No database transaction spans the remote wait.
-
-    # Collect items (then sort) for cursor stability.
-    items: list[dict[str, Any]] = []
-
-    def _collect(event_name: str | None) -> None:
-        for a in _iter_activities(
-            service,
-            user_key=user_key,
-            application=application,
-            start_time=start_time,
-            end_time=None,
-            event_name=event_name,
-            max_results=max_results,
-        ):
-            items.append(a)
-            if max_items and len(items) >= max_items:
-                break
-
-    try:
-        if event_names:
-            for en in event_names:
-                _collect(en)
-        else:
-            _collect(None)
-    except HttpError as e:
-        # Keep error string compact but useful
-        return {
-            "ok": False,
-            "name": name,
-            "application": application,
-            "error": collection_error(e),
-        }
 
     def _ts(a: dict[str, Any]) -> datetime:
         t = None
@@ -394,19 +401,45 @@ def ingest_google_workspace_stream(
             dt = utc_now_naive()
         return dt
 
-    # If we hit the cap, keep the newest max_items by timestamp.
-    if max_items and len(items) > max_items:
-        items = sorted(items, key=_ts)[-max_items:]
-
-    items_sorted = sorted(items, key=_ts)
-
-    # Overlap floor for cursor filtering
+    # Activities are read in windows, from the cursor towards now. Each named
+    # event (or the whole application) must be read to its end within
+    # max_items of activities after the cursor; Google documents no order for
+    # the listing, so one that held more could have kept either end. Such a
+    # window is halved and read again, and the cursor moves only to the end of
+    # a window read in full, and never closer to the present than the
+    # application's report lag, so the next run reads that span again for
+    # activities Google reports late. A narrowed width is kept, across runs
+    # too, until a window of that width reads in full. A minute that still
+    # holds more is stored as far as it was read and reported, and the cursor
+    # moves past it. The first window of a run also reads overlap_seconds
+    # before the cursor; those activities count towards no limit.
+    now_dt = datetime.now(timezone.utc).replace(microsecond=0)
+    lower = (
+        cursor_last.replace(tzinfo=timezone.utc)
+        if cursor_last
+        else now_dt - timedelta(minutes=since_minutes)
+    )
     floor_ts: datetime | None = None
     if cursor_last:
         floor_ts = cursor_last - timedelta(seconds=overlap_seconds)
-
     created = 0
-    newest_ts: datetime | None = cursor_last
+    fetched = 0
+    reader = RecordReader()
+    skipped: list[tuple[datetime, datetime]] = []
+    settled = max(lower, now_dt - report_lag)
+    # How far the last run read: the span from the cursor to there is read
+    # again for late activities, and, like the overlap, counts towards no
+    # limit.
+    read_to = _parse_rfc3339((cur.meta or {}).get("read_to") or "")
+    read_to = read_to.replace(tzinfo=timezone.utc) if read_to else lower
+    window = max(now_dt - lower, MIN_WINDOW)
+    kept = (cur.meta or {}).get("window_seconds")
+    if type(kept) is int and MIN_WINDOW <= timedelta(seconds=kept) < window:
+        window = timedelta(seconds=kept)
+    first, narrowed, reads = True, False, 0
+    start_time = _rfc3339(
+        lower - timedelta(seconds=overlap_seconds) if cursor_last else lower
+    )
 
     def read(a):
         ts = _ts(a)
@@ -474,7 +507,7 @@ def ingest_google_workspace_stream(
             )
         )
 
-        ext_id = _external_id(cursor_name, application, a, payload_bytes)
+        ext_id = _external_id(cursor_name, application, a)
 
         key = f"google_workspace/{_sanitize_hint(name) or application}/{ts.date().isoformat()}/{ext_id}.json"
 
@@ -510,22 +543,105 @@ def ingest_google_workspace_stream(
             captured_by="keen:google_workspace",
         )
 
-    reader = RecordReader()
-    for event in reader.each(items_sorted, read):
-        res = store_event_with_artifact(db, **event)
-        if not res.get("deduped"):
-            created += 1
+    def _collect(items, event_name, query_start, end_time, counted_from) -> bool:
+        """Append the listing's activities; False when it held more than
+        max_items after ``counted_from``, or more than ten times that read
+        again before it."""
+        count = listed = 0
+        for a in _iter_activities(
+            service,
+            user_key=user_key,
+            application=application,
+            start_time=query_start,
+            end_time=end_time,
+            event_name=event_name,
+            max_results=max_results,
+        ):
+            if _ts(a) >= counted_from:
+                if count >= max_items:
+                    return False
+                count += 1
+            elif listed >= max_items * 10:
+                return False
+            else:
+                listed += 1
+            items.append(a)
+        return True
 
-        if newest_ts is None or event["timestamp"] > newest_ts:
-            newest_ts = event["timestamp"]
-
-    if newest_ts:
-        cur.last_ts = newest_ts
+    try:
+        while lower < now_dt:
+            if reads >= MAX_READS:
+                break
+            reads += 1
+            # The end sent is whole seconds, and it is where the cursor goes.
+            upper = _parse_rfc3339(_rfc3339(min(now_dt, lower + window)))
+            upper = upper.replace(tzinfo=timezone.utc) if upper else now_dt
+            query_start = (
+                _rfc3339(lower - timedelta(seconds=overlap_seconds))
+                if first and cursor_last
+                else _rfc3339(lower)
+            )
+            items: list[dict[str, Any]] = []
+            counted_from = max(lower, min(read_to, upper)).replace(tzinfo=None)
+            complete = all(
+                [
+                    _collect(items, en, query_start, _rfc3339(upper), counted_from)
+                    for en in (event_names or [None])
+                ]
+            )
+            if not complete and upper - lower > MIN_WINDOW:
+                window = max(MIN_WINDOW, (upper - lower) / 2)
+                narrowed = True
+                continue
+            # A window grows back only once one of its size reads in full
+            # without having been narrowed.
+            if complete and not narrowed:
+                window = window * 2
+            meta = dict(cur.meta or {})
+            meta["read_to"] = _rfc3339(max(upper, read_to))
+            meta["window_seconds"] = int(min(window, timedelta(days=1)).total_seconds())
+            if not complete:
+                skipped.append((lower, upper))
+                # Kept with the cursor, so a passed minute stays visible.
+                passed = meta.get("minutes_over_limit")
+                passed = passed if isinstance(passed, list) else []
+                if _rfc3339(lower) not in passed:
+                    meta["minutes_over_limit"] = [*passed, _rfc3339(lower)][-20:]
+            # Activities read again for late ones are stored already; they
+            # are recognised before the work of preparing them.
+            stored = _stored(
+                db, [i for i in (_unique_id(application, a) for a in items) if i]
+            )
+            fresh = [a for a in items if _unique_id(application, a) not in stored]
+            for event in reader.each(sorted(fresh, key=_ts), read):
+                if not store_event_with_artifact(db, **event).get("deduped"):
+                    created += 1
+            fetched += len(items)
+            # Even past a minute read short, the cursor stays the report lag
+            # behind, so later runs read that span again, the minute included,
+            # without counting it.
+            moved = min(upper, settled).replace(tzinfo=None)
+            cur.last_ts = max(moved, cursor_last) if cursor_last else moved
+            cursor_last = cur.last_ts
+            cur.meta = meta
+            cur.updated_at = utc_now_naive()
+            db.add(cur)
+            db.commit()
+            lower, first = upper, False
+            narrowed = False
+    except HttpError as e:
+        # Keep error string compact but useful
+        return {
+            "ok": False,
+            "name": name,
+            "application": application,
+            "error": collection_error(e),
+        }
     cur.updated_at = utc_now_naive()
     db.add(cur)
     db.commit()
 
-    return {
+    result = {
         "ok": True,
         "name": name,
         "application": application,
@@ -534,8 +650,19 @@ def ingest_google_workspace_stream(
         "invalid_records": reader.invalid,
         "cursor_last_ts": cur.last_ts.isoformat() if cur.last_ts else None,
         "start_time": start_time,
-        "fetched_items": len(items_sorted),
+        "fetched_items": fetched,
+        # Volume above max_items each poll is read over several runs.
+        "caught_up": lower >= now_dt,
+        "behind_seconds": int((now_dt - lower).total_seconds()),
     }
+    if skipped:
+        result.update(
+            ok=False,
+            error=f"More than {max_items} activities in under a minute from "
+            f"{_rfc3339(skipped[0][0])}; some may not be collected. Raise "
+            "max_items for this stream.",
+        )
+    return result
 
 
 @pausable("google_workspace")
@@ -560,6 +687,7 @@ def ingest_google_workspace_all(db: Session) -> list[dict[str, Any]]:
         "since_minutes": cfg.get("since_minutes"),
         "overlap_seconds": cfg.get("overlap_seconds"),
         "max_items": cfg.get("max_items"),
+        "report_lag_seconds": cfg.get("report_lag_seconds"),
     }
 
     streams = cfg.get("streams") or []
