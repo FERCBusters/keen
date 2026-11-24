@@ -171,7 +171,7 @@ def test_correct_browser_single_use_and_expiry(db, user, monkeypatch):
     state = oidc._browser_state("google", "secret")
     oidc.create_login_state(db, next_url="/", state=state)
 
-    async def exchange(code, db, provider, row):
+    async def exchange(code, db, provider, row, ip):
         assert code == "c"
         assert row.nonce and row.code_verifier
         return user, "/", None
@@ -416,7 +416,7 @@ def test_recent_login(user, monkeypatch, age, identity, allowed):
     else:
         with pytest.raises(
             DomainError,
-            match="^Sign out and sign in again, then manage SSO email addresses within five minutes$",
+            match="^Sign out and sign in again, then manage SSO email addresses and sign-in identities within five minutes$",
         ):
             sso_emails_operations.recent_signin(req(user), user)
 
@@ -512,7 +512,7 @@ def test_recent_signin_treats_unusable_sessions_as_stale(user, monkeypatch, sess
     monkeypatch.setattr(sso_emails_operations, "get_session", lambda *a: session)
     with pytest.raises(
         DomainError,
-        match="^Sign out and sign in again, then manage SSO email addresses within five minutes$",
+        match="^Sign out and sign in again, then manage SSO email addresses and sign-in identities within five minutes$",
     ) as refused:
         sso_emails_operations.recent_signin("sid", user)
     assert refused.value.status_code == 403

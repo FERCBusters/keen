@@ -105,28 +105,19 @@ def test_a_totp_secret_under_another_key_is_reported_and_not_counted(
     assert client.post("/v1/auth/mfa/finish", headers=ORIGIN).status_code == 200
 
 
-def test_a_spent_address_allowance_refuses_codes_before_the_accounts_own(
+def test_a_spent_address_allowance_leaves_a_pending_ceremonys_steps_alone(
     ceremony,  # noqa: F811
 ):
     client = ceremony.sign_in()
     store = ceremony.keen.store
-    # Test clients have no parseable address, so they share "unknown".
+    # Other accounts behind the same address have spent its allowance (test
+    # clients have no parseable address, so they share "unknown"). This
+    # account's password is proven, so its second factor still completes.
     store.set("keen:rl:mfa:ip:unknown", 40, ex=300)
 
-    refused = ceremony.code(client, ceremony.good)
-
-    assert (refused.status_code, refused.json()) == (
-        429,
-        {"detail": "Too many verification attempts; try again later"},
-    )
-    assert store.get(f"keen:rl:mfa:user:{ceremony.user.id}") is None
-    user = _fresh(ceremony.keen.db, ceremony.user)
-    assert (user.mfa_code_failures, user.mfa_totp_last_step) == (0, -1)
-    refused_2 = client.get("/v1/auth/check")
-    assert (refused_2.status_code, refused_2.json()) == (
-        401,
-        {"detail": "Not authenticated"},
-    )
+    assert ceremony.code(client, ceremony.good).status_code == 200
+    assert int(store.get("keen:rl:mfa:ip:unknown")) == 40
+    assert store.zcard(f"keen:rl:mfa:account:{ceremony.user.id}") == 1
 
 
 @pytest.mark.parametrize(

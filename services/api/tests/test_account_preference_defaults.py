@@ -97,4 +97,4 @@ def test_attempts_refused_by_the_address_limit_spend_no_account_allowance(
     assert codes == [400, 400, 429, 429]
     # Only the attempts the address allowed count against the account, so a
     # busy address cannot use up the account's own allowance.
-    assert keen.store.get(f"keen:rl:password_change:user:{user.id}") == "2"
+    assert keen.store.zcard(f"keen:rl:password_change:account:{user.id}") == 2

@@ -81,8 +81,8 @@ def test_a_masked_link_hides_addresses_however_written(
     assert response.status_code == 200, response.text
     (row,) = metrics.entries()
     assert row.source_url == stored
-    if "%40" not in link:
-        assert "ada" not in str(row.raw_payload)
+    # With an address percent-encoded too.
+    assert "ada" not in str(row.raw_payload)
     assert "192.0.2.10" not in str(row.raw_payload)
 
 

@@ -98,11 +98,13 @@ test('item management reauthenticates with the password in the request body and 
 async function ssoEmails(t, options = {}) {
   const state = {
     addresses: options.addresses ?? [{ email: '<b>alice</b>@example.test' }],
+    identities: options.identities ?? [],
     posted: [],
+    navigations: [],
   };
   const ui = await page(t, 'sso-emails', {
     htmlName: 'account',
-    globals: options.globals,
+    globals: { location: { assign: (u) => state.navigations.push(u) }, ...options.globals },
     confirm: options.confirm,
     get: async (u) => {
       if (u.pathname === '/api/v1/me/sso-emails') {
@@ -111,6 +113,10 @@ async function ssoEmails(t, options = {}) {
           smtp_configured: options.smtp ?? true,
           addresses: structuredClone(state.addresses),
         };
+      }
+      if (u.pathname === '/api/v1/me/sso-identities') {
+        if (options.fail) throw new Error('Session expired');
+        return { identities: structuredClone(state.identities) };
       }
       throw new Error('Unexpected GET ' + u);
     },
@@ -144,7 +150,67 @@ test('verified SSO addresses are listed as text and removed after confirmation',
     path: '/api/v1/me/sso-emails/remove',
     body: { email: '<b>alice</b>@example.test' },
   });
-  assert.match(prompts[0].message, /Existing linked sign-in identities will remain active/);
+  assert.match(prompts[0].message, /keeps signing in until you remove it/);
+});
+
+test('linked sign-in identities are listed as text and removed after confirmation', async (t) => {
+  const prompts = [];
+  const { ui, state } = await ssoEmails(t, {
+    identities: [
+      {
+        id: 7,
+        provider: 'github',
+        email: '<i>planted</i>@example.test',
+        name: 'Octo',
+        linked_at: '2026-11-20T10:00:00',
+      },
+      { id: 8, provider: 'oidc', email: null, name: null, linked_at: '2026-11-21T10:00:00' },
+    ],
+    confirm: (asked) => (prompts.push(asked), true),
+  });
+  await settle(() => ui.el('ssoIdentityList').children.length === 2);
+  const [first, second] = ui.el('ssoIdentityList').querySelectorAll('li');
+  assert.equal(
+    first.querySelector('span').textContent,
+    'github: <i>planted</i>@example.test - linked 2026-11-20',
+  );
+  assert.equal(first.querySelector('i'), null);
+  assert.equal(
+    second.querySelector('span').textContent,
+    'oidc: unnamed identity - linked 2026-11-21',
+  );
+  first.querySelector('button').click();
+  // Removal ends every session, this one included.
+  await settle(() => state.navigations.length);
+  assert.deepEqual(state.navigations, ['/login.html']);
+  assert.deepEqual(state.posted.at(-1), {
+    path: '/api/v1/me/sso-identities/remove',
+    body: { id: 7 },
+  });
+  assert.match(prompts[0].message, /every session ends/);
+});
+
+test('linked sign-in identities report none, a declined removal and failures', async (t) => {
+  const none = await ssoEmails(t);
+  await settle(() => !/Loading/.test(none.ui.el('ssoIdentityStatus').textContent));
+  assert.equal(none.ui.el('ssoIdentityStatus').textContent, 'No sign-in identities are linked.');
+  const identities = [
+    { id: 3, provider: 'oidc', email: null, name: 'Ada', linked_at: '2026-11-01T00:00:00' },
+  ];
+  const declined = await ssoEmails(t, { identities, confirm: false });
+  await settle(() => declined.ui.el('ssoIdentityList').children.length);
+  assert.match(declined.ui.el('ssoIdentityList').textContent, /oidc: Ada/);
+  declined.ui.el('ssoIdentityList').querySelector('button').click();
+  assert.equal(declined.state.posted.length, 0);
+  const rejected = await ssoEmails(t, { identities, postFail: true });
+  await settle(() => rejected.ui.el('ssoIdentityList').children.length);
+  const button = rejected.ui.el('ssoIdentityList').querySelector('button');
+  button.click();
+  await settle(() => rejected.ui.el('ssoIdentityStatus').textContent === 'Reauthenticate first');
+  assert.equal(button.disabled, false);
+  assert.equal(rejected.state.navigations.length, 0);
+  const failed = await ssoEmails(t, { fail: true });
+  await settle(() => failed.ui.el('ssoIdentityStatus').textContent === 'Session expired');
 });
 
 test('SSO email verification requests report the outcome', async (t) => {

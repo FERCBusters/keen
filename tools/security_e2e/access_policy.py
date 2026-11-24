@@ -721,6 +721,8 @@ POLICY = {
     "POST /v1/me/sso-emails/confirm": SIGNED_IN,
     "POST /v1/me/sso-emails/remove": SIGNED_IN,
     "POST /v1/me/sso-emails/request": SIGNED_IN,
+    "GET /v1/me/sso-identities": SIGNED_IN,
+    "POST /v1/me/sso-identities/remove": SIGNED_IN,
 }
 
 

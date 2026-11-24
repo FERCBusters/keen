@@ -401,7 +401,9 @@ def test_ordinary_destinations_are_kept(sso, target):
 # --- Linking the identity to an account ---------------------------------------
 
 
-def test_an_existing_identity_signs_in_and_refreshes_its_profile(sso):
+def test_an_existing_identity_signs_in_and_refreshes_its_profile_not_its_address(
+    sso,
+):
     user = sso.account(subject="idp-subject")
     sso.provider.claims = {
         "email": "Ada@Company.example",
@@ -414,11 +416,14 @@ def test_an_existing_identity_signs_in_and_refreshes_its_profile(sso):
     assert _signed_in_as(browser) == user.username
     sso.db.expire_all()
     identity = sso.db.query(UserIdentity).filter_by(subject="idp-subject").one()
+    # The email stays the address the identity was linked through, which
+    # removing the identity removes; the provider's current one is in its claims.
     assert (identity.email, identity.preferred_username, identity.display_name) == (
-        "ada@company.example",
+        "old@company.example",
         "ada",
         "Ada Lovelace",
     )
+    assert identity.claims["email"] == "Ada@Company.example"
     assert sso.db.get(User, user.id).last_login_at is not None
 
 
@@ -546,7 +551,7 @@ def test_the_email_domain_allowlist_applies_to_every_sign_in(sso, monkeypatch, c
     assert not _sets_session(refused) and _signed_in_as(browser) is None
     # The refused identity keeps its last accepted profile.
     sso.db.expire_all()
-    assert sso.db.query(UserIdentity).one().email == "ada@company.example"
+    assert sso.db.query(UserIdentity).one().claims["email"] == "ada@company.example"
     row = _sign_in_rows(sso)[-1]
     assert row == (user.username, {"method": ["oidc"], "outcome": ["failed"]})
 
