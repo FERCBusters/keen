@@ -88,6 +88,7 @@ export const documentRecord = (id, title, fields = {}) => ({
   clauses: [],
   control_count: 0,
   clause_count: 0,
+  diagrams: [],
   ...fields,
 });
 

@@ -1566,6 +1566,51 @@ class IsmsDocument(Base):
         "IsmsDocumentRevision", cascade="all, delete-orphan"
     )
     comments = relationship("IsmsDocumentComment", cascade="all, delete-orphan")
+    # Diagrams from MIDENA shown with the document, metadata only: each
+    # drawing is loaded on its own (IsmsDocumentDiagram.svg is deferred).
+    diagrams = relationship(
+        "IsmsDocumentDiagram",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="IsmsDocumentDiagram.captured_at",
+    )
+
+
+class IsmsDocumentDiagram(Base):
+    """A MIDENA diagram shown with a policy or process document: the drawing
+    of the MIDENA version captured, sanitised again by Keen, with its checksum.
+    Refreshing captures MIDENA's current version in its place, and the
+    document's change history records each version shown."""
+
+    __tablename__ = "isms_document_diagrams"
+    __table_args__ = (UniqueConstraint("document_id", "diagram_uuid"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    diagram_uuid: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    diagram_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_updated_at: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    svg: Mapped[str] = mapped_column(Text, nullable=False, deferred=True)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow
+    )
+    captured_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    captured_by = relationship("User")
 
 
 class IsmsDocumentFolder(Base):

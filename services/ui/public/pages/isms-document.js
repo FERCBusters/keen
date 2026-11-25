@@ -22,6 +22,7 @@ import {
   clauseBadges,
   controlBadges,
 } from '/pages/isms-detail-common.js';
+import { mountDocumentDiagrams } from '/pages/document-diagrams.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -205,7 +206,19 @@ async function load() {
       `/api/v1/isms/documents/${encodeURIComponent(documentId)}?framework=${encodeURIComponent(framework)}`,
     );
     renderDocument(row);
-    await Promise.all([loadChangelog(), loadHistory()]);
+    await Promise.all([
+      loadChangelog(),
+      loadHistory(),
+      mountDocumentDiagrams({
+        documentId,
+        row,
+        me,
+        canManage: canManageIsms,
+        framework,
+        statusEl: status,
+        onChange: loadChangelog,
+      }),
+    ]);
     activateTabFromHashOrQuery(params, TABS);
   } catch (e) {
     toast(status, `Failed to load document: ${errorText(e)}`, 'danger');

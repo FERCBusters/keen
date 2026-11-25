@@ -391,6 +391,8 @@ def me(*, context: ChangeContext, db: Session) -> dict:
         "preferences": _preferences_out(user).model_dump(),
         "available_themes": [{"id": t[0], "name": t[1]} for t in ALLOWED_THEMES],
         "bookstack_enabled": settings.bookstack_enabled,
+        # Whether policy and process documents can show MIDENA diagrams.
+        "midena_enabled": settings.midena_enabled,
     }
 
 

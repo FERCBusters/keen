@@ -468,6 +468,59 @@ class Settings(MospSettings):
     taiga_username: str = Field(default="")
     taiga_password: str = Field(default="")
 
+    # --- MIDENA: diagrams shown with ISMS policies and processes. The base
+    # URL is the MIDENA installation's own (https://midena.example.com); the
+    # token is one a MIDENA administrator issued under Administration, API
+    # tokens, and reads as the account it was issued for.
+    midena_base_url: str = Field(default="")
+    midena_api_token: str = Field(default="")
+
+    @field_validator("midena_base_url")
+    @classmethod
+    def validate_midena_base_url(cls, v: str) -> str:
+        from urllib.parse import urlsplit
+
+        value = (v or "").strip().rstrip("/")
+        if not value:
+            return ""
+        parts = urlsplit(value)
+        if (
+            parts.scheme != "https"
+            or not parts.hostname
+            or parts.username
+            or parts.password
+            or parts.query
+            or parts.fragment
+            or any(ord(c) < 33 or c == "\\" for c in value)
+        ):
+            raise ValueError(
+                "KEEN_MIDENA_BASE_URL must be an https:// address without "
+                "credentials, query or fragment"
+            )
+        return value
+
+    @field_validator("midena_api_token")
+    @classmethod
+    def validate_midena_api_token(cls, v: str) -> str:
+        value = (v or "").strip()
+        if len(value) > 256 or any(ord(c) < 33 or ord(c) > 126 for c in value):
+            raise ValueError(
+                "KEEN_MIDENA_API_TOKEN must be the token MIDENA issued, as shown"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_midena_pair(self):
+        if bool(self.midena_base_url) != bool(self.midena_api_token):
+            raise ValueError(
+                "Set KEEN_MIDENA_BASE_URL and KEEN_MIDENA_API_TOKEN together"
+            )
+        return self
+
+    @property
+    def midena_enabled(self) -> bool:
+        return bool(self.midena_base_url and self.midena_api_token)
+
     # --- RSS / Atom (polling); feed requests always verify TLS.
     imap_enabled: bool = Field(default=False)
     rss_enabled: bool = Field(default=False)

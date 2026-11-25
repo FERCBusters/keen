@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
-from fastapi import Depends, File, Request, UploadFile
+from fastapi import Depends, File, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from mosp.api.routing import Router
 from mosp.services.context import ChangeContext
@@ -13,7 +14,9 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.isms import require_isms_manage, require_isms_read
 from app.core.config import settings
 from app.db.session import get_db
+from app.services.isms import diagrams
 from app.services.isms import documents as service
+from app.services.isms.diagrams import DiagramInput
 from app.services.isms.schemas import (
     DocumentCommentPayload,
     DocumentFolderPayload,
@@ -219,4 +222,91 @@ def delete_document(
         framework=framework,
         user=user,
         db=db,
+    )
+
+
+# Diagrams from MIDENA shown with a document (app.services.isms.diagrams).
+
+
+@router.get("/v1/isms/midena-diagrams")
+def midena_diagram_catalog(
+    q: Annotated[str, Query(max_length=200)] = "",
+    offset: Annotated[int, Query(ge=0, le=diagrams.MAX_CATALOG_OFFSET)] = 0,
+    user=Depends(require_isms_manage),
+):
+    """The MIDENA diagrams an ISMS manager may choose from."""
+    return diagrams.catalog(q=q, offset=offset)
+
+
+@router.get("/v1/isms/documents/{document_id}/diagrams")
+def list_document_diagrams(
+    document_id: str, user=Depends(require_isms_read), db: Session = Depends(get_db)
+):
+    return diagrams.list_diagrams(document_id=document_id, db=db)
+
+
+@router.get("/v1/isms/documents/{document_id}/diagrams/{diagram_id}")
+def get_document_diagram(
+    document_id: str,
+    diagram_id: str,
+    user=Depends(require_isms_read),
+    db: Session = Depends(get_db),
+):
+    return diagrams.get_diagram(document_id=document_id, diagram_id=diagram_id, db=db)
+
+
+@router.post("/v1/isms/documents/{document_id}/diagrams", status_code=201)
+def attach_document_diagram(
+    document_id: str,
+    payload: DiagramInput,
+    request: Request,
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
+    return diagrams.attach_diagram(
+        document_id=document_id,
+        payload=payload,
+        framework=framework,
+        user=user,
+        db=db,
+        context=ChangeContext(method=request.method, path=request.url.path),
+    )
+
+
+@router.post("/v1/isms/documents/{document_id}/diagrams/{diagram_id}/refresh")
+def refresh_document_diagram(
+    document_id: str,
+    diagram_id: str,
+    request: Request,
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
+    return diagrams.refresh_diagram(
+        document_id=document_id,
+        diagram_id=diagram_id,
+        framework=framework,
+        user=user,
+        db=db,
+        context=ChangeContext(method=request.method, path=request.url.path),
+    )
+
+
+@router.delete("/v1/isms/documents/{document_id}/diagrams/{diagram_id}")
+def detach_document_diagram(
+    document_id: str,
+    diagram_id: str,
+    request: Request,
+    framework: str = settings.default_framework_slug,
+    user=Depends(require_isms_manage),
+    db: Session = Depends(get_db),
+):
+    return diagrams.detach_diagram(
+        document_id=document_id,
+        diagram_id=diagram_id,
+        framework=framework,
+        user=user,
+        db=db,
+        context=ChangeContext(method=request.method, path=request.url.path),
     )

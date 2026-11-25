@@ -48,6 +48,24 @@
                 <div id="documentDescription" class="card-body whitespace-pre-wrap small-muted">Loading</div>
               </div>
               <div class="card" id="documentContentCard" hidden><div class="card-header fw-bold">Document</div><div class="card-body" id="documentContent"></div></div>
+              <div class="card" id="documentDiagramsCard" hidden>
+                <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                  <span class="fw-bold">Diagrams</span>
+                  <button id="addDiagramButton" class="btn btn-sm btn-outline-primary no-print" type="button" aria-expanded="false" aria-controls="diagramPicker" hidden><i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Add from MIDENA</button>
+                </div>
+                <div class="card-body">
+                  <form id="diagramPicker" class="mb-3 no-print" role="search" hidden>
+                    <label class="form-label" for="diagramSearch">Find a MIDENA diagram</label>
+                    <div class="input-group input-group-sm">
+                      <input id="diagramSearch" class="form-control" type="search" maxlength="200" placeholder="Name, description or tag">
+                      <button class="btn btn-outline-secondary" type="submit">Search</button>
+                    </div>
+                    <div id="diagramResults" class="list-group list-group-flush mt-2" aria-live="polite"></div>
+                    <button id="diagramMore" class="btn btn-link btn-sm px-0" type="button" hidden>More diagrams</button>
+                  </form>
+                  <div id="documentDiagrams" class="vstack gap-3"></div>
+                </div>
+              </div>
               <div class="card">
                 <div class="card-header fw-bold">Linked controls and clauses</div>
                 <div class="card-body">

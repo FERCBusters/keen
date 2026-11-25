@@ -194,6 +194,18 @@ def _document_out(
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "display": row.title,
+        # The MIDENA diagram versions the document shows (app.services.isms.
+        # diagrams), so its history records each version shown.
+        "diagrams": [
+            {
+                "id": str(diagram.id),
+                "diagram_uuid": str(diagram.diagram_uuid),
+                "name": diagram.name,
+                "version_number": diagram.version_number,
+                "sha256": diagram.sha256,
+            }
+            for diagram in row.diagrams
+        ],
     }
     return _attach_links(db, out, "document", row.id, framework, include_links)
 

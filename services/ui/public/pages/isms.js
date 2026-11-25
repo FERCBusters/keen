@@ -356,6 +356,12 @@ function objectiveUserPill(user) {
 function objectiveUserBadges(list) {
   return userPillsHtml(list, { className: 'isms-objective-user-pill' });
 }
+// How many MIDENA diagrams a document shows (pages/document-diagrams.js).
+function diagramBadge(d) {
+  const count = (d.diagrams || []).length;
+  if (!count) return '';
+  return `<span class="badge text-bg-info"><i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>${esc(count === 1 ? '1 diagram' : `${count} diagrams`)}</span> `;
+}
 function docLink(d) {
   if (d.external_url)
     return `<a href="${esc(safeExternalHref(d.external_url) || '#')}" target="_blank" rel="noopener noreferrer">External URL</a>`;
@@ -1270,7 +1276,7 @@ function renderDocuments() {
         (
           d,
         ) => `<tr data-isms-row="document"${canManage ? ` draggable="true" data-doc-drag="${esc(d.id)}"` : ''}>
-    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title)}</a>${documentFolderLine(d, view)}<div class="small">${d.tags.map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${docLink(d)}</td>
+    <td class="fw-semibold wrap"><a href="${esc(documentHref(d))}">${esc(d.title)}</a>${documentFolderLine(d, view)}<div class="small">${d.tags.map((tag) => `<span class="badge text-bg-${documentTagColor(tag)} me-1">${esc(tag)}</span>`).join('')}</div></td><td>${esc(d.document_type || '-')}</td><td>${d.content_html ? '<span class="badge text-bg-primary">Written in Keen</span> ' : ''}${diagramBadge(d)}${docLink(d)}</td>
     <td class="wrap small-muted">${esc(shorten(d.description || '', 180) || '-')}</td><td>${controlBadges(d.controls, framework, { tab: '' })}</td><td>${clauseBadges(d.clauses, framework)}</td><td class="small-muted">${esc(fmtTs(d.updated_at))}</td>${actionsHtml('document', d.id)}
   </tr>`,
       )
