@@ -34,7 +34,7 @@ COPY services/ui/scripts ./scripts
 COPY services/ui/public ./public
 RUN npm run build
 
-FROM nginx:1.30-alpine@sha256:8eb2b5540eae779603cc3db84b3986a15ecb5308b54303146eee9837c137b51a
+FROM nginx:1.30-alpine@sha256:8eb04fe3b385090e9aa02961f77398ad09b6bf33ab07f6669a5bb7acce22c0d3
 
 COPY services/ui/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=vendor /build/dist/ /usr/share/nginx/html/
