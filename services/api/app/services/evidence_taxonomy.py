@@ -102,7 +102,7 @@ CONCEPTS = (
     ),
     concept(
         "Security monitoring",
-        "siem|ossec|wazuh|ids|ips|intrusion detection|intrusion prevention|security alert|security monitoring|suspicious activity|suspicious login|guardduty|security finding|anomaly|anomalous",
+        "siem|ossec|wazuh|tetragon|ebpf|ids|ips|intrusion detection|intrusion prevention|security alert|security monitoring|suspicious activity|suspicious login|guardduty|security finding|anomaly|anomalous",
         "monitoring activities|security monitoring|intrusion detection|information security events",
         "physical security monitoring",
     ),

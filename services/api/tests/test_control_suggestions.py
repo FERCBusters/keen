@@ -105,8 +105,14 @@ def test_activity_words_split_code_style_names():
 
 
 def test_monitoring_tools_do_not_match_physical_monitoring():
-    refs = {r["ref"] for r in rank_controls(seed_controls(), description="OSSEC")}
-    assert "A.8.16" in refs and "A.7.4" not in refs
+    for tool, term in (("OSSEC", "ossec"), ("Tetragon", "tetragon"), ("eBPF", "ebpf")):
+        results = rank_controls(seed_controls(), description=tool)
+        refs = {r["ref"] for r in results}
+        assert "A.8.16" in refs and "A.7.4" not in refs, tool
+        (monitoring,) = [r for r in results if r["ref"] == "A.8.16"]
+        assert ("Security monitoring", term) in {
+            (c["concept"], c["query_term"]) for c in monitoring["matched_concepts"]
+        }, tool
 
 
 def test_training_data_is_not_awareness_training():
