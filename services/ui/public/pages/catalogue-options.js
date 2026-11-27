@@ -4,6 +4,13 @@
 // elements, so catalogue text is never parsed as HTML.
 import { node } from '/app.js';
 
+// The controls catalogue also holds a row for each clause, so that evidence can
+// map to one. A list of controls leaves those out: clauses have a list of
+// their own.
+export function controlsOnly(records) {
+  return records.filter((record) => record.type !== 'clause');
+}
+
 export function catalogueLabel(record) {
   const ref = `${record.type === 'clause' ? 'Clause ' : ''}${record.ref}`;
   return record.title ? `${ref} ${record.title}` : ref;

@@ -387,8 +387,18 @@ async def list_swot(
     return await _shape(listing, answer)
 
 
-def _legal_item(detail: dict) -> dict:
+def _record_detail(detail: dict) -> dict:
     return fit(compact(detail))
+
+
+async def get_swot_item(item_id: Identifier, framework: Framework = None) -> dict:
+    """One SWOT item in full, with its linked controls and clauses and its
+    related objectives, documents, assets, people, vendors and risks."""
+    _needs("isms.read")
+    answer = await _get(
+        f"/v1/isms/swot/{item_id}", framework=await _framework(framework)
+    )
+    return await _shape(_record_detail, answer)
 
 
 async def list_legal_register(
@@ -433,7 +443,7 @@ async def get_legal_item(item_id: Identifier, framework: Framework = None) -> di
     answer = await _get(
         f"/v1/isms/legal-register/{item_id}", framework=await _framework(framework)
     )
-    return await _shape(_legal_item, answer)
+    return await _shape(_record_detail, answer)
 
 
 async def list_objectives(
@@ -575,6 +585,7 @@ TOOLS = (
     list_risks,
     get_risk,
     list_swot,
+    get_swot_item,
     list_legal_register,
     get_legal_item,
     list_objectives,

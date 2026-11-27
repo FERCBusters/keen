@@ -387,3 +387,116 @@ test('ISMS flow omits disabled SWOT', async (t) => {
   const ui = await fixture(t, { me: { is_admin: true, features: { enabled: { swot: false } } } });
   assert.equal(ui.el('overviewCards').querySelector('a[aria-label="Open SWOT"]'), null);
 });
+
+test('the ISMS menu folds down to its icons, and names each entry on hover', async (t) => {
+  // Without browser storage the menu starts open and still folds.
+  const ui = await fixture(t);
+  const menu = ui.el('ismsTabs');
+  const toggle = ui.el('toggleIsmsRail');
+  const titles = () => [...menu.querySelectorAll('.nav-link')].map((link) => link.title);
+  assert.equal(menu.classList.contains('isms-rail-collapsed'), false);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(toggle.getAttribute('aria-controls'), 'ismsTabs');
+  assert.equal(toggle.textContent, 'Collapse menu');
+  assert.equal(toggle.title, 'Collapse the menu to icons');
+  assert.ok(titles().every((title) => title === ''));
+  // Every entry keeps its name as text beside its icon, for the folded menu to hide.
+  assert.deepEqual(
+    [...menu.querySelectorAll('.nav-link')].map((link) => [
+      link.querySelector('.isms-rail-label').textContent,
+      Boolean(link.querySelector('i.bi')),
+    ]),
+    [
+      ['Overview', true],
+      ['SWOT analysis', true],
+      ['Objectives', true],
+      ['Policies & processes', true],
+      ['Organisation chart', true],
+      ['Asset matrix', true],
+      ['Access control matrix', true],
+      ['Effectiveness measures', true],
+      ['Minutes of meetings', true],
+      ['SoA', true],
+    ],
+  );
+  toggle.click();
+  assert.equal(menu.classList.contains('isms-rail-collapsed'), true);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(toggle.textContent, 'Expand menu');
+  assert.equal(toggle.title, 'Expand the menu');
+  assert.equal(toggle.querySelector('i').className, 'bi bi-chevron-double-right');
+  assert.equal(titles()[3], 'Policies & processes');
+  toggle.click();
+  assert.equal(menu.classList.contains('isms-rail-collapsed'), false);
+  assert.equal(toggle.querySelector('i').className, 'bi bi-chevron-double-left');
+  assert.ok(titles().every((title) => title === ''));
+
+  // A browser that folded the menu before finds it folded, and remembers changes.
+  const stored = { 'keen.isms.menu': 'collapsed' };
+  const storage = {
+    getItem: (key) => stored[key] ?? null,
+    setItem: (key, value) => {
+      stored[key] = value;
+    },
+  };
+  const again = await fixture(t, { globals: { localStorage: storage } });
+  assert.equal(again.el('ismsTabs').classList.contains('isms-rail-collapsed'), true);
+  assert.equal(again.el('toggleIsmsRail').getAttribute('aria-expanded'), 'false');
+  again.el('toggleIsmsRail').click();
+  assert.equal(stored['keen.isms.menu'], 'open');
+  again.el('toggleIsmsRail').click();
+  assert.equal(stored['keen.isms.menu'], 'collapsed');
+});
+
+test('the folders fold away so the policies take the whole row', async (t) => {
+  const ui = await fixture(t);
+  const folders = ui.el('docFolderColumn');
+  const list = ui.el('docListColumn');
+  assert.equal(folders.hidden, false);
+  assert.equal(ui.el('showDocFolders').hidden, true);
+  assert.ok(list.classList.contains('col-xl-9'));
+  ui.el('hideDocFolders').click();
+  assert.equal(folders.hidden, true);
+  assert.equal(ui.el('showDocFolders').hidden, false);
+  assert.equal(ui.el('showDocFolders').textContent.trim(), 'Folders');
+  assert.ok(!list.classList.contains('col-xl-9'));
+  assert.ok(list.classList.contains('col-12'));
+  // The keyboard follows to the button that brings them back.
+  assert.equal(ui.document.activeElement, ui.el('showDocFolders'));
+  ui.el('showDocFolders').click();
+  assert.equal(folders.hidden, false);
+  assert.equal(ui.el('showDocFolders').hidden, true);
+  assert.ok(list.classList.contains('col-xl-9'));
+  assert.equal(ui.document.activeElement, ui.el('hideDocFolders'));
+
+  const stored = { 'keen.isms.folders': 'collapsed' };
+  const storage = {
+    getItem: (key) => stored[key] ?? null,
+    setItem: (key, value) => {
+      stored[key] = value;
+    },
+  };
+  const again = await fixture(t, { globals: { localStorage: storage } });
+  assert.equal(again.el('docFolderColumn').hidden, true);
+  assert.equal(again.el('showDocFolders').hidden, false);
+  // The menu's own choice is kept apart.
+  assert.equal(again.el('ismsTabs').classList.contains('isms-rail-collapsed'), false);
+  again.el('showDocFolders').click();
+  assert.equal(stored['keen.isms.folders'], 'open');
+  again.el('hideDocFolders').click();
+  assert.equal(stored['keen.isms.folders'], 'collapsed');
+});
+
+test('document tags sit with the other policy filters', async (t) => {
+  const ui = await fixture(t);
+  const filters = ui.document.querySelector('[data-mosp-filter-section="documents-isms-filters"]');
+  const tags = ui.el('docTagCloud');
+  assert.ok(filters.contains(tags), 'the tags fold away with the filter section');
+  assert.equal(tags.previousElementSibling.textContent, 'Tags');
+  assert.equal(tags.getAttribute('aria-label'), 'Filter documents by tag');
+  // The search box comes first, then the tags.
+  assert.ok(
+    filters.querySelector('#documentsTableFilter').compareDocumentPosition(tags) &
+      ui.window.Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+});

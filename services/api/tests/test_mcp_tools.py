@@ -220,6 +220,37 @@ def test_the_legal_register_passes_its_filters_and_reads_one_item_in_full(api):
         run(tools.get_legal_item(item))
 
 
+def test_one_swot_item_is_read_in_full_with_its_relationships(api):
+    item = "5d5e5f60-6162-4364-8566-676869707172"
+    api.answers[f"/v1/isms/swot/{item}"] = {
+        "id": item,
+        "title": "New regulation",
+        "display": "New regulation",
+        "description": "x" * 3000,
+        "parent_id": None,
+        "controls": [{"ref": "A.5.31", "display": "A.5.31"}],
+        "links": [
+            {
+                "target_type": "document",
+                "target_id": "d1",
+                "title": "Policy",
+                "url": "/x",
+            }
+        ],
+    }
+    seen = run(tools.get_swot_item(item, framework="other"))
+    assert seen["title"] == "New regulation"
+    assert seen["description"] == "x" * 2000 + " [truncated]"
+    # The relationships are shown as they are named when saving them.
+    assert [(link["target_type"], link["target_id"]) for link in seen["links"]] == [
+        ("document", "d1")
+    ]
+    assert api.calls[-1] == (f"/v1/isms/swot/{item}", False, {"framework": "other"})
+    api.scopes = [code for code in ALL if code != "isms.read"]
+    with pytest.raises(ToolError, match="not granted isms.read"):
+        run(tools.get_swot_item(item))
+
+
 def test_documents_list_excerpts_and_return_their_text(api):
     document = {
         "id": "d",

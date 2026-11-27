@@ -581,6 +581,17 @@ function installIsmsSectionChrome() {
           .querySelector('#objectivesStatus')
           .addEventListener('change', () => applyIsmsTableFilter($(filterId)));
       }
+      if (cfg.key === 'documents') {
+        // Choosing a tag is a filter too, so the tags sit with the search and
+        // fold away with it.
+        const tags = document.createElement('div');
+        tags.className = 'mt-3';
+        const heading = document.createElement('div');
+        heading.className = 'form-label small-muted mb-1';
+        heading.textContent = 'Tags';
+        tags.append(heading, $('docTagCloud'));
+        filter.querySelector('[data-mosp-filter-body]').append(tags);
+      }
       card.insertAdjacentElement('beforebegin', filter);
     }
   }
@@ -2634,6 +2645,70 @@ ismsTabs.addEventListener('shown.bs.tab', () => {
   ismsTabs.classList.remove('admin-nav-open');
   ismsNavigationToggle.setAttribute('aria-expanded', 'false');
 });
+
+// --- Panels that fold away ----------------------------------------------------------------------
+
+// The menu folds down to its icons and the folders fold away, so a wide
+// register has the room. Each choice is a convenience for this browser only.
+function remembered(key) {
+  try {
+    return localStorage.getItem(key) !== 'collapsed';
+  } catch {
+    return true;
+  }
+}
+
+function remember(key, open) {
+  try {
+    localStorage.setItem(key, open ? 'open' : 'collapsed');
+  } catch {
+    // Without storage the choice lasts until the page reloads.
+  }
+}
+
+const RAIL_KEY = 'keen.isms.menu';
+
+function showIsmsRail(open) {
+  ismsTabs.classList.toggle('isms-rail-collapsed', !open);
+  const toggle = $('toggleIsmsRail');
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.title = open ? 'Collapse the menu to icons' : 'Expand the menu';
+  toggle.querySelector('i').className = open
+    ? 'bi bi-chevron-double-left'
+    : 'bi bi-chevron-double-right';
+  toggle.querySelector('.isms-rail-label').textContent = open ? 'Collapse menu' : 'Expand menu';
+  // Folded to icons, each entry is named on hover.
+  for (const link of ismsTabs.querySelectorAll('.nav-link'))
+    link.title = open ? '' : link.querySelector('.isms-rail-label').textContent;
+}
+
+showIsmsRail(remembered(RAIL_KEY));
+$('toggleIsmsRail').addEventListener('click', () => {
+  const open = ismsTabs.classList.contains('isms-rail-collapsed');
+  showIsmsRail(open);
+  remember(RAIL_KEY, open);
+});
+
+const FOLDERS_KEY = 'keen.isms.folders';
+
+function showDocFolders(open) {
+  $('docFolderColumn').hidden = !open;
+  $('showDocFolders').hidden = open;
+  // Without the folders the list takes the whole row.
+  $('docListColumn').classList.toggle('col-xl-9', open);
+}
+
+showDocFolders(remembered(FOLDERS_KEY));
+for (const [id, open] of [
+  ['hideDocFolders', false],
+  ['showDocFolders', true],
+])
+  $(id).addEventListener('click', () => {
+    showDocFolders(open);
+    remember(FOLDERS_KEY, open);
+    // The keyboard follows to the button that undoes the change.
+    $(open ? 'hideDocFolders' : 'showDocFolders').focus();
+  });
 
 load()
   .then(() => activateInitialTab())

@@ -73,6 +73,19 @@ test('chosen records the catalogue does not hold stay listed and chosen', async 
   assert.deepEqual([...chosenIds(select)], ['c1', 'x9']);
 });
 
+test('controlsOnly leaves out the rows the controls catalogue holds for clauses', async (t) => {
+  const { controlsOnly } = await options(t);
+  const rows = [
+    { id: 'c1', ref: 'A.5.1', type: 'annex_control' },
+    { id: 'x1', ref: '4.1', type: 'clause' },
+    { id: 'c2', ref: 'A.5.2' },
+  ];
+  assert.deepEqual(
+    [...controlsOnly(rows)].map((row) => row.id),
+    ['c1', 'c2'],
+  );
+});
+
 test('catalogueLabel names a clause as one and leaves out a missing title', async (t) => {
   const { catalogueLabel } = await options(t);
   assert.equal(catalogueLabel({ ref: 'A.1', title: 'Access' }), 'A.1 Access');

@@ -14,6 +14,7 @@ import {
   userPillHtml,
   userPillsHtml,
   lookupTab,
+  node,
 } from '/app.js';
 import { clauseBadges, controlBadges } from '/pages/isms-detail-common.js';
 import {
@@ -470,12 +471,104 @@ function renderSwot() {
     '<tr><td colspan="6" class="p-4 small-muted">No SWOT items mapped to this framework.</td></tr>';
 }
 
+// The legal register items linked to the framework, built as elements.
+const LEGAL_STATUS_BADGES = {
+  not_assessed: 'text-bg-secondary',
+  compliant: 'text-bg-success',
+  partially_compliant: 'text-bg-warning',
+  non_compliant: 'text-bg-danger',
+};
+
+function renderLegal() {
+  document.getElementById('soaLegalTab').closest('li').hidden = !soa.can_view_legal_register;
+  const refs = (records, page) =>
+    records.length
+      ? records.flatMap((record, index) => [
+          index ? ', ' : '',
+          node(
+            'a',
+            {
+              href: withFramework(`/${page}.html?id=${encodeURIComponent(record.id)}`, framework),
+              title: record.title || record.ref,
+            },
+            record.ref,
+          ),
+        ])
+      : ['-'];
+  const rows = (soa.legal_items || []).map((item) =>
+    node(
+      'tr',
+      {},
+      node(
+        'td',
+        { class: 'wrap' },
+        node(
+          'a',
+          {
+            class: 'fw-semibold',
+            href: withFramework(
+              `/legal-register.html?id=${encodeURIComponent(item.id)}`,
+              framework,
+            ),
+          },
+          item.title,
+        ),
+      ),
+      node('td', {}, item.category?.name || '-'),
+      node(
+        'td',
+        {},
+        node(
+          'span',
+          { class: item.in_scope ? 'badge badge-soft' : 'badge text-bg-light' },
+          item.in_scope ? 'In scope' : 'Out of scope',
+        ),
+      ),
+      node(
+        'td',
+        {},
+        node(
+          'span',
+          { class: `badge ${LEGAL_STATUS_BADGES[item.compliance_status]}` },
+          item.compliance_status_label,
+        ),
+      ),
+      node(
+        'td',
+        {},
+        isoDateToDisplay(item.next_assessment_date) || '-',
+        item.assessment_due ? node('span', { class: 'badge text-bg-warning ms-1' }, 'Due') : null,
+      ),
+      node('td', {}, ...refs(item.controls, 'control')),
+      node('td', {}, ...refs(item.clauses, 'clause')),
+    ),
+  );
+  document
+    .getElementById('legalRows')
+    .replaceChildren(
+      ...(rows.length
+        ? rows
+        : [
+            node(
+              'tr',
+              {},
+              node(
+                'td',
+                { colspan: '7', class: 'p-4 small-muted' },
+                'No legal register items linked to this framework.',
+              ),
+            ),
+          ]),
+    );
+}
+
 function renderAll() {
   const counts = soa.counts || {};
   if (meta) {
     meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} risks · ${counts.pestle || 0} PESTLE(E) items · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets${soa.can_view_legal_register ? ` · ${counts.legal_items || 0} legal register item${counts.legal_items === 1 ? '' : 's'}` : ''}`;
   }
   renderSwot();
+  renderLegal();
   renderControls();
   renderClauses();
   renderRisks();

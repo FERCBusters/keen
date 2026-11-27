@@ -832,6 +832,9 @@ const CONTROLS = [
   { id: 'c1', ref: 'A.5.15', title: 'Access <control>', description: 'Rules for access' },
   { id: 'c2', ref: 'A.5.31', title: 'Legal requirements' },
   { id: 'c3', ref: 'A.8.13', title: 'Backup', in_scope: false },
+  // The controls catalogue also holds a row for each clause; the list of
+  // controls leaves it out, as clauses have a list of their own.
+  { id: 'x41', ref: '4.1', title: 'Context', type: 'clause' },
 ];
 const CLAUSES = [
   { id: 'k1', ref: '4.1', title: 'Context' },

@@ -87,7 +87,9 @@ def test_each_kind_describes_only_the_fields_a_tool_sets():
         assert set(described["required_to_create"]) <= fields
     risk = run(changes.describe_record("risk"))
     assert set(risk["fields"]) <= set(changes.RISK_IMPORT_FIELDS)
-    assert "links" not in run(changes.describe_record("swot_item"))["fields"]
+    # A SWOT item and a legal register item take their relationships.
+    for kind in ("swot_item", "legal_item"):
+        assert "links" in run(changes.describe_record(kind))["fields"], kind
     assert run(changes.describe_record("risk"))["definitions"]
 
 
@@ -111,8 +113,8 @@ def test_a_record_is_added_with_its_framework_where_its_route_takes_it(api):
 
 
 def test_a_record_names_only_its_own_valid_fields(api):
-    with pytest.raises(ToolError, match=r"has no field id, links\. Call describe"):
-        run(changes.create_record("swot_item", {"title": "x", "links": [], "id": 1}))
+    with pytest.raises(ToolError, match=r"has no field id, parent\. Call describe"):
+        run(changes.create_record("swot_item", {"title": "x", "parent": 1, "id": 1}))
     with pytest.raises(
         ToolError,
         match=r"swot_item fields are not valid: significance: Input should be less",

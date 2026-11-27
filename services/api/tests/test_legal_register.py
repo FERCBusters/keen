@@ -561,6 +561,70 @@ def test_an_item_relates_to_a_swot_item_while_swot_is_switched_on(keen):  # noqa
     assert keen.db.query(IsmsLegalItemLink).count() == 1
 
 
+def test_a_save_that_names_relationships_replaces_those_its_author_can_read(  # noqa: F811
+    keen, monkeypatch
+):
+    document, asset, risk = related(keen.db)
+    both = keen.client(keen.user("isms.manage", "risk.read"))
+    isms_only = keen.client(keen.user("isms.manage"))
+
+    def pair(kind, row):
+        return {"target_type": kind, "target_id": str(row.id)}
+
+    def stored():
+        keen.db.expire_all()
+        return sorted(link.target_type for link in keen.db.query(IsmsLegalItemLink))
+
+    item = create(both, links=[pair("document", document), pair("risk", risk)])
+    assert stored() == ["document", "risk"]
+    # A save that names no relationships leaves them as they are.
+    item = patch(both, item, title="Data Protection Act")
+    assert stored() == ["document", "risk"]
+
+    # Naming them replaces those the author can read: the document goes, the
+    # asset arrives, and the risk this author cannot see stays related.
+    item = patch(isms_only, item, links=[pair("asset", asset)])
+    assert stored() == ["asset", "risk"]
+    assert [link["target_type"] for link in item["links"]] == ["asset"]
+    changed = (
+        keen.db.query(EntityChangelog)
+        .filter_by(entity_type="isms_legal_item", action="updated")
+        .order_by(EntityChangelog.changed_at.desc())
+        .first()
+    )
+    # The history names the kinds of record that changed, never the records.
+    assert "relationship_types" in str(changed.changes)
+    assert "'asset', 'document'" in str(changed.changes), changed.changes
+    assert "Payroll" not in str(changed.changes)
+
+    # A record the author cannot read is refused, and nothing changes.
+    refused = patch(
+        isms_only, item, expect=404, links=[pair("asset", asset), pair("risk", risk)]
+    )
+    assert refused == {"detail": "Related item not available"}
+    assert stored() == ["asset", "risk"]
+    # Naming the same relationships again changes none of them.
+    item = patch(isms_only, item, links=[pair("asset", asset)])
+    assert stored() == ["asset", "risk"]
+    # The limit counts the relationships that stay.
+    monkeypatch.setattr(service, "MAX_LINKS", 1)
+    refused = patch(
+        isms_only,
+        item,
+        expect=400,
+        links=[pair("asset", asset), pair("document", document)],
+    )
+    assert refused == {"detail": "A legal register item supports up to 1 relationships"}
+    monkeypatch.setattr(service, "MAX_LINKS", 200)
+    assert stored() == ["asset", "risk"]
+    # An empty list, or none, removes what the author can read.
+    item = patch(both, item, links=[])
+    assert stored() == []
+    item = patch(both, item, links=[pair("risk", risk)])
+    item = patch(both, item, links=None)
+    assert stored() == []
+
+
 def test_relationships_are_added_and_removed_one_at_a_time(keen):  # noqa: F811
     document, asset, risk = related(keen.db)
     manager = keen.client(keen.user("isms.manage"))
@@ -578,11 +642,6 @@ def test_relationships_are_added_and_removed_one_at_a_time(keen):  # noqa: F811
             headers=unsafe(manager),
         )
 
-    # An existing item's relationships change through their own actions.
-    refused = patch(manager, item, expect=400, links=[])
-    assert refused == {
-        "detail": "Use relationship actions for an existing legal register item"
-    }
     added = link("document", document, 1)
     assert (added.status_code, added.json()) == (200, {"ok": True, "version": 2})
     # Linking the same record again keeps one relationship.
@@ -915,7 +974,9 @@ def test_the_register_filters_pages_and_exports(keen):  # noqa: F811
     )
     out = create(
         manager,
-        title="=HYPERLINK(1)",
+        # Sorts first whether the database's collation weighs the "=" or
+        # skips it: before every letter, or as "abs" before "bribery".
+        title="=ABS(1)",
         requirement="line one\n=cmd",
         in_scope=False,
         next_assessment_date=(today - timedelta(days=5)).isoformat(),
@@ -985,12 +1046,12 @@ def test_the_register_filters_pages_and_exports(keen):  # noqa: F811
     )
     assert (companies["category"], companies["owner"], companies["url"]) == ("", "", "")
     # Text a spreadsheet would read as a formula is written as text.
-    hostile = by_title["'=HYPERLINK(1)"]
+    hostile = by_title["'=ABS(1)"]
     assert (hostile["in_scope"], hostile["requirement"]) == ("no", "line one\n'=cmd")
     # The export takes the register's filters.
     filtered = manager.get(BASE + "/export.csv?in_scope=false")
     assert [row["title"] for row in csv.DictReader(io.StringIO(filtered.text))] == [
-        "'=HYPERLINK(1)"
+        "'=ABS(1)"
     ]
     refused = manager.get(BASE + "/export.csv?status=unknown")
     assert refused.status_code == 400
@@ -1390,6 +1451,22 @@ def test_the_statement_of_applicability_counts_items_mapped_to_the_framework(kee
     # An item counts once, however many controls and clauses it maps to.
     seen = soa(manager)
     assert (seen["can_view_legal_register"], seen["counts"]["legal_items"]) == (True, 3)
+    # The items are listed by title for the Legal register tab, each with its
+    # controls and clauses in the framework and the label of its status.
+    assert [
+        (
+            row["title"],
+            [c["ref"] for c in row["controls"]],
+            [c["ref"] for c in row["clauses"]],
+            row["compliance_status_label"],
+            row["in_scope"],
+        )
+        for row in seen["legal_items"]
+    ] == [
+        ("By both", ["L.1"], ["1.1"], "Not assessed", True),
+        ("By clause", [], ["1.1"], "Not assessed", True),
+        ("By control", ["L.1"], [], "Not assessed", True),
+    ]
     assert soa(manager, "legal-soa-other")["counts"]["legal_items"] == 1
     assert service.mapped_count(keen.db, "no-such-framework") == 0
     # Without ISMS access, or with the register switched off, nothing is counted.
@@ -1398,6 +1475,7 @@ def test_the_statement_of_applicability_counts_items_mapped_to_the_framework(kee
         False,
         0,
     )
+    assert outsider["legal_items"] == []
     admin = keen.client(keen.user(role="admin"))
     version = admin.get("/v1/admin/features").json()["version"]
     admin.put(
@@ -1407,3 +1485,65 @@ def test_the_statement_of_applicability_counts_items_mapped_to_the_framework(kee
     )
     off = soa(manager)
     assert (off["can_view_legal_register"], off["counts"]["legal_items"]) == (False, 0)
+    assert off["legal_items"] == []
+
+
+# --- The owner's own items ------------------------------------------------------------
+
+
+def test_an_owner_lists_the_items_they_own_on_their_account(keen):  # noqa: F811
+    owner = keen.user()
+    other = keen.user()
+    manager = keen.client(keen.user("isms.manage"))
+    later = create(
+        manager,
+        title="Bribery Act 2010",
+        owner_user_id=str(owner.id),
+        next_assessment_date="2031-06-01",
+    )
+    undated = create(manager, title="Companies Act 2006", owner_user_id=str(owner.id))
+    sooner = create(
+        manager,
+        title="Data Protection Act 2018",
+        owner_user_id=str(owner.id),
+        next_assessment_date="2020-01-01",
+    )
+    create(manager, title="Someone else's", owner_user_id=str(other.id))
+    create(manager, title="Nobody's")
+
+    # The owner holds no ISMS permission: owning the item is what shows it.
+    mine = keen.client(owner).get("/v1/me/isms-legal-items")
+    assert mine.status_code == 200, mine.text
+    rows = mine.json()["items"]
+    # The next assessment leads, and an item without a date comes last.
+    assert [row["id"] for row in rows] == [sooner["id"], later["id"], undated["id"]]
+    assert (
+        rows[0]["title"],
+        rows[0]["compliance_status_label"],
+        rows[0]["assessment_due"],
+        rows[0]["next_assessment_date"],
+    ) == ("Data Protection Act 2018", "Not assessed", True, "2020-01-01")
+    assert rows[1]["assessment_due"] is False
+    # Related records, controls and assessments are not part of the list.
+    assert not {"links", "assessments", "controls", "clauses"} & set(rows[0])
+    assert (
+        keen.client(other).get("/v1/me/isms-legal-items").json()["items"][0]["title"]
+        == "Someone else's"
+    )
+    assert manager.get("/v1/me/isms-legal-items").json() == {"items": []}
+    anonymous = keen.client(None).get("/v1/me/isms-legal-items")
+    assert anonymous.status_code == 401
+
+    # With the register switched off the list is withdrawn with it.
+    admin = keen.client(keen.user(role="admin"))
+    version = admin.get("/v1/admin/features").json()["version"]
+    admin.put(
+        "/v1/admin/features",
+        json={"version": version, "changes": {"legal_register": False}},
+        headers=unsafe(admin),
+    )
+    refused = keen.client(owner).get("/v1/me/isms-legal-items")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "This feature is disabled by an administrator."},
+    )

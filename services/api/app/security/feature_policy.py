@@ -58,6 +58,7 @@ def requirements(route, params=None, query=None):
             "isms-assets": "assets",
             "isms-meetings": "meetings",
             "isms-role": "organisation",
+            "isms-legal-items": "legal_register",
         }
         needed.update(personal[p] for p in parts if p in personal)
         section = SECTION_FEATURES.get(query.get("section"))

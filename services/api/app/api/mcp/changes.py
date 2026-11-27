@@ -110,9 +110,12 @@ KINDS: dict[str, Kind] = {
         SwotPayload,
         "A SWOT item. kind: strength, weakness, opportunity or threat; "
         "significance: 1 (low) to 5 (high); response: the planned response; "
-        "parent_id: an item of the same kind. An update needs expected_version, "
+        "parent_id: an item of the same kind. links: the objectives, documents, "
+        "assets, people, vendors and risks the item relates to, each "
+        "{target_type: objective|document|asset|person|vendor|risk, target_id}; "
+        "a list replaces the item's relationships, so include those to keep, "
+        "as get_swot_item shows them. An update needs expected_version, "
         "the item's version from list_swot. " + _LINKS,
-        hidden=frozenset({"links"}),
         update_needs=("expected_version",),
         shown_by="list_swot",
     ),
@@ -127,8 +130,10 @@ KINDS: dict[str, Kind] = {
         "requirement: what it requires; applicability: how it applies to the "
         "organisation; in_scope: true or false; owner_user_id: an id from "
         "list_choices('users'); next_assessment_date: YYYY-MM-DD. links: "
-        "documents, assets, risks and SWOT items a new item relates to, each "
-        "{target_type: document|asset|risk, target_id}. A new item with no "
+        "the documents, assets, risks and SWOT items the item relates to, each "
+        "{target_type: document|asset|risk|swot, target_id}; a list replaces "
+        "the item's relationships, so include those to keep, as "
+        "get_legal_item shows them. A new item with no "
         "controls starts with the framework's control for legal requirements "
         "(A.5.31 in ISO/IEC 27001). An update needs expected_version, the "
         "item's version from list_legal_register. " + _LINKS,

@@ -27,7 +27,7 @@ from mosp.services.errors import DomainError
 from mosp.services.mailer import user_email
 from mosp.services.text import clean_text
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -49,8 +49,8 @@ from app.services.schedules import deliver_once, reminder_window, today_for_sche
 from .access import can_manage_isms, can_read_isms
 from .common import _by_id_or_404, _clause_by_ref_or_id, _control_by_ref_or_id, _record
 from .mutations import _apply_links, _delete_entity_links
+from .related_records import replace_links, search_targets, target_summary
 from .related_records import resolve_target as _target
-from .related_records import search_targets, target_summary
 from .schemas import IsmsLinksPayload
 from .serializers import _attach_links, _user_summary
 
@@ -506,18 +506,78 @@ def choices(*, target_type: str, q: str, user: User, db: Session):
     return {"items": search_targets(db, user, target_type, q)}
 
 
+def _mapped(framework: str):
+    """The condition that an item links to a control or clause of ``framework``."""
+    return or_(
+        *(
+            IsmsLegalItem.id.in_(
+                select(model.entity_id).where(
+                    model.entity_type == ENTITY, model.framework_slug == framework
+                )
+            )
+            for model in (IsmsEntityControlLink, IsmsEntityClauseLink)
+        )
+    )
+
+
 def mapped_count(db: Session, framework: str) -> int:
     """How many items link to a control or clause of ``framework``, for the
     Statement of Applicability."""
-    mapped = [
-        IsmsLegalItem.id.in_(
-            db.query(model.entity_id).filter(
-                model.entity_type == ENTITY, model.framework_slug == framework
-            )
+    return (
+        db.query(func.count(IsmsLegalItem.id)).filter(_mapped(framework)).scalar() or 0
+    )
+
+
+def owned_items(db: Session, user: User) -> list[dict[str, Any]]:
+    """The items ``user`` owns, those with an assessment due first and then by
+    title, for the owner's own account page."""
+    rows = (
+        db.query(IsmsLegalItem)
+        .filter(IsmsLegalItem.owner_user_id == user.id)
+        .order_by(
+            IsmsLegalItem.next_assessment_date.asc().nullslast(),
+            *_ORDER,
         )
-        for model in (IsmsEntityControlLink, IsmsEntityClauseLink)
+        .limit(MAX_MAPPED)
+        .all()
+    )
+    return [
+        {
+            **summary(row),
+            "compliance_status_label": STATUS_LABELS[row.compliance_status],
+        }
+        for row in rows
     ]
-    return db.query(func.count(IsmsLegalItem.id)).filter(or_(*mapped)).scalar() or 0
+
+
+MAX_MAPPED = 500
+
+
+def mapped_items(db: Session, framework: str) -> list[dict[str, Any]]:
+    """Up to ``MAX_MAPPED`` items linked to a control or clause of
+    ``framework``, by title, each with those controls and clauses and the
+    label of its compliance status, for the Statement of Applicability."""
+    rows = (
+        db.query(IsmsLegalItem)
+        .filter(_mapped(framework))
+        .order_by(*_ORDER)
+        .limit(MAX_MAPPED)
+        .all()
+    )
+    return [
+        _attach_links(
+            db,
+            {
+                **summary(row),
+                "compliance_status_label": STATUS_LABELS[row.compliance_status],
+            },
+            ENTITY,
+            row.id,
+            framework,
+            True,
+        )
+        for row in rows
+    ]
 
 
 CSV_COLUMNS = (
@@ -595,10 +655,6 @@ def save_item(*, payload: LegalItemPayload, framework, user, db, context, item_i
     require_access(db, user, write=True)
     fw = framework_parameter(framework)
     fields = payload.model_fields_set
-    if item_id and "links" in fields:
-        raise DomainError(
-            400, "Use relationship actions for an existing legal register item"
-        )
     # Every related record is checked before anything is written.
     draft_links = {(link.target_type, link.target_id) for link in payload.links or []}
     for kind, target_id in draft_links:
@@ -671,13 +727,24 @@ def save_item(*, payload: LegalItemPayload, framework, user, db, context, item_i
         IsmsLinksPayload(controls=controls, clauses=payload.clauses),
         user,
     )
-    for kind, target_id in sorted(
-        draft_links, key=lambda pair: (pair[0], str(pair[1]))
-    ):
-        db.add(IsmsLegalItemLink(item_id=row.id, target_type=kind, target_id=target_id))
+    # A new item takes its relationships; a saved one has them replaced when
+    # the save names them, and keeps them when it does not.
+    changed = (
+        replace_links(
+            db,
+            user,
+            IsmsLegalItemLink,
+            {"item_id": row.id},
+            draft_links,
+            limit=MAX_LINKS,
+            noun="legal register item",
+        )
+        if "links" in fields or not item_id
+        else set()
+    )
     after = _history(db, row, fw)
-    if draft_links:
-        after["relationship_types"] = sorted({kind for kind, _ in draft_links})
+    if changed:
+        after["relationship_types"] = sorted({kind for kind, _ in changed})
     _record(
         db,
         ENTITY,

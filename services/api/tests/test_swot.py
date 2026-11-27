@@ -520,16 +520,22 @@ def test_draft_relationships_create_atomically_and_deduplicate(keen):
     assert len(created["links"]) == 1
     assert created["links"][0]["target_id"] == str(objective.id)
     assert keen.db.query(IsmsSwotLink).count() == 1
-    response = client.patch(
+    # A save that names no relationships keeps them; one that names them
+    # replaces them, here with none.
+    kept = client.patch(
         f"/v1/isms/swot/{created['id']}",
-        json={"expected_version": 1, "links": []},
+        json={"expected_version": 1, "response": "Rehearse"},
         headers=unsafe(client),
     )
-    assert (response.status_code, response.json()) == (
-        400,
-        {"detail": "Use relationship actions for an existing SWOT item"},
-    )
+    assert kept.status_code == 200, kept.text
     assert keen.db.query(IsmsSwotLink).count() == 1
+    response = client.patch(
+        f"/v1/isms/swot/{created['id']}",
+        json={"expected_version": 2, "links": []},
+        headers=unsafe(client),
+    )
+    assert (response.status_code, response.json()["links"]) == (200, [])
+    assert keen.db.query(IsmsSwotLink).count() == 0
     history = client.get(f"/v1/isms/swot/{created['id']}/changelog").text
     assert str(objective.id) not in history
     assert objective.goal not in history
@@ -910,3 +916,68 @@ def test_change_link_records_history_without_request_context(keen):
         .one()
     )
     assert entry.request_path is None
+
+
+def test_a_save_that_names_relationships_replaces_those_its_author_can_read(
+    keen, monkeypatch
+):
+    from app.db.models import IsmsDocument, IsmsObjective
+    from app.services.isms import swot as service
+
+    admin = keen.client(keen.user(role="admin"))
+    manager = keen.client(keen.user("isms.manage"))
+    category = RiskCategory(name="Category")
+    keen.db.add(category)
+    keen.db.flush()
+    sub = RiskAssetSubcategory(name="Sub", category_id=category.id)
+    keen.db.add(sub)
+    keen.db.flush()
+    asset = RiskAsset(name="Asset", category_id=category.id, subcategory_id=sub.id)
+    document = IsmsDocument(title="Continuity plan", document_type="policy")
+    objective = IsmsObjective(requirement="Recover", goal="Recover in a day")
+    keen.db.add_all([asset, document, objective])
+    keen.db.flush()
+    risk = Risk(asset_id=asset.id, threat_summary="Restricted risk title")
+    keen.db.add(risk)
+    keen.db.commit()
+
+    def pair(kind, row):
+        return {"target_type": kind, "target_id": str(row.id)}
+
+    def stored():
+        keen.db.expire_all()
+        return sorted(link.target_type for link in keen.db.query(IsmsSwotLink))
+
+    def save(client, version, links, expect=200):
+        response = client.patch(
+            f"/v1/isms/swot/{item['id']}",
+            json={"expected_version": version, "links": links},
+            headers=unsafe(client),
+        )
+        assert response.status_code == expect, response.text
+        return response.json()
+
+    item = create(admin, links=[pair("document", document), pair("risk", risk)])
+    assert stored() == ["document", "risk"]
+    # The manager cannot read the risk: the document goes, the objective
+    # arrives, and the risk stays related.
+    saved = save(manager, 1, [pair("objective", objective)])
+    assert stored() == ["objective", "risk"]
+    assert [link["target_type"] for link in saved["links"]] == ["objective"]
+    history = manager.get(f"/v1/isms/swot/{item['id']}/changelog").text
+    # The history names the kinds of record that changed, never the records.
+    assert "relationship_types" in history
+    assert "Continuity plan" not in history and "Restricted risk title" not in history
+    # A record the author cannot read is refused, and nothing changes.
+    refused = save(manager, 2, [pair("risk", risk)], expect=404)
+    assert refused == {"detail": "Related item not available"}
+    assert stored() == ["objective", "risk"]
+    # The limit counts the relationships that stay.
+    monkeypatch.setattr(service, "MAX_LINKS", 1)
+    refused = save(manager, 2, [pair("objective", objective)], expect=400)
+    assert refused == {"detail": "A SWOT item supports up to 1 relationships"}
+    monkeypatch.setattr(service, "MAX_LINKS", 200)
+    assert stored() == ["objective", "risk"]
+    # An author who reads every record replaces them all.
+    save(admin, 2, [])
+    assert stored() == []

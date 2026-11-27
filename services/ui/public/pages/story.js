@@ -22,7 +22,7 @@ import {
   canSampleIntoAudit,
 } from '/app.js';
 import { createFlowCanvas } from '/pages/story-flow.js';
-import { chosenIds, fillCatalogueSelect } from '/pages/catalogue-options.js';
+import { chosenIds, controlsOnly, fillCatalogueSelect } from '/pages/catalogue-options.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -209,7 +209,7 @@ async function readCatalogue() {
       apiGet(`/api/v1/controls?${fw}&limit=5000`),
       apiGet(`/api/v1/clauses?${fw}&limit=5000`),
     ]);
-    catalogue = { controls: controls.items, clauses: clauses.items };
+    catalogue = { controls: controlsOnly(controls.items), clauses: clauses.items };
     $('frameworkStatus').textContent = '';
     $('saveFramework').disabled = false;
     fillPickers();

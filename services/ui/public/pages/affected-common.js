@@ -12,6 +12,18 @@ export const AFFECTED_KINDS = {
 // Records the picker can add by name, and the choice that names one.
 const NEW_KINDS = { new_person: 'person', new_vendor: 'vendor' };
 
+// The longest name a badge shows. A longer one is cut short with an ellipsis,
+// so one long vendor or asset name does not widen a whole register; hovering
+// over the badge shows the name in full.
+export const AFFECTED_LABEL_LIMIT = 32;
+
+function badgeLabel(label) {
+  const text = String(label ?? '');
+  return text.length > AFFECTED_LABEL_LIMIT
+    ? `${text.slice(0, AFFECTED_LABEL_LIMIT - 1).trimEnd()}…`
+    : text;
+}
+
 // Badges linking to each affected record; a dash when there are none.
 export function affectedBadges(items, framework) {
   const list = Array.isArray(items) ? items : [];
@@ -21,13 +33,16 @@ export function affectedBadges(items, framework) {
     const href = localPath(item.href) && localPath(withFramework(item.href, framework));
     const attrs = { class: `badge badge-soft me-1${href ? ' text-decoration-none' : ''}` };
     if (href) attrs.href = href;
-    if (item.detail) attrs.title = item.detail;
+    const shown = badgeLabel(item.label);
+    // A shortened name is given in full on hover, before any detail.
+    const hover = [shown === item.label ? '' : item.label, item.detail].filter(Boolean);
+    if (hover.length) attrs.title = hover.join(' · ');
     return node(
       href ? 'a' : 'span',
       attrs,
       icon(`${kind.icon} me-1`),
       node('span', { class: 'visually-hidden' }, `${kind.label}: `),
-      item.label,
+      shown,
     );
   });
 }

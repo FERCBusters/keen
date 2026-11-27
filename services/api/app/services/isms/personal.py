@@ -23,6 +23,7 @@ from app.db.models import (
 from app.services.frameworks import framework_parameter
 
 from .access import can_read_isms, meeting_ids_for
+from .legal_register import owned_items as owned_legal_items
 from .serializers import (
     _asset_out,
     _meeting_out,
@@ -147,3 +148,9 @@ def my_isms_assets(*, framework: str, user: User, db: Session):
         out["is_owner"] = owner_id in node_id_set
         items.append(out)
     return {"framework": fw, "items": items}
+
+
+def my_legal_items(*, user: User, db: Session):
+    """The legal register items the account owns. An owner is reminded of each
+    assessment by email, and reads the items here without ISMS read access."""
+    return {"items": owned_legal_items(db, user)}

@@ -135,3 +135,33 @@ def search_targets(db, user, kind, q, *, limit=100):
         for row in rows
         if resolve_target(db, user, kind, row.id, required=False)
     ]
+
+
+def replace_links(db, user, model, owner: dict, wanted: set, *, limit: int, noun: str):
+    """Make a record's relationships ``wanted`` and return those that changed.
+
+    ``model`` is the record's link table and ``owner`` the column and id that
+    name the record in it. A relationship to a record the caller cannot read is
+    not theirs to see or to remove, so it stays whatever the save names; the
+    limit counts the relationships that stay.
+    """
+    current = {
+        (link.target_type, link.target_id)
+        for link in db.query(model).filter_by(**owner)
+    }
+    removed = {
+        pair
+        for pair in current - wanted
+        if resolve_target(db, user, pair[0], pair[1], required=False)
+    }
+    added = wanted - current
+    if len(current) - len(removed) + len(added) > limit:
+        raise DomainError(400, f"A {noun} supports up to {limit} relationships")
+    for kind, target_id in removed:
+        db.query(model).filter_by(
+            **owner, target_type=kind, target_id=target_id
+        ).delete(synchronize_session=False)
+    for kind, target_id in sorted(added, key=lambda pair: (pair[0], str(pair[1]))):
+        db.add(model(**owner, target_type=kind, target_id=target_id))
+    db.flush()
+    return removed | added

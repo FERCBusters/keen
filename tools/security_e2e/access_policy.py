@@ -720,6 +720,7 @@ POLICY = {
     "POST /v1/me/mcp/consent": SIGNED_IN,
     "DELETE /v1/me/mcp/grants/{grant_id}": SIGNED_IN,
     "GET /v1/me/isms-assets": SIGNED_IN,
+    "GET /v1/me/isms-legal-items": SIGNED_IN,
     "GET /v1/me/isms-meetings": SIGNED_IN,
     "GET /v1/me/isms-objectives": SIGNED_IN,
     "GET /v1/me/isms-role": SIGNED_IN,

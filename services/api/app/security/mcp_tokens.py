@@ -124,6 +124,7 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("GET", "/v1/risks/{risk_id:uuid}"): None,
     ("GET", "/v1/risks/{risk_id:uuid}/controls"): None,
     ("GET", "/v1/isms/swot"): None,
+    ("GET", "/v1/isms/swot/{item_id:uuid}"): None,
     ("GET", "/v1/isms/legal-register"): None,
     ("GET", "/v1/isms/legal-register/meta"): None,
     ("GET", "/v1/isms/legal-register/{item_id:uuid}"): None,

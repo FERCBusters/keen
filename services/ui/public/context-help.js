@@ -353,6 +353,8 @@ const tabs = {
   'my-isms-objectives-tab': 'objectives',
   'my-isms-role-tab': 'peopleAssets',
   'my-isms-assets-tab': 'peopleAssets',
+  'my-legal-items-tab': 'legalRegister',
+  soaLegalTab: 'legalRegister',
   'my-meetings-tab': 'meetings',
   libraryTab: 'risks',
   newRiskScenarioTab: 'risks',

@@ -842,6 +842,35 @@ function myIsmsAssetRow(item) {
   </tr>`;
 }
 
+// ---------------------------------------------------------------------------
+// My legal items
+// ---------------------------------------------------------------------------
+
+const LEGAL_STATUS_BADGES = {
+  not_assessed: 'text-bg-secondary',
+  compliant: 'text-bg-success',
+  partially_compliant: 'text-bg-warning',
+  non_compliant: 'text-bg-danger',
+};
+
+function myLegalItemRow(item) {
+  // The register itself needs ISMS read access; an owner without it reads
+  // the item here.
+  const title =
+    me?.is_admin || me?.can_view_isms
+      ? `<a class="fw-semibold" href="${esc(withFramework(`/legal-register.html?id=${encodeURIComponent(item.id)}`, getCurrentFramework()))}">${esc(item.title)}</a>`
+      : `<span class="fw-semibold">${esc(item.title)}</span>`;
+  const due = item.assessment_due ? ' <span class="badge text-bg-warning">Due</span>' : '';
+  return `<tr>
+    <td class="wrap">${title}<div class="small-muted">${esc(item.requirement)}</div></td>
+    <td class="small-muted">${esc(item.category?.name || '-')}</td>
+    <td><span class="badge ${item.in_scope ? 'badge-soft' : 'text-bg-light'}">${item.in_scope ? 'In scope' : 'Out of scope'}</span></td>
+    <td><span class="badge ${esc(LEGAL_STATUS_BADGES[item.compliance_status])}">${esc(item.compliance_status_label)}</span></td>
+    <td class="small-muted">${esc(isoDateToDisplay(item.last_assessed_date) || '-')}</td>
+    <td class="small-muted">${esc(isoDateToDisplay(item.next_assessment_date) || '-')}${due}</td>
+  </tr>`;
+}
+
 const accountLists = {
   '#my-questions-pane': accountList({
     prefix: 'myQuestions',
@@ -918,6 +947,14 @@ const accountLists = {
     noun: 'ISMS assets',
     columns: 6,
     row: myIsmsAssetRow,
+  }),
+  '#my-legal-items-pane': accountList({
+    prefix: 'myLegalItems',
+    feature: 'legal_register',
+    endpoint: '/api/v1/me/isms-legal-items',
+    noun: 'legal register items',
+    columns: 6,
+    row: myLegalItemRow,
   }),
 };
 

@@ -3,7 +3,7 @@
 // an existing register risk. It asks for the method first and shows only the
 // fields that method needs.
 import { featureEnabled } from '/pages/feature-availability.js';
-import { catalogueLabel } from '/pages/catalogue-options.js';
+import { catalogueLabel, controlsOnly } from '/pages/catalogue-options.js';
 import {
   AFFECTED_KINDS,
   affectedChoices,
@@ -861,7 +861,7 @@ async function loadOptions() {
   assets = assetData.items;
   users = userData.items;
   roles = userData.roles;
-  allControls = controlData.items;
+  allControls = controlsOnly(controlData.items);
   clauses = clauseData.items;
   library = libraryData.items;
   affectedOptions = affectedData;

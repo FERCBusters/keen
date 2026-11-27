@@ -34,6 +34,7 @@ from app.services.control_refs import clause_summary, control_summary
 from app.services.features import state
 from app.services.isms.access import can_read_isms
 from app.services.isms.legal_register import mapped_count as legal_mapped_count
+from app.services.isms.legal_register import mapped_items as legal_mapped_items
 from app.services.isms.serializers import (
     _asset_out,
     _attach_links,
@@ -224,6 +225,7 @@ def statement_of_applicability(
 
     can_view_legal = can_view_isms and state(db).enabled("legal_register")
     legal_items = legal_mapped_count(db, fw) if can_view_legal else 0
+    legal_rows = legal_mapped_items(db, fw) if can_view_legal else []
 
     isms_objectives: list[dict[str, Any]] = []
     isms_documents: list[dict[str, Any]] = []
@@ -285,6 +287,7 @@ def statement_of_applicability(
         "can_view_swot": can_view_swot,
         "can_view_legal_register": can_view_legal,
         "swot_items": swot_rows,
+        "legal_items": legal_rows,
         "counts": {
             "swot": len(swot_rows),
             "legal_items": legal_items,

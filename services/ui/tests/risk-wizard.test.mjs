@@ -29,6 +29,9 @@ const users = {
 const controls = [
   { id: 'c1', ref: 'A.5.1', title: 'Policies for information security' },
   { id: 'c2', ref: 'A.8.13', title: 'Information backup', in_scope: false },
+  // The controls catalogue also holds a row for each clause; the control step
+  // leaves it out, as clauses have a step of their own.
+  { id: 'x612', ref: '6.1.2', title: 'Risk assessment', type: 'clause' },
 ];
 const library = [
   {
@@ -304,6 +307,7 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   assert.equal(visibleStep(ui), 'controls');
   assert.equal(ui.el('controlsFramework').textContent, 'A');
   assert.equal(ui.el('controlList').multiple, true);
+  assert.ok(![...ui.el('controlList').options].some((o) => o.value === 'x612'));
   assert.ok([...ui.el('controlList').options].some((o) => o.dataset.badge === 'out of scope'));
   pick(ui, 'control', 'c1');
   assert.equal(picked(ui, 'control').length, 1);

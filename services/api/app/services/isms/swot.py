@@ -18,8 +18,8 @@ from .access import can_manage_isms, can_read_isms
 from .common import _by_id_or_404, _record
 from .link_diary import remove_entity_link_diary
 from .mutations import _apply_links
+from .related_records import replace_links, search_targets, target_summary
 from .related_records import resolve_target as _target
-from .related_records import search_targets, target_summary
 from .serializers import _attach_links
 
 KINDS = ("strength", "weakness", "opportunity", "threat")
@@ -34,6 +34,7 @@ STATUSES = (
     "deferred",
     "superseded",
 )
+MAX_LINKS = 200
 Reference = Annotated[str, Field(min_length=1, max_length=128)]
 
 
@@ -68,7 +69,7 @@ class SwotPayload(BaseModel):
     target_date: date | None = None
     controls: list[Reference] | None = Field(None, max_length=100)
     clauses: list[Reference] | None = Field(None, max_length=100)
-    links: list[DraftLink] | None = Field(None, max_length=200)
+    links: list[DraftLink] | None = Field(None, max_length=MAX_LINKS)
     expected_version: int | None = Field(None, ge=1)
 
 
@@ -253,8 +254,6 @@ def write_item(*, payload, framework, user, db, context, item_id=None):
     """Add or change one SWOT item with its links and history; no commit."""
     require_access(db, user, write=True)
     fw = framework_parameter(framework)
-    if item_id and "links" in payload.model_fields_set:
-        raise DomainError(400, "Use relationship actions for an existing SWOT item")
     # Validate every draft target before adding the item or any mappings/history.
     # The session dependency rolls back the complete transaction on any failure.
     draft_links = {(link.target_type, link.target_id) for link in payload.links or []}
@@ -351,15 +350,26 @@ def write_item(*, payload, framework, user, db, context, item_id=None):
     db.add(row)
     db.flush()
     _apply_links(db, "swot", row.id, fw, payload, user)
-    for kind, target_id in sorted(
-        draft_links, key=lambda pair: (pair[0], str(pair[1]))
-    ):
-        db.add(IsmsSwotLink(swot_id=row.id, target_type=kind, target_id=target_id))
+    # A new item takes its relationships; a saved one has them replaced when
+    # the save names them, and keeps them when it does not.
+    changed = (
+        replace_links(
+            db,
+            user,
+            IsmsSwotLink,
+            {"swot_id": row.id},
+            draft_links,
+            limit=MAX_LINKS,
+            noun="SWOT item",
+        )
+        if "links" in payload.model_fields_set or not item_id
+        else set()
+    )
     # Record framework mapping changes without copying restricted targets.
     after = _attach_links(db, summary(row), "swot", row.id, fw, True)
     after["framework"] = fw
-    if draft_links:
-        after["relationship_types"] = sorted({kind for kind, _ in draft_links})
+    if changed:
+        after["relationship_types"] = sorted({kind for kind, _ in changed})
     _record(
         db,
         "swot",
@@ -455,8 +465,10 @@ def change_link(*, item_id, payload, remove, user, db, context):
     if remove:
         qry.delete(synchronize_session=False)
     elif not existing:
-        if db.query(IsmsSwotLink).filter_by(swot_id=row.id).count() >= 200:
-            raise DomainError(400, "A SWOT item supports up to 200 relationships")
+        if db.query(IsmsSwotLink).filter_by(swot_id=row.id).count() >= MAX_LINKS:
+            raise DomainError(
+                400, f"A SWOT item supports up to {MAX_LINKS} relationships"
+            )
         db.add(
             IsmsSwotLink(
                 swot_id=row.id,
