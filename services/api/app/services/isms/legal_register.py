@@ -3,7 +3,7 @@ organisation has identified, whether each is in scope, who owns it, how it was
 last assessed and when it is assessed next.
 
 An item links to controls and clauses of a framework through the ISMS link
-tables, and to documents, assets and risks through its own. A related record
+tables, and to documents, assets, risks and SWOT items through its own. A related record
 is resolved with the reader's own access each time it is shown, so an item
 never shows more of a record than the record's own page would.
 """
@@ -67,7 +67,7 @@ STATUS_LABELS = {
     "non_compliant": "Non-compliant",
 }
 # Records an item relates to besides controls and clauses.
-LINK_TYPES = ("document", "asset", "risk")
+LINK_TYPES = ("document", "asset", "risk", "swot")
 MAX_LINKS = 200
 MAX_ASSESSMENTS = 500
 # Controls a new item starts with when a save names none, by framework: the
@@ -77,7 +77,7 @@ DEFAULT_CONTROLS: dict[str, tuple[str, ...]] = {"iso_27001_2022": ("A.5.31",)}
 
 Reference = Annotated[str, Field(min_length=1, max_length=128)]
 Outcome = Literal["compliant", "partially_compliant", "non_compliant"]
-LinkType = Literal["document", "asset", "risk"]
+LinkType = Literal["document", "asset", "risk", "swot"]
 
 
 class DraftLink(BaseModel):
@@ -506,6 +506,20 @@ def choices(*, target_type: str, q: str, user: User, db: Session):
     return {"items": search_targets(db, user, target_type, q)}
 
 
+def mapped_count(db: Session, framework: str) -> int:
+    """How many items link to a control or clause of ``framework``, for the
+    Statement of Applicability."""
+    mapped = [
+        IsmsLegalItem.id.in_(
+            db.query(model.entity_id).filter(
+                model.entity_type == ENTITY, model.framework_slug == framework
+            )
+        )
+        for model in (IsmsEntityControlLink, IsmsEntityClauseLink)
+    ]
+    return db.query(func.count(IsmsLegalItem.id)).filter(or_(*mapped)).scalar() or 0
+
+
 CSV_COLUMNS = (
     "title",
     "url",
@@ -529,7 +543,7 @@ def export_register(
 ) -> Iterator[str]:
     """The register, or the part of it the filters keep, as CSV rows.
 
-    Related documents, assets and risks are left out: the file is read by
+    Related documents, assets, risks and SWOT items are left out: the file is read by
     whoever it is passed to, without the access checks a page applies.
     """
     require_access(db, user)

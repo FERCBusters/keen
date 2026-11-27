@@ -1,4 +1,5 @@
-// One story: its timeline, flow chart, comments, questions and changelog.
+// One story: its timeline, flow chart, controls and clauses, comments,
+// questions and changelog.
 import { mountQuestionThreads } from '/pages/question-threads.js';
 import {
   errorText,
@@ -16,10 +17,12 @@ import {
   withFramework,
   localPath,
   loadEntityChangelog,
+  node,
   openAuditSampleModal,
   canSampleIntoAudit,
 } from '/app.js';
 import { createFlowCanvas } from '/pages/story-flow.js';
+import { createLinkChecklist } from '/pages/link-checklist.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -127,6 +130,7 @@ function render() {
         `<a class="badge badge-soft me-1" href="${withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, framework)}" title="${esc(c.title)}">${esc(c.ref)}</a>`,
     )
     .join('');
+  renderFramework();
   const ordered = timelineOrder(story.items);
   $('timeline').innerHTML = ordered.length
     ? ordered.map(itemHtml).join('')
@@ -148,6 +152,106 @@ function applyStory(next) {
   story = next;
   render();
 }
+
+// --- Controls and clauses ----------------------------------------------------
+
+// The author assigns controls and clauses of the selected framework. The
+// framework's catalogue is read when the tab is first opened by someone who
+// may edit the story; readers see what is assigned.
+const pickers = {
+  controls: createLinkChecklist($('controlPicker'), {
+    label: 'Controls in selected framework',
+    plural: 'controls',
+  }),
+  clauses: createLinkChecklist($('clausePicker'), {
+    label: 'Clauses in selected framework',
+    plural: 'clauses',
+  }),
+};
+let catalogue = null;
+let catalogueLoading = null;
+
+function assigned(kind) {
+  return story[`linked_${kind}`] || [];
+}
+
+function refLinks(host, records, page) {
+  host.replaceChildren(
+    ...(records.length
+      ? records.map((record) =>
+          node(
+            'a',
+            {
+              class: 'badge badge-soft me-1 mb-1',
+              href: withFramework(`/${page}.html?id=${encodeURIComponent(record.id)}`, framework),
+              title: record.title || record.ref,
+            },
+            record.ref,
+          ),
+        )
+      : [node('span', { class: 'small-muted' }, 'None assigned.')]),
+  );
+}
+
+function fillPickers() {
+  for (const kind of ['controls', 'clauses'])
+    pickers[kind].load(
+      catalogue[kind],
+      assigned(kind).map((record) => record.id),
+    );
+}
+
+function renderFramework() {
+  refLinks($('linkedControls'), assigned('controls'), 'control');
+  refLinks($('linkedClauses'), assigned('clauses'), 'clause');
+  const total = assigned('controls').length + assigned('clauses').length;
+  $('frameworkCount').textContent = total ? String(total) : '';
+  $('frameworkForm').hidden = !story.can_edit;
+  if (catalogue) fillPickers();
+}
+
+async function readCatalogue() {
+  $('frameworkStatus').textContent = 'Loading controls and clauses';
+  try {
+    const [controls, clauses] = await Promise.all([
+      apiGet(`/api/v1/controls?${fw}&limit=5000`),
+      apiGet(`/api/v1/clauses?${fw}&limit=5000`),
+    ]);
+    catalogue = { controls: controls.items, clauses: clauses.items };
+    $('frameworkStatus').textContent = '';
+    $('saveFramework').disabled = false;
+    fillPickers();
+  } catch (error) {
+    // Opening the tab again tries once more.
+    catalogueLoading = null;
+    $('frameworkStatus').textContent =
+      `Controls and clauses could not be listed: ${errorText(error)}`;
+  }
+}
+
+function loadCatalogue() {
+  if (story?.can_edit) catalogueLoading ||= readCatalogue();
+  return catalogueLoading;
+}
+
+$('frameworkTab').addEventListener('shown.bs.tab', loadCatalogue);
+$('frameworkForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  // Without the catalogue nothing was chosen, so nothing is replaced.
+  if (!catalogue) return;
+  try {
+    applyStory(
+      await apiPatch(`${base}?${fw}`, {
+        controls: pickers.controls.selected(),
+        clauses: pickers.clauses.selected(),
+        expected_version: story.version,
+      }),
+    );
+    toast($('status'), 'Controls and clauses saved.', 'success');
+  } catch (error) {
+    fail(error);
+  }
+});
 
 // --- Story details -----------------------------------------------------------
 
@@ -447,9 +551,10 @@ try {
   await load();
   kindFieldsVisible();
   const tab = params.get('tab');
-  if (['flow', 'comments', 'questions', 'changelog'].includes(tab)) {
+  if (['flow', 'framework', 'comments', 'questions', 'changelog'].includes(tab)) {
     window.bootstrap?.Tab.getOrCreateInstance($(`${tab}Tab`))?.show();
   }
+  if (tab === 'framework') await loadCatalogue();
   await Promise.all([
     loadComments(),
     storyQuestions.refresh(),

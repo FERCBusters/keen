@@ -1,4 +1,4 @@
-// The "Legal register" tab of a document, asset or risk page: the register
+// The "Legal register" tab of a document, asset, risk or SWOT item page: the register
 // items related to that record, so a relationship made on an item shows from
 // the record's side too. The list loads when the tab is first opened.
 import { apiGet, errorText, getCurrentFramework, node, withFramework } from '/app.js';

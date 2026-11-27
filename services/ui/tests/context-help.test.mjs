@@ -174,7 +174,7 @@ test('the real lazy module opens page help and handles keyboard dismissal cleanu
 
 test('page help follows the page and the active tab', async (t) => {
   const ui = await loadUi('context-help.js', {
-    html: '<body data-page="stories"><ul class="nav nav-tabs" role="tablist"><li><button class="nav-link active" role="tab" id="timelineTab">Timeline</button></li><li><button class="nav-link" role="tab" id="flowTab">Flow chart</button></li><li><button class="nav-link" role="tab" id="commentsTab">Comments</button></li><li><button class="nav-link" role="tab" id="questionsTab">Questions</button></li><li><button class="nav-link" role="tab" id="changelogTab">Changelog</button></li></ul><a data-help-topic="page">Help</a></body>',
+    html: '<body data-page="stories"><ul class="nav nav-tabs" role="tablist"><li><button class="nav-link active" role="tab" id="timelineTab">Timeline</button></li><li><button class="nav-link" role="tab" id="flowTab">Flow chart</button></li><li><button class="nav-link" role="tab" id="frameworkTab">Controls and clauses</button></li><li><button class="nav-link" role="tab" id="commentsTab">Comments</button></li><li><button class="nav-link" role="tab" id="questionsTab">Questions</button></li><li><button class="nav-link" role="tab" id="changelogTab">Changelog</button></li></ul><a data-help-topic="page">Help</a></body>',
   });
   t.after(ui.close);
   const trigger = ui.document.querySelector('a');
@@ -188,6 +188,8 @@ test('page help follows the page and the active tab', async (t) => {
   assert.equal(select('timelineTab').url, '/help/using-events.html#stories');
   assert.equal(select('flowTab').title, 'Story flow chart');
   assert.equal(select('flowTab').url, '/help/using-events.html#build-the-story');
+  assert.equal(select('frameworkTab').title, 'Story controls and clauses');
+  assert.equal(select('frameworkTab').url, '/help/using-events.html#story-controls-and-clauses');
   assert.equal(select('commentsTab').url, '/help/using-events.html#share-the-story');
   assert.equal(select('questionsTab').url, '/help/using-events.html#questions-and-incidents');
   assert.equal(

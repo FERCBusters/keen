@@ -266,10 +266,15 @@
 
         <div class="card mb-3">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div><div class="fw-bold">ISMS references</div><div class="small-muted">SWOT items, objectives, organisation roles, assets and meetings linked to this control. Policies, processes and effectiveness measures are under Requirements.</div></div>
+            <div><div class="fw-bold">ISMS references</div><div class="small-muted">SWOT items, legal register items, objectives, organisation roles, assets and meetings linked to this control. Policies, processes and effectiveness measures are under Requirements.</div></div>
             <a class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/isms.html">Open ISMS</a>
           </div>
           <div id="controlIsmsView" class="card-body small-muted">Loading ISMS references</div>
+        </div>
+
+        <div id="controlStoriesCard" class="card mb-3" data-feature="stories" hidden>
+          <div class="card-header"><div class="fw-bold">Stories</div><div class="small-muted">Stories whose authors assigned them to this control, on the story's Controls and clauses tab.</div></div>
+          <div id="controlStories" class="card-body"></div>
         </div>
 
         <div id="controlChangelog" class="card card-body small-muted mb-3">Loading changelog</div>

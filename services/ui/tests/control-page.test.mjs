@@ -139,6 +139,10 @@ async function controlPage(t, options = {}) {
           ],
         };
       }
+      if (p === '/api/v1/stories/related/control/c1') {
+        if (fail.stories) throw new Error('Stories offline');
+        return { items: options.stories || [] };
+      }
       if (p === '/api/v1/controls/c1/pestle') {
         if (fail.pestle) throw new Error('PESTLE forbidden');
         return { items: options.pestle || [] };
@@ -1785,4 +1789,60 @@ test('a control OSA has dropped says so and why it is still here', async (t) => 
   assert.match(note.textContent, /records here depend on it/);
   // The note comes before what OSA last said of the control.
   assert.equal(note.nextElementSibling, ui.el('osaCrosswalk'));
+});
+
+test('the governance pane lists the stories assigned to the control for story readers', async (t) => {
+  const { ui } = await controlPage(t, {
+    stories: [
+      {
+        id: 's1',
+        title: 'Payroll <b>export</b>',
+        status: 'open',
+        updated_at: '2026-05-01',
+        created_by: 'alice',
+      },
+    ],
+  });
+  const storyCalls = () =>
+    ui.calls.filter((c) => c.url.startsWith('/api/v1/stories/related/control/c1')).length;
+  assert.equal(ui.el('controlStoriesCard').hidden, false);
+  assert.equal(ui.el('controlStoriesCard').dataset.feature, 'stories');
+  assert.equal(ui.document.getElementById('storiesRelatedTab'), null, 'no extra top-level tab');
+  assert.equal(storyCalls(), 0, 'the list waits for Governance');
+  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('controlStories').querySelector('.list-group'));
+  const links = [...ui.el('controlStories').querySelectorAll('a')].map((a) => [
+    a.textContent,
+    a.getAttribute('href'),
+  ]);
+  assert.deepEqual(links, [
+    ['Payroll <b>export</b>', '/story.html?id=s1&framework=A'],
+    ['Controls and clauses', '/story.html?id=s1&tab=framework&framework=A'],
+  ]);
+  assert.equal(ui.el('controlStories').querySelector('b'), null);
+  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.equal(storyCalls(), 1);
+});
+
+test('the stories card says when no story is assigned or the list cannot be read', async (t) => {
+  const { ui } = await controlPage(t);
+  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /No story/.test(ui.el('controlStories').textContent));
+  assert.equal(ui.el('controlStories').textContent, 'No story is assigned to this control yet.');
+
+  const { ui: offline } = await controlPage(t, { fail: { stories: true } });
+  offline.el('controlGovernanceTab').dispatchEvent(new offline.window.Event('shown.bs.tab'));
+  await settle(() => /unavailable/.test(offline.el('controlStories').textContent));
+  assert.equal(
+    offline.el('controlStories').textContent,
+    'Stories are unavailable with your current access.',
+  );
+});
+
+test('accounts that cannot read stories get no stories card and no request for one', async (t) => {
+  const { ui } = await controlPage(t, { me: { can_view_isms: true } });
+  assert.equal(ui.el('controlStoriesCard').hidden, true);
+  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => !/Loading ISMS/.test(ui.el('controlIsmsView').textContent));
+  assert.ok(!ui.calls.some((c) => c.url.includes('/stories/')));
 });

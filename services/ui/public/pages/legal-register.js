@@ -4,6 +4,7 @@
 // Everything shown is built as elements, so stored text is never parsed as HTML.
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountQuestionThreads } from '/pages/question-threads.js';
+import { mountStoryRelated } from '/pages/story-related.js';
 import { renderRecordLinksGraph } from '/pages/record-links-graph.js';
 import {
   errorText,
@@ -37,8 +38,8 @@ const itemId = params.get('id'),
   base = '/api/v1/isms/legal-register';
 const fw = `framework=${encodeURIComponent(framework)}`;
 const PAGE = 100;
-const LINK_TYPES = { document: 'Documents', asset: 'Assets', risk: 'Risks' };
-const LINK_FEATURES = { document: 'documents', asset: 'assets', risk: 'risk_cia' };
+const LINK_TYPES = { document: 'Documents', asset: 'Assets', risk: 'Risks', swot: 'SWOT items' };
+const LINK_FEATURES = { document: 'documents', asset: 'assets', risk: 'risk_cia', swot: 'swot' };
 // Related records are offered only for the features that are switched on.
 const types = Object.keys(LINK_TYPES).filter((type) => featureEnabled(me, LINK_FEATURES[type]));
 const STATUS_BADGES = {
@@ -687,6 +688,8 @@ try {
   $('relatedNotice').hidden = !relatedTo || detail;
   if (detail) {
     await loadDetail();
+    // The stories that include the item; a draft has none yet.
+    if (itemId) mountStoryRelated({ me, kind: 'legal_item', id: itemId, framework });
     const tab = TABS.includes(params.get('tab')) && !isNew ? params.get('tab') : 'details';
     window.bootstrap?.Tab.getOrCreateInstance($(tab + 'Tab')).show();
   } else {

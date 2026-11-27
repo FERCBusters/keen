@@ -428,7 +428,7 @@ async def list_legal_register(
 
 async def get_legal_item(item_id: Identifier, framework: Framework = None) -> dict:
     """One legal register item in full, with its linked controls and clauses,
-    related documents, assets and risks, and its assessments, newest first."""
+    related documents, assets, risks and SWOT items, and its assessments, newest first."""
     _needs("isms.read")
     answer = await _get(
         f"/v1/isms/legal-register/{item_id}", framework=await _framework(framework)

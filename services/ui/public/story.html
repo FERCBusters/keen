@@ -44,6 +44,7 @@
     <ul class="nav nav-tabs mb-3" role="tablist">
       <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#timelinePane" type="button" role="tab" id="timelineTab">Timeline</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#flowPane" type="button" role="tab" id="flowTab">Flow chart</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#frameworkPane" type="button" role="tab" id="frameworkTab">Controls and clauses <span id="frameworkCount" class="badge text-bg-light"></span></button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#commentsPane" type="button" role="tab" id="commentsTab">Comments <span id="commentCount" class="badge text-bg-light"></span></button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#questionsPane" type="button" role="tab" id="questionsTab" data-feature="questions">Questions</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#changelogPane" type="button" role="tab" id="changelogTab">Changelog</button></li>
@@ -55,7 +56,7 @@
         <section id="addItems" class="card card-body mt-3" hidden>
           <h2 class="h6">Add to the story</h2>
           <div class="row g-2 align-items-end">
-            <div class="col-md-3"><label for="addKind" class="form-label">Kind</label><select id="addKind" class="form-select"><option value="event">Event</option><option value="risk" data-feature="risk_cia">Risk</option><option value="document" data-feature="documents">Document</option><option value="asset" data-feature="assets">Asset</option><option value="objective" data-feature="objectives">Objective</option><option value="swot" data-feature="swot">SWOT item</option><option value="person" data-feature="people">Person</option><option value="vendor" data-feature="vendors">Vendor / 3rd party</option><option value="effectiveness_measure" data-feature="effectiveness">Effectiveness measure</option><option value="meeting" data-feature="meetings">Meeting minutes</option><option value="note">Note</option></select></div>
+            <div class="col-md-3"><label for="addKind" class="form-label">Kind</label><select id="addKind" class="form-select"><option value="event">Event</option><option value="risk" data-feature="risk_cia">Risk</option><option value="document" data-feature="documents">Document</option><option value="asset" data-feature="assets">Asset</option><option value="objective" data-feature="objectives">Objective</option><option value="swot" data-feature="swot">SWOT item</option><option value="person" data-feature="people">Person</option><option value="vendor" data-feature="vendors">Vendor / 3rd party</option><option value="effectiveness_measure" data-feature="effectiveness">Effectiveness measure</option><option value="meeting" data-feature="meetings">Meeting minutes</option><option value="legal_item" data-feature="legal_register">Legal register item</option><option value="note">Note</option></select></div>
             <div class="col-md-6" id="searchField"><label for="addSearch" class="form-label">Search</label><input id="addSearch" class="form-control" maxlength="256" placeholder="Summary, title or name"></div>
             <div class="col-md-3" id="searchAction"><button id="findItems" class="btn btn-outline-primary" type="button">Search</button></div>
             <div class="col-md-4" id="noteLabelField" hidden><label for="noteLabel" class="form-label">Note title</label><input id="noteLabel" class="form-control" maxlength="256"></div>
@@ -74,6 +75,21 @@
         </div>
         <p id="flowHint" class="small-muted">Drag boxes to arrange the story. Choose <strong>Link items</strong>, then an item and the item it leads to, to draw an arrow between them. A box's title opens its record in a new tab.</p>
         <div id="flow" class="story-flow-host" role="region" aria-label="Story flow chart"></div>
+      </section>
+      <section class="tab-pane fade" id="frameworkPane" role="tabpanel">
+        <p class="small-muted">The controls and clauses of the selected framework this story bears on, chosen by its author. Controls that the story's events are mapped to by rules are listed on the Timeline.</p>
+        <dl class="row mb-3">
+          <dt class="col-sm-2">Controls</dt><dd class="col-sm-10" id="linkedControls"></dd>
+          <dt class="col-sm-2">Clauses</dt><dd class="col-sm-10" id="linkedClauses"></dd>
+        </dl>
+        <form id="frameworkForm" hidden>
+          <div class="row g-3">
+            <div class="col-lg-6" id="controlPicker"></div>
+            <div class="col-lg-6" id="clausePicker"></div>
+          </div>
+          <p id="frameworkStatus" class="small-muted mt-2 mb-0" role="status"></p>
+          <button class="btn btn-primary mt-3" type="submit" id="saveFramework" disabled>Save controls and clauses</button>
+        </form>
       </section>
       <section class="tab-pane fade" id="commentsPane" role="tabpanel">
         <div id="comments"></div>

@@ -169,8 +169,12 @@ def _category(seeder, name):
 
 
 def seed_legal(seeder, frameworks, docs, assets, risks):
-    """Seed the example register; called after documents, assets and risks."""
+    """Seed the example register; called after documents, assets and risks.
+
+    Returns the items by key, for the stories that include one.
+    """
     db = seeder.db
+    items = {}
 
     def identity(key):
         return uuid5(NAMESPACE_URL, f"keen:demo:legal:{seeder.prefix}:{key}")
@@ -211,6 +215,7 @@ def seed_legal(seeder, frameworks, docs, assets, risks):
                 ),
             },
         )
+        items[key] = row
         if outcome:
             seeder.upsert(
                 IsmsLegalAssessment,
@@ -251,3 +256,4 @@ def seed_legal(seeder, frameworks, docs, assets, risks):
                     "target_id": next(iter(records.values())).id,
                 },
             )
+    return items

@@ -50,6 +50,7 @@ async function clausePage(t, options = {}) {
         await options.gate;
         return { clause: structuredClone(state.clause), items: structuredClone(state.linked) };
       }
+      if (p === '/api/v1/stories/related/clause/k1') return { items: options.stories || [] };
       if (p === '/api/v1/clauses/k1/changelog') {
         if (fail.changelog) throw new Error('Log offline');
         return { items: options.changelog || [] };
@@ -677,4 +678,31 @@ test('a clause without linked risks says so, and the card stays hidden when risk
       false,
     );
   }
+});
+
+test('story readers get a Stories tab listing the stories assigned to the clause', async (t) => {
+  const { ui } = await clausePage(t, {
+    stories: [{ id: 's1', title: 'Audit <i>gap</i>', status: 'closed', updated_at: '2026-05-01' }],
+  });
+  const tab = ui.document.getElementById('storiesRelatedTab');
+  assert.equal(tab.textContent, 'Stories');
+  assert.ok(!ui.calls.some((c) => c.url.includes('/stories/')), 'loads when shown');
+  tab.dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  const pane = ui.document.getElementById('storiesRelatedPane');
+  await settle(() => pane.querySelector('.list-group'));
+  assert.equal(tab.textContent, 'Stories (1)');
+  assert.match(pane.textContent, /assigned them to this clause/);
+  assert.equal(
+    pane.querySelector('.list-group a').getAttribute('href'),
+    '/story.html?id=s1&framework=A',
+  );
+  assert.equal(pane.querySelector('.list-group a').textContent, 'Audit <i>gap</i>');
+  assert.equal(pane.querySelector('i'), null);
+});
+
+test('a clause page shows no Stories tab without story access or without a clause', async (t) => {
+  const reader = await clausePage(t, { me: { can_view_isms: true } });
+  assert.equal(reader.ui.document.getElementById('storiesRelatedTab'), null);
+  const blank = await clausePage(t, { query: '' });
+  assert.equal(blank.ui.document.getElementById('storiesRelatedTab'), null);
 });

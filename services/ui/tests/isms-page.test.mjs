@@ -359,6 +359,30 @@ test('ISMS flow places SWOT beside measures and respects feature availability', 
   assert.match(link.getAttribute('href'), /framework=A/);
   assert.equal(link.querySelector('rect').getAttribute('y'), '238');
 });
+test('ISMS flow opens the legal register beside SWOT, unless it is switched off', async (t) => {
+  const ui = await fixture(t);
+  const cards = ui.el('overviewCards');
+  const link = cards.querySelector('a[aria-label="Open Legal register"]');
+  assert.match(link.getAttribute('href'), /^\/legal-register\.html\?framework=A$/);
+  // The three buttons share the row without overlapping.
+  const box = (label) => {
+    const rect = cards.querySelector(`a[aria-label="Open ${label}"] rect`);
+    return ['x', 'y', 'width'].map((name) => Number(rect.getAttribute(name)));
+  };
+  const row = ['Effectiveness measures', 'SWOT', 'Legal register'].map(box);
+  assert.deepEqual(row, [
+    [384, 238, 140],
+    [536, 238, 70],
+    [618, 238, 134],
+  ]);
+  for (let i = 1; i < row.length; i++) assert.ok(row[i - 1][0] + row[i - 1][2] < row[i][0]);
+
+  const off = await fixture(t, {
+    me: { is_admin: true, features: { enabled: { legal_register: false } } },
+  });
+  assert.equal(off.el('overviewCards').querySelector('a[aria-label="Open Legal register"]'), null);
+  assert.ok(off.el('overviewCards').querySelector('a[aria-label="Open SWOT"]'));
+});
 test('ISMS flow omits disabled SWOT', async (t) => {
   const ui = await fixture(t, { me: { is_admin: true, features: { enabled: { swot: false } } } });
   assert.equal(ui.el('overviewCards').querySelector('a[aria-label="Open SWOT"]'), null);

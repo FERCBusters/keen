@@ -1,7 +1,6 @@
 """HTTP adapters for the legal register; every route uses the application's
 protected middleware, and the ISMS prefix rule gates each write."""
 
-from typing import Literal
 from uuid import UUID
 
 from fastapi import Depends, Query, Request
@@ -208,7 +207,7 @@ def add_link(
 @router.delete(BASE + "/{item_id}/links/{target_type}/{target_id}")
 def remove_link(
     item_id: UUID,
-    target_type: Literal["document", "asset", "risk"],
+    target_type: service.LinkType,
     target_id: UUID,
     request: Request,
     expected_version: int = Query(..., ge=1),

@@ -1133,8 +1133,9 @@ function renderOverview() {
               ${button({ label: 'Asset matrix', href: '/isms.html?tab=assets', x: 656, y: 146, w: 96, h: 34 })}
               ${button({ label: 'Policies & processes', href: '/isms.html?tab=documents', x: 384, y: 196, w: 174, h: 34 })}
               ${button({ label: 'Access control matrix', href: '/isms.html?tab=access', x: 570, y: 196, w: 182, h: 34, lines: ['Access control', 'matrix'] })}
-              ${button({ label: 'Effectiveness measures', href: '/isms.html?tab=effectiveness', x: 384, y: 238, w: 224, h: 34, lines: ['Effectiveness', 'measures'] })}
-              ${featureEnabled(me, 'swot') ? button({ label: 'SWOT', href: '/isms.html?tab=swot', x: 620, y: 238, w: 132, h: 34 }) : ''}
+              ${button({ label: 'Effectiveness measures', href: '/isms.html?tab=effectiveness', x: 384, y: 238, w: 140, h: 34, lines: ['Effectiveness', 'measures'] })}
+              ${featureEnabled(me, 'swot') ? button({ label: 'SWOT', href: '/isms.html?tab=swot', x: 536, y: 238, w: 70, h: 34 }) : ''}
+              ${featureEnabled(me, 'legal_register') ? button({ label: 'Legal register', href: '/legal-register.html', x: 618, y: 238, w: 134, h: 34 }) : ''}
             </g>
 
             <g class="isms-flow-section isms-flow-compliance">

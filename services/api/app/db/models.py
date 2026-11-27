@@ -1562,7 +1562,7 @@ class IsmsLegalAssessment(Base):
 
 
 class IsmsLegalItemLink(Base):
-    """A document, asset or risk a legal register item relates to."""
+    """A document, asset, risk or SWOT item a legal register item relates to."""
 
     __tablename__ = "isms_legal_item_links"
     item_id: Mapped[uuid.UUID] = mapped_column(
@@ -1575,7 +1575,7 @@ class IsmsLegalItemLink(Base):
     __table_args__ = (
         Index("ix_legal_item_link_target", "target_type", "target_id"),
         CheckConstraint(
-            "target_type in ('document','asset','risk')",
+            "target_type in ('document','asset','risk','swot')",
             name="ck_legal_item_link_type",
         ),
     )
@@ -3494,7 +3494,7 @@ class StoryItem(Base):
     __table_args__ = (
         CheckConstraint(
             "kind in ('event','risk','document','asset','objective','swot','person',"
-            "'vendor','effectiveness_measure','meeting','note')",
+            "'vendor','effectiveness_measure','meeting','legal_item','note')",
             name="ck_story_item_kind",
         ),
         CheckConstraint(
@@ -3532,6 +3532,46 @@ class StoryLink(Base):
             "story_id", "from_item_id", "to_item_id", name="uq_story_link"
         ),
     )
+
+
+class StoryControlLink(Base):
+    """A control the story's author assigned to it, in one framework."""
+
+    __tablename__ = "story_control_links"
+    story_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("stories.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    control_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("control_items.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    framework_slug: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    control = relationship("ControlItem")
+
+
+class StoryClauseLink(Base):
+    """A clause the story's author assigned to it, in one framework."""
+
+    __tablename__ = "story_clause_links"
+    story_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("stories.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    clause_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("framework_clauses.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    framework_slug: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    clause = relationship("FrameworkClause")
 
 
 class StoryComment(Base):

@@ -626,3 +626,34 @@ test('untitled controls and unnamed records show no placeholder text and match n
   assert.equal(swot[4].textContent, '-');
   assert.equal(swot[5].textContent, '4.1');
 });
+
+test('the summary counts the legal register items of the framework for those who may read them', async (t) => {
+  const meta = async (extra) =>
+    (await soaPage(t, { data: { ...soa(), ...extra } })).el('soaMeta').textContent;
+  assert.doesNotMatch(await meta({}), /legal register/);
+  const counts = soa().counts;
+  assert.match(
+    await meta({ can_view_legal_register: true, counts: { ...counts, legal_items: 1 } }),
+    / · 1 assets · 1 legal register item$/,
+  );
+  assert.match(
+    await meta({ can_view_legal_register: true, counts: { ...counts, legal_items: 12 } }),
+    / · 12 legal register items$/,
+  );
+  assert.match(
+    await meta({ can_view_legal_register: true, counts: undefined }),
+    / · 0 legal register items$/,
+  );
+  // Without that access the count is not shown, whatever was served.
+  assert.doesNotMatch(
+    await meta({ can_view_legal_register: false, counts: { ...counts, legal_items: 3 } }),
+    /legal register/,
+  );
+});
+
+test('the header links to the legal register while that feature is on', async (t) => {
+  const ui = await soaPage(t);
+  const link = ui.document.querySelector('main a[href="/legal-register.html"]');
+  assert.equal(link.textContent.trim(), 'Legal register');
+  assert.equal(link.dataset.feature, 'legal_register', 'hidden with the feature');
+});

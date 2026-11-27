@@ -127,7 +127,7 @@ KINDS: dict[str, Kind] = {
         "requirement: what it requires; applicability: how it applies to the "
         "organisation; in_scope: true or false; owner_user_id: an id from "
         "list_choices('users'); next_assessment_date: YYYY-MM-DD. links: "
-        "documents, assets and risks a new item relates to, each "
+        "documents, assets, risks and SWOT items a new item relates to, each "
         "{target_type: document|asset|risk, target_id}. A new item with no "
         "controls starts with the framework's control for legal requirements "
         "(A.5.31 in ISO/IEC 27001). An update needs expected_version, the "

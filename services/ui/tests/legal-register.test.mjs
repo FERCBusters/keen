@@ -121,6 +121,8 @@ function reads(state) {
     }
     if (path === '/api/v1/questions/entities/isms_legal_item/l1') return { threads: [] };
     if (path === '/api/v1/isms/legal-item/l1/changelog') return { items: [] };
+    if (path === '/api/v1/stories/related/legal_item/l1') return { items: state.stories || [] };
+    if (path === '/api/v1/stories') return { items: [] };
     throw new Error('Unexpected GET ' + url);
   };
 }
@@ -561,6 +563,7 @@ test('an item shows its details, assessments, related records and history', asyn
     ['Assets0', []],
     // An address that is not a path on Keen opens nothing.
     ['Risks1', [['Fine', '#']]],
+    ['SWOT items0', []],
   ]);
   assert.equal(ui.el('relatedList').querySelector('img'), null);
   assert.equal(ui.el('relatedList').children[1].textContent, 'Assets0No linked records.');
@@ -572,6 +575,7 @@ test('an item shows its details, assessments, related records and history', asyn
       ['document', 'Documents'],
       ['asset', 'Assets'],
       ['risk', 'Risks'],
+      ['swot', 'SWOT items'],
     ],
   );
   assert.deepEqual(ui.world.choices, [['document', '']]);
@@ -588,6 +592,7 @@ test('an item shows its details, assessments, related records and history', asyn
   for (const expected of ['Controls (1)', 'Clauses (1)', 'Documents (1)', 'Risks (1)', 'A.5.31'])
     assert.ok(labels.includes(expected), expected);
   assert.ok(!labels.includes('Assets (0)'));
+  assert.ok(!labels.includes('SWOT items (0)'));
   const before = ui.el('graph').querySelector('svg');
   ui.el('graphTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.notEqual(ui.el('graph').querySelector('svg'), before);
@@ -646,12 +651,59 @@ test('related records follow the features that are switched on', async (t) => {
   const ui = await detail(t, {
     me: {
       is_admin: true,
-      features: { enabled: { documents: false, assets: false, risk_cia: false } },
+      features: { enabled: { documents: false, assets: false, risk_cia: false, swot: false } },
     },
   });
   assert.equal(ui.el('relatedList').children.length, 0);
   assert.equal(ui.el('linkForm').hidden, true);
   assert.deepEqual(ui.world.choices, []);
+});
+
+test('a SWOT item is related like the other records, and left out when SWOT is off', async (t) => {
+  const world = state();
+  world.item.links.push({
+    target_type: 'swot',
+    target_id: 'w1',
+    title: 'New <i>regulation</i>',
+    url: '/swot.html?id=w1',
+  });
+  world.choice = (type) => ({
+    items: type === 'swot' ? [{ target_id: 'w2', title: 'Skilled team' }] : [],
+  });
+  const ui = await detail(t, {
+    world,
+    post: async () => ({}),
+    scripts: [d3src, 'window.d3 = d3;'],
+  });
+  const group = ui.el('relatedList').children[3];
+  assert.equal(group.querySelector('h3').textContent, 'SWOT items1');
+  assert.equal(group.querySelector('a').getAttribute('href'), '/swot.html?id=w1&framework=A');
+  assert.equal(group.querySelector('a').textContent, 'New <i>regulation</i>');
+  assert.equal(group.querySelector('i'), null);
+  const labels = [...ui.el('graph').querySelectorAll('text')].map((text) => text.textContent);
+  assert.match(labels.join(' '), /SWOT items \(1\)/, labels.join('|'));
+
+  changed(ui, 'linkType', 'swot');
+  await settle(() => ui.el('linkItem').options.length === 2);
+  assert.deepEqual(world.choices.at(-1), ['swot', '']);
+  ui.el('linkItem').value = 'w2';
+  submit(ui, 'linkForm');
+  await settle(() => ui.el('status').textContent === 'Record linked.');
+  assert.deepEqual(copy(ui.calls.find((call) => call.method === 'POST')).body, {
+    target_type: 'swot',
+    target_id: 'w2',
+    expected_version: 4,
+  });
+
+  const off = await detail(t, {
+    world: state({ item: world.item }),
+    me: { is_admin: true, features: { enabled: { swot: false } } },
+  });
+  assert.deepEqual(
+    [...off.el('relatedList').querySelectorAll('h3')].map((h) => h.textContent),
+    ['Documents1', 'Assets0', 'Risks1'],
+  );
+  assert.ok(![...off.el('linkType').options].some((option) => option.value === 'swot'));
 });
 
 test('saving an item sends its fields with the version it was read at', async (t) => {
@@ -1074,4 +1126,43 @@ test('the Legal register tab is left out without a record, access or the feature
     assert.equal(ui.document.getElementById('legalRelatedTab'), null);
     assert.equal(ui.pane(), null);
   }
+});
+
+// --- Stories ----------------------------------------------------------------------
+
+test('a saved item has a Stories tab listing the stories that include it', async (t) => {
+  const world = state({
+    stories: [
+      {
+        id: 's1',
+        title: 'Regulator <b>letter</b>',
+        status: 'open',
+        item_count: 2,
+        updated_at: '2026-05-01',
+        created_by: 'alice',
+        can_edit: false,
+        version: 1,
+      },
+    ],
+  });
+  const ui = await detail(t, { world });
+  const tab = ui.document.getElementById('storiesRelatedTab');
+  assert.equal(tab.textContent, 'Stories');
+  const pane = ui.document.getElementById('storiesRelatedPane');
+  assert.match(pane.textContent, /Stories that include this legal register item/);
+  tab.dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => pane.querySelector('.list-group a'));
+  assert.ok(ui.calls.some((c) => c.url === '/api/v1/stories/related/legal_item/l1'));
+  assert.equal(tab.textContent, 'Stories (1)');
+  const link = pane.querySelector('.list-group a');
+  assert.equal(link.textContent, 'Regulator <b>letter</b>');
+  assert.equal(link.getAttribute('href'), '/story.html?id=s1&framework=A');
+  assert.equal(pane.querySelector('.list-group b'), null);
+});
+
+test('a new item and an account without story access have no Stories tab', async (t) => {
+  const draft = await register(t, { query: '&new=1' });
+  assert.equal(draft.document.getElementById('storiesRelatedTab'), null);
+  const reader = await detail(t, { me: { can_view_isms: true } });
+  assert.equal(reader.document.getElementById('storiesRelatedTab'), null);
 });

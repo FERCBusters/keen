@@ -473,7 +473,7 @@ function renderSwot() {
 function renderAll() {
   const counts = soa.counts || {};
   if (meta) {
-    meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} risks · ${counts.pestle || 0} PESTLE(E) items · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets`;
+    meta.textContent = `${soa.framework || framework} · ${counts.controls || 0} controls · ${counts.clauses || 0} clauses · ${counts.risks || 0} risks · ${counts.pestle || 0} PESTLE(E) items · ${counts.isms_objectives || 0} ISMS objectives · ${counts.isms_documents || 0} ISMS documents · ${counts.isms_effectiveness_measures || 0} effectiveness measures · ${counts.isms_assets || 0} assets${soa.can_view_legal_register ? ` · ${counts.legal_items || 0} legal register item${counts.legal_items === 1 ? '' : 's'}` : ''}`;
   }
   renderSwot();
   renderControls();

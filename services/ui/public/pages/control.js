@@ -1,3 +1,4 @@
+import { mountAssignedStories } from '/pages/story-related.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
@@ -1073,3 +1074,13 @@ saveControlUpstreamUrlBtn?.addEventListener('click', async () => {
 });
 
 load();
+
+// The stories whose authors assigned them to this control, under Governance.
+const stories = mountAssignedStories({
+  me,
+  kind: 'control',
+  id,
+  host: document.getElementById('controlStories'),
+  trigger: controlGovernanceTab,
+});
+document.getElementById('controlStoriesCard').hidden = !stories;

@@ -1,8 +1,9 @@
 """Records other features refer to, resolved with the reader's own access.
 
 SWOT items relate to objectives, documents, assets, people, vendors and risks.
-Stories relate to those records and also to SWOT items, effectiveness measures
-and meeting minutes. A reference is resolved only when the feature is enabled
+Legal register items relate to documents, assets, risks and SWOT items. Stories relate to
+all of those records and also to SWOT items, legal register items,
+effectiveness measures and meeting minutes. A reference is resolved only when the feature is enabled
 and the reader can read the record itself, so a relationship never shows more
 than the record's own page would.
 """
@@ -14,6 +15,7 @@ from mosp.services.errors import DomainError
 from app.db.models import (
     IsmsDocument,
     IsmsEffectivenessMeasure,
+    IsmsLegalItem,
     IsmsMeeting,
     IsmsObjective,
     IsmsPerson,
@@ -35,6 +37,7 @@ TargetRecord = (
     | IsmsSwot
     | IsmsEffectivenessMeasure
     | IsmsMeeting
+    | IsmsLegalItem
 )
 TARGETS: dict[str, type[TargetRecord]] = {
     "objective": IsmsObjective,
@@ -46,6 +49,7 @@ TARGETS: dict[str, type[TargetRecord]] = {
     "swot": IsmsSwot,
     "effectiveness_measure": IsmsEffectivenessMeasure,
     "meeting": IsmsMeeting,
+    "legal_item": IsmsLegalItem,
 }
 SEARCH_FIELDS = {
     "objective": "goal",
@@ -54,6 +58,7 @@ SEARCH_FIELDS = {
     "swot": "title",
     "effectiveness_measure": "summary",
     "meeting": "title",
+    "legal_item": "title",
 }
 PAGES = {
     "objective": "/isms-objective.html?id={id}",
@@ -65,6 +70,7 @@ PAGES = {
     "swot": "/swot.html?id={id}",
     "effectiveness_measure": "/isms-effectiveness-measure.html?id={id}",
     "meeting": "/isms-meeting.html?id={id}",
+    "legal_item": "/legal-register.html?id={id}",
 }
 
 

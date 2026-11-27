@@ -9,6 +9,7 @@ import {
   esc,
   fmtTs,
   getCurrentFramework,
+  node,
   withFramework,
 } from '/app.js';
 
@@ -23,6 +24,7 @@ export const KIND_NAMES = {
   vendor: 'vendor',
   effectiveness_measure: 'effectiveness measure',
   meeting: 'set of minutes',
+  legal_item: 'legal register item',
 };
 
 export function canViewStories(me) {
@@ -221,4 +223,120 @@ export function mountStoryRelated({
     }
   }
   return { tab, pane, load, refresh };
+}
+
+// The stories assigned to a control or clause, built as elements.
+function assignedList(stories, kind, framework) {
+  if (!stories.length)
+    return node('p', { class: 'small-muted mb-0' }, `No story is assigned to this ${kind} yet.`);
+  return node(
+    'ul',
+    { class: 'list-group mb-0' },
+    ...stories.map((story) =>
+      node(
+        'li',
+        {
+          class: 'list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-start',
+        },
+        node(
+          'div',
+          { class: 'text-break' },
+          node('a', { class: 'fw-semibold', href: storyHref(story, framework) }, story.title),
+          node(
+            'span',
+            {
+              class: `badge ${story.status === 'closed' ? 'text-bg-secondary' : 'text-bg-success'} ms-1`,
+            },
+            story.status,
+          ),
+          node(
+            'div',
+            { class: 'small-muted' },
+            `updated ${fmtTs(story.updated_at)}${story.created_by ? ` · by ${story.created_by}` : ''}`,
+          ),
+        ),
+        node(
+          'a',
+          {
+            class: 'btn btn-sm btn-outline-secondary',
+            href: storyHref(story, framework, 'framework'),
+          },
+          'Controls and clauses',
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Show, on a control's or clause's page, the stories assigned to it.
+ *
+ * Without a host, a "Stories" tab joins the page's tabs and loads when first
+ * shown. With a host, the list renders there and loads when `trigger` (a tab
+ * button) is shown, or straight away when that tab is already open. Stories
+ * are assigned controls and clauses on the story's own page, so the list has
+ * none of the forms a record's Stories tab has.
+ */
+export function mountAssignedStories({
+  me,
+  kind,
+  id,
+  host = null,
+  trigger = null,
+  framework = getCurrentFramework(),
+}) {
+  if (!id || !canViewStories(me)) return null;
+  let pane = host;
+  let tab = trigger;
+  if (!pane) {
+    const inserted = insertTab('Stories');
+    if (!inserted) return null;
+    ({ pane, tab } = inserted);
+  }
+  const list = node('div', {}, node('p', { class: 'small-muted mb-0' }, 'Loading stories'));
+  // A host frames the list itself; a tab of its own carries a heading.
+  pane.replaceChildren(
+    ...(host
+      ? []
+      : [
+          node('h2', { class: 'h5' }, 'Stories'),
+          node(
+            'p',
+            { class: 'small-muted' },
+            `Stories whose authors assigned them to this ${kind}, on the story's Controls and clauses tab.`,
+          ),
+        ]),
+    list,
+  );
+  let loaded = null;
+
+  async function refresh() {
+    try {
+      const data = await apiGet(
+        `/api/v1/stories/related/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
+      );
+      list.replaceChildren(assignedList(data.items, kind, framework));
+      // A tab of its own counts its stories; a host's tab keeps its name.
+      if (!host) tab.textContent = data.items.length ? `Stories (${data.items.length})` : 'Stories';
+    } catch {
+      // A later opening of the tab tries again.
+      loaded = null;
+      list.replaceChildren(
+        node(
+          'p',
+          { class: 'small-muted mb-0' },
+          'Stories are unavailable with your current access.',
+        ),
+      );
+    }
+  }
+
+  function load() {
+    loaded ||= refresh();
+    return loaded;
+  }
+
+  tab.addEventListener('shown.bs.tab', load);
+  if (tab.classList.contains('active')) load();
+  return { tab, pane, load };
 }

@@ -743,6 +743,36 @@ def test_stories_show_linked_records_on_a_timeline_and_flow(seeded):
     assert [s["title"] for s in related["items"]] == [
         "Demo Contractor leaver: every route in closed on the last day"
     ]
+    # One story includes a legal register item and carries the controls and
+    # clause its author assigned; the control and the item list it back.
+    assert "legal_item" in every_kind
+    ssh = next(s for s in listing["items"] if "SSH brute force" in s["title"])
+    story = stories.get_story(
+        story_id=ssh["id"], framework="iso_27001_2022", user=user, db=db
+    )
+    assert [c["ref"] for c in story["linked_controls"]] == [
+        "A.5.24",
+        "A.5.26",
+        "A.8.20",
+    ]
+    assert [c["ref"] for c in story["linked_clauses"]] == ["10.2"]
+    assert {"A.5.24", "A.5.26", "A.8.20"} <= {c["ref"] for c in story["controls"]}
+    law = next(item for item in story["items"] if item["kind"] == "legal_item")
+    assert law["title"] == "Demo Computer Misuse Act 1990"
+    for kind, entity_id in (
+        ("control", story["linked_controls"][0]["id"]),
+        ("clause", story["linked_clauses"][0]["id"]),
+        ("legal_item", law["entity_id"]),
+    ):
+        listed = stories.related_stories(
+            kind=kind, entity_id=entity_id, user=user, db=db
+        )
+        assert [s["id"] for s in listed["items"]] == [ssh["id"]]
+    # In another framework the story has no assignments of its own.
+    other = stories.get_story(
+        story_id=ssh["id"], framework="cyber_essentials", user=user, db=db
+    )
+    assert (other["linked_controls"], other["linked_clauses"]) == ([], [])
 
 
 def test_the_awareness_quiz_records_each_round_on_its_measure(seeded):

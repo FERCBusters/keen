@@ -1,3 +1,4 @@
+import { mountAssignedStories } from '/pages/story-related.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
 import { linkedRisksTable, pestleItemRows } from '/pages/risk-common.js';
@@ -571,3 +572,6 @@ saveClauseControls?.addEventListener('click', async () => {
 controlSearch?.addEventListener('input', debounce(renderAdminControls, 200));
 
 load();
+
+// The stories whose authors assigned them to this clause.
+mountAssignedStories({ me, kind: 'clause', id });

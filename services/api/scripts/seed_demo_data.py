@@ -1861,7 +1861,7 @@ class DemoSeeder:
         seed_pestle(self)
         self.seed_access_matrix(assets, org_nodes)
         docs = seed_documents(self)
-        seed_legal(self, frameworks, docs, assets, risks)
+        legal = seed_legal(self, frameworks, docs, assets, risks)
         diary_events = self.seed_diary_events()
         events = {**diary_events, **self.seed_source_events(), **seed_evidence(self)}
         seed_further_mappings(self, events)
@@ -1873,7 +1873,7 @@ class DemoSeeder:
         # The quiz is assigned to the fictional people the catalogue adds.
         seed_quizzes(self)
         seed_link_diary(self)
-        seed_stories(self, events, docs, assets, risks, objectives)
+        seed_stories(self, events, docs, assets, risks, objectives, legal)
         # The ISMS dataset is written against ISO 27001, so it leads.
         select_frameworks(self, frameworks, default="iso_27001_2022")
 

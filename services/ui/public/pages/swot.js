@@ -30,6 +30,7 @@ import {
 } from '/pages/planning-views.js';
 import { controlBadges, clauseBadges } from '/pages/isms-detail-common.js';
 import { mountStoryRelated } from '/pages/story-related.js';
+import { mountLegalRelated } from '/pages/legal-related.js';
 const $ = (id) => document.getElementById(id),
   params = new URLSearchParams(location.search);
 const me = await initNavbar(),
@@ -465,7 +466,11 @@ try {
       ? params.get('tab')
       : 'details';
     if (window.bootstrap) window.bootstrap.Tab.getOrCreateInstance($(tab + 'Tab')).show();
-    if (itemId) mountStoryRelated({ me, kind: 'swot', id: itemId, framework });
+    if (itemId) {
+      mountStoryRelated({ me, kind: 'swot', id: itemId, framework });
+      // The legal register items related to this SWOT item.
+      mountLegalRelated({ me, type: 'swot', id: itemId });
+    }
   } else {
     const meta = await apiGet(`/api/v1/isms/meta?${fw}`);
     mappingOptions('controlFilter', meta.controls, [], true);

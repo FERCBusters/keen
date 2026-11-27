@@ -369,7 +369,7 @@ def test_a_new_item_starts_with_the_control_for_legal_requirements(keen):  # noq
     meta = manager.get(f"{BASE}/meta?framework={ISO}").json()
     assert [c["ref"] for c in meta["default_controls"]] == ["A.5.31"]
     assert (meta["framework"], meta["can_manage"]) == (ISO, True)
-    assert meta["link_types"] == ["document", "asset", "risk"]
+    assert meta["link_types"] == ["document", "asset", "risk", "swot"]
     assert [s["code"] for s in meta["statuses"]] == [
         "not_assessed",
         "compliant",
@@ -490,6 +490,75 @@ def test_related_records_show_from_both_sides_with_the_readers_access(keen):  # 
         400,
         {"detail": "Unknown relationship type"},
     )
+
+
+def test_an_item_relates_to_a_swot_item_while_swot_is_switched_on(keen):  # noqa: F811
+    from app.db.models import IsmsSwot
+
+    threat = IsmsSwot(title="New privacy regulation", kind="threat")
+    other = IsmsSwot(title="Skilled team", kind="strength")
+    keen.db.add_all([threat, other])
+    keen.db.commit()
+    admin = keen.client(keen.user(role="admin"))
+    manager = keen.client(keen.user("isms.manage"))
+    found = manager.get(BASE + "/choices/swot?q=PRIVACY").json()["items"]
+    assert [(c["target_id"], c["title"]) for c in found] == [
+        (str(threat.id), "New privacy regulation")
+    ]
+    item = create(manager, links=[{"target_type": "swot", "target_id": str(threat.id)}])
+    assert item["links"] == [
+        {
+            "target_type": "swot",
+            "target_id": str(threat.id),
+            "title": "New privacy regulation",
+            "url": f"/swot.html?id={threat.id}",
+        }
+    ]
+    # The SWOT item's own page asks for the items related to it.
+    listed = manager.get(f"{BASE}?target_type=swot&target_id={threat.id}").json()
+    assert [row["id"] for row in listed["items"]] == [item["id"]]
+    assert (
+        manager.get(f"{BASE}?target_type=swot&target_id={other.id}").json()["items"]
+        == []
+    )
+    # A relationship is added to and removed from a saved item as for the others.
+    added = manager.post(
+        f"{BASE}/{item['id']}/links",
+        json={"target_type": "swot", "target_id": str(other.id), "expected_version": 1},
+        headers=unsafe(manager),
+    )
+    assert (added.status_code, added.json()) == (200, {"ok": True, "version": 2})
+    removed = manager.delete(
+        f"{BASE}/{item['id']}/links/swot/{other.id}?expected_version=2",
+        headers=unsafe(manager),
+    )
+    assert (removed.status_code, removed.json()) == (200, {"ok": True, "version": 3})
+    assert [link.target_id for link in keen.db.query(IsmsLegalItemLink)] == [threat.id]
+
+    # With SWOT switched off the relationship is kept, withheld and not offered.
+    version = admin.get("/v1/admin/features").json()["version"]
+    switched = admin.put(
+        "/v1/admin/features",
+        json={"version": version, "changes": {"swot": False}},
+        headers=unsafe(admin),
+    )
+    assert switched.status_code == 200, switched.text
+    assert manager.get(f"{BASE}/{item['id']}").json()["links"] == []
+    refused = manager.post(
+        f"{BASE}/{item['id']}/links",
+        json={"target_type": "swot", "target_id": str(other.id), "expected_version": 3},
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Related feature is disabled"},
+    )
+    refused = manager.get(f"{BASE}?target_type=swot&target_id={threat.id}")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Related feature is disabled"},
+    )
+    assert keen.db.query(IsmsLegalItemLink).count() == 1
 
 
 def test_relationships_are_added_and_removed_one_at_a_time(keen):  # noqa: F811
@@ -1292,3 +1361,49 @@ def test_a_category_name_taken_by_a_concurrent_save_is_never_duplicated(  # noqa
     assert keen.db.get(IsmsLegalCategory, uuid.UUID(item["category_id"])).name == (
         "Labour law"
     )
+
+
+# --- Statement of Applicability -------------------------------------------------------
+
+
+def test_the_statement_of_applicability_counts_items_mapped_to_the_framework(keen):  # noqa: F811
+    manager = keen.client(keen.user("isms.manage"))
+    framework(keen.db, "legal-soa", control="L.1", clause="1.1")
+    framework(keen.db, "legal-soa-other", control="O.1", clause="9.9")
+    create(manager, framework="legal-soa", title="By control", controls=["L.1"])
+    create(manager, framework="legal-soa", title="By clause", clauses=["1.1"])
+    create(
+        manager,
+        framework="legal-soa",
+        title="By both",
+        controls=["L.1"],
+        clauses=["1.1"],
+    )
+    create(manager, framework="legal-soa", title="Unmapped", controls=[])
+    create(manager, framework="legal-soa-other", title="Elsewhere", controls=["O.1"])
+
+    def soa(client, slug="legal-soa"):
+        response = client.get(f"/v1/statement-of-applicability?framework={slug}")
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    # An item counts once, however many controls and clauses it maps to.
+    seen = soa(manager)
+    assert (seen["can_view_legal_register"], seen["counts"]["legal_items"]) == (True, 3)
+    assert soa(manager, "legal-soa-other")["counts"]["legal_items"] == 1
+    assert service.mapped_count(keen.db, "no-such-framework") == 0
+    # Without ISMS access, or with the register switched off, nothing is counted.
+    outsider = soa(keen.client(keen.user("events.read")))
+    assert (outsider["can_view_legal_register"], outsider["counts"]["legal_items"]) == (
+        False,
+        0,
+    )
+    admin = keen.client(keen.user(role="admin"))
+    version = admin.get("/v1/admin/features").json()["version"]
+    admin.put(
+        "/v1/admin/features",
+        json={"version": version, "changes": {"legal_register": False}},
+        headers=unsafe(admin),
+    )
+    off = soa(manager)
+    assert (off["can_view_legal_register"], off["counts"]["legal_items"]) == (False, 0)
