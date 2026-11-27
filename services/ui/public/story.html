@@ -84,8 +84,8 @@
         </dl>
         <form id="frameworkForm" hidden>
           <div class="row g-3">
-            <div class="col-lg-6" id="controlPicker"></div>
-            <div class="col-lg-6" id="clausePicker"></div>
+            <div class="col-lg-6"><label class="form-label" for="storyControls">Controls in selected framework</label><select id="storyControls" class="form-select" multiple size="6"></select></div>
+            <div class="col-lg-6"><label class="form-label" for="storyClauses">Clauses in selected framework</label><select id="storyClauses" class="form-select" multiple size="6"></select></div>
           </div>
           <p id="frameworkStatus" class="small-muted mt-2 mb-0" role="status"></p>
           <button class="btn btn-primary mt-3" type="submit" id="saveFramework" disabled>Save controls and clauses</button>

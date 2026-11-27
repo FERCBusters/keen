@@ -612,11 +612,8 @@
 
 
                 <div class="col-12">
-                  <label class="form-label small-muted mb-1">Map to controls</label>
-                  <input id="controlSearch" class="form-control" placeholder="Search by ref or title (e.g. A.8.13, backup)" />
-                  <div id="controlResults" class="list-group mt-2" style="max-height: 220px; overflow:auto;"></div>
-                  <div class="small-muted mt-2">Selected:</div>
-                  <div id="controlSelected" class="d-flex flex-wrap gap-2"></div>
+                  <label class="form-label small-muted mb-1" for="diaryControls">Map to controls</label>
+                  <select id="diaryControls" class="form-select" multiple size="6"></select>
                 </div>
                 <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
                   <button class="btn btn-primary" type="submit">Create diary evidence</button>

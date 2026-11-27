@@ -154,7 +154,7 @@ const topics = {
     'Story controls and clauses',
     'using-events.html#story-controls-and-clauses',
     "A story's author assigns it the controls and clauses it is about, in the framework selected in the navigation bar. They sit beside the controls the story's events map to.",
-    'If you can edit the story, type a control number or part of a title in a filter, tick what applies in the list below it, then Save controls and clauses. Each control and clause lists the story back on its own page.',
+    'If you can edit the story, type a control number or part of a title to search and add, or tick what applies in the list, then Save controls and clauses. Each control and clause lists the story back on its own page.',
   ],
   storyComments: [
     'Story comments and review',

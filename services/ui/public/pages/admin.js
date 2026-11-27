@@ -1,4 +1,5 @@
 import { mountFeatures } from '/pages/admin-features.js';
+import { chosenIds, fillCatalogueSelect } from '/pages/catalogue-options.js';
 import {
   errorText,
   initNavbar,
@@ -108,48 +109,6 @@ function setOptions(selectEl, items, getValue, getLabel, selected) {
       return `<option value="${esc(v)}" ${s} title="${esc(label)}">${esc(label)}</option>`;
     })
     .join('');
-}
-
-function enhanceWrappedMultiSelect(selectEl) {
-  // Turns a <select multiple> into a scrollable checkbox list with wrapped labels.
-  // Keeps the original <select> in sync so existing code can continue using selValues(selectEl).
-  let wrap = selectEl.nextElementSibling;
-  if (!wrap || !wrap.classList.contains('keen-multiselect-wrap')) {
-    wrap = document.createElement('div');
-    wrap.className = 'keen-multiselect-wrap';
-    wrap.setAttribute('data-for', selectEl.id);
-    selectEl.insertAdjacentElement('afterend', wrap);
-  }
-
-  // Hide the native control (but keep it in the DOM for reads/writes).
-  selectEl.classList.add('keen-multiselect-native-hidden');
-
-  wrap.innerHTML = '';
-  const opts = Array.from(selectEl.options);
-  for (const opt of opts) {
-    const label = document.createElement('label');
-    label.className = 'keen-ms-option';
-
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.value = opt.value;
-    cb.checked = !!opt.selected;
-
-    const span = document.createElement('span');
-    span.className = 'keen-ms-label';
-    span.textContent = opt.textContent;
-
-    // Hover tooltip for very long entries
-    label.title = span.textContent;
-
-    cb.addEventListener('change', () => {
-      opt.selected = cb.checked;
-    });
-
-    label.appendChild(cb);
-    label.appendChild(span);
-    wrap.appendChild(label);
-  }
 }
 
 // The ingest runner buttons. The framework comparison renders a Compare button
@@ -749,7 +708,6 @@ async function openGroupDetail(gid, { keepStatus = false } = {}) {
       (p) => (p.description ? `${p.code} - ${p.description}` : p.code),
       detail.permission_codes,
     );
-    enhanceWrappedMultiSelect(groupPermissions);
 
     // Highlight selection in list
     renderGroups(cachedGroups);
@@ -910,14 +868,11 @@ document.getElementById('remapBtn')?.addEventListener('click', async () => {
 // Diary evidence creator (admin-only)
 // ------------------------------------------------------------------
 
+// The controls and clauses the evidence supports are chosen in a multiple
+// select, which the design system presents as its picker. A clause and a
+// control can share a reference, so choices are sent by id.
 let allControls = [];
-// Chosen catalogue rows ({ id, ref, type }). A clause and a control can share a
-// reference, so choices are sent by id.
-let selectedControls = [];
-
-function diaryControlLabel(item) {
-  return `${item.type === 'clause' ? 'Clause ' : ''}${item.ref}`;
-}
+const diaryControls = document.getElementById('diaryControls');
 
 // Diary link rows (optional)
 const diaryLinksWrap = document.getElementById('diaryLinks');
@@ -960,65 +915,6 @@ document.getElementById('diaryAddLink')?.addEventListener('click', () => diaryAd
 // Start with one empty row for convenience
 if (diaryLinksWrap && diaryLinksWrap.children.length === 0) diaryAddLinkRow();
 
-function renderSelected() {
-  const wrap = document.getElementById('controlSelected');
-
-  wrap.innerHTML = selectedControls
-    .map((item) => {
-      return `
-      <span class="badge badge-soft">
-        ${esc(diaryControlLabel(item))}
-        <button type="button" class="btn btn-sm btn-link link-danger p-0 ms-1" data-remove="${esc(item.id)}" aria-label="Remove">×</button>
-      </span>
-    `;
-    })
-    .join('');
-
-  wrap.querySelectorAll('[data-remove]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-remove');
-      selectedControls = selectedControls.filter((item) => item.id !== id);
-      renderSelected();
-    });
-  });
-}
-
-function renderResults(items) {
-  const resEl = document.getElementById('controlResults');
-
-  if (!items.length) {
-    resEl.innerHTML = '';
-    return;
-  }
-
-  resEl.innerHTML = items
-    .map((it) => {
-      const title = it.title ? ` <span class="small-muted">${esc(it.title)}</span>` : '';
-      const disabled = selectedControls.some((item) => item.id === it.id) ? 'disabled' : '';
-      return (
-        `<button type="button" class="list-group-item list-group-item-action ${disabled}" data-id="${esc(it.id)}">` +
-        `<span class="badge badge-chip me-2">${esc(diaryControlLabel(it))}</span>${title}` +
-        `</button>`
-      );
-    })
-    .join('');
-
-  resEl.querySelectorAll('[data-id]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-id');
-      const chosen = allControls.find((item) => item.id === id);
-      if (!chosen || selectedControls.some((item) => item.id === id)) return;
-      selectedControls.push(chosen);
-      selectedControls.sort((a, b) =>
-        diaryControlLabel(a).localeCompare(diaryControlLabel(b), undefined, { numeric: true }),
-      );
-      renderSelected();
-      document.getElementById('controlSearch').value = '';
-      renderResults([]);
-    });
-  });
-}
-
 async function loadControls() {
   try {
     const res = await apiGet(
@@ -1029,32 +925,6 @@ async function loadControls() {
     allControls = [];
   }
 }
-
-// A link from a control's Requirements tab names the control to record
-// evidence for; it starts out chosen.
-function chooseLinkedDiaryControl() {
-  const wanted = new URLSearchParams(location.search).get('control');
-  const chosen = wanted ? allControls.find((item) => item.id === wanted) : null;
-  if (chosen && !selectedControls.some((item) => item.id === chosen.id))
-    selectedControls.push(chosen);
-}
-
-document.getElementById('controlSearch')?.addEventListener('input', (ev) => {
-  const q = (ev.target.value || '').trim().toLowerCase();
-  if (!q || allControls.length === 0) {
-    renderResults([]);
-    return;
-  }
-  const hits = [];
-  for (const c of allControls) {
-    const hay = `${c.ref} ${c.title || ''}`.toLowerCase();
-    if (hay.includes(q)) {
-      hits.push(c);
-      if (hits.length >= 25) break;
-    }
-  }
-  renderResults(hits);
-});
 
 document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -1081,7 +951,7 @@ document.getElementById('diaryForm')?.addEventListener('submit', async (ev) => {
       if (!Number.isNaN(dt.getTime())) fd.append('timestamp', dt.toISOString());
     }
 
-    for (const item of selectedControls) fd.append('controls', item.id);
+    for (const id of chosenIds(diaryControls)) fd.append('controls', id);
 
     const files = document.getElementById('diaryImages').files;
     if (files && files.length) {
@@ -1352,8 +1222,11 @@ if (!isAdmin) {
   setOut('You do not have access to this page.');
 } else {
   await loadControls();
-  chooseLinkedDiaryControl();
-  renderSelected();
+  // A link from a control's Requirements tab names the control to record
+  // evidence for; it starts out chosen.
+  fillCatalogueSelect(diaryControls, allControls, [
+    new URLSearchParams(location.search).get('control') || '',
+  ]);
   await refreshUsers(true);
   await refreshGroups(true);
   await refreshPermissions();

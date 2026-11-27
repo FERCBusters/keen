@@ -272,6 +272,9 @@ test('person account and asset selection preserve existing links when editing', 
   assert.equal(ui.el('personUser').value, 'u1');
   assert.equal(ui.el('personOrg').value, 'o1');
   assert.equal(ui.el('personAssets').selectedOptions.length, 2);
+  // Selections set from code redraw the shared picker.
+  assert.ok(ui.pickers.refreshed.includes('personAssets'));
+  assert.equal(ui.pickers.enhanced.length, 1);
   submit(ui, 'personForm');
   await settle(ui.idle);
   assert.deepEqual(sent[0][2].asset_ids, ['as1', 'as2']);

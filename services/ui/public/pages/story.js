@@ -22,7 +22,7 @@ import {
   canSampleIntoAudit,
 } from '/app.js';
 import { createFlowCanvas } from '/pages/story-flow.js';
-import { createLinkChecklist } from '/pages/link-checklist.js';
+import { chosenIds, fillCatalogueSelect } from '/pages/catalogue-options.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -158,16 +158,7 @@ function applyStory(next) {
 // The author assigns controls and clauses of the selected framework. The
 // framework's catalogue is read when the tab is first opened by someone who
 // may edit the story; readers see what is assigned.
-const pickers = {
-  controls: createLinkChecklist($('controlPicker'), {
-    label: 'Controls in selected framework',
-    plural: 'controls',
-  }),
-  clauses: createLinkChecklist($('clausePicker'), {
-    label: 'Clauses in selected framework',
-    plural: 'clauses',
-  }),
-};
+const PICKERS = { controls: 'storyControls', clauses: 'storyClauses' };
 let catalogue = null;
 let catalogueLoading = null;
 
@@ -195,7 +186,8 @@ function refLinks(host, records, page) {
 
 function fillPickers() {
   for (const kind of ['controls', 'clauses'])
-    pickers[kind].load(
+    fillCatalogueSelect(
+      $(PICKERS[kind]),
       catalogue[kind],
       assigned(kind).map((record) => record.id),
     );
@@ -242,8 +234,8 @@ $('frameworkForm').addEventListener('submit', async (ev) => {
   try {
     applyStory(
       await apiPatch(`${base}?${fw}`, {
-        controls: pickers.controls.selected(),
-        clauses: pickers.clauses.selected(),
+        controls: chosenIds($(PICKERS.controls)),
+        clauses: chosenIds($(PICKERS.clauses)),
         expected_version: story.version,
       }),
     );

@@ -627,12 +627,6 @@ a.schedule-calendar-event {
   overflow-y: auto;
 }
 
-/* A checklist of controls or clauses scrolls inside its own box. */
-.link-checklist-scroll {
-  max-height: 18rem;
-  overflow-y: auto;
-}
-
 .risk-rating .form-range {
   margin-bottom: 0.25rem;
 }

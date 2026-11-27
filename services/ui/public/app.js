@@ -324,6 +324,12 @@ export function forgetAccountStorage() {
   }
 }
 
+// Redraw a list's picker after code set `option.selected` on options that
+// were already there; replaced options and change events redraw by themselves.
+export function refreshPicker(select) {
+  mosp.refreshMultiSelect?.(select);
+}
+
 let navbarInitialisation;
 // A document can load several page modules. Share its complete shell setup,
 // including notification polling, without persisting account data across loads.
@@ -389,6 +395,10 @@ export function bellItems(me) {
 
 async function initialiseNavbar(...args) {
   initContextHelp();
+  // Every list a person chooses several entries from is the same picker: a
+  // search box, a short list to browse and the chosen entries as chips. A
+  // design system from before the picker leaves the native lists in place.
+  mosp.enhanceMultiSelects?.();
   const cfg = getUiConfig(args[0]);
   // A design system with bell menus lists `items` among its bell defaults; an
   // older one keeps the questions bell that summaryEndpoint describes.

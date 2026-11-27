@@ -856,8 +856,11 @@ function frameworkReads(detail, world) {
 }
 const showFramework = (ui) =>
   ui.el('frameworkTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-const ticked = (ui, host) =>
-  [...ui.el(host).querySelectorAll('input[type=checkbox]:checked')].map((box) => box.value);
+const chosen = (ui, id) => [...ui.el(id).selectedOptions].map((option) => option.value);
+const choose = (ui, id, value, on) => {
+  [...ui.el(id).options].find((option) => option.value === value).selected = on;
+  ui.el(id).dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+};
 const submitFramework = (ui) =>
   ui.el('frameworkForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
 
@@ -905,7 +908,7 @@ test('a story served without assignments says none are assigned', async (t) => {
   assert.equal(ui.el('linkedClauses').textContent, 'None assigned.');
 });
 
-test('an author filters and ticks controls and clauses, and saves them with the version', async (t) => {
+test('an author chooses controls and clauses in the shared picker, and saves them with the version', async (t) => {
   const world = { catalogue: [] };
   const patched = [];
   const detail = story({
@@ -945,29 +948,39 @@ test('an author filters and ticks controls and clauses, and saves them with the 
     'the catalogue is read once',
   );
   assert.equal(ui.el('frameworkStatus').textContent, '');
-  assert.deepEqual(ticked(ui, 'controlPicker'), ['c1']);
-  assert.deepEqual(ticked(ui, 'clausePicker'), []);
-  assert.match(ui.el('controlPicker').textContent, /Access <control>/);
-  assert.equal(ui.el('controlPicker').querySelector('control'), null);
-
-  // Typing a control number narrows the list to it.
-  const filter = ui.el('controlPicker').querySelector('input[type=search]');
-  filter.value = '5.31';
-  filter.dispatchEvent(new ui.window.Event('input'));
-  const boxes = ui.el('controlPicker').querySelectorAll('input[type=checkbox]');
+  assert.deepEqual(chosen(ui, 'storyControls'), ['c1']);
+  assert.deepEqual(chosen(ui, 'storyClauses'), []);
+  // Each list is a multiple select, which the shared picker presents as a
+  // search box, a list to browse and chips. Options are text: reference then
+  // title, with the description as a tooltip the picker also searches.
+  assert.equal(ui.el('storyControls').multiple, true);
+  assert.equal(ui.pickers.enhanced.length, 1);
   assert.deepEqual(
-    [...boxes].map((box) => box.value),
-    ['c2'],
+    [...ui.el('storyControls').options].map((option) => [
+      option.value,
+      option.textContent,
+      option.title,
+      option.dataset.badge || '',
+    ]),
+    [
+      ['c1', 'A.5.15 Access <control>', 'Rules for access', ''],
+      ['c2', 'A.5.31 Legal requirements', '', ''],
+      ['c3', 'A.8.13 Backup', '', 'out of scope'],
+    ],
   );
-  const tick = (box, on) => {
-    box.checked = on;
-    box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
-  };
-  tick(boxes[0], true);
-  filter.value = '';
-  filter.dispatchEvent(new ui.window.Event('input'));
-  tick(ui.el('controlPicker').querySelector('input[value="c1"]'), false);
-  tick(ui.el('clausePicker').querySelector('input[value="k2"]'), true);
+  assert.equal(ui.el('storyControls').querySelector('control'), null);
+  assert.deepEqual(
+    [...ui.el('storyClauses').options].map((option) => option.textContent),
+    ['4.1 Context', '9.2 Internal audit'],
+  );
+  assert.equal(
+    ui.document.querySelector('label[for="storyControls"]').textContent,
+    'Controls in selected framework',
+  );
+
+  choose(ui, 'storyControls', 'c2', true);
+  choose(ui, 'storyControls', 'c1', false);
+  choose(ui, 'storyClauses', 'k2', true);
   submitFramework(ui);
   await settle(() => ui.el('status').textContent === 'Controls and clauses saved.');
   assert.deepEqual(patched, [
@@ -977,8 +990,8 @@ test('an author filters and ticks controls and clauses, and saves them with the 
   assert.equal(ui.el('frameworkCount').textContent, '2');
   assert.equal(ui.el('linkedControls').textContent, 'A.5.31');
   assert.equal(ui.el('linkedClauses').textContent, '9.2');
-  assert.deepEqual(ticked(ui, 'controlPicker'), ['c2']);
-  assert.deepEqual(ticked(ui, 'clausePicker'), ['k2']);
+  assert.deepEqual(chosen(ui, 'storyControls'), ['c2']);
+  assert.deepEqual(chosen(ui, 'storyClauses'), ['k2']);
 });
 
 test('a refused save and an unread catalogue are reported, and the tab tries again', async (t) => {
@@ -1013,7 +1026,7 @@ test('a refused save and an unread catalogue are reported, and the tab tries aga
   showFramework(ui);
   await settle(() => !ui.el('saveFramework').disabled);
   assert.equal(world.catalogue.length, 4);
-  assert.equal(ui.el('controlPicker').querySelectorAll('input[type=checkbox]').length, 3);
+  assert.equal(ui.el('storyControls').options.length, 3);
   submitFramework(ui);
   await settle(() => ui.el('status').textContent.includes('Reload before saving'));
   assert.equal(ui.el('status').dataset.alert, 'danger');

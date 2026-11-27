@@ -40,6 +40,7 @@ async function shell(
     url = 'https://keen.example/controls.html?framework=A',
     globals = {},
     apiPost,
+    vendor = {},
   } = {},
 ) {
   let win;
@@ -77,6 +78,7 @@ async function shell(
         win.document.getElementById('navbar').innerHTML = navbarHtml(links);
         return me;
       },
+      ...vendor,
     },
   });
   t.after(ui.close);
@@ -394,4 +396,30 @@ test('a provider logout address the design system handles is left to it', async 
   ui.document.getElementById('navLogout').click();
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(posts, []);
+});
+
+test('every page asks the design system for its multi-select picker, once', async (t) => {
+  const asked = [];
+  const refreshed = [];
+  const ui = await shell(t, {
+    vendor: {
+      enhanceMultiSelects: (...args) => asked.push(args),
+      refreshMultiSelect: (select) => refreshed.push(select),
+    },
+  });
+  // The whole document, so each list of several choices works the same way.
+  assert.deepEqual(asked, [[]]);
+  await ui.api.initNavbar();
+  assert.equal(asked.length, 1, 'a second page module shares the setup');
+  // Code that sets selections on options already listed asks for a redraw.
+  const select = ui.document.createElement('select');
+  ui.api.refreshPicker(select);
+  assert.deepEqual(refreshed, [select]);
+});
+
+test('a design system from before the picker leaves native lists in place', async (t) => {
+  const ui = await shell(t);
+  assert.equal(ui.me.user, 'admin', 'the shell still starts');
+  // Asking for a redraw is harmless too.
+  assert.equal(ui.api.refreshPicker(ui.document.createElement('select')), undefined);
 });

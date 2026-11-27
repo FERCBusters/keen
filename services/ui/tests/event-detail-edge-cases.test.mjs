@@ -218,7 +218,7 @@ test('without any framework the diary editor searches the default catalogue', as
   assert.ok(state.gets.includes('/api/v1/controls?framework=iso_27001_2022&limit=5000'));
 });
 
-test('the diary editor reads the catalogue once, finds at most 25 controls and names untitled ones by reference', async (t) => {
+test('the diary editor reads the catalogue once, lists all of it and names untitled controls by reference', async (t) => {
   const controls = [
     { id: 'u1', ref: 'Z.1', title: null, type: 'control' },
     ...Array.from({ length: 30 }, (_, i) => ({
@@ -237,25 +237,13 @@ test('the diary editor reads the catalogue once, finds at most 25 controls and n
   await open();
   // A diary entry without details opens with an empty details field.
   assert.equal(ui.el('editDiaryDetails').value, '');
-  const search = ui.el('editControlSearch');
-  const results = () => [...ui.el('editControlResults').querySelectorAll('[data-add]')];
-  search.value = 'key';
-  search.dispatchEvent(new ui.window.Event('input'));
-  assert.equal(results().length, 25);
-  assert.equal(ui.el('editControlResults').querySelector('b'), null);
-  // A control without a title is found by its reference only.
-  for (const q of ['null', 'undefined']) {
-    search.value = q;
-    search.dispatchEvent(new ui.window.Event('input'));
-    assert.equal(results().length, 0, q);
-  }
-  search.value = 'z.1';
-  search.dispatchEvent(new ui.window.Event('input'));
-  assert.deepEqual(
-    results().map((b) => b.textContent.trim()),
-    ['Z.1'],
-  );
-  assert.equal(results()[0].querySelector('.small-muted'), null);
+  // The whole catalogue is listed to browse, as text; a control without a
+  // title is named by its reference alone.
+  const options = [...ui.el('editDiaryControls').options];
+  assert.equal(options.filter((o) => o.textContent.startsWith('K.')).length, 30);
+  assert.equal(options[0].textContent, 'Z.1');
+  assert.equal(options[1].textContent, 'K.0 Key <b>0</b>');
+  assert.equal(ui.el('editDiaryControls').querySelector('b'), null);
   await open();
   assert.equal(state.gets.filter((g) => g.startsWith('/api/v1/controls?')).length, 1);
 });

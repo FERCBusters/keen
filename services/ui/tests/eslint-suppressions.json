@@ -11,7 +11,7 @@
   },
   "services/ui/public/pages/admin.js": {
     "no-unsanitized/property": {
-      "count": 9
+      "count": 7
     }
   },
   "services/ui/public/pages/agent-enrollment.js": {
@@ -112,7 +112,7 @@
   },
   "services/ui/public/pages/event.js": {
     "no-unsanitized/property": {
-      "count": 12
+      "count": 10
     }
   },
   "services/ui/public/pages/events.js": {

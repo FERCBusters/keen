@@ -218,6 +218,8 @@ test('selecting a node fills the editor and saving sends the full node definitio
     ['4.2'],
   );
   assert.equal($('clauses').disabled, false);
+  // Selections set on the listed clauses redraw the shared picker.
+  assert.equal(ui.pickers.refreshed.at(-1), 'fe-clauses');
   $('title').value = 'Information security policy';
   for (const o of $('clauses').options) o.selected = o.value === '4' || o.value === '4.10';
   $('save-node').click();

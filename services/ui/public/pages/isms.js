@@ -18,6 +18,7 @@ import {
   withFramework,
   initCollapsibleFilterSections,
   initRichTextEditors,
+  refreshPicker,
   plainTextFromRichText,
   setRichTextEditorValue,
   syncRichTextEditor,
@@ -225,6 +226,7 @@ function updateMeetingPersonBubble() {
       (o) => o.value === matching.id,
     );
     if (option) option.selected = true;
+    refreshPicker($('meetingPersonAttendees'));
   }
   $('meetingCreatePerson').hidden = !(canManage && name && !matching);
 }
@@ -717,6 +719,7 @@ function resetLicenseForm(item = null) {
 function setSelectValues(select, values = []) {
   const wanted = new Set(values.map((v) => String(v)));
   for (const opt of Array.from(select.options)) opt.selected = wanted.has(String(opt.value));
+  refreshPicker(select);
 }
 function clearFileInput(input) {
   if (input) input.value = '';
@@ -2424,6 +2427,7 @@ $('meetingCreatePerson')?.addEventListener('click', async () => {
       (o) => o.value === person.id,
     );
     if (option) option.selected = true;
+    refreshPicker($('meetingPersonAttendees'));
     $('meetingNewPersonName').value = '';
     $('meetingNewPersonEmail').value = '';
     updateMeetingPersonBubble();

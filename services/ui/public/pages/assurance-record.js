@@ -10,6 +10,7 @@ import {
   errorText,
   safeExternalHref,
   confirmAction,
+  refreshPicker,
   withFramework,
   getCurrentFramework,
 } from '/app.js';
@@ -116,6 +117,7 @@ export async function assuranceRecord(kind) {
     if (!multiple) element.add(new Option('None', ''));
     for (const value of values) element.add(new Option(value.name, value.id));
     for (const option of element.options) option.selected = selected.includes(option.value);
+    refreshPicker(element);
   }
   function fill() {
     const fields = person

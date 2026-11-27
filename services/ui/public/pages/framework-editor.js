@@ -5,6 +5,7 @@ import {
   apiDelete,
   confirmAction,
   refreshFrameworkNavigation,
+  refreshPicker,
   errorText,
 } from '/app.js';
 
@@ -187,6 +188,7 @@ function editNode(item, { scroll = false } = {}) {
   $('parent').value = item.parent_ref || '';
   for (const option of $('clauses').options)
     option.selected = (item.clause_refs || []).includes(option.value);
+  refreshPicker($('clauses'));
   markSelectedRow({ scroll });
   message('');
 }
