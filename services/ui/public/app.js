@@ -363,6 +363,23 @@ export function withStoriesLink(links = []) {
   return list;
 }
 
+// The Map follows Stories (or Audits) and is offered to everyone signed in:
+// it shows each person only the records they can open.
+export function withMapLink(links) {
+  const list = [...links];
+  if (list.some((link) => link?.key === 'map')) return list;
+  const after = Math.max(
+    list.findIndex((link) => link?.key === 'stories'),
+    list.findIndex((link) => link?.key === 'audits'),
+  );
+  list.splice(after < 0 ? list.length : after + 1, 0, {
+    key: 'map',
+    label: 'Map',
+    href: '/map.html',
+  });
+  return list;
+}
+
 // The bell's notification kinds: questions for everyone who has them, and
 // suggested mapping rules for administrators. Several kinds make the bell a menu.
 export function bellItems(me) {
@@ -410,7 +427,7 @@ async function initialiseNavbar(...args) {
   const menus = Object.prototype.hasOwnProperty.call(cfg.bell || {}, 'items');
   const me = await _mospInitNavbar({
     ...cfg,
-    links: withStoriesLink(cfg.links),
+    links: withMapLink(withStoriesLink(cfg.links)),
     auth: { ...cfg.auth, meCacheMs: 0 },
     bell: {
       ...cfg.bell,

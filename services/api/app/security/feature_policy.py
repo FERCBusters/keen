@@ -10,6 +10,7 @@ OWNERS = {
     "artifacts": "evidence",
     "sources": "sources",
     "graph": "visualisations",
+    "map": "map",
     "home": "explorer",
     "audits": "audits",
     "questions": "questions",

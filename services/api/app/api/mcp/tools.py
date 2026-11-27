@@ -393,7 +393,8 @@ def _record_detail(detail: dict) -> dict:
 
 async def get_swot_item(item_id: Identifier, framework: Framework = None) -> dict:
     """One SWOT item in full, with its linked controls and clauses and its
-    related objectives, documents, assets, people, vendors and risks."""
+    related objectives, documents, assets, people, vendors, risks and legal
+    register items."""
     _needs("isms.read")
     answer = await _get(
         f"/v1/isms/swot/{item_id}", framework=await _framework(framework)

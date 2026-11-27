@@ -388,6 +388,22 @@ test('the Stories link follows Audits and is offered once', () => {
   assert.deepEqual([...a.withStoriesLink(undefined).map((link) => link.key)], ['stories']);
 });
 
+test('the Map link follows Stories, or Audits, and is offered once', () => {
+  const keys = (links) => [...a.withMapLink(links).map((link) => link.key)];
+  const links = [{ key: 'events' }, { key: 'audits' }, { key: 'stories' }, { key: 'admin' }];
+  assert.deepEqual(keys(links), ['events', 'audits', 'stories', 'map', 'admin']);
+  assert.deepEqual(JSON.parse(JSON.stringify(a.withMapLink(links)[3])), {
+    key: 'map',
+    label: 'Map',
+    href: '/map.html',
+  });
+  assert.equal(links.length, 4);
+  assert.deepEqual(keys(a.withMapLink(links)), ['events', 'audits', 'stories', 'map', 'admin']);
+  assert.deepEqual(keys([{ key: 'audits' }, { key: 'admin' }]), ['audits', 'map', 'admin']);
+  assert.deepEqual(keys([{ key: 'controls' }]), ['controls', 'map']);
+  assert.deepEqual(keys([]), ['map']);
+});
+
 test('changelog values show blanks, booleans and long objects as inert text', () => {
   const cyclic = { name: 'loop' };
   cyclic.self = cyclic;

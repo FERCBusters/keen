@@ -688,8 +688,20 @@ try {
   $('relatedNotice').hidden = !relatedTo || detail;
   if (detail) {
     await loadDetail();
-    // The stories that include the item; a draft has none yet.
-    if (itemId) mountStoryRelated({ me, kind: 'legal_item', id: itemId, framework });
+    // The stories that include the item are a card among its related items;
+    // a draft has none yet.
+    if (itemId)
+      $('relatedStoriesCard').hidden = !mountStoryRelated({
+        me,
+        kind: 'legal_item',
+        id: itemId,
+        framework,
+        host: $('relatedStories'),
+        trigger: $('relatedTab'),
+        onLoad: (stories) => {
+          $('relatedStoriesCount').textContent = String(stories.length);
+        },
+      });
     const tab = TABS.includes(params.get('tab')) && !isNew ? params.get('tab') : 'details';
     window.bootstrap?.Tab.getOrCreateInstance($(tab + 'Tab')).show();
   } else {

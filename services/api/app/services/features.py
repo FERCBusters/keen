@@ -19,6 +19,7 @@ DEFINITIONS = (
     ("evidence", "Evidence browsing and downloads", None),
     ("sources", "Sources workspace", None),
     ("visualisations", "Visualisations", None),
+    ("map", "Map", None),
     ("explorer", "Home overview", None),
     ("risks", "Risk management", None),
     ("risk_cia", "Risk assessments", "risks"),

@@ -111,8 +111,10 @@ KINDS: dict[str, Kind] = {
         "A SWOT item. kind: strength, weakness, opportunity or threat; "
         "significance: 1 (low) to 5 (high); response: the planned response; "
         "parent_id: an item of the same kind. links: the objectives, documents, "
-        "assets, people, vendors and risks the item relates to, each "
-        "{target_type: objective|document|asset|person|vendor|risk, target_id}; "
+        "assets, people, vendors, risks and legal register items the item "
+        "relates to, each {target_type: objective|document|asset|person|vendor|"
+        "risk|legal_item, target_id}; a relationship to a legal register item "
+        "is the one that item shows to this SWOT item, made from either end; "
         "a list replaces the item's relationships, so include those to keep, "
         "as get_swot_item shows them. An update needs expected_version, "
         "the item's version from list_swot. " + _LINKS,

@@ -18,13 +18,33 @@ from .access import can_manage_isms, can_read_isms
 from .common import _by_id_or_404, _record
 from .link_diary import remove_entity_link_diary
 from .mutations import _apply_links
-from .related_records import replace_links, search_targets, target_summary
+from .related_records import (
+    add_link,
+    filter_by_target,
+    forget_record,
+    linked_pairs,
+    remove_link,
+    replace_links,
+    search_targets,
+    target_summary,
+)
 from .related_records import resolve_target as _target
 from .serializers import _attach_links
 
 KINDS = ("strength", "weakness", "opportunity", "threat")
 # Records a SWOT item relates to; stories reach further through the same resolver.
-LINK_TYPES = ("objective", "document", "asset", "person", "vendor", "risk")
+LINK_TYPES = (
+    "objective",
+    "document",
+    "asset",
+    "person",
+    "vendor",
+    "risk",
+    "legal_item",
+)
+LinkType = Literal[
+    "objective", "document", "asset", "person", "vendor", "risk", "legal_item"
+]
 STATUSES = (
     "defined",
     "planned",
@@ -40,7 +60,7 @@ Reference = Annotated[str, Field(min_length=1, max_length=128)]
 
 class DraftLink(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    target_type: Literal["objective", "document", "asset", "person", "vendor", "risk"]
+    target_type: LinkType
     target_id: UUID
 
 
@@ -75,7 +95,7 @@ class SwotPayload(BaseModel):
 
 class LinkPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    target_type: Literal["objective", "document", "asset", "person", "vendor", "risk"]
+    target_type: LinkType
     target_id: UUID
     expected_version: int = Field(ge=1)
 
@@ -128,10 +148,11 @@ def summary(row):
 def output(db, row, framework, user):
     out = _attach_links(db, summary(row), "swot", row.id, framework, True)
     out["links"] = []
-    for link in db.query(IsmsSwotLink).filter_by(swot_id=row.id).limit(200).all():
-        target = _target(db, user, link.target_type, link.target_id, required=False)
+    pairs = linked_pairs(db, IsmsSwotLink, {"swot_id": row.id})
+    for kind, target_id in sorted(pairs, key=lambda pair: (pair[0], str(pair[1]))):
+        target = _target(db, user, kind, target_id, required=False)
         if target:
-            out["links"].append(target_summary(link.target_type, target))
+            out["links"].append(target_summary(kind, target))
     return out
 
 
@@ -187,8 +208,8 @@ def list_items(
         if not target_type or not target_id:
             raise DomainError(400, "Choose a relationship type and item")
         _target(db, user, target_type, target_id)
-        qry = qry.join(IsmsSwotLink, IsmsSwotLink.swot_id == IsmsSwot.id).filter(
-            IsmsSwotLink.target_type == target_type, IsmsSwotLink.target_id == target_id
+        qry = filter_by_target(
+            qry, IsmsSwotLink.swot_id, IsmsSwot.id, "swot", target_type, target_id
         )
     if control or clause:
         from app.db.models import IsmsEntityClauseLink, IsmsEntityControlLink
@@ -444,6 +465,7 @@ def delete_item(*, item_id, expected_version, user, db, context):
             synchronize_session=False
         )
     db.query(IsmsSwotLink).filter_by(swot_id=row.id).delete(synchronize_session=False)
+    forget_record(db, "swot", row.id)
     # Withdraw the automatic diary entry that recorded the deleted item's links.
     remove_entity_link_diary(db, "swot", row.id)
     _record(db, "swot", row, "deleted", summary(row), None, user, context)
@@ -458,24 +480,17 @@ def change_link(*, item_id, payload, remove, user, db, context):
     row = _by_id_or_404(db, IsmsSwot, item_id, "SWOT")
     _version(row, payload.expected_version)
     _target(db, user, payload.target_type, payload.target_id)
-    qry = db.query(IsmsSwotLink).filter_by(
-        swot_id=row.id, target_type=payload.target_type, target_id=payload.target_id
-    )
-    existing = qry.first()
+    owner = {"swot_id": row.id}
+    pair = (payload.target_type, payload.target_id)
+    held = linked_pairs(db, IsmsSwotLink, owner)
     if remove:
-        qry.delete(synchronize_session=False)
-    elif not existing:
-        if db.query(IsmsSwotLink).filter_by(swot_id=row.id).count() >= MAX_LINKS:
+        remove_link(db, IsmsSwotLink, owner, *pair)
+    elif pair not in held:
+        if len(held) >= MAX_LINKS:
             raise DomainError(
                 400, f"A SWOT item supports up to {MAX_LINKS} relationships"
             )
-        db.add(
-            IsmsSwotLink(
-                swot_id=row.id,
-                target_type=payload.target_type,
-                target_id=payload.target_id,
-            )
-        )
+        add_link(db, IsmsSwotLink, owner, *pair)
     row.version += 1
     row.updated_at = _utcnow()
     # Target identifiers and titles are resolved at read time, never copied into

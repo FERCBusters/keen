@@ -688,7 +688,7 @@ def test_a_relationship_is_removed_only_at_the_current_version(keen):
                 {
                     "type": "literal_error",
                     "loc": ["path", "target_type"],
-                    "msg": "Input should be 'objective', 'document', 'asset', 'person', 'vendor' or 'risk'",
+                    "msg": "Input should be 'objective', 'document', 'asset', 'person', 'vendor', 'risk' or 'legal_item'",
                 }
             ]
         },
@@ -981,3 +981,115 @@ def test_a_save_that_names_relationships_replaces_those_its_author_can_read(
     # An author who reads every record replaces them all.
     save(admin, 2, [])
     assert stored() == []
+
+
+def test_a_legal_register_item_is_related_from_either_end(keen, monkeypatch):
+    # One relationship joins a SWOT item and a legal register item. It is made,
+    # read, filtered on and removed from the SWOT item as it is from the
+    # register item, and is kept once.
+    import uuid
+
+    from app.db.models import IsmsLegalItem, IsmsLegalItemLink
+    from app.services.isms import related_records
+
+    manager = keen.client(keen.user("isms.manage"))
+    law = IsmsLegalItem(title="Privacy Act")
+    other = IsmsLegalItem(title="Spam Act")
+    keen.db.add_all([law, other])
+    keen.db.commit()
+
+    def pair(row):
+        return {"target_type": "legal_item", "target_id": str(row.id)}
+
+    def kept():
+        keen.db.expire_all()
+        return sorted(str(link.item_id) for link in keen.db.query(IsmsLegalItemLink))
+
+    def titles(row):
+        return sorted(link["title"] for link in row["links"])
+
+    def register_side(row):
+        answer = manager.get(f"/v1/isms/legal-register/{row.id}")
+        assert answer.status_code == 200, answer.text
+        return [(link["target_type"], link["title"]) for link in answer.json()["links"]]
+
+    # A new item takes the relationship; it is the register item's row.
+    item = create(manager, title="Regulatory change", links=[pair(law)])
+    path = f"/v1/isms/swot/{item['id']}"
+    assert titles(item) == ["Privacy Act"]
+    assert item["links"][0]["url"] == f"/legal-register.html?id={law.id}"
+    assert keen.db.query(IsmsSwotLink).count() == 0
+    assert kept() == [str(law.id)]
+    assert register_side(law) == [("swot", "Regulatory change")]
+
+    # One made on the register item shows on the SWOT item too.
+    patched = manager.patch(
+        f"/v1/isms/legal-register/{other.id}",
+        json={
+            "expected_version": 1,
+            "links": [{"target_type": "swot", "target_id": item["id"]}],
+        },
+        headers=unsafe(manager),
+    )
+    assert patched.status_code == 200, patched.text
+    assert titles(manager.get(path).json()) == ["Privacy Act", "Spam Act"]
+
+    # The register is filtered by the related item from the SWOT side.
+    listed = manager.get(
+        "/v1/isms/swot", params={"target_type": "legal_item", "target_id": str(law.id)}
+    )
+    assert [row["id"] for row in listed.json()["items"]] == [item["id"]]
+    unrelated = create(manager, title="Unrelated")
+    assert unrelated["links"] == []
+
+    # Adding one that is already there keeps one row; removing it removes it
+    # for both ends.
+    link_path = path + "/links"
+    again = manager.post(
+        link_path, json={**pair(law), "expected_version": 1}, headers=unsafe(manager)
+    )
+    assert (again.status_code, again.json()) == (200, {"ok": True, "version": 2})
+    assert kept() == sorted([str(law.id), str(other.id)])
+    removed = manager.delete(
+        f"{link_path}/legal_item/{law.id}",
+        params={"expected_version": 2},
+        headers=unsafe(manager),
+    )
+    assert (removed.status_code, removed.json()) == (200, {"ok": True, "version": 3})
+    assert kept() == [str(other.id)]
+    assert register_side(law) == []
+
+    # A register item's own limit holds from the SWOT side.
+    mirror = related_records.MIRRORS["swot"]["legal_item"]
+    monkeypatch.setitem(
+        related_records.MIRRORS["swot"],
+        "legal_item",
+        related_records.Mirror(IsmsLegalItemLink, "item_id", 0, "legal register item"),
+    )
+    refused = manager.post(
+        link_path, json={**pair(law), "expected_version": 3}, headers=unsafe(manager)
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "A legal register item supports up to 0 relationships"},
+    )
+    monkeypatch.setitem(related_records.MIRRORS["swot"], "legal_item", mirror)
+
+    # A save that names relationships replaces the register's too, and the
+    # choices list the register's items.
+    saved = manager.patch(
+        path,
+        json={"expected_version": 3, "links": [pair(law)]},
+        headers=unsafe(manager),
+    )
+    assert saved.status_code == 200, saved.text
+    assert titles(saved.json()) == ["Privacy Act"]
+    assert kept() == [str(law.id)]
+    choices = manager.get("/v1/isms/swot-choices/legal_item", params={"q": "spam"})
+    assert [row["title"] for row in choices.json()["items"]] == ["Spam Act"]
+
+    # Deleting the SWOT item removes the relationships kept for it.
+    gone = manager.delete(path, params={"expected_version": 4}, headers=unsafe(manager))
+    assert gone.status_code == 200, gone.text
+    assert kept() == []
+    assert keen.db.get(IsmsSwot, uuid.UUID(item["id"])) is None

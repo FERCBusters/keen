@@ -272,6 +272,7 @@ test('every help topic points at a published chapter and anchor', async (t) => {
     'scheduling',
     'diary',
     'stories',
+    'map',
     'storyFlow',
     'storyComments',
     'visualisations',

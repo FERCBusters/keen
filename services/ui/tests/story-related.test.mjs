@@ -307,7 +307,8 @@ test('a host on the page frames the list without a heading of its own', async (t
   assert.match(lazy.pane.textContent, /Loading stories/);
   ui.document.getElementById('trigger').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => /Restore test/.test(lazy.pane.textContent));
-  assert.equal(ui.document.getElementById('trigger').textContent, 'Stories (1)');
+  // The host's tab is the page's own and keeps its name.
+  assert.equal(ui.document.getElementById('trigger').textContent, 'Stories');
   assert.match(lazy.pane.querySelector('label').textContent, /Add this person to a story/);
 
   const now = ui.api.mountStoryRelated({

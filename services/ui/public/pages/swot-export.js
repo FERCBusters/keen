@@ -3,7 +3,7 @@ import { buildPdfFromJpegPages } from '/pages/evidence-export/pdf.js';
 
 export const exportKinds = ['strength', 'weakness', 'opportunity', 'threat'];
 const names = ['Strengths', 'Weaknesses', 'Opportunities', 'Threats'];
-const relatedTypes = ['objective', 'document', 'asset', 'risk', 'person', 'vendor'];
+const relatedTypes = ['objective', 'document', 'asset', 'risk', 'person', 'vendor', 'legal_item'];
 const heading = (value) => value.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
 const xml = (value) =>
   String(value)

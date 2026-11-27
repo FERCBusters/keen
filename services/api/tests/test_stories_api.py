@@ -1459,10 +1459,12 @@ def test_stories_include_legal_register_items_for_isms_readers(world):
     )
     (hidden,) = author.get(f"/v1/stories/{story['id']}").json()["items"]
     assert hidden["withheld"] is True
-    # Neither a SWOT item nor a legal register item relates to a legal item.
+    # A SWOT item relates to a legal register item, as the item does to it; a
+    # register item does not relate to another, nor a SWOT item to another.
     features.update(
         world.db, world.keen.user(role="admin"), 1, {"legal_register": True}
     )
     isms = world.client("isms.manage")
-    assert isms.get("/v1/isms/swot-choices/legal_item").status_code == 400
+    assert isms.get("/v1/isms/swot-choices/legal_item").status_code == 200
+    assert isms.get("/v1/isms/swot-choices/swot").status_code == 400
     assert isms.get("/v1/isms/legal-register/choices/legal_item").status_code == 400

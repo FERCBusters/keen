@@ -77,7 +77,9 @@ const controlsBreadcrumb = document.getElementById('controlsBreadcrumb');
 const controlRequirementsTab = document.getElementById('controlRequirementsTab');
 const controlEvidenceTab = document.getElementById('controlEvidenceTab');
 const controlRelatedTab = document.getElementById('controlRelatedTab');
+const controlItemsTab = document.getElementById('controlItemsTab');
 const controlGovernanceTab = document.getElementById('controlGovernanceTab');
+const controlChangelogTab = document.getElementById('controlChangelogTab');
 const controlIsmsView = document.getElementById('controlIsmsView');
 const controlChangelogEl = document.getElementById('controlChangelog');
 const canViewRisks = !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
@@ -375,8 +377,10 @@ function activateControlTab(name) {
   const tabs = {
     requirements: controlRequirementsTab,
     evidence: controlEvidenceTab,
+    items: controlItemsTab,
     related: controlRelatedTab,
     governance: controlGovernanceTab,
+    changelog: controlChangelogTab,
   };
   const resolved = Object.hasOwn(tabs, name) ? name : 'requirements';
   if (tabs[resolved] && window.bootstrap?.Tab)
@@ -398,14 +402,16 @@ function wireControlTabs() {
     setControlTabQuery('related');
     await loadRelatedControls();
   });
-  controlGovernanceTab?.addEventListener('shown.bs.tab', async () => {
-    setControlTabQuery('governance');
-    await Promise.all([
-      loadLinkedRisks(),
-      loadControlPestle(),
-      loadControlIsms(),
-      loadControlChangelog(),
-    ]);
+  // Related items: the records that refer to the control, each in its card.
+  controlItemsTab?.addEventListener('shown.bs.tab', async () => {
+    setControlTabQuery('items');
+    await Promise.all([loadLinkedRisks(), loadControlPestle(), loadControlIsms()]);
+  });
+  // Governance holds the owners and the justification, loaded with the control.
+  controlGovernanceTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('governance'));
+  controlChangelogTab?.addEventListener('shown.bs.tab', async () => {
+    setControlTabQuery('changelog');
+    await loadControlChangelog();
   });
   activeTab = activateControlTab(qs('tab', 'requirements'));
 }
@@ -913,9 +919,8 @@ async function load() {
       opening,
       loadLinkedRisks(),
       tab === 'related' ? loadRelatedControls() : null,
-      tab === 'governance'
-        ? Promise.all([loadControlChangelog(), loadControlIsms({ force: true })])
-        : null,
+      tab === 'items' ? loadControlIsms({ force: true }) : null,
+      tab === 'changelog' ? loadControlChangelog() : null,
     ]);
   } catch (e) {
     toast(status, `Failed to load control: ${errorText(e)}`, 'danger');
@@ -1059,12 +1064,12 @@ saveControlUpstreamUrlBtn?.addEventListener('click', async () => {
 
 load();
 
-// The stories whose authors assigned them to this control, under Governance.
+// The stories whose authors assigned them to this control, among its related items.
 const stories = mountAssignedStories({
   me,
   kind: 'control',
   id,
   host: document.getElementById('controlStories'),
-  trigger: controlGovernanceTab,
+  trigger: controlItemsTab,
 });
 document.getElementById('controlStoriesCard').hidden = !stories;

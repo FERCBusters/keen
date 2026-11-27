@@ -96,7 +96,8 @@ function insertTab(label) {
  *
  * Without a host, a "Stories" tab joins the page's tabs and loads when first
  * shown. With a host, the list renders there, loading when `trigger` (a tab
- * button) is first shown or straight away when there is no trigger.
+ * button, which keeps its name) is first shown or straight away when there is
+ * no trigger. A page with a Related items tab hosts the list in a card there.
  * `onLoad` receives the stories each time the list loads.
  */
 export function mountStoryRelated({
@@ -163,7 +164,8 @@ export function mountStoryRelated({
       const stories = data.items;
       included = new Set(stories.map((s) => s.id));
       list.innerHTML = relatedListHtml(stories, kind, framework);
-      if (tab) tab.textContent = stories.length ? `Stories (${stories.length})` : 'Stories';
+      // A tab of its own counts its stories; a host's tab keeps its name.
+      if (!host) tab.textContent = stories.length ? `Stories (${stories.length})` : 'Stories';
       onLoad(stories);
     } catch {
       list.innerHTML =

@@ -96,7 +96,7 @@ async function shell(
   return { ...ui, me: result, nav, seen, topLevel, menu, window: win };
 }
 
-test('the design system receives the Stories link for accounts that may read them', async (t) => {
+test('the design system receives the Stories link for accounts that may read them, and the Map', async (t) => {
   const ui = await shell(t);
   assert.deepEqual(JSON.parse(JSON.stringify(ui.seen.config.links)), [
     {
@@ -105,6 +105,8 @@ test('the design system receives the Stories link for accounts that may read the
       href: '/stories.html',
       requireAny: ['is_admin', 'can_view_stories'],
     },
+    // The Map names no permission: it shows each person their own records.
+    { key: 'map', label: 'Map', href: '/map.html' },
   ]);
 });
 

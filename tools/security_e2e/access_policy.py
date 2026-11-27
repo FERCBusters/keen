@@ -117,6 +117,11 @@ AFFECTED_RULE = (
 # Additional object rules. The matrix probe account owns nothing, so these
 # operations are checked with their permission gate only.
 OBJECT_RULES = {
+    "GET /v1/map": (
+        "Each node is a record the caller can read with its feature switched on, "
+        "and a link joins two such records."
+    ),
+    "GET /v1/map/neighbours": "As the Map: the record and its neighbours are those the caller can read.",
     "GET /v1/risks/{risk_id}": "Members of the risk's owning organisation role can read it.",
     "POST /v1/risks": AFFECTED_RULE,
     "POST /v1/risks/import": AFFECTED_RULE,
@@ -493,6 +498,8 @@ POLICY = {
     "GET /v1/graph/clause_source": EVENTS_READ,
     "GET /v1/graph/control_source": EVENTS_READ,
     "GET /v1/graph/risk_control": RISK_READ,
+    "GET /v1/map": SIGNED_IN,
+    "GET /v1/map/neighbours": SIGNED_IN,
     "GET /v1/home": SIGNED_IN,
     "GET /v1/sources": EVENTS_READ,
     "GET /v1/sources/meta": EVENTS_READ,

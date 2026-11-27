@@ -1130,7 +1130,7 @@ test('the Legal register tab is left out without a record, access or the feature
 
 // --- Stories ----------------------------------------------------------------------
 
-test('a saved item has a Stories tab listing the stories that include it', async (t) => {
+test('a saved item lists the stories that include it in a card among its related items', async (t) => {
   const world = state({
     stories: [
       {
@@ -1146,23 +1146,29 @@ test('a saved item has a Stories tab listing the stories that include it', async
     ],
   });
   const ui = await detail(t, { world });
-  const tab = ui.document.getElementById('storiesRelatedTab');
-  assert.equal(tab.textContent, 'Stories');
-  const pane = ui.document.getElementById('storiesRelatedPane');
-  assert.match(pane.textContent, /Stories that include this legal register item/);
-  tab.dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => pane.querySelector('.list-group a'));
+  // Stories are related items: there is no tab of their own.
+  assert.equal(ui.document.getElementById('storiesRelatedTab'), null);
+  const card = ui.el('relatedStoriesCard');
+  assert.equal(card.hidden, false);
+  assert.ok(ui.el('relatedPane').contains(card));
+  assert.match(card.textContent, /Stories that include this legal register item/);
+  assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/stories')), 'loads with the tab');
+  ui.el('relatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => card.querySelector('.list-group a'));
   assert.ok(ui.calls.some((c) => c.url === '/api/v1/stories/related/legal_item/l1'));
-  assert.equal(tab.textContent, 'Stories (1)');
-  const link = pane.querySelector('.list-group a');
+  assert.equal(ui.el('relatedStoriesCount').textContent, '1');
+  // The tab keeps its name.
+  assert.equal(ui.el('relatedTab').textContent.trim(), 'Related items');
+  const link = card.querySelector('.list-group a');
   assert.equal(link.textContent, 'Regulator <b>letter</b>');
   assert.equal(link.getAttribute('href'), '/story.html?id=s1&framework=A');
-  assert.equal(pane.querySelector('.list-group b'), null);
+  assert.equal(card.querySelector('.list-group b'), null);
 });
 
-test('a new item and an account without story access have no Stories tab', async (t) => {
+test('a new item and an account without story access have no Stories card', async (t) => {
   const draft = await register(t, { query: '&new=1' });
-  assert.equal(draft.document.getElementById('storiesRelatedTab'), null);
+  assert.equal(draft.el('relatedStoriesCard').hidden, true);
   const reader = await detail(t, { me: { can_view_isms: true } });
-  assert.equal(reader.document.getElementById('storiesRelatedTab'), null);
+  assert.equal(reader.el('relatedStoriesCard').hidden, true);
+  assert.equal(reader.el('relatedStories').children.length, 0);
 });

@@ -166,6 +166,7 @@ def build(admin, payloads, cleanup, *, evidence_writes=False):
         201,
     )
     seed.pages.append(("stories", "/stories.html"))
+    seed.pages.append(("map", "/map.html"))
     create(
         "audit",
         "/api/v1/audits",

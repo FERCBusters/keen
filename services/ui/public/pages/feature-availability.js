@@ -30,6 +30,7 @@ const pages = {
   '/audit-wizard.html': 'audits',
   '/stories.html': 'stories',
   '/story.html': 'stories',
+  '/map.html': 'map',
   '/audit.html': 'audits',
   '/isms-objective.html': 'objectives',
   '/isms-document.html': 'documents',

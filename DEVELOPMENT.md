@@ -512,6 +512,10 @@ An administrator can switch features off. Two things make the UI follow:
 - `pages/feature-availability.js` maps each page to its feature, and hides links to a page whose feature is off.
 - An element with `data-feature="<key>"` is hidden when that feature is off. Use it on tabs and buttons that belong to another feature, as the Visualisation tabs do with `data-feature="visualisations"`.
 
+### The Map
+
+`app/services/record_map.py` builds the Map's graph: `load_records` adds a node for every record the reader can open and `load_links` adds a link for every relationship, which `link()` keeps only when both ends are nodes. To put a new kind of record on the Map, add it to `KINDS`, load its rows in `load_records` with the same access rule its own page uses, and add its relationships to `load_links`; then give it a colour in `pages/map.js`. To draw a new relationship between existing kinds, add it to `load_links` and name it in `RELATIONS` in `pages/map.js`.
+
 ### Recipe: add a page
 
 1. Copy the HTML of the closest existing page to `public/<name>.html` and point its module script at `/pages/<name>.js`.

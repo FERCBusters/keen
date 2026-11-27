@@ -868,11 +868,24 @@ test('SWOT relationships that resolve to another host link nowhere', async (t) =
   );
 });
 
-test('a saved SWOT item lists the legal register items related to it on a tab of its own', async (t) => {
-  const item = { id: 's1', title: 'New regulation', kind: 'threat', version: 1, links: [] };
-  const open = (me, query = '&id=s1') =>
+test('a SWOT item relates to legal register items among its other relationships', async (t) => {
+  const item = {
+    id: 's1',
+    title: 'New regulation',
+    kind: 'threat',
+    version: 1,
+    links: [
+      {
+        target_type: 'legal_item',
+        target_id: 'l1',
+        title: 'Data <b>Act</b>',
+        url: '/legal-register.html?id=l1',
+      },
+    ],
+  };
+  const open = (me) =>
     page(t, 'swot', {
-      query,
+      query: '&id=s1',
       me,
       get(url) {
         if (url.pathname === '/api/v1/isms/swot/s1') return { ...item, controls: [], clauses: [] };
@@ -881,43 +894,82 @@ test('a saved SWOT item lists the legal register items related to it on a tab of
         if (url.pathname.includes('/changelog')) return { items: [] };
         if (url.pathname.startsWith('/api/v1/isms/swot-choices/')) return { items: [] };
         if (url.pathname.startsWith('/api/v1/questions/entities/')) return { threads: [] };
-        if (url.pathname === '/api/v1/isms/legal-register') {
-          assert.equal(url.searchParams.get('target_type'), 'swot');
-          assert.equal(url.searchParams.get('target_id'), 's1');
-          return { items: [{ id: 'l1', title: 'Data <b>Act</b>', in_scope: true }], total: 1 };
-        }
         throw Error('Unexpected GET ' + url);
       },
     });
+  const names = (ui, id) => [...ui.el(id).options].map((option) => [option.value, option.text]);
   const ui = await open({ is_admin: true, can_view_isms: true });
-  await settle(() => ui.el('legalRelatedTab'));
-  const tab = ui.el('legalRelatedTab');
-  assert.equal(tab.textContent, 'Legal register');
-  assert.ok(!ui.calls.some((call) => call.url.includes('legal-register')), 'loads when opened');
-  tab.click();
-  await settle(() => ui.el('legalRelatedPane').querySelector('h2'));
-  const links = [...ui.el('legalRelatedPane').querySelectorAll('a')].map((a) => [
-    a.textContent,
-    a.getAttribute('href'),
-  ]);
-  assert.deepEqual(links, [
-    ['Data <b>Act</b>', '/legal-register.html?id=l1&tab=related&framework=A'],
-    [
-      'Open in the legal register (1)',
-      '/legal-register.html?target_type=swot&target_id=s1&framework=A',
-    ],
-  ]);
-  assert.equal(ui.el('legalRelatedPane').querySelector('b'), null);
+  await settle(() => ui.el('pageTitle').textContent === item.title);
+  // The register is one of the kinds to relate to and to filter by, by name.
+  assert.deepEqual(names(ui, 'linkType').at(-1), ['legal_item', 'Legal register item']);
+  assert.deepEqual(names(ui, 'relatedType').at(-1), ['legal_item', 'Legal register item']);
+  const section = [...ui.el('relatedList').querySelectorAll('section')].at(-1);
+  assert.equal(section.querySelector('h3').firstChild.textContent, 'Legal register item');
+  assert.deepEqual(
+    [...section.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
+    [['Data <b>Act</b>', '/legal-register.html?id=l1&framework=A']],
+  );
+  assert.equal(section.querySelector('b'), null);
+  assert.equal(section.querySelector('[data-unlink-type]').dataset.unlinkType, 'legal_item');
+  // The relationships are in one place: there is no separate register tab.
+  assert.equal(ui.el('legalRelatedTab'), null);
 
-  // Not while the register is switched off, and not on a draft.
+  // Not while the register is switched off.
   const off = await open({
     is_admin: true,
     can_view_isms: true,
     features: { enabled: { legal_register: false } },
   });
   await settle(() => off.el('pageTitle').textContent === item.title);
-  assert.equal(off.el('legalRelatedTab'), null);
-  const draft = await open({ is_admin: true, can_view_isms: true }, '&new=1&kind=threat');
+  assert.ok(!names(off, 'linkType').some(([value]) => value === 'legal_item'));
+  assert.ok(!off.el('relatedList').textContent.includes('Legal register item'));
+});
+
+test('a saved SWOT item lists the stories that include it in a card among its related items', async (t) => {
+  const item = { id: 's1', title: 'New regulation', kind: 'threat', version: 1, links: [] };
+  const open = (me, query = '&id=s1') =>
+    page(t, 'swot', {
+      query,
+      me,
+      get(url) {
+        if (url.pathname === '/api/v1/isms/swot/s1') return { ...item, controls: [], clauses: [] };
+        if (url.pathname === '/api/v1/isms/meta') return { users: [], controls: [], clauses: [] };
+        if (url.pathname.includes('/changelog')) return { items: [] };
+        if (url.pathname.startsWith('/api/v1/isms/swot-choices/')) return { items: [] };
+        if (url.pathname.startsWith('/api/v1/questions/entities/')) return { threads: [] };
+        if (url.pathname === '/api/v1/isms/swot') return { items: [item], total: 1 };
+        if (url.pathname === '/api/v1/stories/related/swot/s1')
+          return {
+            items: [
+              { id: 'st1', title: 'Regulator <b>letter</b>', status: 'open', item_count: 2 },
+              { id: 'st2', title: 'Board review', status: 'closed', item_count: 1 },
+            ],
+          };
+        throw Error('Unexpected GET ' + url);
+      },
+    });
+  const ui = await open({ can_view_isms: true, can_view_stories: true });
+  await settle(() => ui.el('pageTitle').textContent === item.title);
+  // Stories are related items: there is no tab of their own.
+  assert.equal(ui.el('storiesRelatedTab'), null);
+  const card = ui.el('relatedStoriesCard');
+  await settle(() => !card.hidden);
+  assert.ok(ui.el('relatedPane').contains(card));
+  assert.match(card.textContent, /Stories that include this SWOT item/);
+  assert.ok(!ui.calls.some((call) => call.url.startsWith('/api/v1/stories')), 'loads with the tab');
+  ui.el('relatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => card.querySelector('.list-group a'));
+  assert.equal(ui.el('relatedStoriesCount').textContent, '2');
+  assert.equal(ui.el('relatedTab').textContent.trim(), 'Related items');
+  assert.equal(card.querySelector('.list-group a').textContent, 'Regulator <b>letter</b>');
+  assert.equal(card.querySelector('.list-group b'), null);
+
+  // Not for an account that cannot read stories, and not on a draft.
+  const reader = await open({ can_view_isms: true });
+  await settle(() => reader.el('pageTitle').textContent === item.title && reader.idle());
+  assert.equal(reader.el('relatedStoriesCard').hidden, true);
+  assert.equal(reader.el('relatedStories').children.length, 0);
+  const draft = await open({ can_view_isms: true, can_view_stories: true }, '&new=1&kind=threat');
   await settle(() => !draft.el('draftNotice').hidden);
-  assert.equal(draft.el('legalRelatedTab'), null);
+  assert.equal(draft.el('relatedStoriesCard').hidden, true);
 });
