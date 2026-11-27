@@ -251,9 +251,17 @@ a:hover {
   white-space: nowrap;
 }
 @media (min-width: 992px) {
+  /* The design system gives the rail a minimum width for its labels; folded
+     to icons it is only as wide as an icon and its padding. */
   .isms-tab-nav.isms-rail-collapsed {
     flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
     padding: 12px 8px;
+  }
+  .isms-rail-collapsed .nav-link,
+  .isms-rail-collapsed .isms-rail-bar .btn {
+    width: auto;
   }
   .isms-rail-collapsed .admin-nav-label,
   .isms-rail-collapsed .isms-rail-label {

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import * as d3 from 'd3';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
 const records = {
   objectives: [
@@ -499,4 +500,16 @@ test('document tags sit with the other policy filters', async (t) => {
     filters.querySelector('#documentsTableFilter').compareDocumentPosition(tags) &
       ui.window.Node.DOCUMENT_POSITION_FOLLOWING,
   );
+});
+
+test('the folded menu gives up the width its labels needed', async () => {
+  // The design system gives the rail a minimum width and Keen a fixed basis;
+  // folded to icons, both are released so the page gains the room.
+  const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const rule = /\.isms-tab-nav\.isms-rail-collapsed\s*\{([^}]*)\}/.exec(css)[1];
+  for (const declaration of ['flex: 0 0 auto', 'width: auto', 'min-width: 0'])
+    assert.ok(rule.includes(declaration + ';'), declaration);
+  // Only on a wide screen: a narrow one has the menu button instead.
+  const before = css.slice(0, css.indexOf('.isms-tab-nav.isms-rail-collapsed'));
+  assert.match(before.slice(before.lastIndexOf('@media')), /^@media \(min-width: 992px\) \{/);
 });
