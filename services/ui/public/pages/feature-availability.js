@@ -25,6 +25,7 @@ const pages = {
   '/pestle.html': 'pestle',
   '/isms.html': 'isms',
   '/swot.html': 'swot',
+  '/legal-register.html': 'legal_register',
   '/audits.html': 'audits',
   '/audit-wizard.html': 'audits',
   '/stories.html': 'stories',

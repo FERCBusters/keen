@@ -160,6 +160,7 @@ function _patchIsmsNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html'))}">ISMS overview</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=objectives'))}">Objectives</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/swot.html'))}">SWOT analysis</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/legal-register.html'))}">Legal register</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness measures</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/quizzes.html'))}">Quizzes</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; processes</a></li>

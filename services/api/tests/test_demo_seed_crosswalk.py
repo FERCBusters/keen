@@ -586,6 +586,7 @@ def test_every_linked_record_counts_towards_control_coverage(seeded):
     assert set(counted) == {
         "document",
         "effectiveness_measure",
+        "legal_item",
         "meeting",
         "objective",
         "risk",
@@ -860,6 +861,7 @@ def test_teardown_removes_the_seeded_dataset(artifact_storage, postgres_engine):
         assert {entry.external_id.split(":")[1] for entry in entries} == {
             "document",
             "effectiveness_measure",
+            "legal_item",
             "meeting",
             "objective",
             "risk",
@@ -909,3 +911,68 @@ def test_scripts_need_explicit_permission_outside_demo_mode(
     monkeypatch.setattr(settings, "demo_mode", True)
     monkeypatch.setattr(sys, "argv", [script, "--dry-run"])
     assert module.parse_args().dry_run
+
+
+def test_the_demo_legal_register_has_scoped_assessed_and_related_items(db):
+    from app.db.models import (
+        IsmsEntityControlLink,
+        IsmsLegalAssessment,
+        IsmsLegalCategory,
+        IsmsLegalItem,
+        IsmsLegalItemLink,
+    )
+    from app.services.isms import legal_register
+
+    categories = db.query(IsmsLegalCategory).count()
+    config = DemoConfig("iso_27001_2022", "Demo", None, False, True)
+    DemoSeeder(db, config).run()
+    rows = {row.title: row for row in db.query(IsmsLegalItem)}
+    assert len(rows) == 10
+    assert all(title.startswith("Demo ") for title in rows)
+    # Every item names a seeded category, an owner and a link to its text.
+    assert db.query(IsmsLegalCategory).count() == categories
+    assert all(row.category_id and row.owner_user_id for row in rows.values())
+    assert all(
+        row.url.startswith("https://www.legislation.gov.uk/") for row in rows.values()
+    )
+    dpa = rows["Demo Data Protection Act 2018"]
+    assert (dpa.in_scope, dpa.compliance_status) == (True, "partially_compliant")
+    assert dpa.category.name == "Data protection and privacy"
+    # Laws considered and found not to apply are recorded as out of scope,
+    # with no assessment due.
+    out = [row for row in rows.values() if not row.in_scope]
+    assert len(out) == 5
+    assert all(row.next_assessment_date is None for row in out)
+    assessed = {
+        a.item_id: a
+        for a in db.query(IsmsLegalAssessment).order_by(IsmsLegalAssessment.id)
+    }
+    assert len(assessed) == 4
+    for item_id, assessment in assessed.items():
+        item = db.get(IsmsLegalItem, item_id)
+        assert item.compliance_status == assessment.outcome
+        assert item.last_assessed_date == assessment.assessed_on
+    never = rows["Demo Bribery Act 2010"]
+    assert (never.compliance_status, never.last_assessed_date) == (
+        "not_assessed",
+        None,
+    )
+    # Items in scope start with the framework's control for legal
+    # requirements, as a new item does in the application.
+    control = legal_register.default_controls(db, "iso_27001_2022")[0]
+    linked = {
+        link.entity_id
+        for link in db.query(IsmsEntityControlLink).filter_by(
+            entity_type="legal_item", framework_slug="iso_27001_2022"
+        )
+        if str(link.control_item_id) == control["id"]
+    }
+    assert linked == {row.id for row in rows.values() if row.in_scope}
+    assert {
+        (link.item_id, link.target_type) for link in db.query(IsmsLegalItemLink)
+    } == {(dpa.id, "document"), (dpa.id, "asset"), (dpa.id, "risk")}
+    # A second run changes nothing.
+    DemoSeeder(db, config).run()
+    assert db.query(IsmsLegalItem).count() == 10
+    assert db.query(IsmsLegalAssessment).count() == 4
+    assert db.query(IsmsLegalItemLink).count() == 3

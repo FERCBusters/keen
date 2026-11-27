@@ -152,6 +152,12 @@ A risk or a PESTLE(E) item names the people, vendors / 3rd parties and assets it
 
 Everyone who can read a risk or factor sees the names of the records it names, with a short description (a person's position, a vendor's description or website, an asset's category), including readers without ISMS read access; naming a record is a deliberate disclosure to the readers of the risk or factor. Opening the record itself keeps its own authority.
 
+### Legal register
+
+The legal register is an ISMS register: `isms.read` reads it and `isms.manage` changes it, through routes under the ISMS prefix, and risk readers and managers stand in as for the other ISMS registers. An item relates to documents, assets and risks through links it owns. Relating an item to a record requires read access to that record and its feature, and each related record is resolved with the reader's own access whenever the item is shown, so an ISMS reader without risk access sees neither a related risk nor its title. An item's history records the kind of record a relationship named, never the record, and the CSV export leaves related records out, since the file is read without those checks. The register's list from a document, asset or risk page is the same filtered route, so it shows only what its reader could open from the register.
+
+An item's link to the text of a law is stored only as an HTTP or HTTPS address without credentials, and the page opens it only as such. Assessment reminders go to the address of the item's owner, an active account, once for each next assessment date; an item's title reaches the subject line as a single line.
+
 ### Stories
 
 Stories are containers for events, risks, ISMS records and notes: `stories.read` views them and comments, `stories.manage` creates stories and edits or deletes its holder's own, and `stories.admin` edits or deletes any story. Adding an item requires read access to the referenced record, and each item is shown only to readers who can read that record themselves; other items appear as placeholders without the record's identifier, label or note, so a story's title, summary, notes and shape are visible to every story reader while its restricted content is not.

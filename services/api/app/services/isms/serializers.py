@@ -593,6 +593,12 @@ def _entity_out(
         from .swot import summary
 
         return _attach_links(db, summary(row), "swot", row.id, framework, include_links)
+    if entity_type == "legal_item":
+        from .legal_register import summary as legal_summary
+
+        return _attach_links(
+            db, legal_summary(row), "legal_item", row.id, framework, include_links
+        )
     if entity_type == "objective":
         return _objective_out(db, row, framework, include_links=include_links)
     if entity_type == "document":

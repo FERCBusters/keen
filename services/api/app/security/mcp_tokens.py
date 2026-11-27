@@ -53,8 +53,8 @@ _URLSAFE = frozenset(string.ascii_letters + string.digits + "-_")
 # implies events.read and isms.read; with_implied_permissions adds those first.
 SCOPES: dict[str, tuple[str, frozenset[str]]] = {
     "isms.read": (
-        "ISMS records: objectives, SWOT, policies and processes, assets, people "
-        "and vendors / 3rd parties",
+        "ISMS records: objectives, SWOT, the legal register, policies and "
+        "processes, assets, people and vendors / 3rd parties",
         frozenset({"isms.read", "isms.manage"}),
     ),
     "risk.read": (
@@ -73,8 +73,8 @@ SCOPES: dict[str, tuple[str, frozenset[str]]] = {
     # deletes them, and is granted only by that domain's manage permission.
     "isms.manage": (
         "Add and update ISMS records: policies and processes, objectives, SWOT, "
-        "assets, the access matrix, the organisation chart, measures, meetings, "
-        "people and vendors / 3rd parties",
+        "the legal register, assets, the access matrix, the organisation chart, "
+        "measures, meetings, people and vendors / 3rd parties",
         frozenset({"isms.manage"}),
     ),
     "risk.manage": (
@@ -124,6 +124,9 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("GET", "/v1/risks/{risk_id:uuid}"): None,
     ("GET", "/v1/risks/{risk_id:uuid}/controls"): None,
     ("GET", "/v1/isms/swot"): None,
+    ("GET", "/v1/isms/legal-register"): None,
+    ("GET", "/v1/isms/legal-register/meta"): None,
+    ("GET", "/v1/isms/legal-register/{item_id:uuid}"): None,
     ("GET", "/v1/isms/objectives"): None,
     ("GET", "/v1/isms/documents"): None,
     ("GET", "/v1/isms/documents/{document_id:uuid}"): None,
@@ -151,6 +154,8 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("POST", "/v1/isms/swot"): _ISMS,
     ("PATCH", "/v1/isms/swot/{item_id:uuid}"): _ISMS,
     ("POST", "/v1/isms/swot/import"): _ISMS,
+    ("POST", "/v1/isms/legal-register"): _ISMS,
+    ("PATCH", "/v1/isms/legal-register/{item_id:uuid}"): _ISMS,
     ("POST", "/v1/isms/assets"): _ISMS,
     ("PATCH", "/v1/isms/assets/{asset_id:uuid}"): _ISMS,
     ("POST", "/v1/isms/licenses"): _ISMS,

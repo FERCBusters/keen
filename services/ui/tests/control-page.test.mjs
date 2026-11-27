@@ -154,6 +154,7 @@ async function controlPage(t, options = {}) {
           };
         return {
           swot: [{ id: 's1', title: 'Strength <b>x</b>', updated_at: '2026-01-01' }],
+          legal_items: [{ id: 'l1', title: 'Data <b>Act</b>', updated_at: '2026-01-02' }],
           objectives: [{ requirement: 'Reduce incidents' }],
           documents: empty.documents
             ? []
@@ -472,13 +473,24 @@ test('the governance pane loads ISMS and changelog on demand and updates the URL
   const rows = [...ui.el('controlIsmsView').querySelectorAll('tbody tr')];
   assert.deepEqual(
     rows.map((r) => r.cells[0].textContent),
-    ['SWOT', 'Objectives', 'Organisation chart', 'Assets', 'Meetings', 'Meetings'],
+    [
+      'SWOT',
+      'Legal register',
+      'Objectives',
+      'Organisation chart',
+      'Assets',
+      'Meetings',
+      'Meetings',
+    ],
   );
   assert.equal(ui.el('controlIsmsView').querySelector('b'), null);
   const hrefs = rows.map((r) => r.querySelector('a').getAttribute('href'));
   assert.match(hrefs[0], /^\/swot\.html\?id=s1&framework=A$/);
-  assert.match(hrefs[4], /isms-meeting\.html\?id=mt1/);
-  assert.match(hrefs[5], /isms\.html\?tab=meetings/);
+  // A legal register item opens its own page, with its title shown as text.
+  assert.equal(hrefs[1], '/legal-register.html?id=l1&framework=A');
+  assert.equal(rows[1].cells[1].textContent, 'Data <b>Act</b>');
+  assert.match(hrefs[5], /isms-meeting\.html\?id=mt1/);
+  assert.match(hrefs[6], /isms\.html\?tab=meetings/);
   await settle(() => /Justification changed/.test(ui.el('controlChangelog').textContent));
   assert.equal(ui.el('controlChangelog').querySelector('b'), null);
   // A second activation reuses the loaded references.
@@ -1184,7 +1196,7 @@ test('the ISMS tab names what it lists when only policies or measures are linked
   await settle(() => !/Loading/.test(ui.el('controlIsmsView').textContent));
   assert.equal(
     ui.el('controlIsmsView').textContent,
-    'No SWOT items, objectives, organisation roles, assets or meetings are linked to this control.',
+    'No SWOT items, legal register items, objectives, organisation roles, assets or meetings are linked to this control.',
   );
 });
 

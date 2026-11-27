@@ -102,6 +102,7 @@ async function clausePage(t, options = {}) {
         if (options.isms) return options.isms;
         return {
           swot: [{ id: 's1', title: 'Weak <b>backups</b>' }],
+          legal_items: [{ id: 'l1', title: 'Data <b>Act</b>' }],
           objectives: [{ goal: 'Zero breaches' }],
           documents: [{}],
           org_nodes: [{ name: 'CISO' }],
@@ -341,10 +342,17 @@ test('PESTLE and ISMS tabs load linked records on demand', async (t) => {
   const rows = [...ui.el('clauseIsmsView').querySelectorAll('tbody tr')];
   assert.deepEqual(
     rows.map((r) => r.cells[1].textContent),
-    ['Weak <b>backups</b>', 'Zero breaches', 'Document', 'CISO', 'DB', 'Board'],
+    ['Weak <b>backups</b>', 'Data <b>Act</b>', 'Zero breaches', 'Document', 'CISO', 'DB', 'Board'],
   );
   assert.match(rows[0].querySelector('a').getAttribute('href'), /swot\.html\?id=s1&framework=A/);
-  assert.match(rows[1].querySelector('a').getAttribute('href'), /isms\.html\?tab=objectives/);
+  // A legal register item opens its own page, and its title is shown as text.
+  assert.equal(rows[1].cells[0].textContent, 'Legal register');
+  assert.equal(
+    rows[1].querySelector('a').getAttribute('href'),
+    '/legal-register.html?id=l1&framework=A',
+  );
+  assert.equal(rows[1].querySelector('b'), null);
+  assert.match(rows[2].querySelector('a').getAttribute('href'), /isms\.html\?tab=objectives/);
   tab(ui, 'clauseChangelogTab');
   assert.match(ui.window.location.search, /tab=changelog/);
   tab(ui, 'clauseControlsTab');

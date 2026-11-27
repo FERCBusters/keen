@@ -1447,6 +1447,140 @@ class AuditSwotScope(Base):
     )
 
 
+class IsmsLegalCategory(Base):
+    """A category of law in the legal register, such as data protection."""
+
+    __tablename__ = "isms_legal_categories"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    __table_args__ = (
+        Index("uq_isms_legal_categories_name", sql_text("lower(name)"), unique=True),
+    )
+
+
+class IsmsLegalItem(Base):
+    """A law, regulation or contractual requirement in the legal register."""
+
+    __tablename__ = "isms_legal_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    url: Mapped[str | None] = mapped_column(String(2048))
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_legal_categories.id", ondelete="RESTRICT"),
+        index=True,
+    )
+    jurisdiction: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    authority: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    requirement: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    applicability: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    in_scope: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, index=True
+    )
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    # The outcome and date of the newest assessment, kept on the item so the
+    # register lists and filters by them.
+    compliance_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_assessed", index=True
+    )
+    last_assessed_date: Mapped[date | None] = mapped_column(Date)
+    next_assessment_date: Mapped[date | None] = mapped_column(Date, index=True)
+    # When the owner was reminded of next_assessment_date; cleared when that
+    # date changes, so each due date is reminded once.
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+
+    category = relationship("IsmsLegalCategory")
+    owner = relationship("User", foreign_keys=[owner_user_id])
+    __table_args__ = (
+        CheckConstraint(
+            "compliance_status in ('not_assessed','compliant',"
+            "'partially_compliant','non_compliant')",
+            name="ck_legal_item_status",
+        ),
+    )
+
+
+class IsmsLegalAssessment(Base):
+    """One assessment of a legal register item: when, by whom and its outcome."""
+
+    __tablename__ = "isms_legal_assessments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_legal_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assessed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    assessed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    outcome: Mapped[str] = mapped_column(String(24), nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+
+    assessed_by = relationship("User", foreign_keys=[assessed_by_user_id])
+    __table_args__ = (
+        CheckConstraint(
+            "outcome in ('compliant','partially_compliant','non_compliant')",
+            name="ck_legal_assessment_outcome",
+        ),
+    )
+
+
+class IsmsLegalItemLink(Base):
+    """A document, asset or risk a legal register item relates to."""
+
+    __tablename__ = "isms_legal_item_links"
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("isms_legal_items.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    target_type: Mapped[str] = mapped_column(String(24), primary_key=True)
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    __table_args__ = (
+        Index("ix_legal_item_link_target", "target_type", "target_id"),
+        CheckConstraint(
+            "target_type in ('document','asset','risk')",
+            name="ck_legal_item_link_type",
+        ),
+    )
+
+
 class IsmsObjective(Base):
     __tablename__ = "isms_objectives"
 

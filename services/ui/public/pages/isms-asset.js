@@ -168,5 +168,7 @@ load();
 
 import { mountSwotRelated } from '/pages/swot-related.js';
 import { mountStoryRelated } from '/pages/story-related.js';
+import { mountLegalRelated } from '/pages/legal-related.js';
 mountSwotRelated('asset', new URLSearchParams(location.search).get('id'));
 mountStoryRelated({ me, kind: 'asset', id: new URLSearchParams(location.search).get('id') });
+mountLegalRelated({ me, type: 'asset', id: new URLSearchParams(location.search).get('id') });

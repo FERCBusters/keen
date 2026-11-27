@@ -422,6 +422,12 @@ function _ismsEntityRows(data) {
   const groups = [
     ['SWOT', data.swot, (x) => x.title, (x) => `/swot.html?id=${encodeURIComponent(x.id)}`],
     [
+      'Legal register',
+      data.legal_items,
+      (x) => x.title,
+      (x) => `/legal-register.html?id=${encodeURIComponent(x.id)}`,
+    ],
+    [
       'Objectives',
       data.objectives,
       (x) => x.goal || x.requirement || 'Objective',
@@ -447,7 +453,7 @@ function _ismsEntityRows(data) {
     }
   }
   if (!rows.length)
-    return '<div class="small-muted">No SWOT items, objectives, organisation roles, assets or meetings are linked to this control.</div>';
+    return '<div class="small-muted">No SWOT items, legal register items, objectives, organisation roles, assets or meetings are linked to this control.</div>';
   return `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th style="width:190px;">Type</th><th>Entity</th><th style="width:170px;">Updated</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 

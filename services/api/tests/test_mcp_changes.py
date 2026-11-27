@@ -151,8 +151,21 @@ def test_an_update_sends_only_the_fields_given(api):
     assert api.calls[-1][2] == {"asset": "Laptop"}
     with pytest.raises(ToolError, match="Name at least one field"):
         run(changes.update_record("asset", ID, {}))
-    with pytest.raises(ToolError, match="needs expected_version"):
+    with pytest.raises(
+        ToolError, match="needs expected_version, as list_swot shows it"
+    ):
         run(changes.update_record("swot_item", ID, {"title": "x"}))
+    with pytest.raises(
+        ToolError, match="needs expected_version, as list_legal_register shows it"
+    ):
+        run(changes.update_record("legal_item", ID, {"title": "x"}))
+    api.answers[("PATCH", f"/v1/isms/legal-register/{ID}")] = {"id": ID}
+    run(
+        changes.update_record(
+            "legal_item", ID, {"in_scope": False, "expected_version": 3}
+        )
+    )
+    assert api.calls[-1][2] == {"in_scope": False, "expected_version": 3}
     api.answers[("PATCH", f"/v1/isms/swot/{ID}")] = {"id": ID}
     run(changes.update_record("swot_item", ID, {"title": "x", "expected_version": 2}))
     assert api.calls[-1][2] == {"title": "x", "expected_version": 2}

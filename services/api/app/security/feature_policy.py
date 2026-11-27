@@ -31,6 +31,7 @@ ISMS_OWNERS = {
     "access_control": "access_control",
     "effectiveness": "effectiveness",
     "meetings": "meetings",
+    "legal_register": "legal_register",
 }
 
 

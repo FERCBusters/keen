@@ -213,7 +213,7 @@ Every table is a SQLAlchemy model in the single file `app/db/models.py`, and eve
 | `Event`, `Artifact`, `Mapping` | One collected occurrence, its original bytes, and its link to a control. |
 | `Risk`, `RiskAsset`, `RiskControlLink`, `RiskClauseLink` | A risk, the asset it concerns, and its links to controls and clauses. |
 | `PestleItem`, `PestleClauseRelevance`, `PestleControlRelevance` | A PESTLE(E) item and how relevant it is to each clause and control. |
-| `Isms*` | The ISMS registers: objectives, documents, organisation chart, people, vendors, access matrix, measures, meetings, SWOT. |
+| `Isms*` | The ISMS registers: objectives, documents, organisation chart, people, vendors, access matrix, measures, meetings, SWOT, the legal register. |
 | `IsmsEntityControlLink`, `IsmsEntityClauseLink` | One generic pair of link tables that ties any ISMS record to controls and clauses. |
 | `EntityChangelog` | One recorded change to any record, with the state before and after as JSON. |
 | `User`, `Group`, `Permission` | Accounts, groups and the permission codes they hold. |
@@ -408,7 +408,7 @@ Each row is a feature area, the service that owns it and its pages. Routes live 
 | Sources and connections | `services/sources.py`, `source_connections.py` | `sources.html`, `source.html`, `admin.html` |
 | Risks | `services/risks.py`, `risk_register.py`, `risk_mitigator.py` | `risks.html`, `risk.html`, `risk-wizard.html`, `mitigator.html` |
 | PESTLE(E) | `services/pestle.py` | `pestle.html`, `pestle_item.html` |
-| ISMS records | `services/isms/` (objectives, documents, meetings, assets, organisation, effectiveness, SWOT) | `isms.html` and the `isms-*.html` pages, `swot.html` |
+| ISMS records | `services/isms/` (objectives, documents, meetings, assets, organisation, effectiveness, SWOT, legal register) | `isms.html` and the `isms-*.html` pages, `swot.html`, `legal-register.html` |
 | Audits | `services/audits/` | `audits.html`, `audit.html`, `audit-wizard.html` |
 | People, vendors, quizzes | `services/people.py`, `assurance.py`, `services/quizzes/` | `assurance.html`, `person.html`, `vendor.html`, `quizzes.html` |
 | Questions and stories | `services/questions.py`, `stories.py` | `questions.html`, `stories.html`, `story.html` |

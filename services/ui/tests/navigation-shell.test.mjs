@@ -128,6 +128,7 @@ test('risk and ISMS pages are grouped into menus that keep the framework', async
     ['ISMS overview', '/isms.html?framework=A'],
     ['Objectives', '/isms.html?tab=objectives&framework=A'],
     ['SWOT analysis', '/swot.html?framework=A'],
+    ['Legal register', '/legal-register.html?framework=A'],
     ['Effectiveness measures', '/isms.html?tab=effectiveness&framework=A'],
     ['Quizzes', '/quizzes.html?framework=A'],
     ['Policies & processes', '/isms.html?tab=documents&framework=A'],
@@ -158,7 +159,7 @@ test('without risk access the ISMS menu still joins the navigation', async (t) =
   });
   assert.equal(ui.nav.querySelector('#riskAssessmentsDropdown'), null);
   assert.ok(ui.topLevel().includes('ISMS'));
-  assert.equal(ui.menu('ismsDropdown').length, 12);
+  assert.equal(ui.menu('ismsDropdown').length, 13);
 });
 
 test('an ISMS link supplied by the design system is used as it is', async (t) => {

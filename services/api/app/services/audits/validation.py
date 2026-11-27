@@ -26,6 +26,7 @@ AUDIT_SAMPLE_ENTITY_LABELS = {
     "isms_asset": "ISMS asset",
     "isms_access_control_matrix": "Access control matrix row",
     "isms_meeting": "ISMS meeting",
+    "isms_legal_item": "Legal register item",
     "isms_effectiveness_measure": "ISMS effectiveness measure",
     "isms_effectiveness_metric": "ISMS effectiveness metric",
     "story": "Story",

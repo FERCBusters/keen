@@ -1845,6 +1845,7 @@ class DemoSeeder:
         from app.ingest.demo_rss import seed_preset
         from demo_documents import seed_documents
         from demo_evidence import seed_evidence, seed_further_mappings
+        from demo_legal import seed_legal
         from demo_link_diary import seed_link_diary
         from demo_pestle import seed_pestle
         from demo_quizzes import seed_quizzes
@@ -1860,6 +1861,7 @@ class DemoSeeder:
         seed_pestle(self)
         self.seed_access_matrix(assets, org_nodes)
         docs = seed_documents(self)
+        seed_legal(self, frameworks, docs, assets, risks)
         diary_events = self.seed_diary_events()
         events = {**diary_events, **self.seed_source_events(), **seed_evidence(self)}
         seed_further_mappings(self, events)

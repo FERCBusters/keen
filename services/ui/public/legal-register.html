@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Keen - Legal register</title>
+    <script src="/vendor/mosp-design-system/theme-boot.js"></script>
+    <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet" />
+    <link href="/styles.css" rel="stylesheet" />
+    <link href="/planning.css" rel="stylesheet" />
+    <link rel="icon" href="/favicon.svg" />
+    <script src="/demo-notice.js" defer></script>
+  </head>
+  <body data-page="isms">
+    <a class="visually-hidden-focusable" href="#main-content">Skip to content</a>
+    <div id="navbar"></div>
+    <main id="main-content" class="container-fluid py-4">
+      <div id="status" role="status"></div>
+      <header class="d-flex flex-wrap justify-content-between gap-3 mb-4">
+        <div>
+          <a href="/isms.html" data-nav-fw="1">ISMS</a>
+          <h1 id="pageTitle" class="h2 mt-2">Legal register</h1>
+          <p class="small-muted">
+            The laws, regulations and contractual requirements that apply to the organisation, who
+            owns each one, and when it was last assessed.
+          </p>
+        </div>
+        <div class="d-flex gap-2 align-items-start">
+          <a class="btn btn-primary" id="newItem" href="/legal-register.html?new=1" data-nav-fw="1" hidden
+            >New item</a
+          >
+        </div>
+      </header>
+
+      <section id="workspace" hidden>
+        <form
+          id="filters"
+          class="card mb-3"
+          data-mosp-filter-section="legal-register-filters"
+          data-mosp-filter-title="Filters"
+          data-mosp-filter-default="collapsed"
+        >
+          <div class="card-body" data-mosp-filter-body hidden>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label for="search" class="form-label">Search</label>
+                <input
+                  id="search"
+                  class="form-control"
+                  maxlength="256"
+                  placeholder="Title, requirement, jurisdiction or authority"
+                />
+              </div>
+              <div class="col-md-3">
+                <label for="categoryFilter" class="form-label">Category</label>
+                <select id="categoryFilter" class="form-select">
+                  <option value="">All categories</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label for="scopeFilter" class="form-label">Scope</label>
+                <select id="scopeFilter" class="form-select">
+                  <option value="">In and out of scope</option>
+                  <option value="true">In scope</option>
+                  <option value="false">Out of scope</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="statusFilter" class="form-label">Compliance status</label>
+                <select id="statusFilter" class="form-select">
+                  <option value="">All statuses</option>
+                </select>
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="dueFilter" />
+                  <label class="form-check-label" for="dueFilter">Assessment due only</label>
+                </div>
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary" type="submit">Apply filters</button>
+              </div>
+            </div>
+          </div>
+        </form>
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+          <div id="resultCount" aria-live="polite"></div>
+          <div class="d-flex gap-2">
+            <a id="exportCsv" class="btn btn-sm btn-outline-primary" href="#" download
+              >Export CSV</a
+            >
+            <button
+              id="manageCategories"
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              aria-expanded="false"
+              aria-controls="categoryPanel"
+              hidden
+            >
+              Manage categories
+            </button>
+          </div>
+          <div>
+            <button id="previous" class="btn btn-sm btn-outline-secondary" type="button">
+              Previous
+            </button>
+            <button id="next" class="btn btn-sm btn-outline-secondary" type="button">Next</button>
+          </div>
+        </div>
+        <p id="relatedNotice" class="alert alert-info" hidden>
+          Showing the items related to one record.
+          <a href="/legal-register.html" data-nav-fw="1">Show the whole register</a>
+        </p>
+        <section id="categoryPanel" class="card mb-3" hidden>
+          <div class="card-body">
+            <h2 class="h5">Categories</h2>
+            <p class="small-muted">
+              Rename a category, or delete one that no item uses. An item's form also takes a new
+              category name.
+            </p>
+            <div id="categoryList" class="d-grid gap-2 mb-3"></div>
+            <form id="categoryForm" class="row g-2">
+              <div class="col-md-4">
+                <label for="categoryName" class="form-label">New category</label>
+                <input id="categoryName" class="form-control" maxlength="128" required />
+              </div>
+              <div class="col-md-6">
+                <label for="categoryDescription" class="form-label">Description (optional)</label>
+                <input id="categoryDescription" class="form-control" maxlength="2000" />
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-outline-primary" type="submit">Add category</button>
+              </div>
+            </form>
+          </div>
+        </section>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle" id="registerTable">
+            <thead>
+              <tr>
+                <th scope="col">Legislation</th>
+                <th scope="col">Category</th>
+                <th scope="col">Requirement</th>
+                <th scope="col">Applicability</th>
+                <th scope="col">In scope</th>
+                <th scope="col">Compliance</th>
+                <th scope="col">Last assessed</th>
+                <th scope="col">Next assessment</th>
+                <th scope="col">Owner</th>
+              </tr>
+            </thead>
+            <tbody id="registerRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="detail" hidden>
+        <div class="d-flex gap-2 mb-3">
+          <a href="/legal-register.html" class="me-auto" data-nav-fw="1">← Legal register</a>
+          <a
+            id="sourceLink"
+            class="btn btn-sm btn-outline-secondary"
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+            >Open legislation</a
+          >
+          <button
+            id="sample"
+            data-feature="sampling"
+            class="btn btn-sm btn-outline-success"
+            type="button"
+            hidden
+          >
+            Sample into audit
+          </button>
+          <button id="deleteItem" class="btn btn-sm btn-outline-danger" type="button" hidden>
+            Delete item
+          </button>
+        </div>
+        <p id="draftNotice" class="alert alert-info" hidden>
+          Draft: assessments, related items, questions and audit sampling are available after
+          saving.
+        </p>
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item">
+            <button
+              class="nav-link active"
+              data-bs-toggle="tab"
+              data-bs-target="#detailsPane"
+              type="button"
+              role="tab"
+              id="detailsTab"
+            >
+              Details
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#assessmentsPane"
+              type="button"
+              role="tab"
+              id="assessmentsTab"
+            >
+              Assessments
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#relatedPane"
+              type="button"
+              role="tab"
+              id="relatedTab"
+            >
+              Related items
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#graphPane"
+              type="button"
+              role="tab"
+              id="graphTab"
+              data-feature="visualisations"
+            >
+              Visualisation
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#questionsPane"
+              type="button"
+              role="tab"
+              id="questionsTab"
+              data-feature="questions"
+            >
+              Questions
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#changelogPane"
+              type="button"
+              role="tab"
+              id="changelogTab"
+            >
+              Changelog
+            </button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <section class="tab-pane fade show active" id="detailsPane" role="tabpanel">
+            <form id="itemForm">
+              <fieldset id="editor" disabled>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label for="title" class="form-label">Legislation or requirement</label>
+                    <input id="title" class="form-control" required maxlength="256" />
+                  </div>
+                  <div class="col-md-6">
+                    <label for="url" class="form-label">Link to its text (optional)</label>
+                    <input
+                      id="url"
+                      type="url"
+                      class="form-control"
+                      maxlength="2048"
+                      placeholder="https://"
+                    />
+                  </div>
+                  <div class="col-md-3">
+                    <label for="category" class="form-label">Category</label>
+                    <select id="category" class="form-select">
+                      <option value="">Uncategorised</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label for="newCategory" class="form-label">Or a new category</label>
+                    <input id="newCategory" class="form-control" maxlength="128" />
+                  </div>
+                  <div class="col-md-3">
+                    <label for="jurisdiction" class="form-label">Jurisdiction</label>
+                    <input id="jurisdiction" class="form-control" maxlength="128" />
+                  </div>
+                  <div class="col-md-3">
+                    <label for="authority" class="form-label">Authority or regulator</label>
+                    <input id="authority" class="form-control" maxlength="256" />
+                  </div>
+                  <div class="col-md-3">
+                    <label for="inScope" class="form-label">In scope</label>
+                    <select id="inScope" class="form-select">
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label for="owner" class="form-label">Owner</label>
+                    <select id="owner" class="form-select">
+                      <option value="">Unassigned</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label for="nextAssessment" class="form-label">Next assessment date</label>
+                    <input type="date" id="nextAssessment" class="form-control" />
+                    <div class="form-text">The owner is emailed a reminder as it falls due.</div>
+                  </div>
+                  <div class="col-md-3">
+                    <span class="form-label d-block">Compliance status</span>
+                    <div id="statusSummary" class="pt-1"></div>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="requirement" class="form-label">Requirement</label>
+                    <textarea
+                      id="requirement"
+                      class="form-control"
+                      rows="6"
+                      maxlength="20000"
+                    ></textarea>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="applicability" class="form-label">Applicability</label>
+                    <textarea
+                      id="applicability"
+                      class="form-control"
+                      rows="6"
+                      maxlength="20000"
+                    ></textarea>
+                    <div class="form-text">How and why it applies, or why it is out of scope.</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="controls" class="form-label">Controls in selected framework</label>
+                    <select
+                      id="controls"
+                      class="form-select"
+                      multiple
+                      size="7"
+                      aria-describedby="mappingHelp"
+                    ></select>
+                    <p id="mappingHelp" class="form-text">
+                      Use Ctrl (Command on macOS) or Shift to select several. Links in other
+                      frameworks are kept.
+                    </p>
+                    <div id="controlLinks" class="mt-2"></div>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="clauses" class="form-label">Clauses in selected framework</label>
+                    <select
+                      id="clauses"
+                      class="form-select"
+                      multiple
+                      size="7"
+                      aria-describedby="mappingHelp"
+                    ></select>
+                    <div id="clauseLinks" class="mt-2"></div>
+                  </div>
+                </div>
+                <button class="btn btn-primary mt-3" type="submit">Save item</button>
+              </fieldset>
+            </form>
+          </section>
+          <section class="tab-pane fade" id="assessmentsPane" role="tabpanel">
+            <div id="assessmentSummary" class="mb-3"></div>
+            <div class="table-responsive mb-4">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th scope="col">Assessed on</th>
+                    <th scope="col">Outcome</th>
+                    <th scope="col">Assessed by</th>
+                    <th scope="col">Notes</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody id="assessmentRows"></tbody>
+              </table>
+            </div>
+            <form id="assessmentForm" hidden>
+              <h2 class="h5">Add an assessment</h2>
+              <div class="row g-2">
+                <div class="col-md-3">
+                  <label for="assessedOn" class="form-label">Assessed on</label>
+                  <input type="date" id="assessedOn" class="form-control" required />
+                </div>
+                <div class="col-md-3">
+                  <label for="outcome" class="form-label">Outcome</label>
+                  <select id="outcome" class="form-select" required></select>
+                </div>
+                <div class="col-md-3">
+                  <label for="assessedBy" class="form-label">Assessed by</label>
+                  <select id="assessedBy" class="form-select"></select>
+                </div>
+                <div class="col-md-3">
+                  <label for="assessmentNext" class="form-label">Next assessment date</label>
+                  <input type="date" id="assessmentNext" class="form-control" />
+                </div>
+                <div class="col-12">
+                  <label for="assessmentNotes" class="form-label">Notes</label>
+                  <textarea
+                    id="assessmentNotes"
+                    class="form-control"
+                    rows="4"
+                    maxlength="20000"
+                  ></textarea>
+                </div>
+              </div>
+              <button class="btn btn-primary mt-3" type="submit">Add assessment</button>
+            </form>
+          </section>
+          <section class="tab-pane fade" id="relatedPane" role="tabpanel">
+            <div id="relatedList" class="row g-3 mb-4"></div>
+            <form id="linkForm" hidden>
+              <div class="row g-2">
+                <div class="col-md-3">
+                  <label for="linkType" class="form-label">Record type</label>
+                  <select id="linkType" class="form-select"></select>
+                </div>
+                <div class="col-md-3">
+                  <label for="linkSearch" class="form-label">Search records</label>
+                  <input id="linkSearch" class="form-control" maxlength="256" />
+                  <button id="findLinks" type="button" class="btn btn-sm btn-outline-secondary mt-2">
+                    Search
+                  </button>
+                </div>
+                <div class="col-md-4">
+                  <label for="linkItem" class="form-label">Record</label>
+                  <select id="linkItem" class="form-select" required></select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                  <button class="btn btn-primary" type="submit">Link record</button>
+                </div>
+              </div>
+            </form>
+          </section>
+          <section class="tab-pane fade planning-visual" id="graphPane" role="tabpanel">
+            <div id="graph"></div>
+          </section>
+          <section class="tab-pane fade" id="questionsPane" role="tabpanel">
+            <div id="questionPanel" data-feature="questions"></div>
+          </section>
+          <section class="tab-pane fade" id="changelogPane" role="tabpanel">
+            <div id="changelog"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="/vendor/d3/d3.min.js"></script>
+    <script type="module" src="/pages/legal-register.js"></script>
+  </body>
+</html>

@@ -84,6 +84,12 @@ const topics = {
     'Record context, significance and responses, then link framework controls, clauses and related records.',
     'Use quadrants, status boards and timelines to review the work. The guide explains hierarchy, questions and audit sampling.',
   ],
+  legalRegister: [
+    'Legal register',
+    'using-isms.html#legal-register',
+    'List the laws, regulations and contractual requirements that apply, with their scope, owner, controls and related records.',
+    'Add an assessment with its outcome and the next assessment date; the owner is reminded as that date falls due.',
+  ],
   isms: [
     'ISMS records',
     'using-isms.html',
@@ -316,6 +322,8 @@ const pages = {
   quiz: 'quizzes',
   'quiz-take': 'myQuizzes',
 };
+// Pages that share another page's name and have a guide of their own.
+const paths = { '/swot.html': 'swot', '/legal-register.html': 'legalRegister' };
 // Tabs that change the subject of a page. Keys are the tab buttons' ids.
 const tabs = {
   flowTab: 'storyFlow',
@@ -401,8 +409,7 @@ export function resolveHelp(trigger) {
     if (page === 'admin')
       key = own(panes, document.querySelector('#adminTabContent > .tab-pane.active').id);
     else {
-      const swot = location.pathname === '/swot.html';
-      key = activeTabTopic() || (swot ? 'swot' : own(pages, page));
+      key = activeTabTopic() || own(paths, location.pathname) || own(pages, page);
     }
   }
   if (key === 'sources' && document.querySelector('#hub-mapping[aria-selected="true"]'))

@@ -30,6 +30,7 @@ import {
 import { affectedBadgesHtml } from '/pages/affected-common.js';
 import { renderRecordLinksGraph } from '/pages/record-links-graph.js';
 import { mountSwotRelated } from '/pages/swot-related.js';
+import { mountLegalRelated } from '/pages/legal-related.js';
 import { mountStoryRelated } from '/pages/story-related.js';
 
 const me = await initNavbar();
@@ -363,3 +364,4 @@ await loadRisk();
 
 mountSwotRelated('risk', new URLSearchParams(location.search).get('id'));
 mountStoryRelated({ me, kind: 'risk', id: new URLSearchParams(location.search).get('id') });
+mountLegalRelated({ me, type: 'risk', id: new URLSearchParams(location.search).get('id') });
