@@ -2,8 +2,8 @@
   "comment": "Dependencies fetched from a git host, which npm does not checksum: each one's pinned commit and a SHA-256 digest of its fetched tree, recorded when it was reviewed. The image build checks them before running any of their code, and the vendoring before copying any of their files. `built` names the directory a package's own build writes, which the digest leaves out. After reviewing a new pin, run `npm run vendor:record`.",
   "packages": {
     "@fercbusters/mosp-design-system": {
-      "commit": "fe3a8d7a69e598c1f45e7a8f071ca20829785ba8",
-      "tree": "52607aedf56aea7f570ee8a3064afa8f8d50d5d6c5d05abf2340cdfda76253a4",
+      "commit": "6a7f80685844967fe68b97608603baab3500d1d2",
+      "tree": "072d6dfdb980f7620079967c0c60d3fb3fa02acf530ef62a6686d8886661eeee",
       "built": "dist"
     },
     "wysi": {

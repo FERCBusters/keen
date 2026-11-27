@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@fercbusters/mosp-design-system": "github:FERCBusters/mosp-design-system#fe3a8d7a69e598c1f45e7a8f071ca20829785ba8",
+    "@fercbusters/mosp-design-system": "github:FERCBusters/mosp-design-system#6a7f80685844967fe68b97608603baab3500d1d2",
     "bootstrap": "5.3.8",
     "bootstrap-icons": "1.13.1",
     "d3": "7.9.0",
