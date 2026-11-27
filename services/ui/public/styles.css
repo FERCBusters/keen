@@ -2726,23 +2726,3 @@ tr[data-doc-drag] {
   max-height: max(360px, calc(100vh - 23rem));
   overflow-y: auto;
 }
-
-/* A record's related items: short cards side by side, and below them the
-   cards that hold a table, each the full width. A hidden card leaves no gap. */
-.related-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
-  gap: 1rem;
-  align-items: start;
-}
-
-.related-cards > .related-card-wide {
-  grid-column: 1 / -1;
-}
-
-/* A card is never wider than its column. Its body must not scroll: a table's
-   header sticks beneath the navbar as the page scrolls, and inside a scrolling
-   box it would stick to that box instead, part-way down over the first rows. */
-.related-cards > .card {
-  min-width: 0;
-}

@@ -105,7 +105,7 @@ test('without people, controls or clauses in the meta the editor offers none of 
   assert.equal(draft.el('pageTitle').textContent, 'New SWOT item');
   assert.equal(draft.el('status').textContent, '');
   assert.equal(draft.el('controls').options.length, 0);
-  assert.match(draft.el('relatedList').textContent, /No linked items\./);
+  assert.match(draft.el('relatedList').textContent, /No linked records\./);
 });
 
 test('readers see an item’s relationships without unlink buttons', async (t) => {

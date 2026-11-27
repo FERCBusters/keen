@@ -4,7 +4,7 @@
 // Everything shown is built as elements, so stored text is never parsed as HTML.
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountQuestionThreads } from '/pages/question-threads.js';
-import { mountStoryRelated } from '/pages/story-related.js';
+import { renderRelatedRecords, storiesCard } from '/pages/related-records.js';
 import { renderRecordLinksGraph } from '/pages/record-links-graph.js';
 import {
   errorText,
@@ -387,63 +387,18 @@ function relatedLinks(type) {
   return row.links.filter((link) => link.target_type === type);
 }
 
+// The stories card is built once and shown again each time the tab is drawn.
+let relatedStories = null;
+
 function renderRelated() {
-  $('relatedList').replaceChildren(
-    ...types.map((type) => {
-      const links = relatedLinks(type);
-      return node(
-        'section',
-        { class: 'col-12 col-md-6 col-xl-4' },
-        node(
-          'div',
-          { class: 'card h-100' },
-          node(
-            'div',
-            { class: 'card-body p-3' },
-            node(
-              'h3',
-              { class: 'h6 d-flex justify-content-between' },
-              LINK_TYPES[type],
-              node('span', { class: 'badge text-bg-secondary' }, String(links.length)),
-            ),
-            node(
-              'div',
-              { class: 'd-grid gap-2' },
-              ...(links.length
-                ? links.map((link) =>
-                    node(
-                      'div',
-                      { class: 'border rounded p-2 d-flex align-items-center gap-2' },
-                      node(
-                        'a',
-                        {
-                          class: 'text-break flex-grow-1',
-                          href: recordHref(link),
-                        },
-                        link.title,
-                      ),
-                      manage
-                        ? node(
-                            'button',
-                            {
-                              type: 'button',
-                              class: 'btn btn-sm btn-outline-danger flex-shrink-0',
-                              'data-unlink-type': type,
-                              'data-unlink-id': link.target_id,
-                              'aria-label': `Remove ${link.title}`,
-                            },
-                            'Unlink',
-                          )
-                        : null,
-                    ),
-                  )
-                : [muted('No linked records.')]),
-            ),
-          ),
-        ),
-      );
-    }),
-  );
+  renderRelatedRecords($('relatedList'), {
+    types,
+    label: (type) => LINK_TYPES[type],
+    links: row.links,
+    href: recordHref,
+    manage,
+    stories: relatedStories,
+  });
 }
 
 function renderGraph() {
@@ -690,18 +645,17 @@ try {
     await loadDetail();
     // The stories that include the item are a card among its related items;
     // a draft has none yet.
-    if (itemId)
-      $('relatedStoriesCard').hidden = !mountStoryRelated({
+    if (itemId) {
+      relatedStories = storiesCard({
         me,
         kind: 'legal_item',
         id: itemId,
         framework,
-        host: $('relatedStories'),
         trigger: $('relatedTab'),
-        onLoad: (stories) => {
-          $('relatedStoriesCount').textContent = String(stories.length);
-        },
+        noun: 'legal register item',
       });
+      renderRelated();
+    }
     const tab = TABS.includes(params.get('tab')) && !isNew ? params.get('tab') : 'details';
     window.bootstrap?.Tab.getOrCreateInstance($(tab + 'Tab')).show();
   } else {

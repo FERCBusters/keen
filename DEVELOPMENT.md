@@ -512,6 +512,12 @@ An administrator can switch features off. Two things make the UI follow:
 - `pages/feature-availability.js` maps each page to its feature, and hides links to a page whose feature is off.
 - An element with `data-feature="<key>"` is hidden when that feature is off. Use it on tabs and buttons that belong to another feature, as the Visualisation tabs do with `data-feature="visualisations"`.
 
+### Related-item cards
+
+A page that lists what a record is linked to builds each list with the design system's `relatedCard` and groups them with `relatedCards` (both come through `/app.js`), and changes a card's count and content with `updateRelatedCard`. Do not write a card's markup by hand: the frame, heading, text size and table style are the design system's, which is what keeps the cards alike on every page. `pages/related-records.js` draws the Related items tab of a record that keeps its own relationships, as the legal register and SWOT pages use it, and a control's cards are built at the top of `pages/control.js`.
+
+Pass text as strings and it is written as text. Where a card needs markup of its own (a badge, a form), build the element with `node()` and pass the element; the builder refuses a string in an element's place. Page tests run against a stand-in for the design system (`tests/support/related-cards.mjs`) that keeps the same contract.
+
 ### The Map
 
 `app/services/record_map.py` builds the Map's graph: `load_records` adds a node for every record the reader can open and `load_links` adds a link for every relationship, which `link()` keeps only when both ends are nodes. To put a new kind of record on the Map, add it to `KINDS`, load its rows in `load_records` with the same access rule its own page uses, and add its relationships to `load_links`; then give it a colour in `pages/map.js`. To draw a new relationship between existing kinds, add it to `load_links` and name it in `RELATIONS` in `pages/map.js`.

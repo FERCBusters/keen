@@ -213,44 +213,60 @@ function cell(attrs, ...children) {
   return node('td', attrs, ...children);
 }
 
-// The risks linked to one control or clause, as that record's page lists them.
-export function linkedRisksTable(items, framework) {
-  const heading = (label, attrs = {}) => node('th', attrs, label);
+// The risks mapped to one control or clause as a table: its columns and, for
+// each risk, its cells. A related-items card draws it (the design system's
+// relatedCard), and linkedRisksTable draws the same cells where a page has a
+// table of its own.
+export function linkedRisksData(items, framework) {
   const score = (value) =>
-    cell(
-      { class: 'text-end' },
-      node('span', { class: `badge ${scoreClass(value)}` }, String(Number(value || 0))),
-    );
-  const rows = items.map((r) => {
-    const owner = userDisplayName(r.risk_owner);
-    const types = (r.risk_types || []).map((type) =>
-      node('span', { class: 'badge badge-soft me-1' }, type),
-    );
-    return node(
-      'tr',
-      {},
-      cell(
-        {},
-        node('a', { class: 'fw-semibold', href: riskHref(r.id, framework) }, r.asset),
-        node(
-          'div',
-          { class: 'small-muted text-truncate', style: 'max-width:360px;' },
-          r.threat_summary || '',
-        ),
-      ),
-      cell({}, r.category?.name || ''),
-      cell({}, r.subcategory?.name || ''),
-      cell({}, ...(types.length ? types : [node('span', { class: 'small-muted' }, '-')])),
-      score(r.risk_score),
-      score(r.residual_risk_score),
-      cell(
-        {},
-        owner
-          ? node('span', { class: 'badge badge-soft user-pill' }, owner)
-          : node('span', { class: 'small-muted' }, '-'),
-      ),
-    );
-  });
+    node('span', { class: `badge ${scoreClass(value)}` }, String(Number(value || 0)));
+  const none = () => node('span', { class: 'small-muted' }, '-');
+  return {
+    columns: [
+      { label: 'Asset' },
+      { label: 'Category', width: '130px' },
+      { label: 'Subcategory', width: '150px' },
+      { label: 'Type', width: '170px' },
+      { label: 'Risk', width: '90px', align: 'end' },
+      { label: 'Residual', width: '100px', align: 'end' },
+      { label: 'Owner', width: '120px' },
+    ],
+    rows: items.map((r) => {
+      const owner = userDisplayName(r.risk_owner);
+      const types = (r.risk_types || []).map((type) =>
+        node('span', { class: 'badge badge-soft me-1' }, type),
+      );
+      return [
+        [
+          node('a', { class: 'fw-semibold', href: riskHref(r.id, framework) }, r.asset),
+          node(
+            'div',
+            { class: 'small-muted text-truncate', style: 'max-width:360px;' },
+            r.threat_summary || '',
+          ),
+        ],
+        r.category?.name || '',
+        r.subcategory?.name || '',
+        types.length ? types : none(),
+        score(r.risk_score),
+        score(r.residual_risk_score),
+        owner ? node('span', { class: 'badge badge-soft user-pill' }, owner) : none(),
+      ];
+    }),
+  };
+}
+
+// A table's cells as a page's own table draws them: text, an element, or
+// several of either.
+function tableCell(column, content) {
+  return cell(
+    column.cellClass || column.align === 'end' ? { class: column.cellClass || 'text-end' } : {},
+    ...[content].flat(),
+  );
+}
+
+export function linkedRisksTable(items, framework) {
+  const { columns, rows } = linkedRisksData(items, framework);
   return node(
     'div',
     { class: 'table-responsive' },
@@ -263,34 +279,59 @@ export function linkedRisksTable(items, framework) {
         node(
           'tr',
           {},
-          heading('Asset'),
-          heading('Category', { style: 'width:130px;' }),
-          heading('Subcategory', { style: 'width:150px;' }),
-          heading('Type', { style: 'width:170px;' }),
-          heading('Risk', { class: 'text-end', style: 'width:90px;' }),
-          heading('Residual', { class: 'text-end', style: 'width:100px;' }),
-          heading('Owner', { style: 'width:120px;' }),
+          ...columns.map((column) =>
+            node(
+              'th',
+              {
+                ...(column.align === 'end' ? { class: 'text-end' } : {}),
+                ...(column.width ? { style: `width:${column.width};` } : {}),
+              },
+              column.label,
+            ),
+          ),
         ),
       ),
-      node('tbody', {}, ...rows),
+      node(
+        'tbody',
+        {},
+        ...rows.map((row) =>
+          node('tr', {}, ...row.map((content, index) => tableCell(columns[index], content))),
+        ),
+      ),
     ),
   );
 }
 
-// Table rows for the PESTLE(E) items rated against one clause or control:
-// type, lens, item, relevance to that record, overall relevance, rationale.
+// The PESTLE(E) items rated against one clause or control as a table: type,
+// lens, item, relevance to that record, overall relevance, rationale.
+export function pestleItemsData(items, framework, record) {
+  return {
+    columns: [
+      { label: 'Type', width: '150px' },
+      { label: 'Lens', width: '110px' },
+      { label: 'Item' },
+      { label: `${record} relevance`, width: '130px' },
+      { label: 'Overall relevance' },
+      { label: 'Rationale', cellClass: 'wrap small-muted' },
+    ],
+    rows: items.map((row) => {
+      const it = row.pestle_item;
+      return [
+        it.type || '',
+        it.lens || '',
+        node('a', { class: 'fw-semibold', href: pestleHref(it.id, framework) }, it.item),
+        relevanceBadge(row.relevance),
+        relevanceBadge(it.overall_relevance),
+        it.rationale || '-',
+      ];
+    }),
+  };
+}
+
+// The same rows for a page that has the table's heading in its own markup.
 export function pestleItemRows(items, framework) {
-  return items.map((row) => {
-    const it = row.pestle_item;
-    return node(
-      'tr',
-      {},
-      cell({}, it.type || ''),
-      cell({}, it.lens || ''),
-      cell({}, node('a', { class: 'fw-semibold', href: pestleHref(it.id, framework) }, it.item)),
-      cell({}, relevanceBadge(row.relevance)),
-      cell({}, relevanceBadge(it.overall_relevance)),
-      cell({ class: 'wrap small-muted' }, it.rationale || '-'),
-    );
-  });
+  const { columns, rows } = pestleItemsData(items, framework, 'Record');
+  return rows.map((row) =>
+    node('tr', {}, ...row.map((content, index) => tableCell(columns[index], content))),
+  );
 }

@@ -119,37 +119,11 @@
       </section>
 
       <section class="tab-pane fade" id="controlItemsPane" role="tabpanel" aria-labelledby="controlItemsTab" tabindex="0">
-        <!-- Short cards sit side by side; a card that holds a table takes the full width below them. -->
-        <div class="related-cards mb-3">
-        <div id="clausesCard" class="card" style="display:none;">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">Clauses</div>
-              <div class="small-muted">Clauses linked to this control and their applicability.</div>
-            </div>
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-              <span id="clausesCount" class="badge text-bg-light">0</span>
-              <button id="editClauseApplicability" class="btn btn-sm btn-outline-primary no-print" type="button" style="display:none;">Edit</button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div id="clausesView" class="small-muted">No clauses linked.</div>
-          </div>
-        </div>
-
-        <div id="controlStoriesCard" class="card" data-feature="stories" hidden>
-          <div class="card-header"><div class="fw-bold">Stories</div><div class="small-muted">Stories whose authors assigned them to this control, on the story's Controls and clauses tab.</div></div>
-          <div id="controlStories" class="card-body"></div>
-        </div>
-
-        <div id="adminClausesCard" class="card related-card-wide no-print" style="display:none;">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">Admin: clause applicability</div>
-              <div class="small-muted">Choose the clauses this control supports and how far. A clause left out is not applicable; a parent clause follows its children.</div>
-            </div>
-          </div>
-          <div class="card-body">
+        <!-- The cards are built by pages/control.js with the design system's
+             relatedCard, so each has the same frame as on every other page. -->
+        <div id="controlRelatedItems" class="mb-3"></div>
+        <!-- The body of the clause applicability card, for administrators. -->
+        <div id="adminClausesEditor">
             <div class="row g-3 mb-3">
               <div class="col-12 col-lg-8">
                 <label class="form-label small-muted mb-1" for="controlUpstreamUrl">Control upstream URL</label>
@@ -168,54 +142,6 @@
               <div class="small-muted">Tip: use “Partially applicable” where the control only supports part of the clause objective.</div>
               <button id="saveClauseLinks" class="btn btn-primary" type="button">Save clauses</button>
             </div>
-          </div>
-        </div>
-
-        <div id="risksCard" class="card related-card-wide" style="display:none;">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">Cross-referenced risks</div>
-              <div class="small-muted">Risks mapped to this control for the selected framework.</div>
-            </div>
-            <span id="risksCount" class="badge text-bg-light">0</span>
-          </div>
-          <div class="card-body">
-            <div id="risksView" class="small-muted">No risks linked.</div>
-          </div>
-        </div>
-
-        <div class="card related-card-wide">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div><div class="fw-bold">ISMS references</div><div class="small-muted">SWOT items, legal register items, objectives, organisation roles, assets and meetings linked to this control. Policies, processes and effectiveness measures are under Requirements.</div></div>
-            <a class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/isms.html">Open ISMS</a>
-          </div>
-          <div id="controlIsmsView" class="card-body small-muted">Loading ISMS references</div>
-        </div>
-
-        <div id="controlPestleCard" class="card related-card-wide" style="display:none;">
-          <div class="card-header">
-            <div class="fw-bold">PESTLE(E) relevance</div>
-            <div class="small-muted">PESTLE(E) items rated against this control.</div>
-          </div>
-          <div class="card-body small-muted">
-            <div class="table-responsive">
-              <table class="table table-sm align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th style="width:150px;">Type</th>
-                    <th style="width:110px;">Lens</th>
-                    <th>Item</th>
-                    <th style="width:130px;">Control relevance</th>
-                    <th>Overall relevance</th>
-                    <th>Rationale</th>
-                  </tr>
-                </thead>
-                <tbody id="controlPestleRows"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
         </div>
       </section>
 

@@ -855,14 +855,15 @@ test('SWOT relationships that resolve to another host link nowhere', async (t) =
   });
   await settle(() => ui.el('pageTitle').textContent === item.title);
   assert.deepEqual(
-    [...ui.el('relatedList').querySelectorAll('a.text-break')].map((a) => [
+    [...ui.el('relatedList').querySelectorAll('.mosp-related-link')].map((a) => [
       a.textContent,
       a.getAttribute('href'),
     ]),
     [
-      ['Dots', '#'],
-      ['Encoded', '#'],
-      ['Script', '#'],
+      // An address that is not a path on Keen is text with no link.
+      ['Dots', null],
+      ['Encoded', null],
+      ['Script', null],
       ['Policy', '/isms-document.html?id=d4&framework=A'],
     ],
   );
@@ -903,8 +904,13 @@ test('a SWOT item relates to legal register items among its other relationships'
   // The register is one of the kinds to relate to and to filter by, by name.
   assert.deepEqual(names(ui, 'linkType').at(-1), ['legal_item', 'Legal register item']);
   assert.deepEqual(names(ui, 'relatedType').at(-1), ['legal_item', 'Legal register item']);
-  const section = [...ui.el('relatedList').querySelectorAll('section')].at(-1);
-  assert.equal(section.querySelector('h3').firstChild.textContent, 'Legal register item');
+  // The last of the cards for kinds of record; the stories card follows them.
+  const section = [...ui.el('relatedList').querySelectorAll('section:not(#relatedStoriesCard)')].at(
+    -1,
+  );
+  assert.ok(section.classList.contains('mosp-related-card'));
+  assert.equal(section.querySelector('h3').textContent, 'Legal register item');
+  assert.equal(section.querySelector('.mosp-related-card-count').textContent, '1');
   assert.deepEqual(
     [...section.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
     [['Data <b>Act</b>', '/legal-register.html?id=l1&framework=A']],
@@ -952,14 +958,15 @@ test('a saved SWOT item lists the stories that include it in a card among its re
   await settle(() => ui.el('pageTitle').textContent === item.title);
   // Stories are related items: there is no tab of their own.
   assert.equal(ui.el('storiesRelatedTab'), null);
+  await settle(() => ui.el('relatedStoriesCard'));
   const card = ui.el('relatedStoriesCard');
-  await settle(() => !card.hidden);
-  assert.ok(ui.el('relatedPane').contains(card));
+  assert.ok(card.classList.contains('mosp-related-card'));
+  assert.equal(ui.el('relatedList').lastElementChild, card);
   assert.match(card.textContent, /Stories that include this SWOT item/);
   assert.ok(!ui.calls.some((call) => call.url.startsWith('/api/v1/stories')), 'loads with the tab');
   ui.el('relatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => card.querySelector('.list-group a'));
-  assert.equal(ui.el('relatedStoriesCount').textContent, '2');
+  assert.equal(card.querySelector('.mosp-related-card-count').textContent, '2');
   assert.equal(ui.el('relatedTab').textContent.trim(), 'Related items');
   assert.equal(card.querySelector('.list-group a').textContent, 'Regulator <b>letter</b>');
   assert.equal(card.querySelector('.list-group b'), null);
@@ -967,9 +974,9 @@ test('a saved SWOT item lists the stories that include it in a card among its re
   // Not for an account that cannot read stories, and not on a draft.
   const reader = await open({ can_view_isms: true });
   await settle(() => reader.el('pageTitle').textContent === item.title && reader.idle());
-  assert.equal(reader.el('relatedStoriesCard').hidden, true);
-  assert.equal(reader.el('relatedStories').children.length, 0);
+  assert.equal(reader.el('relatedStoriesCard'), null);
+  assert.ok(reader.el('relatedList').children.length > 0);
   const draft = await open({ can_view_isms: true, can_view_stories: true }, '&new=1&kind=threat');
   await settle(() => !draft.el('draftNotice').hidden);
-  assert.equal(draft.el('relatedStoriesCard').hidden, true);
+  assert.equal(draft.el('relatedStoriesCard'), null);
 });

@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -452,11 +451,10 @@ test('the Keen Assurance Framework attribution is shown for its controls', async
 
 test('readers without risk or ISMS permission do not request restricted links', async (t) => {
   const { ui } = await controlPage(t, { me: { can_view_controls: true } });
-  assert.ok(ui.el('risksCard').classList.contains('d-none'));
   assert.ok(ui.el('controlItemsPane').contains(ui.el('risksCard')));
-  assert.equal(ui.el('risksCard').style.display, 'none');
+  assert.equal(ui.el('risksCard').hidden, true);
   assert.ok(!ui.calls.some((c) => /\/risks\?/.test(c.url)));
-  assert.equal(ui.el('editClauseApplicability').style.display, 'none');
+  assert.equal(ui.el('editClauseApplicability').hidden, true);
   assert.equal(ui.el('controlJustificationCard').style.display, 'none');
   await openRelated(ui);
   assert.ok([...ui.el('crossFrameworkView').options].some((o) => o.value === 'B'));
@@ -569,31 +567,48 @@ test('each tab holds its own cards: related items, governance and the changelog'
       ['controlChangelogTab', 'Changelog'],
     ],
   );
-  // The records that refer to the control are cards side by side.
-  const cards = ui.el('controlItemsPane').querySelector('.related-cards');
+  // The records that refer to the control are the design system's
+  // related-item cards, laid out as one group.
+  const cards = ui.el('controlRelatedItems');
+  assert.ok(cards.classList.contains('mosp-related-cards'));
+  assert.ok(ui.el('controlItemsPane').contains(cards));
   assert.deepEqual(
-    [...cards.children].map((card) => card.querySelector('.fw-bold').textContent),
+    [...cards.children].map((card) => [
+      card.id,
+      card.querySelector('.mosp-related-card-title').textContent,
+    ]),
     [
-      'Clauses',
-      'Stories',
-      'Admin: clause applicability',
-      'Cross-referenced risks',
-      'ISMS references',
-      'PESTLE(E) relevance',
+      ['clausesCard', 'Clauses'],
+      ['controlStoriesCard', 'Stories'],
+      ['adminClausesCard', 'Admin: clause applicability'],
+      ['risksCard', 'Cross-referenced risks'],
+      ['controlIsmsCard', 'ISMS references'],
+      ['controlPestleCard', 'PESTLE(E) relevance'],
     ],
   );
-  // Every table on the tab is framed alike: inside a padded card body, in
-  // the small text the tables built by the page use.
-  for (const id of ['risksView', 'controlIsmsView', 'controlPestleRows']) {
-    assert.ok(ui.el(id).closest('.small-muted'), id);
-    assert.ok(!ui.el(id).closest('.card-body').classList.contains('p-0'), id);
+  // Every card has the one frame: none is written out by hand.
+  for (const card of cards.children) {
+    assert.ok(card.classList.contains('mosp-related-card'), card.id);
+    assert.ok(card.querySelector('.card-body.mosp-related-card-body'), card.id);
   }
-  // The short cards share a row; each card that holds a table has its own.
+  // Clauses and Stories are short and share a row; a card that holds a table
+  // has a row of its own, as the clause list does once it has clauses.
+  const wide = (id) => ui.el(id).classList.contains('mosp-related-card-wide');
   assert.deepEqual(
-    [...cards.children].map((card) => card.classList.contains('related-card-wide')),
-    [false, false, true, true, true, true],
+    [
+      'controlStoriesCard',
+      'adminClausesCard',
+      'risksCard',
+      'controlIsmsCard',
+      'controlPestleCard',
+    ].map(wide),
+    [false, true, true, true, true],
   );
-  assert.ok(ui.el('controlIsmsView').closest('.related-cards'));
+  assert.equal(wide('clausesCard'), true);
+  assert.equal(ui.el('clausesView').querySelectorAll('tbody tr').length, 3);
+  // The clause editor's form is the page's own, inside the shared frame.
+  assert.ok(ui.el('adminClausesCard').contains(ui.el('controlClauses')));
+  assert.equal(ui.el('controlIsmsCard').querySelector('a.btn').getAttribute('href'), '/isms.html');
   // Governance is who answers for the control and why it applies.
   assert.deepEqual(
     [...ui.el('controlGovernancePane').children].map((card) => card.id),
@@ -710,7 +725,7 @@ test('a selected source with no remaining results stays selectable', async (t) =
 
 test('administrators edit clause applicability with inferred parent values', async (t) => {
   const { ui, state } = await controlPage(t);
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
   ui.el('editClauseApplicability').click();
   await settle(() => ui.el('controlClauses').options.length);
   assert.equal(ui.el('editClauseApplicability').textContent, 'Hide edit');
@@ -769,7 +784,7 @@ test('administrators edit clause applicability with inferred parent values', asy
   await settle(() => ui.el('status').textContent === 'Clause applicability saved');
   await settle(() => ui.el('saveClauseLinks').disabled === false);
   ui.el('editClauseApplicability').click();
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
   // The clause catalogue is fetched once.
   assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses?')).length, 1);
 });
@@ -779,7 +794,7 @@ test('a clause catalogue failure leaves edit mode closed with an error', async (
   ui.el('editClauseApplicability').click();
   await settle(() => /Failed to load clauses: Clauses offline/.test(ui.el('status').textContent));
   assert.equal(ui.el('editClauseApplicability').textContent, 'Edit');
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
 });
 
 test('administrators save justification and guidance URL, refreshing the guidance link', async (t) => {
@@ -882,7 +897,7 @@ test('failed or forbidden link lookups are contained in their own panels', async
   const { ui } = await controlPage(t, {
     fail: { risks: true, isms: true, changelog: true, cross: true },
   });
-  await settle(() => ui.el('risksCard').style.display === 'none');
+  await settle(() => ui.el('risksCard').hidden === true);
   await openRelated(ui);
   assert.equal(
     ui.el('crossFrameworkLinks').textContent,
@@ -1500,7 +1515,7 @@ test('switched-off risks and ISMS leave Related items without those requests', a
     false,
   );
   // Their panels keep the page's own placeholders.
-  assert.equal(ui.el('risksCard').style.display, 'none');
+  assert.equal(ui.el('risksCard').hidden, true);
   assert.equal(ui.el('controlIsmsView').textContent, 'Loading ISMS references');
 });
 
@@ -1537,9 +1552,9 @@ test('reopening clause editing reuses the clause catalogue already loaded', asyn
   ui.el('editClauseApplicability').click();
   await settle(() => ui.el('controlClauses').options.length);
   ui.el('editClauseApplicability').click();
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesCard').style.display === '');
+  await settle(() => ui.el('adminClausesCard').hidden === false);
   assert.ok([...ui.el('controlClauses').options].some((o) => o.value === 'k10'));
   assert.equal(clauseCalls(), 1);
 });
@@ -1751,9 +1766,13 @@ test('PESTLE(E) readers see the items rated against the control on the Related i
     ],
   });
   governance(ui);
-  await settle(() => ui.el('controlPestleRows').querySelector('a'));
-  assert.equal(ui.el('controlPestleCard').style.display, '');
-  const row = ui.el('controlPestleRows').querySelector('tr');
+  await settle(() => ui.el('controlPestleView').querySelector('a'));
+  assert.equal(ui.el('controlPestleCard').hidden, false);
+  assert.deepEqual(
+    [...ui.el('controlPestleView').querySelectorAll('th')].map((th) => th.textContent),
+    ['Type', 'Lens', 'Item', 'Control relevance', 'Overall relevance', 'Rationale'],
+  );
+  const row = ui.el('controlPestleView').querySelector('tbody tr');
   assert.equal(row.querySelector('b'), null);
   assert.equal(row.querySelector('a').textContent, '<b>Privacy law</b>');
   assert.equal(
@@ -1778,16 +1797,16 @@ test('PESTLE(E) readers see the items rated against the control on the Related i
 test('a control with no rated items says so, and the card stays hidden when they cannot be read', async (t) => {
   const none = await controlPage(t);
   governance(none.ui);
-  await settle(() => none.ui.el('controlPestleCard').style.display === '');
+  await settle(() => none.ui.el('controlPestleCard').hidden === false);
   assert.equal(
-    none.ui.el('controlPestleRows').textContent,
+    none.ui.el('controlPestleView').textContent,
     'No PESTLE(E) items are rated against this control.',
   );
 
   const failed = await controlPage(t, { fail: { pestle: true } });
   governance(failed.ui);
   await settle(() => failed.ui.idle());
-  assert.equal(failed.ui.el('controlPestleCard').style.display, 'none');
+  assert.equal(failed.ui.el('controlPestleCard').hidden, true);
 
   for (const me of [
     { is_admin: true, features: { enabled: { pestle: false } } },
@@ -1796,7 +1815,7 @@ test('a control with no rated items says so, and the card stays hidden when they
     const hidden = await controlPage(t, { me });
     governance(hidden.ui);
     await settle(() => hidden.ui.idle());
-    assert.equal(hidden.ui.el('controlPestleCard').style.display, 'none');
+    assert.equal(hidden.ui.el('controlPestleCard').hidden, true);
     assert.equal(
       hidden.ui.calls.some((c) => c.url.endsWith('/pestle')),
       false,
@@ -1914,16 +1933,4 @@ test('accounts that cannot read stories get no stories card and no request for o
   ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => !/Loading ISMS/.test(ui.el('controlIsmsView').textContent));
   assert.ok(!ui.calls.some((c) => c.url.includes('/stories/')));
-});
-
-test('a related-items card never becomes a scrolling box around its table', async () => {
-  // Table headers stick beneath the navbar as the page scrolls. Inside a box
-  // that scrolls they stick to the box instead and sit over the first rows.
-  const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
-  const rules = [...css.matchAll(/([^{}]*\.related-cards[^{}]*)\{([^}]*)\}/g)];
-  assert.ok(rules.length >= 3);
-  for (const [, selector, body] of rules) assert.doesNotMatch(body, /overflow/, selector.trim());
-  // A card still keeps to its column.
-  const card = rules.find(([, selector]) => selector.trim().endsWith('.related-cards > .card'));
-  assert.ok(card[2].includes('min-width: 0;'));
 });

@@ -1651,11 +1651,17 @@ export async function loadEntityChangelog(
 }
 
 // How far a control applies to a clause, as the control and clause pages show it.
-export function applicabilityBadge(v) {
+// How far a control supports a clause, as a badge: an element, or its markup
+// for the pages that still write table rows as text.
+export function applicabilityPill(v) {
   if (v === 'partially_applicable')
-    return '<span class="badge text-bg-warning">Partially applicable</span>';
-  if (v === 'applicable') return '<span class="badge badge-soft">Applicable</span>';
-  return '<span class="badge text-bg-light">Not applicable</span>';
+    return node('span', { class: 'badge text-bg-warning' }, 'Partially applicable');
+  if (v === 'applicable') return node('span', { class: 'badge badge-soft' }, 'Applicable');
+  return node('span', { class: 'badge text-bg-light' }, 'Not applicable');
+}
+
+export function applicabilityBadge(v) {
+  return applicabilityPill(v).outerHTML;
 }
 
 // The entries of a comma-separated value, as filters arrive in an address.

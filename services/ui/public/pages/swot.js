@@ -29,7 +29,7 @@ import {
   renderGraph,
 } from '/pages/planning-views.js';
 import { controlBadges, clauseBadges } from '/pages/isms-detail-common.js';
-import { mountStoryRelated } from '/pages/story-related.js';
+import { renderRelatedRecords, storiesCard } from '/pages/related-records.js';
 const $ = (id) => document.getElementById(id),
   params = new URLSearchParams(location.search);
 const me = await initNavbar(),
@@ -207,6 +207,8 @@ async function parents() {
   }
   $('parent').value = row?.parent_id || '';
 }
+// The stories card is built once and shown again each time the tab is drawn.
+let relatedStories = null;
 function renderRelations() {
   const current = isNew
     ? {
@@ -223,12 +225,15 @@ function renderRelations() {
         ),
       }
     : row;
-  $('relatedList').innerHTML = types
-    .map((type) => {
-      const links = current.links.filter((link) => link.target_type === type);
-      return `<section class="col-12 col-md-6 col-xl-4"><div class="card h-100"><div class="card-body p-3"><h3 class="h6 d-flex justify-content-between">${esc(typeLabel(type))}<span class="badge text-bg-secondary">${links.length}</span></h3><div class="d-grid gap-2">${links.map((link) => `<div class="border rounded p-2 d-flex align-items-center gap-2"><a class="text-break flex-grow-1" href="${esc(localPath(withFramework(link.url, framework)) || '#')}"${isNew ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(link.title)}</a>${manage ? `<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-unlink-type="${type}" data-unlink-id="${esc(link.target_id)}" aria-label="Remove ${esc(link.title)}">Unlink</button>` : ''}</div>`).join('') || '<span class="small-muted">No linked items.</span>'}</div></div></div></section>`;
-    })
-    .join('');
+  renderRelatedRecords($('relatedList'), {
+    types,
+    label: typeLabel,
+    links: current.links,
+    href: (link) => localPath(withFramework(link.url, framework)) || '',
+    manage,
+    newTab: isNew,
+    stories: relatedStories,
+  });
   renderGraph($('graph'), current, framework);
 }
 function mappingOptions(id, records = [], selected = [], filter = false) {
@@ -465,18 +470,17 @@ try {
     if (isNew && kinds.includes(params.get('kind'))) $('kind').value = params.get('kind');
     await loadDetail();
     // The stories that include the item are a card among its related items.
-    if (itemId)
-      $('relatedStoriesCard').hidden = !mountStoryRelated({
+    if (itemId) {
+      relatedStories = storiesCard({
         me,
         kind: 'swot',
         id: itemId,
         framework,
-        host: $('relatedStories'),
         trigger: $('relatedTab'),
-        onLoad: (stories) => {
-          $('relatedStoriesCount').textContent = String(stories.length);
-        },
+        noun: 'SWOT item',
       });
+      renderRelations();
+    }
     const tab = ['details', 'related', 'visualisation', 'questions', 'changelog'].includes(
       params.get('tab'),
     )

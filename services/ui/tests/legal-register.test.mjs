@@ -554,16 +554,24 @@ test('an item shows its details, assessments, related records and history', asyn
   assert.equal(ui.el('assessedBy').value, SIGNED_IN);
   assert.equal(ui.el('assessedOn').value, new Date().toISOString().slice(0, 10));
 
+  // Each kind of record is one of the design system's related-item cards,
+  // and the stories that include the item are one more.
+  assert.ok(ui.el('relatedList').classList.contains('mosp-related-cards'));
   const groups = [...ui.el('relatedList').children].map((group) => [
     group.querySelector('h3').textContent,
-    [...group.querySelectorAll('a')].map((link) => [link.textContent, link.getAttribute('href')]),
+    group.querySelector('.mosp-related-card-count').textContent,
+    [...group.querySelectorAll('.mosp-related-link')].map((link) => [
+      link.textContent,
+      link.getAttribute('href'),
+    ]),
   ]);
   assert.deepEqual(groups, [
-    ['Documents1', [[HOSTILE, '/isms-document.html?id=d1&framework=A']]],
-    ['Assets0', []],
-    // An address that is not a path on Keen opens nothing.
-    ['Risks1', [['Fine', '#']]],
-    ['SWOT items0', []],
+    ['Documents', '1', [[HOSTILE, '/isms-document.html?id=d1&framework=A']]],
+    ['Assets', '0', []],
+    // An address that is not a path on Keen is text with no link.
+    ['Risks', '1', [['Fine', null]]],
+    ['SWOT items', '0', []],
+    ['Stories', '', []],
   ]);
   assert.equal(ui.el('relatedList').querySelector('img'), null);
   assert.equal(ui.el('relatedList').children[1].textContent, 'Assets0No linked records.');
@@ -654,7 +662,11 @@ test('related records follow the features that are switched on', async (t) => {
       features: { enabled: { documents: false, assets: false, risk_cia: false, swot: false } },
     },
   });
-  assert.equal(ui.el('relatedList').children.length, 0);
+  // Only the stories card is left.
+  assert.deepEqual(
+    [...ui.el('relatedList').children].map((card) => card.id),
+    ['relatedStoriesCard'],
+  );
   assert.equal(ui.el('linkForm').hidden, true);
   assert.deepEqual(ui.world.choices, []);
 });
@@ -676,7 +688,8 @@ test('a SWOT item is related like the other records, and left out when SWOT is o
     scripts: [d3src, 'window.d3 = d3;'],
   });
   const group = ui.el('relatedList').children[3];
-  assert.equal(group.querySelector('h3').textContent, 'SWOT items1');
+  assert.equal(group.querySelector('h3').textContent, 'SWOT items');
+  assert.equal(group.querySelector('.mosp-related-card-count').textContent, '1');
   assert.equal(group.querySelector('a').getAttribute('href'), '/swot.html?id=w1&framework=A');
   assert.equal(group.querySelector('a').textContent, 'New <i>regulation</i>');
   assert.equal(group.querySelector('i'), null);
@@ -701,7 +714,7 @@ test('a SWOT item is related like the other records, and left out when SWOT is o
   });
   assert.deepEqual(
     [...off.el('relatedList').querySelectorAll('h3')].map((h) => h.textContent),
-    ['Documents1', 'Assets0', 'Risks1'],
+    ['Documents', 'Assets', 'Risks', 'Stories'],
   );
   assert.ok(![...off.el('linkType').options].some((option) => option.value === 'swot'));
 });
@@ -1149,14 +1162,14 @@ test('a saved item lists the stories that include it in a card among its related
   // Stories are related items: there is no tab of their own.
   assert.equal(ui.document.getElementById('storiesRelatedTab'), null);
   const card = ui.el('relatedStoriesCard');
-  assert.equal(card.hidden, false);
-  assert.ok(ui.el('relatedPane').contains(card));
+  assert.ok(card.classList.contains('mosp-related-card'));
+  assert.equal(ui.el('relatedList').lastElementChild, card);
   assert.match(card.textContent, /Stories that include this legal register item/);
   assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/stories')), 'loads with the tab');
   ui.el('relatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => card.querySelector('.list-group a'));
   assert.ok(ui.calls.some((c) => c.url === '/api/v1/stories/related/legal_item/l1'));
-  assert.equal(ui.el('relatedStoriesCount').textContent, '1');
+  assert.equal(card.querySelector('.mosp-related-card-count').textContent, '1');
   // The tab keeps its name.
   assert.equal(ui.el('relatedTab').textContent.trim(), 'Related items');
   const link = card.querySelector('.list-group a');
@@ -1167,8 +1180,10 @@ test('a saved item lists the stories that include it in a card among its related
 
 test('a new item and an account without story access have no Stories card', async (t) => {
   const draft = await register(t, { query: '&new=1' });
-  assert.equal(draft.el('relatedStoriesCard').hidden, true);
+  assert.equal(draft.el('relatedStoriesCard'), null);
   const reader = await detail(t, { me: { can_view_isms: true } });
-  assert.equal(reader.el('relatedStoriesCard').hidden, true);
-  assert.equal(reader.el('relatedStories').children.length, 0);
+  assert.equal(reader.el('relatedStoriesCard'), null);
+  assert.equal(reader.el('relatedStories'), null);
+  // The cards for the kinds of record are there all the same.
+  assert.ok(reader.el('relatedList').children.length > 0);
 });
