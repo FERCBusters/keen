@@ -283,16 +283,6 @@ a:hover {
   position: static;
 }
 
-/* Control detail: keep the admin clause applicability matrix contained. */
-#adminClausesCard .admin-control-clauses-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-#adminClausesCard .admin-control-clauses-wrap > .table {
-  min-width: 900px;
-}
-
 .whitespace-pre-wrap {
   white-space: pre-wrap;
 }
@@ -620,11 +610,6 @@ a.schedule-calendar-event {
 .risk-method-card.selected {
   border-color: var(--bs-primary) !important;
   box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.15);
-}
-
-.risk-wizard-scroll {
-  max-height: 22rem;
-  overflow-y: auto;
 }
 
 .risk-rating .form-range {

@@ -186,6 +186,18 @@ const check = (ui, selector, checked = true) => {
   box.checked = checked;
   box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
 };
+// The control and clause steps are multiple selects, which the design system
+// presents as its picker; a test chooses as the picker would, by selecting the
+// option and reporting the change.
+const linkList = (ui, kind) => ui.el(kind === 'control' ? 'controlList' : 'clauseList');
+const link = (ui, kind, id) => [...linkList(ui, kind).options].find((o) => o.value === id);
+const pick = (ui, kind, id, on = true, level) => {
+  link(ui, kind, id).selected = on;
+  if (level) link(ui, kind, id).dataset.extra = level;
+  linkList(ui, kind).dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+};
+const picked = (ui, kind) => [...linkList(ui, kind).selectedOptions].map((o) => o.value);
+const levelsOffered = (ui, kind) => JSON.parse(linkList(ui, kind).dataset.pickerExtra || 'null');
 const tick = () => new Promise((r) => setTimeout(r, 5));
 // The affected picker waits for typing to pause before it searches.
 const pause = () => new Promise((r) => setTimeout(r, 140));
@@ -291,14 +303,12 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
 
   assert.equal(visibleStep(ui), 'controls');
   assert.equal(ui.el('controlsFramework').textContent, 'A');
-  assert.match(ui.el('controlList').textContent, /out of scope/);
-  check(ui, '[data-control="c1"]');
-  assert.equal(ui.el('controlCount').textContent, '1');
-  input(ui, 'controlSearch', 'backup');
-  await tick();
-  assert.equal(ui.el('controlList').querySelectorAll('[data-control]').length, 1);
+  assert.equal(ui.el('controlList').multiple, true);
+  assert.ok([...ui.el('controlList').options].some((o) => o.dataset.badge === 'out of scope'));
+  pick(ui, 'control', 'c1');
+  assert.equal(picked(ui, 'control').length, 1);
   // A register risk links controls plainly, with no relevance to choose.
-  assert.equal(ui.el('controlList').querySelector('select'), null);
+  assert.equal(levelsOffered(ui, 'control'), null);
   assert.equal(
     ui.document.querySelector('[data-links-intro="controls"]:not([hidden])').dataset.linksFor,
     'risk',
@@ -308,9 +318,9 @@ test('the wizard walks a simple risk from method to saved, adding the asset and 
   assert.equal(visibleStep(ui), 'clauses');
   assert.equal(ui.el('clausesFramework').textContent, 'A');
   assert.equal(ui.el('skipStep').hidden, false);
-  assert.equal(ui.el('clauseList').querySelector('select'), null);
-  check(ui, '[data-clause="cl1"]');
-  assert.equal(ui.el('clauseCount').textContent, '1');
+  assert.equal(levelsOffered(ui, 'clause'), null);
+  pick(ui, 'clause', 'cl1');
+  assert.equal(picked(ui, 'clause').length, 1);
   next(ui);
 
   assert.equal(visibleStep(ui), 'review');
@@ -411,7 +421,7 @@ test('a CIA risk needs at least one property, and a template fills the blanks', 
   assert.match(ui.el('suggestedControlsNote').textContent, /BC-1.*not enabled here/);
   ui.el('skipStep').click();
   assert.equal(visibleStep(ui), 'clauses');
-  check(ui, '[data-clause="cl1"]');
+  pick(ui, 'clause', 'cl1');
   // Skipping drops what was ticked.
   ui.el('skipStep').click();
   assert.match(ui.el('reviewSummary').textContent, /Template\s*Ransomware/);
@@ -482,24 +492,20 @@ test('the PESTLE(E) path records an item with the controls and clauses it bears 
     ui.document.querySelector('[data-links-intro="controls"]:not([hidden])').dataset.linksFor,
     'pestle',
   );
-  const controlLevel = () => ui.el('controlList').querySelector('[data-control-level="c1"]');
-  assert.equal(controlLevel().disabled, true);
-  check(ui, '[data-control="c1"]');
-  // A ticked record takes the factor's overall relevance until another is chosen.
-  assert.equal(controlLevel().disabled, false);
-  assert.equal(controlLevel().value, 'low');
+  // Each chosen record carries a relevance: the picker offers every level but
+  // "not applicable", and a newly chosen record starts at the factor's overall
+  // relevance.
   assert.deepEqual(
-    [...controlLevel().options].map((o) => o.value),
+    levelsOffered(ui, 'control').choices.map(([code]) => code),
     ['high', 'low'],
   );
+  assert.equal(levelsOffered(ui, 'control').label, 'Relevance');
+  assert.equal(levelsOffered(ui, 'control').default, 'low');
+  pick(ui, 'control', 'c1');
   next(ui);
   assert.equal(visibleStep(ui), 'clauses');
-  check(ui, '[data-clause="cl1"]');
-  const level = ui.el('clauseList').querySelector('[data-clause-level="cl1"]');
-  assert.equal(level.disabled, false);
-  assert.equal(level.value, 'low');
-  level.value = 'high';
-  level.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  assert.equal(levelsOffered(ui, 'clause').default, 'low');
+  pick(ui, 'clause', 'cl1', true, 'high');
   next(ui);
   assert.equal(visibleStep(ui), 'review');
   const review = reviewText(ui);
@@ -575,10 +581,10 @@ test('editing an existing risk starts at the subject with everything filled in a
   assert.equal(visibleStep(ui), 'describe');
   next(ui);
   next(ui);
-  assert.equal(ui.document.querySelector('[data-control="c2"]').checked, true);
+  assert.equal(link(ui, 'control', 'c2').selected, true);
   next(ui);
   assert.equal(visibleStep(ui), 'clauses');
-  assert.equal(ui.document.querySelector('[data-clause="cl1"]').checked, true);
+  assert.equal(link(ui, 'clause', 'cl1').selected, true);
   next(ui);
   assert.match(ui.el('nextStep').textContent, /Save changes/);
   assert.match(ui.el('reviewSummary').textContent, /Owner\s*Security lead/);
@@ -637,8 +643,10 @@ test('a Mitigator draft pre-fills the wizard and pre-ticks its suggested control
   assert.equal(ui.document.querySelector('[data-cia="Confidentiality"]').checked, true);
   next(ui);
   next(ui);
-  assert.equal(ui.document.querySelector('[data-control="c1"]').checked, true);
-  assert.match(ui.el('controlList').querySelector('label').textContent, /A\.5\.1.*suggested/s);
+  assert.equal(link(ui, 'control', 'c1').selected, true);
+  // The suggested control leads the list and is marked.
+  assert.match(ui.el('controlList').options[0].textContent, /^A\.5\.1/);
+  assert.equal(ui.el('controlList').options[0].dataset.badge, 'suggested');
   assert.match(ui.el('suggestedControlsNote').textContent, /The Mitigator suggested 1 control/);
   next(ui);
   next(ui);
@@ -740,11 +748,11 @@ test('a template asset the register lacks is typed in as new, with a category of
   next(ui);
   next(ui);
   assert.equal(visibleStep(ui), 'controls');
-  check(ui, '[data-control="c1"]');
-  check(ui, '[data-control="c2"]');
-  assert.equal(ui.el('controlCount').textContent, '2');
-  check(ui, '[data-control="c2"]', false);
-  assert.equal(ui.el('controlCount').textContent, '1');
+  pick(ui, 'control', 'c1');
+  pick(ui, 'control', 'c2');
+  assert.equal(picked(ui, 'control').length, 2);
+  pick(ui, 'control', 'c2', false);
+  assert.equal(picked(ui, 'control').length, 1);
 
   // Stepping back to the subject redraws it with the new asset still chosen.
   ui.document.querySelector('[data-goto-step="subject"]').click();
@@ -782,11 +790,9 @@ test('a PESTLE(E) clause can be unticked, and a clause list that cannot load lea
   const { ui } = await wizard(t, { query: '&method=pestle' });
   describe(ui);
   assert.equal(visibleStep(ui), 'clauses');
-  check(ui, '[data-clause="cl1"]');
-  const level = ui.el('clauseList').querySelector('[data-clause-level="cl1"]');
-  assert.equal(level.disabled, false);
-  check(ui, '[data-clause="cl1"]', false);
-  assert.equal(level.disabled, true);
+  pick(ui, 'clause', 'cl1');
+  assert.deepEqual(picked(ui, 'clause'), ['cl1']);
+  pick(ui, 'clause', 'cl1', false);
   next(ui);
   assert.equal(reviewText(ui).includes('Relevant clauses None yet'), true);
 

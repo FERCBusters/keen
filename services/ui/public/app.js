@@ -324,6 +324,11 @@ export function forgetAccountStorage() {
   }
 }
 
+// Present the multiple selects a page built after it loaded as pickers too.
+export function enhancePickers(root) {
+  mosp.enhanceMultiSelects?.(root);
+}
+
 // Redraw a list's picker after code set `option.selected` on options that
 // were already there; replaced options and change events redraw by themselves.
 export function refreshPicker(select) {

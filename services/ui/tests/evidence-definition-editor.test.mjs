@@ -1,6 +1,7 @@
 // Evidence definitions through the assembled mapping editor: collection inputs,
 // the BookStack picker, the definition library, revisions and historical runs.
 // A small in-memory server stands in for the administrator API.
+import { chooseTarget, chosenTargets } from './support/rule-targets.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -296,8 +297,7 @@ async function editor(t, server = {}) {
   }
   async function publish({ description = 'Collected evidence', predefine = false } = {}) {
     $('description').value = description;
-    $('control').value = 'A1';
-    $('add-target').click();
+    chooseTarget($('control'), 'A1');
     $('predefine').checked = predefine;
     if (!predefine) await click('preview');
     await click('save-rule');
@@ -914,8 +914,7 @@ test('a rule for several sources is chosen with source pills and saved as one pa
   assert.match(ui.$('rule-sentence').textContent, /^From aws or azure\./);
 
   ui.$('description').value = 'Identity posture';
-  ui.$('control').value = 'A1';
-  ui.$('add-target').click();
+  chooseTarget(ui.$('control'), 'A1');
   await ui.click('preview');
   const preview = ui.writes.find((write) => write.path === '/api/v1/admin/mapping-rules/preview');
   assert.deepEqual(preview.body.rule.when, { source_regex: CLOUDS });
@@ -1928,8 +1927,7 @@ test('each step refuses to move on until its part of the rule is complete', asyn
     ui.$('status').textContent,
     'Add at least one framework control or clause before continuing.',
   );
-  ui.$('control').value = 'A1';
-  ui.$('add-target').click();
+  chooseTarget(ui.$('control'), 'A1');
   await ui.click('next-step');
   assert.equal(ui.$('step-number').textContent, '3');
   assert.equal(ui.$('status').hidden, true);
@@ -2071,8 +2069,7 @@ test('saving needs a preview of this version, and no evidence asks for confirmat
   });
   await ui.openInput('keen-agent');
   ui.$('description').value = 'Agent evidence';
-  ui.$('control').value = 'A1';
-  ui.$('add-target').click();
+  chooseTarget(ui.$('control'), 'A1');
   await ui.click('save-rule');
   assert.equal(
     ui.$('status').textContent,

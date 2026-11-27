@@ -36,12 +36,12 @@
   },
   "services/ui/public/pages/audit-wizard.js": {
     "no-unsanitized/property": {
-      "count": 9
+      "count": 7
     }
   },
   "services/ui/public/pages/audit.js": {
     "no-unsanitized/property": {
-      "count": 11
+      "count": 8
     }
   },
   "services/ui/public/pages/audits.js": {
@@ -67,7 +67,7 @@
       "count": 2
     },
     "no-unsanitized/property": {
-      "count": 6
+      "count": 5
     }
   },
   "services/ui/public/pages/clauses.js": {
@@ -87,7 +87,7 @@
   },
   "services/ui/public/pages/control.js": {
     "no-unsanitized/property": {
-      "count": 7
+      "count": 6
     }
   },
   "services/ui/public/pages/controls.js": {
@@ -215,7 +215,7 @@
   },
   "services/ui/public/pages/pestle_item.js": {
     "no-unsanitized/property": {
-      "count": 5
+      "count": 4
     }
   },
   "services/ui/public/pages/planning-views.js": {
@@ -260,7 +260,7 @@
   },
   "services/ui/public/pages/risk-wizard.js": {
     "no-unsanitized/property": {
-      "count": 18
+      "count": 17
     }
   },
   "services/ui/public/pages/risk.js": {

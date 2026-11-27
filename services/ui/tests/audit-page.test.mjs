@@ -1,3 +1,4 @@
+import { deselectAll, scopeBox, scopeChosen } from './support/scope-lists.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -289,28 +290,35 @@ test('audit page renders details, KPIs, people, findings and evidence with hosti
 test('audit scope selection expands parent clauses and documents to children and linked controls', async (t) => {
   const { ui, state } = await auditPage(t);
   // The saved parent clause cl4 is normalised to its children and their linked controls.
-  const checked = (sel) =>
-    [...ui.document.querySelectorAll(sel)]
-      .filter((x) => x.checked)
-      .map((x) => x.getAttribute(sel.slice(1, -1)));
-  assert.deepEqual(checked('[data-clause-id]'), ['cl41', 'cl42']);
-  assert.deepEqual(checked('[data-control-id]').sort(), ['c1', 'c2']);
+  // Each list is a multiple select, which the design system presents as its picker.
+  for (const id of ['documentsList', 'clausesList', 'controlsList']) {
+    assert.equal(ui.el(id).multiple, true, id);
+    assert.equal(ui.el(id).disabled, false, id);
+  }
+  assert.deepEqual(scopeChosen(ui, 'clause'), ['cl41', 'cl42']);
+  assert.deepEqual(scopeChosen(ui, 'control').sort(), ['c1', 'c2']);
   // Clause-typed control rows are excluded from the control list.
-  assert.equal(ui.document.querySelector('[data-control-id="cx"]'), null);
-  assert.match(ui.el('clausesList').textContent, /child clauses selected/);
+  assert.equal(scopeBox(ui, 'control', 'cx'), null);
+  // A parent clause is a heading: marked, explained and never chosen itself.
+  const heading = scopeBox(ui, 'clause', 'cl4').option;
+  assert.equal(heading.dataset.badge, 'child clauses selected');
+  assert.match(heading.title, /Parent clauses are grouping headings/);
+  assert.equal(heading.selected, false);
   assert.equal(ui.el('clauseScopeCount').textContent, '2 selected');
 
   // Selecting a document adds its clauses and controls.
-  const doc = ui.document.querySelector('[data-document-id="d1"]');
+  const doc = scopeBox(ui, 'document', 'd1');
   assert.equal(ui.el('documentsList').querySelector('u'), null);
+  assert.match(doc.option.title, /^\d+ clauses, \d+ controls$/);
+  assert.ok(doc.option.dataset.badge, 'the kind of document is shown beside it');
   doc.checked = true;
   doc.dispatchEvent(new ui.window.Event('change'));
   assert.equal(ui.el('documentScopeCount').textContent, '1 selected');
-  assert.equal(ui.document.querySelector('[data-clause-id="cl5"]').checked, true);
-  assert.equal(ui.document.querySelector('[data-control-id="c3"]').checked, true);
+  assert.equal(scopeBox(ui, 'clause', 'cl5').checked, true);
+  assert.equal(scopeBox(ui, 'control', 'c3').checked, true);
 
   // Unticking a control, ticking a SWOT candidate, then saving sends the exact scope.
-  const c3 = ui.document.querySelector('[data-control-id="c3"]');
+  const c3 = scopeBox(ui, 'control', 'c3');
   c3.checked = false;
   c3.dispatchEvent(new ui.window.Event('change'));
   const swot = ui.document.querySelector('[data-swot-scope="s2"]');
@@ -326,53 +334,45 @@ test('audit scope selection expands parent clauses and documents to children and
   await idle(ui);
 });
 
-test('clicking a parent clause selects its children; filters and deselect buttons apply locally', async (t) => {
+test('choosing a parent clause chooses its children, and Deselect all clears one list', async (t) => {
   const { ui } = await auditPage(t, {
     audit: baseAudit({ scoped_clauses: [], scoped_controls: [] }),
   });
-  assert.equal(ui.el('deselectClauses').disabled, true);
-  const parent = ui.document.querySelector('[data-clause-id="cl4"]');
+  assert.equal(scopeBox(ui, 'clause', 'cl4').option.dataset.badge, 'selects child clauses');
+  const parent = scopeBox(ui, 'clause', 'cl4');
   parent.checked = true;
-  parent.dispatchEvent(new ui.window.Event('change'));
-  assert.equal(ui.document.querySelector('[data-clause-id="cl4"]').checked, false);
-  assert.equal(ui.document.querySelector('[data-clause-id="cl41"]').checked, true);
+  parent.dispatchEvent();
+  assert.equal(scopeBox(ui, 'clause', 'cl4').checked, false);
+  assert.equal(scopeBox(ui, 'clause', 'cl41').checked, true);
   assert.match(ui.el('status').textContent, /Selected 2 child clauses and 2 linked controls/);
-  assert.equal(ui.el('deselectClauses').disabled, false);
+  assert.equal(ui.el('clauseScopeCount').textContent, '2 selected');
 
   // A leaf clause adds its linked controls; unticking removes only the clause.
-  ui.el('deselectControls').click();
+  deselectAll(ui, 'control');
   assert.equal(ui.el('controlScopeCount').textContent, '0 selected');
-  const leaf = ui.document.querySelector('[data-clause-id="cl41"]');
-  leaf.checked = false;
-  leaf.dispatchEvent(new ui.window.Event('change'));
-  leaf.checked = true;
-  leaf.dispatchEvent(new ui.window.Event('change'));
-  assert.equal(ui.document.querySelector('[data-control-id="c2"]').checked, true);
+  assert.equal(ui.el('clauseScopeCount').textContent, '2 selected');
+  const leaf = () => scopeBox(ui, 'clause', 'cl41');
+  leaf().checked = false;
+  leaf().dispatchEvent();
+  assert.deepEqual(scopeChosen(ui, 'control'), []);
+  leaf().checked = true;
+  leaf().dispatchEvent();
+  assert.equal(scopeBox(ui, 'control', 'c2').checked, true);
 
-  ui.el('clauseFilter').value = 'leader';
-  ui.el('clauseFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.deepEqual(
-    [...ui.document.querySelectorAll('[data-clause-id]')].map((x) => x.dataset.clauseId),
-    ['cl5'],
-  );
-  ui.el('controlFilter').value = 'nothing-matches';
-  ui.el('controlFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.match(ui.el('controlsList').textContent, /No controls match/);
-  ui.el('documentFilter').value = 'zzz';
-  ui.el('documentFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.match(ui.el('documentsList').textContent, /No ISMS documents match/);
-
-  ui.el('deselectClauses').click();
+  deselectAll(ui, 'clause');
   assert.equal(ui.el('clauseScopeCount').textContent, '0 selected');
-  assert.equal(ui.el('deselectDocuments').disabled, true);
-  ui.el('documentFilter').value = '';
-  ui.el('documentFilter').dispatchEvent(new ui.window.Event('input'));
-  const doc = ui.document.querySelector('[data-document-id="d1"]');
+  assert.ok(scopeChosen(ui, 'control').length, 'controls stay until they are deselected');
+  const doc = scopeBox(ui, 'document', 'd1');
   doc.checked = true;
-  doc.dispatchEvent(new ui.window.Event('change'));
-  ui.el('deselectDocuments').click();
+  doc.dispatchEvent();
+  assert.equal(ui.el('documentScopeCount').textContent, '1 selected');
+  deselectAll(ui, 'document');
   assert.equal(ui.el('documentScopeCount').textContent, '0 selected');
-  assert.match(ui.el('status').textContent, /All ISMS documents deselected/);
+  // What the document brought into scope stays.
+  assert.equal(scopeBox(ui, 'clause', 'cl5').checked, true);
+  // The header no longer carries a deselect button for each list.
+  for (const id of ['deselectDocuments', 'deselectClauses', 'deselectControls'])
+    assert.equal(ui.el(id), null, id);
 });
 
 test('audit scope graph renders a bipartite SVG and reports unlinked items', async (t) => {
@@ -769,7 +769,7 @@ test('locked audits show a reopen path and reject edits until reopened', async (
   assert.equal(ui.document.querySelector('[data-del-attendee]'), null);
   assert.equal(ui.document.querySelector('[data-edit-finding]'), null);
   assert.equal(ui.document.querySelector('[data-evidence-notes="e1"]').readOnly, true);
-  assert.ok(ui.document.querySelector('[data-control-id]').disabled);
+  assert.ok(ui.el('controlsList').disabled);
 
   // Keeping a locked status is refused locally.
   ui.el('detailsForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
@@ -803,8 +803,9 @@ test('audit readers without management permission receive a read-only view', asy
     'findingForm',
   ])
     assert.ok(ui.el(id).classList.contains('d-none'), id);
-  for (const id of ['saveScope', 'deselectDocuments', 'deselectClauses', 'deselectControls'])
-    assert.ok(ui.el(id).classList.contains('d-none'), id);
+  assert.ok(ui.el('saveScope').classList.contains('d-none'));
+  for (const id of ['documentsList', 'clausesList', 'controlsList'])
+    assert.equal(ui.el(id).disabled, true, id);
   assert.ok(ui.el('deleteAudit').classList.contains('d-none'));
   assert.match(ui.el('status').textContent, /read-only access/);
   // Readers do not request the user directory used for attendee selection.
@@ -829,10 +830,15 @@ test('audit managers who did not create the audit cannot edit it', async (t) => 
   assert.equal(ui.document.querySelector('[data-del-attendee]'), null);
   assert.equal(ui.document.querySelector('[data-edit-finding]'), null);
   assert.ok(ui.el('deleteAudit').classList.contains('d-none'));
-  // Re-enabling a control in the DOM does not bypass the page's edit check.
-  ui.el('deselectControls').disabled = false;
-  ui.el('deselectControls').click();
+  // Re-enabling a list in the DOM does not bypass the page's edit check: the
+  // reason is shown and the list is drawn again as the scope stands.
+  const inScope = scopeChosen(ui, 'control');
+  assert.ok(inScope.length);
+  ui.el('controlsList').disabled = false;
+  deselectAll(ui, 'control');
   assert.match(ui.el('status').textContent, /Only the audit creator or an audit administrator/);
+  assert.deepEqual(scopeChosen(ui, 'control'), inScope);
+  assert.equal(ui.el('controlsList').disabled, true);
   ui.el('findingForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   await settle(() => /Only the audit creator/.test(ui.el('status').textContent));
   assert.equal(state.posted.length, 0);
@@ -989,7 +995,7 @@ test('disabled features skip their catalogue requests and keep the saved scope',
   ])
     assert.ok(!ui.calls.some((c) => c.url.startsWith(path + '?') || c.url === path), path);
   assert.equal(ui.el('swotScope'), null);
-  assert.equal(ui.document.querySelector('[data-control-id="c1"]').checked, true);
+  assert.equal(scopeBox(ui, 'control', 'c1').checked, true);
   ui.el('saveScope').click();
   await settle(() => state.put);
   assert.deepEqual(state.put, { clauses: ['cl4'], controls: ['c1'] });
@@ -1071,6 +1077,9 @@ async function auditZipExport(t, responses, audit = baseAudit(), artifacts = und
         assert.equal(node.querySelector('#reportForm'), null);
         assert.equal(node.querySelector('button'), null);
         assert.ok(node.querySelector('.export-scope-list'));
+        // The scope pickers are left out; the export lists what is in scope.
+        assert.equal(node.querySelector('.mosp-picker'), null);
+        assert.ok(!node.textContent.includes('picker search box'));
         assert.ok(!node.textContent.includes('bob@example.test'));
         assert.match(node.textContent, /\[MASKED_EMAIL\]/);
         captured.push(node.textContent);
@@ -1078,6 +1087,11 @@ async function auditZipExport(t, responses, audit = baseAudit(), artifacts = und
       };
     },
   });
+  // Standing in for the picker the design system draws beside each scope list.
+  const picker = ui.document.createElement('div');
+  picker.className = 'mosp-picker';
+  picker.textContent = 'picker search box';
+  ui.el('controlsList').after(picker);
   ui.el('btnAuditZip').click();
   await settle(() => zip);
   const files = readZip(new Uint8Array(await zip.arrayBuffer()));
@@ -1458,9 +1472,13 @@ test('unticking a document or SWOT item removes it from the scope that is saved'
     box.checked = checked;
     box.dispatchEvent(new ui.window.Event('change'));
   };
-  toggle('[data-document-id="d1"]', true);
+  const documentInScope = (checked) => {
+    scopeBox(ui, 'document', 'd1').checked = checked;
+    scopeBox(ui, 'document', 'd1').dispatchEvent();
+  };
+  documentInScope(true);
   assert.equal(ui.el('documentScopeCount').textContent, '1 selected');
-  toggle('[data-document-id="d1"]', false);
+  documentInScope(false);
   assert.equal(ui.el('documentScopeCount').textContent, '0 selected');
   toggle('[data-swot-scope="s2"]', true);
   toggle('[data-swot-scope="s2"]', false);

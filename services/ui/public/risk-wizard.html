@@ -171,12 +171,11 @@
         <!-- Step 6: controls -->
         <section class="risk-wizard-step" data-step="controls" hidden>
           <h2 class="h5">Which controls does it relate to?</h2>
-          <p class="small-muted" data-links-intro="controls" data-links-for="risk">Optional. Controls are the safeguards that reduce the risk. Tick the ones that apply in <span id="controlsFramework">this framework</span>; suggested controls are pre-ticked for you to review.</p>
+          <p class="small-muted" data-links-intro="controls" data-links-for="risk">Optional. Controls are the safeguards that reduce the risk. Search for or tick the ones that apply in <span id="controlsFramework">this framework</span>; suggested controls are pre-ticked for you to review.</p>
           <p class="small-muted" data-links-intro="controls" data-links-for="pestle" hidden>Optional. Tick the controls this item is relevant to and say how strongly. You can refine this later on the item's page.</p>
           <div id="suggestedControlsNote" class="alert alert-light border py-2" hidden role="status"></div>
-          <input id="controlSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter controls by reference or title" aria-label="Filter controls">
-          <div id="controlList" class="border rounded p-2 risk-wizard-scroll"></div>
-          <div class="small-muted mt-2"><span id="controlCount">0</span> selected.</div>
+          <label class="visually-hidden" for="controlList">Controls</label>
+          <select id="controlList" class="form-select" multiple size="10"></select>
         </section>
 
         <!-- Step 7: clauses -->
@@ -184,9 +183,8 @@
           <h2 class="h5">Which clauses does it relate to?</h2>
           <p class="small-muted" data-links-intro="clauses" data-links-for="risk">Optional. Clauses are the framework's own requirements, such as context, leadership or planning. Tick the ones in <span id="clausesFramework">this framework</span> that this risk bears on.</p>
           <p class="small-muted" data-links-intro="clauses" data-links-for="pestle" hidden>Optional. Tick the framework clauses this item is relevant to and say how strongly. You can refine this later on the item's page.</p>
-          <input id="clauseSearch" class="form-control form-control-sm mb-2" type="search" placeholder="Filter clauses by reference or title" aria-label="Filter clauses">
-          <div id="clauseList" class="border rounded p-2 risk-wizard-scroll"></div>
-          <div class="small-muted mt-2"><span id="clauseCount">0</span> selected.</div>
+          <label class="visually-hidden" for="clauseList">Clauses</label>
+          <select id="clauseList" class="form-select" multiple size="10"></select>
         </section>
 
         <!-- Step 8: review -->

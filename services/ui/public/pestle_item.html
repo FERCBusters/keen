@@ -115,23 +115,25 @@
                 <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
                   <div>
                     <div class="fw-semibold">Control relevance</div>
-                    <div class="small-muted">Scores against each control in the selected framework.</div>
+                    <div class="small-muted">Choose the controls in the selected framework this item bears on, and how relevant it is to each.</div>
                   </div>
                   <button id="saveControlRelevance" class="btn btn-sm btn-outline-primary" type="button">Save control relevance</button>
                 </div>
-                <input id="controlRelevanceFilter" class="form-control form-control-sm mb-2" type="search" placeholder="Filter controls">
-                <div id="controlRelevanceList" class="border rounded p-2 small-muted">Save the item first.</div>
+                <label class="visually-hidden" for="controlRelevance">Control relevance</label>
+                <select id="controlRelevance" class="form-select" multiple size="8"></select>
+                <div id="controlRelevanceList" class="small-muted mt-2">Save the item first.</div>
               </div>
               <div class="col-12 col-xl-6">
                 <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
                   <div>
                     <div class="fw-semibold">Clause relevance</div>
-                    <div class="small-muted">Scores against each clause in the selected framework.</div>
+                    <div class="small-muted">Choose the clauses in the selected framework this item bears on, and how relevant it is to each.</div>
                   </div>
                   <button id="saveClauseRelevance" class="btn btn-sm btn-outline-primary" type="button">Save clause relevance</button>
                 </div>
-                <input id="clauseRelevanceFilter" class="form-control form-control-sm mb-2" type="search" placeholder="Filter clauses">
-                <div id="clauseRelevanceList" class="border rounded p-2 small-muted">Save the item first.</div>
+                <label class="visually-hidden" for="clauseRelevance">Clause relevance</label>
+                <select id="clauseRelevance" class="form-select" multiple size="8"></select>
+                <div id="clauseRelevanceList" class="small-muted mt-2">Save the item first.</div>
               </div>
             </div>
           </div>

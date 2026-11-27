@@ -271,34 +271,50 @@ test('administrators save the guidance URL and see failures reported', async (t)
   await settle(() => /Failed to save linked controls/.test(failing.ui.el('status').textContent));
 });
 
-test('administrators link controls with applicability and can filter the catalogue', async (t) => {
+test('administrators link controls in the shared picker, each with its applicability', async (t) => {
   const { ui, state } = await clausePage(t);
   ui.el('editLinkedControls').click();
   assert.equal(ui.el('adminControlsCard').style.display, '');
-  const sel = (id) => ui.el('adminControlsList').querySelector(`[data-control-id="${id}"]`);
-  assert.equal(sel('c1').value, 'applicable');
-  assert.equal(sel('c2').value, 'partially_applicable');
-  assert.equal(sel('c3').value, '');
-  assert.equal(sel('k9'), null);
-  assert.equal(ui.el('adminControlsList').querySelector('b'), null);
-  ui.el('controlSearch').value = 'crypto';
-  ui.el('controlSearch').dispatchEvent(new ui.window.Event('input'));
+  const select = ui.el('clauseControls');
+  const option = (id) => [...select.options].find((o) => o.value === id);
+  // A linked control is chosen and carries its applicability; clauses in the
+  // catalogue are not offered.
+  assert.equal(select.multiple, true);
   assert.deepEqual(
-    [...ui.el('adminControlsList').querySelectorAll('select')].map((s) => s.dataset.controlId),
-    ['c3'],
+    [...select.options].map((o) => [o.value, o.selected, o.dataset.extra || '']),
+    [
+      ['c1', true, 'applicable'],
+      ['c2', true, 'partially_applicable'],
+      ['c3', false, ''],
+    ],
   );
-  sel('c3').value = 'applicable';
+  assert.equal(option('k9'), undefined);
+  assert.equal(select.querySelector('b'), null, 'titles are text');
+  assert.deepEqual(JSON.parse(select.dataset.pickerExtra), {
+    label: 'Applicability',
+    choices: [
+      ['applicable', 'Applicable'],
+      ['partially_applicable', 'Partially applicable'],
+    ],
+    default: 'applicable',
+  });
+  assert.equal(ui.el('adminControlsList').textContent, '');
+  // Unlink one, change one, and link another without naming its applicability.
+  option('c1').selected = false;
+  option('c2').dataset.extra = 'applicable';
+  option('c3').selected = true;
   ui.el('saveClauseControls').click();
   await settle(() => ui.el('status').textContent === 'Linked controls saved');
-  // Only visible, applicable rows are submitted.
+  // Every chosen control is sent, whatever a search was showing.
   assert.deepEqual(state.patched[0], {
     path: '/api/v1/admin/clauses/k1/controls',
-    body: { controls: [{ control_id: 'c3', applicability: 'applicable' }] },
+    body: {
+      controls: [
+        { control_id: 'c2', applicability: 'applicable' },
+        { control_id: 'c3', applicability: 'applicable' },
+      ],
+    },
   });
-  await settle(() => ui.el('controlsMeta').textContent === '1 linked control');
-  ui.el('controlSearch').value = 'zzz';
-  ui.el('controlSearch').dispatchEvent(new ui.window.Event('input'));
-  assert.match(ui.el('adminControlsList').textContent, /No controls match/);
   ui.el('editLinkedControls').click();
   assert.equal(ui.el('adminControlsCard').style.display, 'none');
 });
@@ -318,7 +334,8 @@ test('intermediate parent clauses cannot have controls linked directly', async (
     /Link controls to the child clauses instead/,
   );
   assert.equal(ui.el('saveClauseControls').disabled, true);
-  assert.equal(ui.el('controlSearch').disabled, true);
+  assert.equal(ui.el('clauseControls').disabled, true);
+  assert.equal(ui.el('clauseControls').options.length, 0);
 });
 
 test('PESTLE and ISMS tabs load linked records on demand', async (t) => {
@@ -411,7 +428,7 @@ test('a control catalogue that cannot load is reported when editing linked contr
   await settle(() => /Failed to load controls/.test(ui.el('status').textContent));
   assert.equal(ui.el('status').textContent, 'Failed to load controls: Catalogue offline');
   assert.equal(ui.el('status').dataset.alert, 'danger');
-  assert.equal(ui.el('adminControlsList').querySelector('select'), null);
+  assert.equal(ui.el('clauseControls').options.length, 0);
 });
 
 test("a clause's owners show in its header, and administrators change them", async (t) => {
@@ -491,7 +508,7 @@ test('switched-off PESTLE and ISMS load nothing, even after a save on their tab'
   );
   const { ui, state } = await clausePage(t, { me, query: '&id=k1&tab=isms' });
   ui.el('editLinkedControls').click();
-  await settle(() => ui.el('adminControlsList').querySelector('select'));
+  await settle(() => ui.el('clauseControls').options.length);
   ui.el('saveClauseControls').click();
   await settle(() => ui.el('status').textContent === 'Linked controls saved');
   await settle(() => ui.idle());
@@ -504,7 +521,7 @@ test('saving linked controls on the ISMS tab reloads the ISMS references', async
   const { ui } = await clausePage(t, { query: '&id=k1&tab=isms' });
   assert.equal(ismsCalls(ui), 0);
   ui.el('editLinkedControls').click();
-  await settle(() => ui.el('adminControlsList').querySelector('select'));
+  await settle(() => ui.el('clauseControls').options.length);
   ui.el('saveClauseControls').click();
   await settle(() => ui.el('clauseIsmsView').querySelector('table'));
   assert.equal(ismsCalls(ui), 1);
@@ -597,7 +614,7 @@ test('editing the evidence of a clause without mappings starts from one blank ro
   assert.equal(rows[0].querySelector('.clause-evidence-url').value, '');
 });
 
-test('the control search leaves out untitled controls when looking for the word null', async (t) => {
+test('an untitled control is offered by its reference alone, and an empty catalogue says so', async (t) => {
   const { ui } = await clausePage(t, {
     catalogue: [
       { id: 'c1', ref: 'A1', title: 'Null routing' },
@@ -605,25 +622,25 @@ test('the control search leaves out untitled controls when looking for the word 
     ],
   });
   ui.el('editLinkedControls').click();
-  await settle(() => ui.el('adminControlsList').querySelectorAll('tbody tr').length === 2);
-  const untitled = ui.el('adminControlsList').querySelectorAll('tbody tr')[1];
-  assert.equal(untitled.cells[1].textContent, '');
-  ui.el('controlSearch').value = 'null';
-  ui.el('controlSearch').dispatchEvent(new ui.window.Event('input'));
+  await settle(() => ui.el('clauseControls').options.length === 2);
   assert.deepEqual(
-    [...ui.el('adminControlsList').querySelectorAll('tbody tr')].map((r) => r.cells[0].textContent),
-    ['A1'],
+    [...ui.el('clauseControls').options].map((o) => o.textContent),
+    ['A1 Null routing', 'A4'],
   );
+  const empty = await clausePage(t, { catalogue: [] });
+  empty.ui.el('editLinkedControls').click();
+  await settle(() => /No controls/.test(empty.ui.el('adminControlsList').textContent));
+  assert.equal(empty.ui.el('adminControlsList').textContent, 'No controls in this framework.');
 });
 
 test('a control catalogue that failed with the page is requested again when editing starts', async (t) => {
   const { ui } = await clausePage(t, { catalogueFailures: 1 });
   assert.match(ui.el('status').textContent, /Catalogue busy/);
   ui.el('editLinkedControls').click();
-  await settle(() => ui.el('adminControlsList').querySelector('select'));
+  await settle(() => ui.el('clauseControls').options.length);
   assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/controls?')).length, 2);
   assert.deepEqual(
-    [...ui.el('adminControlsList').querySelectorAll('tbody tr')].map((r) => r.cells[0].textContent),
+    [...ui.el('clauseControls').options].map((o) => o.textContent.split(' ')[0]),
     ['A1', 'A2', 'A3'],
   );
 });

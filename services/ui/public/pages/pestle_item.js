@@ -1,4 +1,5 @@
 import { mountQuestionThreads } from '/pages/question-threads.js';
+import { catalogueLabel } from '/pages/catalogue-options.js';
 import { controlHref, relevanceBadgeHtml, relevanceStrength } from '/pages/risk-common.js';
 import { renderRecordLinksGraph } from '/pages/record-links-graph.js';
 import {
@@ -19,7 +20,7 @@ import {
   esc,
   fmtTs,
   toast,
-  debounce,
+  node,
   getCurrentFramework,
   withFramework,
   loadEntityChangelog,
@@ -84,7 +85,7 @@ const RELEVANCE_EDITORS = [
     saved: 'Clause relevance saved',
     href: clauseHref,
     list: document.getElementById('clauseRelevanceList'),
-    filter: document.getElementById('clauseRelevanceFilter'),
+    select: document.getElementById('clauseRelevance'),
     save: document.getElementById('saveClauseRelevance'),
     rows: [],
   },
@@ -96,7 +97,7 @@ const RELEVANCE_EDITORS = [
     saved: 'Control relevance saved',
     href: (id) => controlHref(id, framework),
     list: document.getElementById('controlRelevanceList'),
-    filter: document.getElementById('controlRelevanceFilter'),
+    select: document.getElementById('controlRelevance'),
     save: document.getElementById('saveControlRelevance'),
     rows: [],
   },
@@ -281,35 +282,29 @@ function renderItem(item = null) {
   }
 }
 
+// Each list is a multiple select, which the design system presents as its
+// picker: a record is chosen when the item is relevant to it, and carries how
+// relevant as a value of its own. A record left out is not applicable.
 function renderRelevance(editor) {
-  if (!itemId) {
-    editor.list.innerHTML = '<div class="small-muted">Save the item first.</div>';
-    return;
-  }
-  const q = String(editor.filter.value || '')
-    .trim()
-    .toLowerCase();
-  const rows = editor.rows.filter((row) => {
-    const target = row[editor.key];
-    return !q || `${target.ref} ${target.title}`.toLowerCase().includes(q);
+  const levels = meta.relevance_levels.filter((level) => level.code !== 'na');
+  editor.select.dataset.pickerExtra = JSON.stringify({
+    label: 'Relevance',
+    choices: levels.map((level) => [level.code, level.label]),
+    // A newly chosen record starts at the item's overall relevance.
+    default: pestleOverallRelevance.value,
   });
-  if (!rows.length) {
-    editor.list.innerHTML = `<div class="small-muted">No ${esc(editor.plural)} match.</div>`;
-    return;
-  }
-  editor.list.innerHTML = `<div class="table-responsive" style="max-height:620px;"><table class="table table-sm align-middle mb-0">
-    <thead><tr><th style="width:120px;">${esc(editor.heading)}</th><th>Title</th><th style="width:140px;">Relevance</th></tr></thead>
-    <tbody>${rows
-      .map((row) => {
-        const target = row[editor.key];
-        return `<tr>
-        <td><a class="fw-semibold" href="${esc(editor.href(target.id))}">${esc(target.ref)}</a></td>
-        <td class="wrap small-muted">${esc(target.title)}</td>
-        <td><select class="form-select form-select-sm" data-relevance-of="${esc(target.id)}" ${canManagePestle ? '' : 'disabled'}>${relevanceOptions(row.relevance.code)}</select></td>
-      </tr>`;
-      })
-      .join('')}</tbody>
-  </table></div>`;
+  editor.select.disabled = !canManagePestle;
+  editor.select.replaceChildren(
+    ...editor.rows.map((row) => {
+      const target = row[editor.key];
+      const option = node('option', { value: target.id }, catalogueLabel(target));
+      option.selected = row.relevance.code !== 'na';
+      if (option.selected) option.dataset.extra = row.relevance.code;
+      return option;
+    }),
+  );
+  editor.list.textContent = itemId ? '' : 'Save the item first.';
+  editor.list.hidden = Boolean(itemId);
 }
 
 async function loadMeta() {
@@ -409,31 +404,19 @@ async function saveCurrentItem(ev) {
   }
 }
 
-// A filtered list shows some rows only; the rest keep the relevance they had.
+// Every record is sent: the chosen ones with their relevance, the rest as
+// not applicable.
 function relevancePayload(editor) {
-  const shown = new Map(
-    Array.from(editor.list.querySelectorAll('[data-relevance-of]')).map((sel) => [
-      sel.dataset.relevanceOf,
-      sel.value,
-    ]),
-  );
   return {
-    items: editor.rows.map((row) => {
-      const id = row[editor.key].id;
-      return {
-        [`${editor.key}_id`]: id,
-        relevance_code: shown.has(id) ? shown.get(id) : row.relevance.code,
-      };
-    }),
+    items: Array.from(editor.select.options, (option) => ({
+      [`${editor.key}_id`]: option.value,
+      relevance_code: option.selected ? option.dataset.extra : 'na',
+    })),
   };
 }
 
 pestleForm?.addEventListener('submit', saveCurrentItem);
 for (const editor of RELEVANCE_EDITORS) {
-  editor.filter.addEventListener(
-    'input',
-    debounce(() => renderRelevance(editor), 200),
-  );
   editor.save.addEventListener('click', async () => {
     if (!canManagePestle || !itemId) return;
     editor.save.disabled = true;

@@ -287,8 +287,10 @@ test('read-only PESTLE viewers see disabled fields and no mutation controls', as
     assert.equal(ui.el(id).style.display, 'none', id);
   assert.equal(ui.el('pestleQuestions').querySelector('[data-question-ask]').hidden, true);
   tab(ui, 'pestleRelevanceTab');
-  await settle(() => ui.el('controlRelevanceList').querySelector('select'));
-  assert.ok([...ui.document.querySelectorAll('[data-relevance-of]')].every((s) => s.disabled));
+  await settle(() => ui.el('controlRelevance').options.length);
+  // A reader sees what is chosen; the picker follows the disabled selects.
+  assert.equal(ui.el('controlRelevance').disabled, true);
+  assert.equal(ui.el('clauseRelevance').disabled, true);
   ui.el('pestleForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
   ui.el('saveClauseRelevance').click();
   await new Promise((r) => setTimeout(r, 10));
@@ -347,7 +349,7 @@ test('new PESTLE items require text and are created before relevance can be edit
     },
   });
   assert.match(ui.window.location.search, /id=p1/);
-  assert.ok(ui.el('controlRelevanceList').querySelector('select'));
+  assert.ok(ui.el('controlRelevance'));
   assert.equal(ui.el('deletePestleItem').style.display, '');
   await settle(() => ui.el('thread-t1'));
   assert.equal(ask.hidden, false);
@@ -373,33 +375,49 @@ test('failed saves report the error and re-enable the save button', async (t) =>
   await settle(() => /Failed to save PESTLE\(E\) item: Rejected/.test(ui.el('status').textContent));
   assert.equal(ui.el('savePestleItem').disabled, false);
   tab(ui, 'pestleRelevanceTab');
-  await settle(() => ui.el('controlRelevanceList').querySelector('select'));
+  await settle(() => ui.el('controlRelevance').options.length);
   ui.el('saveControlRelevance').click();
   await settle(() => /Failed to save control relevance/.test(ui.el('status').textContent));
   ui.el('saveClauseRelevance').click();
   await settle(() => /Failed to save clause relevance/.test(ui.el('status').textContent));
 });
 
-test('control and clause relevance are edited and saved, including filtered rows', async (t) => {
+test('control and clause relevance are chosen in the shared picker and saved for every record', async (t) => {
   const { ui, state } = await pestleItem(t);
   tab(ui, 'pestleRelevanceTab');
   await settle(
-    () =>
-      ui.el('clauseRelevanceList').querySelector('select') &&
-      ui.el('controlRelevanceList').querySelector('select'),
+    () => ui.el('clauseRelevance').options.length && ui.el('controlRelevance').options.length,
   );
   assert.match(ui.window.location.search, /tab=relevance/);
-  const rated = (list, id) => ui.el(list).querySelector(`[data-relevance-of="${id}"]`);
-  // Control titles are text, and each control links to its page.
-  assert.equal(ui.el('controlRelevanceList').querySelector('b'), null);
-  assert.match(ui.el('controlRelevanceList').textContent, /Privacy <b>/);
-  assert.equal(
-    ui.el('controlRelevanceList').querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&framework=A',
+  const listed = (id) =>
+    [...ui.el(id).options].map((o) => [o.value, o.textContent, o.selected, o.dataset.extra || '']);
+  // Each list is a multiple select: a record is chosen when the item is
+  // relevant to it, and carries how relevant. Titles are text.
+  const controls = ui.el('controlRelevance');
+  assert.equal(controls.multiple, true);
+  assert.equal(controls.disabled, false);
+  assert.equal(controls.querySelector('b'), null);
+  assert.match(controls.options[0].textContent, /Privacy <b>/);
+  assert.deepEqual(
+    listed('controlRelevance').map(([id, , chosen, level]) => [id, chosen, level]),
+    [
+      ['c1', true, 'medium'],
+      ['c2', false, ''],
+    ],
   );
-  assert.equal(rated('controlRelevanceList', 'c1').value, 'medium');
-  assert.equal(rated('controlRelevanceList', 'c2').value, 'na');
-  rated('controlRelevanceList', 'c1').value = 'high';
+  // The picker offers the levels other than "not applicable"; a newly chosen
+  // record starts at the item's overall relevance.
+  assert.deepEqual(JSON.parse(controls.dataset.pickerExtra), {
+    label: 'Relevance',
+    choices: [
+      ['low', '3 Low'],
+      ['medium', '2 Medium'],
+      ['high', '1 High'],
+    ],
+    default: 'high',
+  });
+  assert.equal(ui.el('controlRelevanceList').hidden, true);
+  controls.options[0].dataset.extra = 'high';
   ui.el('saveControlRelevance').click();
   await settle(() => ui.el('status').textContent === 'Control relevance saved');
   assert.deepEqual(state.patched[0], {
@@ -411,26 +429,27 @@ test('control and clause relevance are edited and saved, including filtered rows
       ],
     },
   });
-  assert.match(ui.el('controlRelevanceList').textContent, /No controls match/);
 
-  // Filtering hides a clause; the hidden clause keeps its existing relevance in the payload.
-  ui.el('clauseRelevanceFilter').value = 'risks';
-  ui.el('clauseRelevanceFilter').dispatchEvent(new ui.window.Event('input'));
-  await settle(() => ui.el('clauseRelevanceList').querySelectorAll('select').length === 1);
-  assert.equal(rated('clauseRelevanceList', 'k1'), null);
-  rated('clauseRelevanceList', 'k2').value = 'high';
+  // Choosing a clause and leaving another out: the one left out is sent as
+  // not applicable, so every record has an answer.
+  const clauses = ui.el('clauseRelevance');
+  const k1 = [...clauses.options].find((o) => o.value === 'k1');
+  const k2 = [...clauses.options].find((o) => o.value === 'k2');
+  assert.deepEqual([k1.selected, k1.dataset.extra], [true, 'low']);
+  k1.selected = false;
+  k2.selected = true;
+  k2.dataset.extra = 'high';
   ui.el('saveClauseRelevance').click();
   await settle(() => ui.el('status').textContent === 'Clause relevance saved');
   assert.deepEqual(state.patched[1], {
     path: '/api/v1/pestle/items/p1/clauses',
     body: {
       items: [
-        { clause_id: 'k1', relevance_code: 'low' },
+        { clause_id: 'k1', relevance_code: 'na' },
         { clause_id: 'k2', relevance_code: 'high' },
       ],
     },
   });
-  assert.match(ui.el('clauseRelevanceList').textContent, /No clauses match/);
 });
 
 // The shared question panel is tested through the event page; these tests
@@ -479,7 +498,7 @@ test('question and changelog failures are reported inside their panes', async (t
 
 test('deep links load relevance and changelog panes with the item', async (t) => {
   const rel = await pestleItem(t, { query: '&id=p1&tab=relevance' });
-  await settle(() => rel.ui.el('clauseRelevanceList').querySelector('select'));
+  await settle(() => rel.ui.el('clauseRelevance').options.length);
   const log = await pestleItem(t, { query: '&id=p1&tab=changelog' });
   await settle(() => /Item created/.test(log.ui.el('pestleChangelog').textContent));
 });

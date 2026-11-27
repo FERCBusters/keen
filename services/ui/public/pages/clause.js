@@ -1,4 +1,5 @@
 import { mountAssignedStories } from '/pages/story-related.js';
+import { catalogueLabel } from '/pages/catalogue-options.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
 import { linkedRisksTable, pestleItemRows } from '/pages/risk-common.js';
@@ -17,7 +18,7 @@ import {
   withFramework,
   getCurrentFramework,
   showTableLoading,
-  debounce,
+  node,
   loadEntityChangelog,
   applicabilityBadge,
 } from '/app.js';
@@ -40,7 +41,7 @@ const clausesBreadcrumb = document.getElementById('clausesBreadcrumb');
 const adminControlsCard = document.getElementById('adminControlsCard');
 const adminControlsList = document.getElementById('adminControlsList');
 const saveClauseControls = document.getElementById('saveClauseControls');
-const controlSearch = document.getElementById('controlSearch');
+const clauseControls = document.getElementById('clauseControls');
 const editLinkedControls = document.getElementById('editLinkedControls');
 const clauseEvidenceMeta = document.getElementById('clauseEvidenceMeta');
 const clauseEvidenceLinks = document.getElementById('clauseEvidenceLinks');
@@ -363,11 +364,24 @@ function renderControls(rows) {
     .join('');
 }
 
+// The linked controls are chosen in a multiple select, which the design system
+// presents as its picker; each chosen control carries its applicability.
+const APPLICABILITY = JSON.stringify({
+  label: 'Applicability',
+  choices: [
+    ['applicable', 'Applicable'],
+    ['partially_applicable', 'Partially applicable'],
+  ],
+  default: 'applicable',
+});
+
 function renderAdminControls() {
   if (!adminControlsList || !me?.is_admin) return;
-  if (isIntermediateParentClause()) {
-    if (controlSearch) controlSearch.disabled = true;
-    if (saveClauseControls) saveClauseControls.disabled = true;
+  const parent = isIntermediateParentClause();
+  clauseControls.disabled = parent;
+  saveClauseControls.disabled = parent;
+  if (parent) {
+    clauseControls.replaceChildren();
     adminControlsList.innerHTML = `
       <div class="alert alert-info mb-0">
         This clause has more specific child clauses. Link controls to the child clauses instead;
@@ -375,52 +389,18 @@ function renderAdminControls() {
       </div>`;
     return;
   }
-  if (controlSearch) controlSearch.disabled = false;
-  if (saveClauseControls) saveClauseControls.disabled = false;
   const selected = linkedMap();
-  const q = (controlSearch?.value || '').trim().toLowerCase();
-  const rows = allControls.filter(
-    (c) => !q || `${c.ref} ${c.title || ''}`.toLowerCase().includes(q),
+  clauseControls.dataset.pickerExtra = APPLICABILITY;
+  clauseControls.replaceChildren(
+    ...allControls.map((c) => {
+      const option = node('option', { value: c.id }, catalogueLabel(c));
+      const applicability = selected.get(String(c.id));
+      option.selected = Boolean(applicability);
+      if (applicability) option.dataset.extra = applicability;
+      return option;
+    }),
   );
-  if (!rows.length) {
-    adminControlsList.innerHTML = '<span class="small-muted">No controls match.</span>';
-    return;
-  }
-  adminControlsList.innerHTML = `
-    <div class="table-responsive admin-clause-controls-wrap">
-      <table class="table table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th style="width:130px;">Control</th>
-            <th>Title</th>
-            <th style="width:220px;">Applicability</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows
-            .map((c) => {
-              const cid = String(c.id);
-              const cur = selected.get(cid) || '';
-              const href = withFramework(
-                `/control.html?id=${encodeURIComponent(cid)}`,
-                c.framework || framework,
-              );
-              return `<tr>
-              <td class="fw-semibold"><a href="${esc(href)}">${esc(c.ref)}</a></td>
-              <td class="wrap small-muted">${esc(c.title)}</td>
-              <td>
-                <select class="form-select form-select-sm control-applicability" data-control-id="${esc(cid)}">
-                  <option value="" ${cur ? '' : 'selected'}>Not applicable</option>
-                  <option value="applicable" ${cur === 'applicable' ? 'selected' : ''}>Applicable</option>
-                  <option value="partially_applicable" ${cur === 'partially_applicable' ? 'selected' : ''}>Partially applicable</option>
-                </select>
-              </td>
-            </tr>`;
-            })
-            .join('')}
-        </tbody>
-      </table>
-    </div>`;
+  adminControlsList.textContent = allControls.length ? '' : 'No controls in this framework.';
 }
 
 async function loadAdminControls() {
@@ -543,12 +523,10 @@ saveClauseUpstreamUrl?.addEventListener('click', async () => {
 });
 
 saveClauseControls?.addEventListener('click', async () => {
-  const controls = [];
-  for (const sel of adminControlsList.querySelectorAll('.control-applicability')) {
-    const applicability = (sel.value || '').trim();
-    if (!applicability) continue;
-    controls.push({ control_id: sel.dataset.controlId, applicability });
-  }
+  const controls = Array.from(clauseControls.selectedOptions, (option) => ({
+    control_id: option.value,
+    applicability: option.dataset.extra || 'applicable',
+  }));
   saveClauseControls.disabled = true;
   try {
     const data = await apiPatch(`/api/v1/admin/clauses/${encodeURIComponent(clause.id)}/controls`, {
@@ -568,8 +546,6 @@ saveClauseControls?.addEventListener('click', async () => {
     saveClauseControls.disabled = false;
   }
 });
-
-controlSearch?.addEventListener('input', debounce(renderAdminControls, 200));
 
 load();
 

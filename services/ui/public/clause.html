@@ -99,14 +99,14 @@
         <div class="card-body">
           <div class="row g-2 mb-3">
             <div class="col-12 col-lg-8">
-              <label class="form-label small-muted mb-1" for="controlSearch">Search controls</label>
-              <input id="controlSearch" class="form-control" type="text" placeholder="Control ref or title">
+              <label class="form-label small-muted mb-1" for="clauseControls">Controls linked to this clause</label>
+              <select id="clauseControls" class="form-select" multiple size="8"></select>
             </div>
             <div class="col-12 col-lg-4 d-flex align-items-end">
               <button id="saveClauseControls" class="btn btn-primary w-100" type="button">Save controls</button>
             </div>
           </div>
-          <div id="adminControlsList" class="border rounded p-2 small-muted">Loading controls</div>
+          <div id="adminControlsList" class="small-muted">Loading controls</div>
         </div>
       </div>
     </div>

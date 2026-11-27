@@ -70,48 +70,37 @@ const next = (ui) =>
   ui.el('wizardForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
 const visible = (ui) =>
   [...ui.document.querySelectorAll('.risk-wizard-step')].find((s) => !s.hidden).dataset.step;
-const listed = (ui, key) =>
-  [...ui.document.querySelectorAll(`[data-scope-key="${key}"]`)].map((box) => box.value);
-const filter = (ui, key, value, type = 'input') => {
-  const box = ui.document.querySelector(`[data-scope-filter="${key}"]`);
-  box.value = value;
-  box.dispatchEvent(new ui.window.Event(type, { bubbles: true }));
-};
+const scopeSelect = (ui, key) => ui.document.querySelector(`[data-scope-list="${key}"]`);
+const listed = (ui, key) => [...(scopeSelect(ui, key)?.options || [])].map((o) => o.value);
 const choose = (ui, value) => {
   ui.el('attendeeWho').value = value;
   ui.el('attendeeWho').dispatchEvent(new ui.window.Event('change'));
 };
 
-test('scope filters search policies by type and SWOT items by quadrant', async (t) => {
+test('scope lists show a policy by its type, a SWOT item by its quadrant and an untitled control by its reference', async (t) => {
   const { ui } = await wizard(t);
-  ui.el('auditTitle').value = 'Filtered';
+  ui.el('auditTitle').value = 'Listed';
   next(ui);
   await settle(() => listed(ui, 'swot').length === 2);
-  filter(ui, 'documents', 'procedure');
-  assert.deepEqual(listed(ui, 'documents'), ['d2']);
-  filter(ui, 'swot', 'STRENGTH');
-  assert.deepEqual(listed(ui, 'swot'), ['s2']);
-  // An untitled control is found by its reference, never by the word "null".
-  filter(ui, 'controls', 'nul');
-  assert.deepEqual(listed(ui, 'controls'), []);
-  filter(ui, 'controls', 'a.8');
-  assert.deepEqual(listed(ui, 'controls'), ['c2']);
-  assert.equal(
-    ui.document.querySelector('[data-scope-key="controls"]').closest('label').textContent.trim(),
-    'A.8.2',
-  );
+  const shown = (key) =>
+    [...scopeSelect(ui, key).options].map((o) => [o.value, o.textContent, o.dataset.badge || '']);
+  assert.ok(shown('documents').some(([id, , badge]) => id === 'd2' && badge === 'procedure'));
+  assert.ok(shown('swot').some(([id, , badge]) => id === 's2' && badge === 'strength'));
+  assert.ok(shown('controls').some(([id, text]) => id === 'c2' && text === 'A.8.2'));
 });
 
-test('leaving a filter or clicking between the tabs changes no choice', async (t) => {
+test('the picker’s own controls and clicks between the tabs change no choice', async (t) => {
   const { ui } = await wizard(t);
   ui.el('auditTitle').value = 'Steady';
   next(ui);
   await settle(() => listed(ui, 'controls').length === 2);
-  const box = ui.document.querySelector('[data-scope-key="controls"][value="c1"]');
-  box.checked = true;
-  box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
-  // A filter reports a change when it loses focus after typing.
-  filter(ui, 'controls', 'A.5', 'change');
+  [...scopeSelect(ui, 'controls').options].find((o) => o.value === 'c1').selected = true;
+  scopeSelect(ui, 'controls').dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  // The picker's own controls sit beside the select; a change from one of
+  // them, such as its search box losing focus, is not a choice.
+  const search = ui.document.createElement('input');
+  ui.document.querySelector('[data-scope-pane="controls"]').append(search);
+  search.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
   ui.el('scopeTabs').dispatchEvent(new ui.window.MouseEvent('click', { bubbles: true }));
   assert.equal(
     ui.el('scopeTabs').querySelector('[aria-selected="true"]').textContent,

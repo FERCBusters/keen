@@ -666,26 +666,45 @@ test('administrators edit clause applicability with inferred parent values', asy
   const { ui, state } = await controlPage(t);
   assert.equal(ui.el('adminClausesCard').style.display, 'none');
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   assert.equal(ui.el('editClauseApplicability').textContent, 'Hide edit');
   assert.equal(ui.el('controlUpstreamUrl').value, 'https://guidance.example/a51');
-  const sel = (id) => ui.el('adminClausesList').querySelector(`[data-clause-id="${id}"]`);
-  // Existing link values are selected; k2 is an intermediate parent, so its value
-  // is inferred and its select stays blank.
-  assert.equal(sel('k10').value, 'applicable');
-  assert.equal(sel('k2').value, '');
-  assert.equal(sel('k4').value, '');
-  sel('k41').value = 'applicable';
-  sel('k41').dispatchEvent(new ui.window.Event('change'));
-  assert.equal(sel('k4').value, 'partially_applicable');
-  sel('k421').value = 'applicable';
-  sel('k422').value = 'applicable';
-  sel('k422').dispatchEvent(new ui.window.Event('change'));
-  assert.equal(sel('k4').value, 'applicable');
-  assert.equal(sel('k2').value, '');
-  sel('k422').value = 'partially_applicable';
-  sel('k422').dispatchEvent(new ui.window.Event('change'));
-  assert.equal(sel('k4').value, 'partially_applicable');
+  // The clauses are a multiple select, which the design system presents as its
+  // picker: a chosen clause carries its applicability, one left out is not
+  // applicable.
+  const select = ui.el('controlClauses');
+  const option = (id) => [...select.options].find((o) => o.value === id);
+  const value = (id) => (option(id).selected ? option(id).dataset.extra : '');
+  const set = (id, applicability) => {
+    option(id).selected = Boolean(applicability);
+    if (applicability) option(id).dataset.extra = applicability;
+    select.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  };
+  assert.equal(select.multiple, true);
+  assert.equal(ui.el('adminClausesList').textContent, '');
+  assert.deepEqual(JSON.parse(select.dataset.pickerExtra).choices, [
+    ['applicable', 'Applicable'],
+    ['partially_applicable', 'Partially applicable'],
+  ]);
+  // Existing link values are chosen; k2 is an intermediate parent, so its value
+  // is inferred and it stays unchosen.
+  assert.equal(value('k10'), 'applicable');
+  assert.equal(value('k2'), '');
+  assert.equal(value('k4'), '');
+  const redraws = ui.pickers.refreshed.length;
+  set('k41', 'applicable');
+  assert.equal(value('k4'), 'partially_applicable');
+  // The parent was set from code, so the picker is asked to show it.
+  assert.ok(ui.pickers.refreshed.length > redraws);
+  assert.equal(ui.pickers.refreshed.at(-1), 'controlClauses');
+  option('k421').selected = true;
+  set('k422', 'applicable');
+  // k421 is chosen without a value of its own; it is saved as applicable below.
+  assert.equal(option('k421').dataset.extra, undefined);
+  assert.equal(value('k4'), 'applicable');
+  assert.equal(value('k2'), '');
+  set('k422', 'partially_applicable');
+  assert.equal(value('k4'), 'partially_applicable');
 
   ui.el('saveClauseLinks').click();
   await settle(() => state.patched.length === 1);
@@ -729,7 +748,7 @@ test('administrators save justification and guidance URL, refreshing the guidanc
   await settle(() => ui.el('ctrlMeta').textContent === 'A · control · in scope');
 
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('controlUpstreamUrl').value = ' javascript:alert(1) ';
   ui.el('saveControlUpstreamUrl').click();
   await settle(() => state.patched.length === 2);
@@ -810,7 +829,7 @@ test('a control with nothing linked says so in every tab', async (t) => {
   assert.equal(ui.el('status').dataset.alert, undefined);
   ui.el('editClauseApplicability').click();
   await settle(() => /No clauses are loaded/.test(ui.el('adminClausesList').textContent));
-  assert.equal(ui.el('adminClausesList').querySelector('select'), null);
+  assert.equal(ui.el('controlClauses').options.length, 0);
 });
 
 test('failed or forbidden link lookups are contained in their own panels', async (t) => {
@@ -839,7 +858,7 @@ test('refused saves and link changes are reported and leave the controls usable'
   assert.equal(ui.el('saveControlJustification').disabled, false);
 
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('saveClauseLinks').click();
   await settle(() => ui.el('status').textContent === 'Failed to save clauses: Patch refused');
   assert.equal(ui.el('saveClauseLinks').disabled, false);
@@ -874,7 +893,7 @@ test('a saved guidance URL becomes the Guidance link, and a failed saved search 
   });
   assert.equal(ui.el('ctrlLinks').querySelector('a'), null);
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('controlUpstreamUrl').value = 'https://guidance.example/a51 ';
   ui.el('saveControlUpstreamUrl').click();
   await settle(() => ui.el('ctrlLinks').querySelector('a'));
@@ -1466,19 +1485,19 @@ test('reopening clause editing reuses the clause catalogue already loaded', asyn
   const { ui } = await controlPage(t);
   const clauseCalls = () => ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses?')).length;
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('editClauseApplicability').click();
   assert.equal(ui.el('adminClausesCard').style.display, 'none');
   ui.el('editClauseApplicability').click();
   await settle(() => ui.el('adminClausesCard').style.display === '');
-  assert.ok(ui.el('adminClausesList').querySelector('[data-clause-id="k10"]'));
+  assert.ok([...ui.el('controlClauses').options].some((o) => o.value === 'k10'));
   assert.equal(clauseCalls(), 1);
 });
 
 test('clearing the guidance URL saves no URL', async (t) => {
   const { ui, state } = await controlPage(t);
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('controlUpstreamUrl').value = '   ';
   ui.el('saveControlUpstreamUrl').click();
   await settle(() => state.patched.length === 1);
@@ -1659,7 +1678,7 @@ test('saving the justification while the clause catalogue loads reports the save
   await settle(() => ui.el('saveControlJustification').disabled === false);
   assert.equal(ui.el('status').textContent, 'Control justification saved');
   release();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
 });
 
 const governance = (ui) =>

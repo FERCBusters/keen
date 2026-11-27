@@ -2,13 +2,16 @@
 // attendees, then a choice of where to begin. Nothing is saved until the
 // last step, when the audit and its attendees are created together.
 import { featureEnabled } from '/pages/feature-availability.js';
+import { catalogueLabel } from '/pages/catalogue-options.js';
 import {
   isoDateToDisplay,
   errorText,
   initNavbar,
   apiGet,
   apiPost,
+  enhancePickers,
   esc,
+  node,
   toast,
   getCurrentFramework,
   frameworkLabel,
@@ -227,59 +230,65 @@ function renderScopeTabs() {
     .join('');
 }
 
-function itemLabel(key, item) {
-  if (key === 'documents')
-    return `<span class="fw-semibold">${esc(item.title)}</span> <span class="badge text-bg-light">${esc(item.document_type || 'document')}</span><span class="small-muted d-block">${(item.clauses || []).length} clauses, ${(item.controls || []).length} controls</span>`;
-  if (key === 'swot')
-    return `<span class="fw-semibold">${esc(item.title)}</span> <span class="small-muted">${esc(item.kind)}</span>`;
-  return `<span class="fw-semibold">${esc(item.ref)}</span> <span class="small-muted">${esc(item.title)}</span>`;
-}
-
-function matches(key, item, filter) {
-  if (!filter) return true;
-  const text =
-    key === 'documents'
-      ? `${item.title} ${item.document_type}`
-      : key === 'swot'
-        ? `${item.title} ${item.kind}`
-        : `${item.ref} ${item.title || ''}`;
-  return text.toLowerCase().includes(filter);
+// One entry of a scope list, as an option built from text.
+function scopeOption(key, item) {
+  const id = String(item.id);
+  let option;
+  if (key === 'documents') {
+    option = node(
+      'option',
+      {
+        value: id,
+        title: `${(item.clauses || []).length} clauses, ${(item.controls || []).length} controls`,
+      },
+      item.title,
+    );
+    option.dataset.badge = item.document_type || 'document';
+  } else if (key === 'swot') {
+    option = node('option', { value: id }, item.title);
+    option.dataset.badge = item.kind;
+  } else option = node('option', { value: id }, catalogueLabel(item));
+  option.selected = chosen[key].has(id);
+  return option;
 }
 
 function renderScopeList(key) {
-  const host = document.querySelector(`[data-scope-items="${key}"]`);
+  const select = document.querySelector(`[data-scope-list="${key}"]`);
+  const note = document.querySelector(`[data-scope-items="${key}"]`);
+  note.className = failures[key] ? 'text-danger small p-1' : 'small-muted p-1';
   if (failures[key]) {
-    host.innerHTML = `<div class="text-danger small p-1">Could not load this list: ${esc(failures[key])}</div>`;
+    select.replaceChildren();
+    note.textContent = `Could not load this list: ${failures[key]}`;
     return;
   }
-  const filter = (document.querySelector(`[data-scope-filter="${key}"]`)?.value || '')
-    .trim()
-    .toLowerCase();
-  const items = catalogue[key].filter((item) => matches(key, item, filter));
-  host.innerHTML =
-    items
-      .map((item) => {
-        const id = String(item.id);
-        const indent =
-          key === 'clauses'
-            ? ` style="margin-left:${Math.min(String(item.ref).split('.').length - 1, 3)}rem"`
-            : '';
-        return `<label class="d-flex gap-2 align-items-start border-bottom py-2"${indent}><input class="form-check-input mt-1" type="checkbox" data-scope-key="${esc(key)}" value="${esc(id)}" ${chosen[key].has(id) ? 'checked' : ''}><span>${itemLabel(key, item)}</span></label>`;
-      })
-      .join('') ||
-    `<div class="small-muted p-1">${catalogue[key].length ? 'Nothing matches the filter.' : `No ${esc(SCOPE.find((list) => list.key === key).plural)} in this framework yet.`}</div>`;
+  select.replaceChildren(...catalogue[key].map((item) => scopeOption(key, item)));
+  note.textContent = catalogue[key].length
+    ? ''
+    : `No ${SCOPE.find((list) => list.key === key).plural} in this framework yet.`;
 }
 
+// Each list is a multiple select, which the design system presents as its
+// picker: a search box, a short list to browse and the chosen entries as chips.
 function renderScopePanes() {
-  $('scopePanes').innerHTML = scopeLists
-    .map(
-      (list) =>
-        `<div data-scope-pane="${esc(list.key)}" role="tabpanel" ${list.key === activeScope ? '' : 'hidden'}>
-          <input class="form-control form-control-sm mb-2" type="search" data-scope-filter="${esc(list.key)}" aria-label="Filter ${esc(list.plural)}" placeholder="Filter ${esc(list.plural)}">
-          <div class="border rounded px-2 risk-wizard-scroll" data-scope-items="${esc(list.key)}"></div>
-        </div>`,
-    )
-    .join('');
+  $('scopePanes').replaceChildren(
+    ...scopeLists.map((list) => {
+      const pane = node(
+        'div',
+        { 'data-scope-pane': list.key, role: 'tabpanel' },
+        node('select', {
+          class: 'form-select',
+          multiple: '',
+          size: '10',
+          'data-scope-list': list.key,
+          'aria-label': list.label,
+        }),
+        node('div', { 'data-scope-items': list.key }),
+      );
+      pane.hidden = list.key !== activeScope;
+      return pane;
+    }),
+  );
+  enhancePickers($('scopePanes'));
   for (const list of scopeLists) renderScopeList(list.key);
   renderScopeTabs();
 }
@@ -317,25 +326,22 @@ $('scopeTabs').addEventListener('click', (ev) => {
     pane.hidden = pane.dataset.scopePane !== activeScope;
   renderScopeTabs();
 });
-$('scopePanes').addEventListener('input', (ev) => {
-  const filter = ev.target.closest('[data-scope-filter]');
-  if (filter) renderScopeList(filter.dataset.scopeFilter);
-});
 $('scopePanes').addEventListener('change', (ev) => {
-  const box = ev.target.closest('[data-scope-key]');
-  if (!box) return;
-  const key = box.dataset.scopeKey;
-  if (!box.checked) {
-    chosen[key].delete(box.value);
-    $('scopeNote').textContent = '';
-  } else {
-    chosen[key].add(box.value);
-    const added = addLinked(key, box.value);
-    $('scopeNote').textContent = added
-      ? `Added ${added} linked ${added === 1 ? 'clause or control' : 'clauses and controls'} as well.`
-      : '';
-    if (added) for (const list of scopeLists) renderScopeList(list.key);
+  const select = ev.target.closest('[data-scope-list]');
+  if (!select) return;
+  const key = select.dataset.scopeList;
+  let added = 0;
+  for (const option of select.options) {
+    if (!option.selected) chosen[key].delete(option.value);
+    else if (!chosen[key].has(option.value)) {
+      chosen[key].add(option.value);
+      added += addLinked(key, option.value);
+    }
   }
+  $('scopeNote').textContent = added
+    ? `Added ${added} linked ${added === 1 ? 'clause or control' : 'clauses and controls'} as well.`
+    : '';
+  if (added) for (const list of scopeLists) renderScopeList(list.key);
   renderScopeTabs();
 });
 

@@ -1,4 +1,5 @@
 import { mountAssignedStories } from '/pages/story-related.js';
+import { catalogueLabel } from '/pages/catalogue-options.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
@@ -36,6 +37,7 @@ import {
   wireOffsetPagerButtons,
   loadEntityChangelog,
   node,
+  refreshPicker,
   applicabilityBadge,
 } from '/app.js';
 
@@ -612,10 +614,30 @@ function selectedClauseMap() {
   return m;
 }
 
-function clauseSelect(id) {
-  return adminClausesList.querySelector(
-    `.clause-applicability[data-clause-id="${CSS.escape(String(id))}"]`,
-  );
+// The clauses are chosen in a multiple select, which the design system
+// presents as its picker; each chosen clause carries its applicability. A
+// clause that is not chosen is not applicable.
+const controlClauses = document.getElementById('controlClauses');
+const APPLICABILITY = JSON.stringify({
+  label: 'Applicability',
+  choices: [
+    ['applicable', 'Applicable'],
+    ['partially_applicable', 'Partially applicable'],
+  ],
+  default: 'applicable',
+});
+
+function clauseOption(id) {
+  return Array.from(controlClauses.options).find((option) => option.value === String(id));
+}
+
+function clauseApplicability(option) {
+  return option.selected ? option.dataset.extra || 'applicable' : '';
+}
+
+function setClauseApplicability(option, value) {
+  option.selected = Boolean(value);
+  if (value) option.dataset.extra = value;
 }
 
 function applyInferredParentClauseApplicability() {
@@ -637,7 +659,7 @@ function applyInferredParentClauseApplicability() {
 
     const kids = childrenByParent.get(key) || [];
     if (!kids.length) {
-      const value = (clauseSelect(key)?.value || '').trim();
+      const value = clauseApplicability(clauseOption(key));
       memo.set(key, value);
       return value;
     }
@@ -659,13 +681,14 @@ function applyInferredParentClauseApplicability() {
     const clause = byId.get(key);
     const isIntermediateParent = Boolean(clause?.parent_id && kids.length);
     const valueToStore = isIntermediateParent ? '' : inferred;
-    const sel = clauseSelect(key);
-    if (sel && sel.value !== valueToStore) sel.value = valueToStore;
+    setClauseApplicability(clauseOption(key), valueToStore);
     memo.set(key, inferred);
     return inferred;
   }
 
   for (const c of flat) inferValue(c.id);
+  // The parents were set from code, so the picker is asked to show them.
+  refreshPicker(controlClauses);
 }
 
 function renderAdminClauses() {
@@ -678,57 +701,20 @@ function renderAdminClauses() {
 
   const flat = flattenClauseTree(clauseCatalog.tree);
   const selected = selectedClauseMap();
-  if (!flat.length) {
-    adminClausesList.innerHTML =
-      '<span class="small-muted">No clauses are loaded for this framework.</span>';
-    return;
-  }
-
-  adminClausesList.innerHTML = `
-    <div class="table-responsive admin-control-clauses-wrap">
-      <table class="table table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Clause</th>
-            <th style="width:220px;">Applicability</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${flat
-            .map((c) => {
-              const cid = String(c.id);
-              const cur = selected.get(cid) || '';
-              const depth = Math.max(0, Number(c.depth || 0));
-              const indent = depth ? `style="padding-left:${Math.min(depth * 1.25, 4)}rem"` : '';
-              const parentClass = depth === 0 ? 'fw-bold' : '';
-              const clauseHref = withFramework(
-                `/clause.html?id=${encodeURIComponent(cid)}`,
-                ctrl.framework,
-              );
-              return `<tr>
-              <td class="wrap ${parentClass}" ${indent}>
-                <a class="me-2" href="${esc(clauseHref)}">${esc(c.ref)}</a>
-                <span class="small-muted">${esc(c.title)}</span>
-              </td>
-              <td>
-                <select class="form-select form-select-sm clause-applicability" data-clause-id="${esc(cid)}">
-                  <option value="" ${cur ? '' : 'selected'}>Not applicable</option>
-                  <option value="applicable" ${cur === 'applicable' ? 'selected' : ''}>Applicable</option>
-                  <option value="partially_applicable" ${cur === 'partially_applicable' ? 'selected' : ''}>Partially applicable</option>
-                </select>
-              </td>
-            </tr>`;
-            })
-            .join('')}
-        </tbody>
-      </table>
-    </div>`;
-
-  for (const sel of adminClausesList.querySelectorAll('.clause-applicability')) {
-    sel.addEventListener('change', applyInferredParentClauseApplicability);
-  }
+  adminClausesList.textContent = flat.length ? '' : 'No clauses are loaded for this framework.';
+  controlClauses.dataset.pickerExtra = APPLICABILITY;
+  controlClauses.replaceChildren(
+    ...flat.map((c) => {
+      const option = node('option', { value: c.id }, catalogueLabel(c));
+      setClauseApplicability(option, selected.get(String(c.id)) || '');
+      return option;
+    }),
+  );
   applyInferredParentClauseApplicability();
 }
+
+// A parent clause follows its children as they are chosen.
+controlClauses.addEventListener('change', applyInferredParentClauseApplicability);
 
 async function loadClauseCatalog() {
   const data = await apiGet(`/api/v1/clauses?framework=${encodeURIComponent(ctrl.framework)}`);
@@ -1014,12 +1000,10 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
 
 saveClauseLinksBtn?.addEventListener('click', async () => {
   applyInferredParentClauseApplicability();
-  const clauses = [];
-  for (const sel of adminClausesList.querySelectorAll('.clause-applicability')) {
-    const applicability = (sel.value || '').trim();
-    if (!applicability) continue;
-    clauses.push({ clause_id: sel.dataset.clauseId, applicability });
-  }
+  const clauses = Array.from(controlClauses.selectedOptions, (option) => ({
+    clause_id: option.value,
+    applicability: clauseApplicability(option),
+  }));
   saveClauseLinksBtn.disabled = true;
   try {
     await apiPatch(`/api/v1/admin/controls/${encodeURIComponent(id)}/clauses`, { clauses });
