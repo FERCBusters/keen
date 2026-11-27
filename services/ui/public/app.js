@@ -1555,18 +1555,25 @@ export function effectivenessMetricThresholdState(measure, entry) {
   };
 }
 
+// A metric entry's value in words: as recorded for display, else its number,
+// unit and qualitative value, else the fallback.
+export function effectivenessMetricValueText(entry, fallback = 'Metric entry') {
+  return (
+    entry.value_display ||
+    [entry.metric_value ?? '', entry.metric_unit || '', entry.qualitative_value || '']
+      .filter(Boolean)
+      .join(' ') ||
+    fallback
+  );
+}
+
 export function effectivenessMetricValueHtml(
   entry,
   measure,
   { href = '', fallback = 'Metric entry', className = '' } = {},
 ) {
   if (!entry) return `<span class="small-muted">${esc(fallback)}</span>`;
-  const value =
-    entry.value_display ||
-    [entry.metric_value ?? '', entry.metric_unit || '', entry.qualitative_value || '']
-      .filter(Boolean)
-      .join(' ') ||
-    fallback;
+  const value = effectivenessMetricValueText(entry, fallback);
   const state = effectivenessMetricThresholdState(measure, entry);
   const baseClass = className || 'fw-semibold';
   if (!state) {

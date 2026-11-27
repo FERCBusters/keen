@@ -253,12 +253,36 @@ test('initial URL filters are validated before use', async (t) => {
 
 test('effectiveness measures show the latest entry recorded against this source', async (t) => {
   const ui = await sourcePage(t);
-  ui.el('sourceEffectivenessTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => ui.el('sourceEffectivenessRows').querySelectorAll('tr').length === 2);
-  assert.match(ui.window.location.search, /tab=effectiveness/);
-  const [first, second] = ui.el('sourceEffectivenessRows').querySelectorAll('tr');
-  assert.equal(ui.el('sourceEffectivenessRows').querySelector('b'), null);
-  assert.equal(ui.el('sourceEffectivenessRows').querySelector('i'), null);
+  ui.el('sourceRelatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('sourceEffectivenessView').querySelectorAll('tbody tr').length === 2);
+  assert.match(ui.window.location.search, /tab=related/);
+  // The measures are a card of the source's Related items, the last tab.
+  assert.deepEqual(
+    [...ui.document.querySelectorAll('main .nav-tabs button')].map((b) => b.id),
+    ['sourceEventsTab', 'sourceInsightsTab', 'sourceVisualisationsTab', 'sourceRelatedTab'],
+  );
+  assert.equal(ui.el('sourceRelatedTab').textContent, 'Related items');
+  const card = ui.el('sourceEffectivenessCard');
+  assert.equal(card.closest('#sourceRelatedPane') !== null, true);
+  assert.equal(
+    card.querySelector('.mosp-related-card-title').textContent,
+    'Effectiveness measures',
+  );
+  assert.equal(card.querySelector('.mosp-related-card-count').textContent, '2');
+  assert.deepEqual(
+    [...card.querySelectorAll('th')].map((th) => th.textContent),
+    ['Measure', 'Target', 'Latest matching value', 'Controls'],
+  );
+  assert.deepEqual(
+    [...card.querySelectorAll('.mosp-related-card-tools a')].map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+    ]),
+    [['Open effectiveness measures', '/isms.html?tab=effectiveness&framework=A']],
+  );
+  const [first, second] = ui.el('sourceEffectivenessView').querySelectorAll('tbody tr');
+  assert.equal(ui.el('sourceEffectivenessView').querySelector('b'), null);
+  assert.equal(ui.el('sourceEffectivenessView').querySelector('i'), null);
   assert.match(first.textContent, /3 h/);
   assert.match(first.textContent, /Meets target/);
   assert.match(first.textContent, /Feb/);
@@ -269,40 +293,42 @@ test('effectiveness measures show the latest entry recorded against this source'
   assert.equal(first.querySelectorAll('td')[1].textContent, '< 4 h');
   assert.match(second.textContent, /Count/);
   assert.equal(second.querySelectorAll('td')[1].textContent, '-');
-  assert.match(ui.el('sourceEffectivenessMeta').textContent, /recorded against github/);
+  assert.match(card.textContent, /Measures with metric entries recorded against github\./);
   // Switching back clears the tab parameter; the tab loads once.
   ui.el('sourceEventsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.doesNotMatch(ui.window.location.search, /tab=/);
   ui.el('sourceVisualisationsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.match(ui.window.location.search, /tab=visualisations/);
   const before = ui.calls.length;
-  ui.el('sourceEffectivenessTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('sourceRelatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.equal(ui.calls.length, before);
 });
 
-test('effectiveness deep links load immediately; empty and failed loads are explained', async (t) => {
+test('addresses naming the tab, old or new, load it immediately; empty and failed loads are explained', async (t) => {
   const empty = await sourcePage(t, { query: '&source=github&tab=effectiveness', measures: [] });
   await settle(() =>
     /No effectiveness measures have metric entries for github/.test(
-      empty.el('sourceEffectivenessRows').textContent,
+      empty.el('sourceEffectivenessView').textContent,
     ),
   );
+  const named = await sourcePage(t, { query: '&source=github&tab=related' });
+  await settle(() => named.el('sourceEffectivenessView').querySelector('table'));
   const failed = await sourcePage(t, {
     query: '&source=github&tab=effectiveness-measures',
     fail: { effectiveness: true },
   });
   await settle(() =>
-    /Failed to load effectiveness measures/.test(failed.el('sourceEffectivenessRows').textContent),
+    /Failed to load effectiveness measures/.test(failed.el('sourceEffectivenessView').textContent),
   );
 });
 
 test('readers without ISMS access do not see source effectiveness measures', async (t) => {
   const ui = await sourcePage(t, { me: { can_view_events: true } });
-  assert.ok(ui.el('sourceEffectivenessTabItem').classList.contains('d-none'));
+  assert.ok(ui.el('sourceRelatedTabItem').classList.contains('d-none'));
   assert.ok(
     ![...ui.document.querySelectorAll('a')].some((a) => a.textContent === 'Evidence retention'),
   );
-  ui.el('sourceEffectivenessTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('sourceRelatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.ok(!ui.calls.some((c) => c.url.includes('/effectiveness-measures')));
 });
 
@@ -476,9 +502,9 @@ test('metric source links on the source page only allow web or Keen URLs', async
       { id: 'm4', metric: 'Web', metric_entries: [entry('https://reports.example/1')] },
     ],
   });
-  ui.el('sourceEffectivenessTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => ui.el('sourceEffectivenessRows').querySelectorAll('tr').length === 4);
-  const hrefs = [...ui.el('sourceEffectivenessRows').querySelectorAll('tr')].map((row) =>
+  ui.el('sourceRelatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('sourceEffectivenessView').querySelectorAll('tbody tr').length === 4);
+  const hrefs = [...ui.el('sourceEffectivenessView').querySelectorAll('tbody tr')].map((row) =>
     [...row.querySelectorAll('a')].find((a) => a.textContent === 'Report').getAttribute('href'),
   );
   assert.deepEqual(hrefs, ['#', '#', '#', 'https://reports.example/1']);

@@ -63,12 +63,12 @@ export function relatedListHtml(stories, kind, framework) {
 function formHtml(kind) {
   const name = esc(KIND_NAMES[kind]);
   return `<form class="row g-2 align-items-end mt-3" data-story-add>
-      <div class="col-12 col-md-8"><label class="form-label" for="storyRelatedChoice">Add this ${name} to a story</label><select class="form-select" id="storyRelatedChoice" required><option value="">Loading your open stories</option></select></div>
-      <div class="col-12 col-md-4"><button class="btn btn-outline-primary w-100" type="submit">Add to story</button></div>
+      <div class="col-12 col-md"><label class="form-label" for="storyRelatedChoice">Add this ${name} to a story</label><select class="form-select" id="storyRelatedChoice" required><option value="">Loading your open stories</option></select></div>
+      <div class="col-12 col-md-auto"><button class="btn btn-outline-primary story-related-action" type="submit">Add to story</button></div>
     </form>
     <form class="row g-2 align-items-end mt-1" data-story-start>
-      <div class="col-12 col-md-8"><label class="form-label" for="storyRelatedTitle">Or start a new story with it</label><input class="form-control" id="storyRelatedTitle" maxlength="256" required placeholder="What happened"></div>
-      <div class="col-12 col-md-4"><button class="btn btn-outline-primary w-100" type="submit">Start a story</button></div>
+      <div class="col-12 col-md"><label class="form-label" for="storyRelatedTitle">Or start a new story with it</label><input class="form-control" id="storyRelatedTitle" maxlength="256" required placeholder="What happened"></div>
+      <div class="col-12 col-md-auto"><button class="btn btn-outline-primary story-related-action" type="submit">Start a story</button></div>
     </form>`;
 }
 

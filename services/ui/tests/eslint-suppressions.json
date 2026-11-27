@@ -288,7 +288,7 @@
   },
   "services/ui/public/pages/source.js": {
     "no-unsanitized/property": {
-      "count": 5
+      "count": 4
     }
   },
   "services/ui/public/pages/sources.js": {

@@ -2726,3 +2726,9 @@ tr[data-doc-drag] {
   max-height: max(360px, calc(100vh - 23rem));
   overflow-y: auto;
 }
+
+/* The two actions of a record's Stories card are as wide as their words need,
+   and as wide as each other, so the fields beside them end in line. */
+.story-related-action {
+  min-width: 8.5rem;
+}

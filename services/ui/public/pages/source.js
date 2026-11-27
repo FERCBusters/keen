@@ -16,8 +16,12 @@ import {
   getCurrentFramework,
   withFramework,
   showTableLoading,
-  effectivenessMetricValueHtml,
-  effectivenessMetricThresholdBadgeHtml,
+  effectivenessMetricThresholdState,
+  effectivenessMetricValueText,
+  node,
+  relatedCard,
+  relatedCards,
+  updateRelatedCard,
   collectOffsetPagerButtons,
   setOffsetPagerDisabled,
   offsetPagerState,
@@ -68,10 +72,25 @@ const eventStartDate = document.getElementById('eventStartDate');
 const eventEndDate = document.getElementById('eventEndDate');
 const eventLimit = document.getElementById('eventLimit');
 const eventUnmapped = document.getElementById('eventUnmapped');
-const effectivenessTabItem = document.getElementById('sourceEffectivenessTabItem');
-const effectivenessTab = document.getElementById('sourceEffectivenessTab');
-const effectivenessRows = document.getElementById('sourceEffectivenessRows');
-const effectivenessMeta = document.getElementById('sourceEffectivenessMeta');
+const relatedTabItem = document.getElementById('sourceRelatedTabItem');
+const relatedTab = document.getElementById('sourceRelatedTab');
+// Earlier addresses named the tab after the one kind of record it listed.
+const RELATED_TAB_NAMES = new Set(['related', 'effectiveness', 'effectiveness-measures']);
+// The Related items tab: the records that draw on this source, each kind in
+// the design system's related-item card, as on every other record's page.
+const effectivenessCard = relatedCard({
+  id: 'sourceEffectivenessCard',
+  title: 'Effectiveness measures',
+  description: `Measures with metric entries recorded against ${sourceName || 'this source'}.`,
+  action: {
+    label: 'Open effectiveness measures',
+    href: withFramework('/isms.html?tab=effectiveness', framework),
+  },
+  empty: 'Loading effectiveness measures',
+  wide: true,
+});
+effectivenessCard.querySelector('.mosp-related-card-body').id = 'sourceEffectivenessView';
+relatedCards([effectivenessCard], document.getElementById('sourceRelatedItems'));
 const visualisationsTab = document.getElementById('sourceVisualisationsTab');
 const insightsTab = document.getElementById('sourceInsightsTab');
 const insightsEl = document.getElementById('sourceInsights');
@@ -280,15 +299,24 @@ function measureHref(item) {
   );
 }
 
-function controlsHtml(items) {
-  const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return '<span class="small-muted">-</span>';
-  return arr
-    .map(
-      (c) =>
-        `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(withFramework(`/control.html?id=${encodeURIComponent(c.id)}`, c.framework || framework))}" title="${esc(c.title || c.ref)}">${esc(c.ref)}</a>`,
-    )
-    .join('');
+const muted = (text) => node('span', { class: 'small-muted' }, text);
+
+function controlLinks(items) {
+  if (!items.length) return muted('-');
+  return items.map((c) =>
+    node(
+      'a',
+      {
+        class: 'badge badge-soft text-decoration-none me-1 mb-1',
+        href: withFramework(
+          `/control.html?id=${encodeURIComponent(c.id)}`,
+          c.framework || framework,
+        ),
+        title: c.title || c.ref,
+      },
+      c.ref,
+    ),
+  );
 }
 
 function latestEntryForSource(item) {
@@ -299,51 +327,115 @@ function latestEntryForSource(item) {
   );
 }
 
-function entryValueHtml(entry, measure) {
-  if (!entry) return '<span class="small-muted">-</span>';
-  const source = entry.source_url
-    ? `<a href="${esc(safeExternalHref(entry.source_url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(entry.source_title || entry.source_type)}</a>`
-    : esc(entry.source_title || entry.source_type);
-  const eventLink = entry.source_event_id
-    ? ` · <a class="font-monospace" href="${esc(withFramework(`/event.html?id=${encodeURIComponent(entry.source_event_id)}`, framework))}" title="Open Keen event">${esc(entry.source_event_id)}</a>`
-    : '';
-  const valueHtml = effectivenessMetricValueHtml(entry, measure, { fallback: 'Metric entry' });
-  const thresholdHtml = effectivenessMetricThresholdBadgeHtml(measure, entry);
-  return `<div>${valueHtml}${thresholdHtml}${entry.period ? `<span class="small-muted ms-2">${esc(entry.period)}</span>` : ''}</div><div class="small-muted">${source}${entry.source_reference ? ` · ${esc(entry.source_reference)}` : ''}${eventLink}</div>`;
+// The newest value recorded against this source: the value and whether it
+// meets the measure's target, then where it came from.
+function entryValue(entry, measure) {
+  if (!entry) return muted('-');
+  const state = effectivenessMetricThresholdState(measure, entry);
+  const value = node(
+    'span',
+    state
+      ? {
+          class: `eff-metric-value eff-metric-value-${state.state} fw-semibold`,
+          title: state.title,
+        }
+      : { class: 'fw-semibold' },
+    effectivenessMetricValueText(entry),
+  );
+  const origin = entry.source_title || entry.source_type;
+  return [
+    node(
+      'div',
+      {},
+      value,
+      state
+        ? node(
+            'span',
+            {
+              class: `eff-metric-threshold-label eff-metric-threshold-label-${state.state}`,
+              title: state.title,
+            },
+            state.label,
+          )
+        : '',
+      entry.period ? node('span', { class: 'small-muted ms-2' }, entry.period) : '',
+    ),
+    node(
+      'div',
+      { class: 'small-muted' },
+      entry.source_url
+        ? node(
+            'a',
+            {
+              href: safeExternalHref(entry.source_url) || '#',
+              target: '_blank',
+              rel: 'noopener noreferrer',
+            },
+            origin,
+          )
+        : origin,
+      entry.source_reference ? ` · ${entry.source_reference}` : '',
+      ...(entry.source_event_id
+        ? [
+            ' · ',
+            node(
+              'a',
+              {
+                class: 'font-monospace',
+                href: withFramework(
+                  `/event.html?id=${encodeURIComponent(entry.source_event_id)}`,
+                  framework,
+                ),
+                title: 'Open Keen event',
+              },
+              entry.source_event_id,
+            ),
+          ]
+        : []),
+    ),
+  ];
 }
 
-function renderEffectiveness(items) {
-  const rows = [];
-  for (const item of items) {
-    const entry = latestEntryForSource(item);
-    rows.push(`<tr>
-      <td class="wrap"><a class="fw-semibold" href="${esc(measureHref(item))}">${esc(shorten(item.summary || 'Effectiveness measure', 180))}</a>${item.metric_key ? `<div class="small-muted"><code>${esc(item.metric_key)}</code></div>` : ''}</td>
-      <td>${esc(item.target_display || '-')}</td>
-      <td class="wrap">${entryValueHtml(entry, item)}</td>
-      <td class="wrap">${controlsHtml(item.controls)}</td>
-    </tr>`);
-  }
-  effectivenessMeta.textContent = `Measures with metric entries recorded against ${sourceName}.`;
-  effectivenessRows.innerHTML =
-    rows.join('') ||
-    `<tr><td colspan="4" class="p-4 small-muted">No effectiveness measures have metric entries for ${esc(sourceName)}.</td></tr>`;
+function effectivenessTable(items) {
+  return {
+    columns: ['Measure', 'Target', 'Latest matching value', 'Controls'],
+    rows: items.map((item) => [
+      [
+        node(
+          'a',
+          { class: 'fw-semibold', href: measureHref(item) },
+          shorten(item.summary || 'Effectiveness measure', 180),
+        ),
+        item.metric_key
+          ? node('div', { class: 'small-muted' }, node('code', {}, item.metric_key))
+          : '',
+      ],
+      item.target_display || '-',
+      entryValue(latestEntryForSource(item), item),
+      controlLinks(Array.isArray(item.controls) ? item.controls : []),
+    ]),
+  };
 }
 
 async function loadEffectiveness({ force = false } = {}) {
-  if (!effectivenessRows || !canViewIsms || !sourceName) return;
+  if (!canViewIsms || !sourceName) return;
   if (effectivenessLoaded && !force) return;
-  effectivenessRows.innerHTML =
-    '<tr><td colspan="4" class="p-4 small-muted">Loading effectiveness measures</td></tr>';
+  updateRelatedCard(effectivenessCard, { empty: 'Loading effectiveness measures' });
   try {
     const data = await apiGet(
       `/api/v1/sources/${encodeURIComponent(sourceName)}/effectiveness-measures?framework=${encodeURIComponent(framework)}`,
     );
-    renderEffectiveness(data.items);
+    updateRelatedCard(effectivenessCard, {
+      count: data.items.length,
+      table: effectivenessTable(data.items),
+      empty: `No effectiveness measures have metric entries for ${sourceName}.`,
+    });
     effectivenessLoaded = true;
   } catch (e) {
     effectivenessLoaded = false;
-    effectivenessRows.innerHTML =
-      '<tr><td colspan="4" class="p-4 text-danger">Failed to load effectiveness measures.</td></tr>';
+    updateRelatedCard(effectivenessCard, {
+      body: node('span', { class: 'text-danger' }, 'Failed to load effectiveness measures.'),
+    });
   }
 }
 
@@ -507,20 +599,19 @@ function setActiveTabQuery(name) {
 
 function activateInitialTab() {
   const tab = String(new URLSearchParams(location.search).get('tab') || '').toLowerCase();
-  const target =
-    tab === 'effectiveness' || tab === 'effectiveness-measures'
-      ? effectivenessTab
-      : tab === 'visualisations' || tab === 'visualizations'
-        ? visualisationsTab
-        : tab === 'insights'
-          ? insightsTab
-          : null;
+  const target = RELATED_TAB_NAMES.has(tab)
+    ? relatedTab
+    : tab === 'visualisations' || tab === 'visualizations'
+      ? visualisationsTab
+      : tab === 'insights'
+        ? insightsTab
+        : null;
   if (target && window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(target).show();
 }
 
 if (!canViewIsms) {
-  effectivenessTabItem?.classList.add('d-none');
-  document.getElementById('sourceEffectivenessPane')?.classList.add('d-none');
+  relatedTabItem.classList.add('d-none');
+  document.getElementById('sourceRelatedPane').classList.add('d-none');
 }
 
 syncInputs();
@@ -556,8 +647,8 @@ wireOffsetPagerButtons(pagerButtons, (direction) => {
   loadEvents();
 });
 
-effectivenessTab?.addEventListener('shown.bs.tab', () => {
-  setActiveTabQuery('effectiveness');
+relatedTab.addEventListener('shown.bs.tab', () => {
+  setActiveTabQuery('related');
   loadEffectiveness();
 });
 visualisationsTab?.addEventListener('shown.bs.tab', () => setActiveTabQuery('visualisations'));
@@ -577,10 +668,6 @@ document
   ?.addEventListener('shown.bs.tab', () => setActiveTabQuery('events'));
 
 const initialTabName = String(new URLSearchParams(location.search).get('tab') || '').toLowerCase();
-if (
-  sourceName &&
-  canViewIsms &&
-  (initialTabName === 'effectiveness' || initialTabName === 'effectiveness-measures')
-) {
+if (sourceName && canViewIsms && RELATED_TAB_NAMES.has(initialTabName)) {
   loadEffectiveness();
 }

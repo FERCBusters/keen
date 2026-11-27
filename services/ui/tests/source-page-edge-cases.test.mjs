@@ -159,8 +159,8 @@ test('a metric entry without a source title is named by its source type', async 
       { id: 'm2', summary: 'Plain', controls: [], metric_entries: [entry({})] },
     ],
   });
-  await settle(() => ui.el('sourceEffectivenessRows').querySelectorAll('tr').length === 2);
-  const [linked, plain] = ui.el('sourceEffectivenessRows').querySelectorAll('tr');
+  await settle(() => ui.el('sourceEffectivenessView').querySelectorAll('tbody tr').length === 2);
+  const [linked, plain] = ui.el('sourceEffectivenessView').querySelectorAll('tbody tr');
   const link = linked.querySelector('a[href="https://ci.example/run/1"]');
   assert.equal(link.textContent, 'github');
   assert.equal(plain.querySelector('a[target="_blank"]'), null);

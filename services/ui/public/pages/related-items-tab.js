@@ -199,7 +199,9 @@ export function mountRelatedItems({
     return null;
   }
   const pane = host || tabbed.pane;
-  relatedCards(cards, pane);
+  // The cards are laid out as a grid, with a gap between them. A tab's pane
+  // has a display of its own, shown or hidden, so the grid goes inside it.
+  relatedCards(cards, host || pane.appendChild(node('div', { class: 'mb-3' })));
   const load = () => Promise.all(fetched.map((entry) => entry.load()));
   if (!tabbed) {
     load();

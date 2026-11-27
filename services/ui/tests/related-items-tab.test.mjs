@@ -93,6 +93,12 @@ test('a record gains one Related items tab, with a card for each kind related to
   assert.equal(pane.getAttribute('aria-labelledby'), 'relatedItemsTab');
   assert.equal(pane.parentElement.className, 'tab-content');
   assert.deepEqual(view.titles(), ['SWOT analysis', 'Legal register', 'Stories']);
+  // The grid that spaces the cards is inside the pane, not the pane itself:
+  // a tab's pane is shown and hidden by a display of its own.
+  assert.equal(pane.classList.contains('mosp-related-cards'), false);
+  assert.equal(pane.children.length, 1);
+  assert.equal(pane.firstElementChild.className, 'mb-3 mosp-related-cards');
+  assert.equal(pane.firstElementChild.children.length, 3);
   for (const card of pane.querySelectorAll('.mosp-related-card'))
     assert.equal(card.closest('#relatedItemsPane'), pane);
   assert.match(el('relatedSwotCard').textContent, /SWOT items related to this document\./);
@@ -232,6 +238,7 @@ test("a page's own cards come first and load with the rest", async (t) => {
   // In a host the lists load straight away, and there is no tab to wait for.
   assert.equal(hosted.tab, null);
   assert.equal(hosted.pane, view.el('host'));
+  assert.equal(view.el('host').classList.contains('mosp-related-cards'), true);
   await hosted.load();
   assert.equal(reads, 1);
   const cards = [...view.el('host').querySelectorAll('.mosp-related-card')];
