@@ -4,8 +4,11 @@ The OAuth protocol is the MCP SDK's (app.api.mcp adapts it); this module keeps
 its records. A person approves a client's request on Keen's consent page,
 which creates a grant of the scopes they tick: read scopes, and change scopes
 while KEEN_MCP_WRITE_ENABLED is set. The client then holds a one-hour access
-token and a refresh token that rotates on every use. Presenting a used code or
-refresh token again revokes the grant, since only a copy could do that.
+token and a refresh token that rotates on every use. Presenting a used code
+again revokes the grant, since only a copy could do that, and so does
+presenting a used refresh token once its grace period has passed. Within that
+period the client is taken to be asking twice, from requests it sent together
+or because an answer was lost, and is given the same tokens again.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from app.security.mcp_tokens import (
     CONSENT_PREFIX,
     CONSENT_REQUEST_SECONDS,
     GRANT_SECONDS,
+    REFRESH_GRACE_SECONDS,
     REFRESH_PREFIX,
     REFRESH_TOKEN_SECONDS,
     SCOPES,
@@ -51,6 +55,7 @@ from app.security.mcp_tokens import (
     granted_scopes,
     new_secret,
     redirect_allowed,
+    successor,
     well_formed,
     with_read_scopes,
 )
@@ -124,6 +129,11 @@ def remove_expired(db: Session) -> None:
     replayed later in the grant's 90 days would go unnoticed.
     """
     now = utc_now_naive()
+    # A used refresh token's salt is of use only in its grace period.
+    db.query(McpToken).filter(
+        McpToken.rotation_salt.is_not(None),
+        McpToken.used_at <= now - timedelta(seconds=REFRESH_GRACE_SECONDS),
+    ).update({McpToken.rotation_salt: None}, synchronize_session=False)
     for model, condition in (
         (McpConsentRequest, McpConsentRequest.expires_at <= now),
         (McpAuthorizationCode, McpAuthorizationCode.expires_at <= now),
@@ -388,9 +398,15 @@ def _revoke(db: Session, grant_id: uuid.UUID) -> None:
     db.commit()
 
 
-def _issue(db: Session, grant: McpGrant, scopes: list[str]) -> IssuedTokens:
+def _issue(
+    db: Session,
+    grant: McpGrant,
+    scopes: list[str],
+    pair: tuple[str, str] | None = None,
+) -> IssuedTokens:
+    """Issue an access and a refresh token: ``pair`` when given, else new."""
     now = utc_now_naive()
-    access, refresh = new_secret(ACCESS_PREFIX), new_secret(REFRESH_PREFIX)
+    access, refresh = pair or (new_secret(ACCESS_PREFIX), new_secret(REFRESH_PREFIX))
     access_expiry = min(now + timedelta(seconds=ACCESS_TOKEN_SECONDS), grant.expires_at)
     for value, kind, expires_at in (
         (access, "access", access_expiry),
@@ -488,10 +504,20 @@ def _record(row: McpToken) -> TokenRecord:
     )
 
 
+def _in_grace(row: McpToken, now: datetime) -> bool:
+    """Whether a used refresh token may still be answered with what it issued."""
+    return (
+        row.used_at is not None
+        and row.rotation_salt is not None
+        and now - row.used_at <= timedelta(seconds=REFRESH_GRACE_SECONDS)
+    )
+
+
 def refresh_token(db: Session, *, client_id: str, token: str) -> TokenRecord | None:
     """The refresh token's record for ``client_id``, or None.
 
-    A refresh token presented after it was used revokes its grant.
+    A refresh token presented after it was used revokes its grant, unless it
+    was used moments ago: exchange_refresh then answers with the same tokens.
     """
     if not well_formed(token, REFRESH_PREFIX):
         return None
@@ -501,7 +527,7 @@ def refresh_token(db: Session, *, client_id: str, token: str) -> TokenRecord | N
     now = utc_now_naive()
     if row is None or row.grant.client.client_id != client_id:
         return None
-    if row.used_at is not None:
+    if row.used_at is not None and not _in_grace(row, now):
         _revoke(db, row.grant_id)
         return None
     if row.expires_at <= now or not _live(
@@ -511,23 +537,61 @@ def refresh_token(db: Session, *, client_id: str, token: str) -> TokenRecord | N
     return _record(row)
 
 
+def _issued_again(db: Session, row: McpToken, token: str) -> IssuedTokens | None:
+    """The pair a refresh token used moments ago was exchanged for, or None."""
+    db.refresh(row)
+    now = utc_now_naive()
+    if not _in_grace(row, now):
+        return None
+    access = successor(token, str(row.rotation_salt), ACCESS_PREFIX)
+    issued = _token_row(db, access, ACCESS_PREFIX, "access")
+    if issued is None or issued.grant_id != row.grant_id:
+        return None
+    return IssuedTokens(
+        access_token=access,
+        refresh_token=successor(token, str(row.rotation_salt), REFRESH_PREFIX),
+        expires_in=max(0, int((issued.expires_at - now).total_seconds())),
+        scopes=list(issued.scopes),
+    )
+
+
 def exchange_refresh(
     db: Session, *, token: str, scopes: list[str]
 ) -> IssuedTokens | None:
-    """Rotate a refresh token checked by refresh_token; None if spent since."""
+    """Rotate a refresh token checked by refresh_token.
+
+    The first request to present a token marks it used and is issued a pair
+    derived from the token and a new salt. A request that finds it used waits
+    for that one to finish, then is given the same pair within the grace
+    period; after it, the grant is revoked and the answer is None.
+    """
     row = _token_row(db, token, REFRESH_PREFIX, "refresh")
     if row is None:  # Removed since it was checked: its grant ended
         return None
+    salt = new_secret("")
     spent = (
         db.query(McpToken)
         .filter(McpToken.id == row.id, McpToken.used_at.is_(None))
-        .update({McpToken.used_at: utc_now_naive()}, synchronize_session=False)
+        .update(
+            {McpToken.used_at: utc_now_naive(), McpToken.rotation_salt: salt},
+            synchronize_session=False,
+        )
     )
     if not spent:
         db.rollback()
-        _revoke(db, row.grant_id)
-        return None
-    return _issue(db, row.grant, [code for code in row.scopes if code in scopes])
+        again = _issued_again(db, row, token)
+        if again is None:
+            _revoke(db, row.grant_id)
+        return again
+    return _issue(
+        db,
+        row.grant,
+        [code for code in row.scopes if code in scopes],
+        (
+            successor(token, salt, ACCESS_PREFIX),
+            successor(token, salt, REFRESH_PREFIX),
+        ),
+    )
 
 
 def access_token(db: Session, token: str) -> TokenRecord | None:

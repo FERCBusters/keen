@@ -145,6 +145,7 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0061_mcp_refresh_grace",
         "0060_story_controls_legal",
         "0059_isms_legal_register",
         "0058_isms_document_diagrams",

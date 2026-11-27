@@ -18,6 +18,9 @@ configured redirect URIs with it.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import secrets
 import string
 from urllib.parse import urlsplit
@@ -25,6 +28,11 @@ from urllib.parse import urlsplit
 ACCESS_TOKEN_SECONDS = 3600
 # A refresh token rotates on every use and lapses after 30 days unused.
 REFRESH_TOKEN_SECONDS = 30 * 24 * 3600
+# A client that sends several requests at once refreshes once for each when its
+# access token lapses, and one whose refresh went unanswered asks again. For
+# this long after a refresh token is used, presenting it again returns the
+# tokens that use issued; after it, presenting it revokes the grant.
+REFRESH_GRACE_SECONDS = 30
 # However often it is refreshed, a grant ends 90 days after consent.
 GRANT_SECONDS = 90 * 24 * 3600
 AUTHORIZATION_CODE_SECONDS = 60
@@ -198,6 +206,21 @@ _URI_LIMIT = 2048
 
 def new_secret(prefix: str) -> str:
     return prefix + secrets.token_urlsafe(_SECRET_BYTES)
+
+
+def successor(refresh_token: str, salt: str, prefix: str) -> str:
+    """The token a used refresh token was exchanged for.
+
+    Keen keeps only digests, so it cannot hand out again a token it issued.
+    A refresh token's successors are instead derived from the token itself,
+    which Keen never stores, and a random salt kept beside its digest for the
+    grace period. Presented again in that period, the token yields the same
+    pair; neither the token nor the database alone yields anything.
+    """
+    mac = hmac.new(
+        refresh_token.encode(), f"{prefix}{salt}".encode(), hashlib.sha256
+    ).digest()
+    return prefix + base64.urlsafe_b64encode(mac).rstrip(b"=").decode()
 
 
 def well_formed(value: str, prefix: str) -> bool:

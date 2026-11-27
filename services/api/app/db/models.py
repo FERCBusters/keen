@@ -4146,6 +4146,9 @@ class McpToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     # A refresh token is used once; presenting it again revokes its grant.
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Kept for the grace period after a refresh token is used: with the token
+    # itself it yields the pair that use issued (app.security.mcp_tokens).
+    rotation_salt: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     grant = relationship("McpGrant")
 
