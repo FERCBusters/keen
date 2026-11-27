@@ -19,6 +19,7 @@ from .common import _by_id_or_404, _record
 from .link_diary import remove_entity_link_diary
 from .mutations import _apply_links
 from .related_records import (
+    SWOT_LOCK,
     add_link,
     filter_by_target,
     forget_record,
@@ -108,7 +109,7 @@ def require_access(db, user, *, write=False):
 def _lock(db):
     # Serialize structural edits, including reparenting and deletion. Row locks
     # alone cannot prevent two simultaneous edits from introducing a cycle.
-    db.execute(text("SELECT pg_advisory_xact_lock(724103610)"))
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": SWOT_LOCK})
 
 
 def _version(row, expected):
@@ -149,7 +150,9 @@ def output(db, row, framework, user):
     out = _attach_links(db, summary(row), "swot", row.id, framework, True)
     out["links"] = []
     pairs = linked_pairs(db, IsmsSwotLink, {"swot_id": row.id})
-    for kind, target_id in sorted(pairs, key=lambda pair: (pair[0], str(pair[1]))):
+    # No more are resolved than an item supports, whatever is stored.
+    ordered = sorted(pairs, key=lambda pair: (pair[0], str(pair[1])))[:MAX_LINKS]
+    for kind, target_id in ordered:
         target = _target(db, user, kind, target_id, required=False)
         if target:
             out["links"].append(target_summary(kind, target))

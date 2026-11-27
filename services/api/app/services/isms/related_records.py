@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mosp.services.errors import DomainError
+from sqlalchemy import text
 
 from app.db.models import (
     IsmsDocument,
@@ -27,6 +28,7 @@ from app.db.models import (
     IsmsObjective,
     IsmsPerson,
     IsmsSwot,
+    IsmsSwotLink,
     IsmsVendor,
     Risk,
     RiskAsset,
@@ -168,8 +170,60 @@ MIRRORS: dict[str, dict[str, Mirror]] = {
 }
 
 
+@dataclass(frozen=True)
+class Reader:
+    """A kind that reads, as its own, relationships another kind's table keeps.
+
+    ``model`` and ``column`` are the kind's own link table and the column that
+    names a record in it, ``limit`` is how many relationships one record
+    supports however they are kept, ``noun`` is what a message calls it and
+    ``lock`` is the advisory lock its edits are made under.
+    """
+
+    model: Any
+    column: str
+    limit: int
+    noun: str
+    lock: int
+
+
+# A SWOT item reads the legal register's rows that reach it (MIRRORS), so a
+# relationship made from the register counts towards the SWOT item's limit too.
+SWOT_LOCK = 724103610
+READERS: dict[str, Reader] = {
+    "swot": Reader(IsmsSwotLink, "swot_id", 200, "SWOT item", SWOT_LOCK),
+}
+
 # The kind a link table's owner column names.
 OWNER_KINDS = {"swot_id": "swot"}
+
+
+def lock_readers(db, kinds) -> None:
+    """Serialise with edits to the kinds, among ``kinds``, that read
+    relationships kept elsewhere.
+
+    A record that relates to one of them is saved under that kind's lock, so
+    its limit holds when several relationships are made at once. Take it
+    before the record's own row lock, the order the kind's own edits use.
+    """
+    for kind in sorted(set(kinds) & set(READERS)):
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": READERS[kind].lock}
+        )
+
+
+def _room_at_reader(db, model, kind: str, target_id) -> None:
+    """Refuse a relationship that would take its far end past that end's limit."""
+    reader = READERS.get(kind)
+    if reader is None or all(
+        mirror.model is not model for mirror in MIRRORS.get(kind, {}).values()
+    ):
+        return
+    held = len(linked_pairs(db, reader.model, {reader.column: target_id}))
+    if held >= reader.limit:
+        raise DomainError(
+            400, f"A {reader.noun} supports up to {reader.limit} relationships"
+        )
 
 
 def _owner(owner: dict) -> tuple[str, object]:
@@ -204,6 +258,8 @@ def add_link(db, model, owner: dict, kind: str, target_id) -> None:
     """Keep one new relationship in the table its pair of kinds uses."""
     mirror = _mirrors(owner).get(kind)
     if mirror is None:
+        # The far end may read this row as one of its own relationships.
+        _room_at_reader(db, model, kind, target_id)
         db.add(model(**owner, target_type=kind, target_id=target_id))
         return
     held = db.query(mirror.model).filter_by(**{mirror.column: target_id}).count()

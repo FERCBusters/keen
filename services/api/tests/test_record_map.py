@@ -668,3 +668,86 @@ def test_a_records_neighbours_reach_the_catalogue_and_its_evidence(world):
         }
     missing = world.admin.get("/v1/map/neighbours")
     assert missing.status_code == 422
+
+
+def test_a_role_makes_its_members_owners_and_a_connection_owns_nothing(world):
+    # A risk is a person's own when a role they hold owns it, as when they
+    # own it themselves; the Map reads those and no others for them.
+    from app.db.models import IsmsOrgNode, IsmsOrgNodeUser
+    from app.services import record_map
+    from mosp.services.context import ChangeContext
+
+    member = world.keen.user()
+    role = IsmsOrgNode(name="Risk owners", node_type="role")
+    world.db.add(role)
+    world.db.flush()
+    world.db.add(IsmsOrgNodeUser(org_node_id=role.id, user_id=member.id))
+    world.unnamed.risk_owner_role_id = role.id
+    world.db.commit()
+    assert labels(read(world.keen.client(member)), "risk") == ["Payroll"]
+
+    # A connection acts with its scopes: ownership shows it no risk.
+    owner = world.db.merge(world.owner)
+    owner.scope_limited = True
+    owner.effective_permission_codes = set()
+    data = record_map.overview(
+        context=ChangeContext(actor=owner), framework="A", db=world.db
+    )
+    assert [node for node in data["nodes"] if node["kind"] == "risk"] == []
+
+
+def test_the_map_reads_a_bounded_number_of_rows_and_requests(world, monkeypatch):
+    import fakeredis
+    from app.api.routes import map as routes
+    from app.services import record_map
+
+    # No more records of a kind are read than the Map shows, and the answer
+    # says it is not the whole.
+    monkeypatch.setattr(record_map, "MAX_NODES", 1)
+    data = read(world.admin)
+    counts = {kind["key"]: kind["count"] for kind in data["kinds"]}
+    assert data["truncated"] is True
+    assert max(counts.values()) <= 1 and len(data["nodes"]) <= 1
+    monkeypatch.setattr(record_map, "MAX_NODES", 2000)
+    # Nor more rows of one relationship table.
+    whole = len(read(world.admin)["links"])
+    monkeypatch.setattr(record_map, "MAX_LINK_ROWS", 1)
+    data = read(world.admin)
+    assert data["truncated"] is True
+    assert 0 < len(data["links"]) < whole
+    monkeypatch.setattr(record_map, "MAX_LINK_ROWS", 20000)
+    assert read(world.admin)["truncated"] is False
+
+    # A record that is not the reader's is refused before any relationship
+    # is read.
+    def unread(self):
+        raise AssertionError("relationships were read for a refused record")
+
+    load_links = record_map._Graph.load_links
+    monkeypatch.setattr(record_map._Graph, "load_links", unread)
+    refused = world.admin.get(
+        f"/v1/map/neighbours?framework=A&node=risk:{uuid.uuid4()}"
+    )
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Record not available"},
+    )
+    monkeypatch.setattr(record_map._Graph, "load_links", load_links)
+
+    # Each account has an allowance of requests a minute, counted apart.
+    store = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(routes, "get_valkey", lambda: store)
+    monkeypatch.setattr(routes, "REQUESTS_PER_MINUTE", 2)
+    other = world.keen.client(world.keen.user("isms.read"))
+    for path in (
+        "/v1/map?framework=A",
+        f"/v1/map/neighbours?framework=A&node=risk:{world.risk.id}",
+    ):
+        assert world.admin.get(path).status_code == 200
+    limited = world.admin.get("/v1/map?framework=A")
+    assert (limited.status_code, limited.json()) == (
+        429,
+        {"detail": "The Map was asked for too often; try again shortly."},
+    )
+    assert int(limited.headers["Retry-After"]) > 0
+    assert other.get("/v1/map?framework=A").status_code == 200

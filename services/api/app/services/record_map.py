@@ -21,7 +21,7 @@ from typing import Any
 from mosp.core.identifiers import try_uuid
 from mosp.services.context import ChangeContext, signed_in_user
 from mosp.services.errors import DomainError
-from sqlalchemy import select
+from sqlalchemy import false, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -48,6 +48,7 @@ from app.db.models import (
     IsmsMeetingPerson,
     IsmsObjective,
     IsmsOrgNode,
+    IsmsOrgNodeUser,
     IsmsPerson,
     IsmsPersonAsset,
     IsmsSwot,
@@ -73,11 +74,15 @@ from app.services.frameworks import framework_parameter
 from app.services.graph import graph_control_source
 from app.services.isms.access import can_read_isms, meeting_ids_for
 from app.services.pestle import can_read_pestle, rated_links
-from app.services.risks import _is_risk_owner, can_read_risks
+from app.services.risks import can_read_risks
 from app.services.stories import can_read_stories
 
-# A graph larger than this is cut to its best connected records.
+# A graph larger than this is cut to its best connected records. No more
+# records of one kind, and no more rows of one relationship table, are read
+# than these, so the work one request causes is bounded by them and not by
+# how much the installation holds.
 MAX_NODES = 2000
+MAX_LINK_ROWS = 20000
 LABEL_LIMIT = 80
 
 
@@ -152,6 +157,7 @@ class _Graph:
         self.nodes: dict[str, dict[str, Any]] = {}
         self.links: dict[tuple[str, str, str], dict[str, Any]] = {}
         self.notes: list[str] = []
+        self.truncated = False
         features = feature_state(db)
         isms = can_read_isms(db, self.user)
         readable = {
@@ -203,8 +209,28 @@ class _Graph:
                 },
             )
 
-    def _rows(self, kind: str, query):
-        return query.all() if kind in self.allowed else []
+    def _capped(self, query, limit: int) -> list:
+        """At most ``limit`` of the query's rows; more than that is noted."""
+        rows = query.limit(limit + 1).all()
+        if len(rows) > limit:
+            self.truncated = True
+        return rows[:limit]
+
+    def _rows(self, kind: str, query) -> list:
+        return self._capped(query, MAX_NODES) if kind in self.allowed else []
+
+    def _own_risks(self):
+        """The condition for the risks a person reads without risk.read: those
+        they own, themselves or through a role. A connection reads none so."""
+        if getattr(self.user, "scope_limited", False):
+            return false()
+        roles = select(IsmsOrgNodeUser.org_node_id).where(
+            IsmsOrgNodeUser.user_id == self.user.id
+        )
+        return or_(
+            Risk.risk_owner_user_id == self.user.id,
+            Risk.risk_owner_role_id.in_(roles),
+        )
 
     def load_records(self) -> None:
         db, fw = self.db, self.framework
@@ -216,12 +242,13 @@ class _Graph:
             "clause", db.query(FrameworkClause).filter_by(framework_slug=fw)
         ):
             self.node("clause", row.id, row.ref, row.title)
-        every_risk = can_read_risks(db, self.user)
-        assets = {row.id: row.name for row in db.query(RiskAsset.id, RiskAsset.name)}
-        for row in self._rows("risk", db.query(Risk)):
-            if every_risk or _is_risk_owner(self.user, row):
-                name = assets.get(row.asset_id, "")
-                self.node("risk", row.id, row.threat_summary or name, name)
+        risks = db.query(Risk.id, Risk.threat_summary, RiskAsset.name).outerjoin(
+            RiskAsset, RiskAsset.id == Risk.asset_id
+        )
+        if not can_read_risks(db, self.user):
+            risks = risks.filter(self._own_risks())
+        for risk_id, threat, asset in self._rows("risk", risks):
+            self.node("risk", risk_id, threat or asset, asset)
         for row in self._rows(
             "pestle_item", db.query(PestleItem).filter_by(framework_slug=fw)
         ):
@@ -282,6 +309,8 @@ class _Graph:
         where a row names an end's kind itself, the kind is read from the
         ``..._kind_column`` instead.
         """
+        if not isinstance(rows, list):
+            rows = self._capped(rows, MAX_LINK_ROWS)
         for row in rows:
             a_kind = getattr(row, a_kind_column) if a_kind_column else a[0]
             b_kind = getattr(row, b_kind_column) if b_kind_column else b[0]
@@ -310,13 +339,17 @@ class _Graph:
                 "mitigates",
             ),
             (
-                rated_links(db.query(PestleControlRelevance).all()),
+                rated_links(
+                    self._capped(db.query(PestleControlRelevance), MAX_LINK_ROWS)
+                ),
                 ("pestle_item", "pestle_item_id"),
                 control,
                 "relevant",
             ),
             (
-                rated_links(db.query(PestleClauseRelevance).all()),
+                rated_links(
+                    self._capped(db.query(PestleClauseRelevance), MAX_LINK_ROWS)
+                ),
                 ("pestle_item", "pestle_item_id"),
                 clause,
                 "relevant",
@@ -426,7 +459,7 @@ class _Graph:
                 "attends",
             ),
         ]
-        affected = db.query(AffectedLink).all()
+        affected = self._capped(db.query(AffectedLink), MAX_LINK_ROWS)
         for owner in (("risk", "risk_id"), ("pestle_item", "pestle_item_id")):
             for target in ("person", "vendor", "asset"):
                 plain.append((affected, owner, (target, f"{target}_id"), "affects"))
@@ -528,8 +561,8 @@ class _Graph:
         for link in links:
             for end in (link["source"], link["target"]):
                 degree[end] = degree.get(end, 0) + 1
-        truncated = len(nodes) > MAX_NODES
-        if truncated:
+        truncated = self.truncated or len(nodes) > MAX_NODES
+        if len(nodes) > MAX_NODES:
             nodes.sort(key=lambda node: (-degree.get(node["id"], 0), node["id"]))
             nodes = nodes[:MAX_NODES]
             kept = {node["id"] for node in nodes}
@@ -591,13 +624,19 @@ def neighbours(*, context: ChangeContext, framework, node: str, db: Session):
         raise DomainError(400, "node names a kind of record and its id")
     if kind != "source" and not isinstance(try_uuid(record_id), uuid.UUID):
         raise DomainError(400, "node names a kind of record and its id")
-    graph = _graph(db, context, framework)
+    graph = _Graph(db, context, framework_parameter(framework))
+    graph.load_records()
+    # A record that is not there, or not the reader's to open, is answered
+    # before any relationship is read.
+    if kind != "source" and node not in graph.nodes:
+        raise DomainError(404, "Record not available")
+    graph.load_links()
     if kind == "source":
         graph.load_evidence(source=record_id)
-    elif kind == "control" and node in graph.nodes:
+        if node not in graph.nodes:
+            raise DomainError(404, "Record not available")
+    elif kind == "control":
         graph.load_evidence(control=record_id)
-    if node not in graph.nodes:
-        raise DomainError(404, "Record not available")
     keep = {node}
     for link in graph.links.values():
         if node in (link["source"], link["target"]):

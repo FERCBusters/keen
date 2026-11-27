@@ -1379,6 +1379,79 @@ def test_a_risk_scope_reads_no_isms_or_pestle_records_through_any_tool(mcp):
     assert mcp.tool(risk_only, "list_risks").get("isError") is not True
 
 
+def test_a_connection_never_reads_a_risk_because_its_person_owns_it(mcp):
+    # A person reads the risks they own without risk.read. That is theirs as
+    # an account: a connection they gave the ISMS scope alone must not be
+    # shown the risk, asked for directly or met as a related record.
+    from app.db.models import (
+        IsmsLegalItem,
+        IsmsLegalItemLink,
+        IsmsSwot,
+        IsmsSwotLink,
+        Risk,
+        RiskAsset,
+        RiskAssetSubcategory,
+        RiskCategory,
+    )
+
+    owner = mcp.keen.user("isms.read")
+    category = RiskCategory(name="Category")
+    mcp.db.add(category)
+    mcp.db.flush()
+    sub = RiskAssetSubcategory(name="Sub", category_id=category.id)
+    mcp.db.add(sub)
+    mcp.db.flush()
+    asset = RiskAsset(name="Payroll", category_id=category.id, subcategory_id=sub.id)
+    mcp.db.add(asset)
+    mcp.db.flush()
+    risk = Risk(
+        asset_id=asset.id,
+        threat_summary="Owned risk secret",
+        risk_owner_user_id=owner.id,
+    )
+    swot = IsmsSwot(title="Key person", kind="threat")
+    law = IsmsLegalItem(title="Privacy Act")
+    mcp.db.add_all([risk, swot, law])
+    mcp.db.flush()
+    mcp.db.add_all(
+        [
+            IsmsSwotLink(swot_id=swot.id, target_type="risk", target_id=risk.id),
+            IsmsLegalItemLink(item_id=law.id, target_type="risk", target_id=risk.id),
+        ]
+    )
+    mcp.db.commit()
+    paths = (f"/v1/isms/swot/{swot.id}", f"/v1/isms/legal-register/{law.id}")
+
+    # Signed in, the owner sees their risk on both records and opens it.
+    mcp.sign_in(owner)
+    for path in paths:
+        links = mcp.client.get(path, params={"framework": FW}).json()["links"]
+        assert [link["title"] for link in links] == ["Owned risk secret"], path
+    assert mcp.client.get(f"/v1/risks/{risk.id}").status_code == 200
+    mcp.client.cookies.clear()
+
+    # The connection has the ISMS scope and nothing of the risk.
+    token = mcp.connect(owner, ["isms.read"]).access_token
+    for path in paths:
+        seen = inner(path, token, params={"framework": FW})
+        assert seen.status_code == 200, seen.text
+        assert seen.json()["links"] == [], path
+        assert "Owned risk secret" not in seen.text
+    for tool, argument in (("get_swot_item", swot.id), ("get_legal_item", law.id)):
+        answer = mcp.tool(token, tool, {"item_id": str(argument)})
+        assert "Owned risk secret" not in str(answer), tool
+        assert str(risk.id) not in str(answer), tool
+    refused = inner(f"/v1/risks/{risk.id}", token)
+    assert refused.status_code == 403, refused.text
+    assert "Owned risk secret" not in refused.text
+
+    # With the risk scope the connection reads it, as its scopes name.
+    reader = mcp.keen.user("isms.read", "risk.read")
+    wide = mcp.connect(reader, ["isms.read", "risk.read"]).access_token
+    seen = inner(paths[0], wide, params={"framework": FW})
+    assert [link["title"] for link in seen.json()["links"]] == ["Owned risk secret"]
+
+
 def test_a_connection_reads_only_the_link_entries_its_own_scopes_name(mcp):
     # Entries about risks follow the risk scope and entries about other ISMS
     # records the ISMS scope. In Keen a risk reader opens both.

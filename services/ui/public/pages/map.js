@@ -278,7 +278,9 @@ function draw({ settled = true } = {}) {
   const records = shown.nodes.length;
   $('mapMeta').textContent =
     `${records} record${records === 1 ? '' : 's'} and ${shown.links.length} link${shown.links.length === 1 ? '' : 's'} shown` +
-    (state.truncated ? '. The map is cut to its best connected records.' : '');
+    (state.truncated
+      ? '. The map shows part of what there is: the best connected records, within the most Keen reads at once.'
+      : '');
   if (!records) {
     svg = null;
     $('mapCanvas').replaceChildren(

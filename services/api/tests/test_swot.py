@@ -1093,3 +1093,101 @@ def test_a_legal_register_item_is_related_from_either_end(keen, monkeypatch):
     assert gone.status_code == 200, gone.text
     assert kept() == []
     assert keen.db.get(IsmsSwot, uuid.UUID(item["id"])) is None
+
+
+def test_a_swot_items_limit_holds_for_relationships_made_from_the_register(
+    keen, monkeypatch
+):
+    # A relationship between a SWOT item and a legal register item is the
+    # register item's row, and the SWOT item reads it as its own. So the SWOT
+    # item's limit is held when the register makes the relationship too, and
+    # an item never resolves more than it supports, whatever is stored.
+    from dataclasses import replace
+
+    from app.db.models import IsmsLegalItem, IsmsLegalItemLink, IsmsObjective
+    from app.services.isms import related_records
+    from app.services.isms import swot as service
+
+    manager = keen.client(keen.user("isms.manage"))
+    laws = [IsmsLegalItem(title=f"Act {n}") for n in range(4)]
+    objective = IsmsObjective(goal="Own relationship")
+    keen.db.add_all([*laws, objective])
+    keen.db.commit()
+    item = create(
+        manager,
+        title="Regulatory change",
+        links=[{"target_type": "objective", "target_id": str(objective.id)}],
+    )
+    monkeypatch.setitem(
+        related_records.READERS,
+        "swot",
+        replace(related_records.READERS["swot"], limit=2),
+    )
+    swot_link = {"target_type": "swot", "target_id": item["id"]}
+    full = {"detail": "A SWOT item supports up to 2 relationships"}
+
+    def kept():
+        keen.db.expire_all()
+        return keen.db.query(IsmsLegalItemLink).count()
+
+    # One more fits beside the item's own relationship.
+    added = manager.post(
+        f"/v1/isms/legal-register/{laws[0].id}/links",
+        json={**swot_link, "expected_version": 1},
+        headers=unsafe(manager),
+    )
+    assert added.status_code == 200, added.text
+    # The third is refused however the register makes it: one at a time,
+    # in a save that names its relationships, and on a new register item.
+    refused = manager.post(
+        f"/v1/isms/legal-register/{laws[1].id}/links",
+        json={**swot_link, "expected_version": 1},
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (400, full)
+    refused = manager.patch(
+        f"/v1/isms/legal-register/{laws[2].id}",
+        json={"expected_version": 1, "links": [swot_link]},
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (400, full)
+    refused = manager.post(
+        "/v1/isms/legal-register",
+        json={"title": "New act", "links": [swot_link]},
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (400, full)
+    assert kept() == 1
+    assert keen.db.query(IsmsLegalItem).filter_by(title="New act").count() == 0
+    # Adding the one already there again changes nothing and is not refused.
+    again = manager.post(
+        f"/v1/isms/legal-register/{laws[0].id}/links",
+        json={**swot_link, "expected_version": 2},
+        headers=unsafe(manager),
+    )
+    assert again.status_code == 200, again.text
+    # A relationship to another kind of record is not the SWOT item's concern.
+    other = manager.patch(
+        f"/v1/isms/legal-register/{laws[3].id}",
+        json={"expected_version": 1, "links": []},
+        headers=unsafe(manager),
+    )
+    assert other.status_code == 200, other.text
+
+    # Rows stored past the limit by other means are not all resolved.
+    for law in laws[1:]:
+        keen.db.add(
+            IsmsLegalItemLink(
+                item_id=law.id, target_type="swot", target_id=uuid_of(item)
+            )
+        )
+    keen.db.commit()
+    monkeypatch.setattr(service, "MAX_LINKS", 3)
+    shown = manager.get(f"/v1/isms/swot/{item['id']}").json()["links"]
+    assert len(shown) == 3
+
+
+def uuid_of(item):
+    import uuid
+
+    return uuid.UUID(item["id"])

@@ -357,7 +357,7 @@ test('evidence sources are loaded on request and starting again clears the map',
   assert.match(panel().textContent, /Choose a record/);
   assert.equal(
     ui.el('mapMeta').textContent,
-    '6 records and 6 links shown. The map is cut to its best connected records.',
+    '6 records and 6 links shown. The map shows part of what there is: the best connected records, within the most Keen reads at once.',
   );
   // A link is drawn thicker the more events it stands for.
   const width = (el) => Number(el.getAttribute('stroke-width'));

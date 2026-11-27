@@ -163,9 +163,16 @@ def risk_owner_out(risk):
 
 
 def _is_risk_owner(user: User | None, risk: Risk | None) -> bool:
+    """Whether a person reads a risk because it is theirs.
+
+    That is for a person acting as their account. An MCP connection acts with
+    the scopes its person approved and no more (see has_shared_permission):
+    it reads a risk with the risk.read scope, never by its person's ownership,
+    whether it asks for the risk or meets it related to another record.
+    """
     if not is_active_user(user):
         return False
-    if risk is None:
+    if risk is None or getattr(user, "scope_limited", False):
         return False
     return risk.risk_owner_user_id == user.id or bool(
         risk.owner_role

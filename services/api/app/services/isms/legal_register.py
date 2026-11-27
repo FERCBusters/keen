@@ -49,7 +49,13 @@ from app.services.schedules import deliver_once, reminder_window, today_for_sche
 from .access import can_manage_isms, can_read_isms
 from .common import _by_id_or_404, _clause_by_ref_or_id, _control_by_ref_or_id, _record
 from .mutations import _apply_links, _delete_entity_links
-from .related_records import replace_links, search_targets, target_summary
+from .related_records import (
+    add_link,
+    lock_readers,
+    replace_links,
+    search_targets,
+    target_summary,
+)
 from .related_records import resolve_target as _target
 from .schemas import IsmsLinksPayload
 from .serializers import _attach_links, _user_summary
@@ -659,6 +665,8 @@ def save_item(*, payload: LegalItemPayload, framework, user, db, context, item_i
     draft_links = {(link.target_type, link.target_id) for link in payload.links or []}
     for kind, target_id in draft_links:
         _target(db, user, kind, target_id)
+    # A related SWOT item counts this relationship towards its own limit.
+    lock_readers(db, (kind for kind, _ in draft_links))
     if item_id:
         row = _item(db, item_id, lock=True)
         _version(row, payload.expected_version)
@@ -785,6 +793,7 @@ def delete_item(*, item_id, expected_version: int, framework, user, db, context)
 
 def change_link(*, item_id, payload: LinkPayload, remove: bool, user, db, context):
     require_access(db, user, write=True)
+    lock_readers(db, [payload.target_type])
     row = _item(db, item_id, lock=True)
     _version(row, payload.expected_version)
     _target(db, user, payload.target_type, payload.target_id)
@@ -798,12 +807,13 @@ def change_link(*, item_id, payload: LinkPayload, remove: bool, user, db, contex
             raise DomainError(
                 400, f"A legal register item supports up to {MAX_LINKS} relationships"
             )
-        db.add(
-            IsmsLegalItemLink(
-                item_id=row.id,
-                target_type=payload.target_type,
-                target_id=payload.target_id,
-            )
+        # Kept through add_link, which holds the related record's limit too.
+        add_link(
+            db,
+            IsmsLegalItemLink,
+            {"item_id": row.id},
+            payload.target_type,
+            payload.target_id,
         )
     row.version += 1
     row.updated_at = _utcnow()
