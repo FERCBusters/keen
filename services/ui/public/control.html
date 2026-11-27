@@ -119,6 +119,7 @@
       </section>
 
       <section class="tab-pane fade" id="controlItemsPane" role="tabpanel" aria-labelledby="controlItemsTab" tabindex="0">
+        <!-- Short cards sit side by side; a card that holds a table takes the full width below them. -->
         <div class="related-cards mb-3">
         <div id="clausesCard" class="card" style="display:none;">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
@@ -136,17 +137,9 @@
           </div>
         </div>
 
-        <div id="risksCard" class="card" style="display:none;">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">Cross-referenced risks</div>
-              <div class="small-muted">Risks mapped to this control for the selected framework.</div>
-            </div>
-            <span id="risksCount" class="badge text-bg-light">0</span>
-          </div>
-          <div class="card-body">
-            <div id="risksView" class="small-muted">No risks linked.</div>
-          </div>
+        <div id="controlStoriesCard" class="card" data-feature="stories" hidden>
+          <div class="card-header"><div class="fw-bold">Stories</div><div class="small-muted">Stories whose authors assigned them to this control, on the story's Controls and clauses tab.</div></div>
+          <div id="controlStories" class="card-body"></div>
         </div>
 
         <div id="adminClausesCard" class="card related-card-wide no-print" style="display:none;">
@@ -178,17 +171,25 @@
           </div>
         </div>
 
-        <div class="card">
+        <div id="risksCard" class="card related-card-wide" style="display:none;">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-bold">Cross-referenced risks</div>
+              <div class="small-muted">Risks mapped to this control for the selected framework.</div>
+            </div>
+            <span id="risksCount" class="badge text-bg-light">0</span>
+          </div>
+          <div class="card-body">
+            <div id="risksView" class="small-muted">No risks linked.</div>
+          </div>
+        </div>
+
+        <div class="card related-card-wide">
           <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
             <div><div class="fw-bold">ISMS references</div><div class="small-muted">SWOT items, legal register items, objectives, organisation roles, assets and meetings linked to this control. Policies, processes and effectiveness measures are under Requirements.</div></div>
             <a class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/isms.html">Open ISMS</a>
           </div>
           <div id="controlIsmsView" class="card-body small-muted">Loading ISMS references</div>
-        </div>
-
-        <div id="controlStoriesCard" class="card" data-feature="stories" hidden>
-          <div class="card-header"><div class="fw-bold">Stories</div><div class="small-muted">Stories whose authors assigned them to this control, on the story's Controls and clauses tab.</div></div>
-          <div id="controlStories" class="card-body"></div>
         </div>
 
         <div id="controlPestleCard" class="card related-card-wide" style="display:none;">

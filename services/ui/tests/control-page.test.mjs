@@ -574,12 +574,17 @@ test('each tab holds its own cards: related items, governance and the changelog'
     [...cards.children].map((card) => card.querySelector('.fw-bold').textContent),
     [
       'Clauses',
-      'Cross-referenced risks',
-      'Admin: clause applicability',
-      'ISMS references',
       'Stories',
+      'Admin: clause applicability',
+      'Cross-referenced risks',
+      'ISMS references',
       'PESTLE(E) relevance',
     ],
+  );
+  // The short cards share a row; each card that holds a table has its own.
+  assert.deepEqual(
+    [...cards.children].map((card) => card.classList.contains('related-card-wide')),
+    [false, false, true, true, true, true],
   );
   assert.ok(ui.el('controlIsmsView').closest('.related-cards'));
   // Governance is who answers for the control and why it applies.
