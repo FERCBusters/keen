@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { page, settle } from './support/page-fixture.mjs';
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -1907,4 +1908,16 @@ test('accounts that cannot read stories get no stories card and no request for o
   ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => !/Loading ISMS/.test(ui.el('controlIsmsView').textContent));
   assert.ok(!ui.calls.some((c) => c.url.includes('/stories/')));
+});
+
+test('a related-items card never becomes a scrolling box around its table', async () => {
+  // Table headers stick beneath the navbar as the page scrolls. Inside a box
+  // that scrolls they stick to the box instead and sit over the first rows.
+  const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const rules = [...css.matchAll(/([^{}]*\.related-cards[^{}]*)\{([^}]*)\}/g)];
+  assert.ok(rules.length >= 3);
+  for (const [, selector, body] of rules) assert.doesNotMatch(body, /overflow/, selector.trim());
+  // A card still keeps to its column.
+  const card = rules.find(([, selector]) => selector.trim().endsWith('.related-cards > .card'));
+  assert.ok(card[2].includes('min-width: 0;'));
 });

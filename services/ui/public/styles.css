@@ -2740,11 +2740,9 @@ tr[data-doc-drag] {
   grid-column: 1 / -1;
 }
 
-/* A card is never wider than its column: a table too wide for it scrolls. */
+/* A card is never wider than its column. Its body must not scroll: a table's
+   header sticks beneath the navbar as the page scrolls, and inside a scrolling
+   box it would stick to that box instead, part-way down over the first rows. */
 .related-cards > .card {
   min-width: 0;
-}
-
-.related-cards > .card > .card-body {
-  overflow-x: auto;
 }
