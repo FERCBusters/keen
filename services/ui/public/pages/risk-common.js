@@ -209,14 +209,9 @@ export function relevanceBadgeHtml(rel) {
   return relevanceBadge(rel).outerHTML;
 }
 
-function cell(attrs, ...children) {
-  return node('td', attrs, ...children);
-}
-
 // The risks mapped to one control or clause as a table: its columns and, for
 // each risk, its cells. A related-items card draws it (the design system's
-// relatedCard), and linkedRisksTable draws the same cells where a page has a
-// table of its own.
+// relatedCard).
 export function linkedRisksData(items, framework) {
   const score = (value) =>
     node('span', { class: `badge ${scoreClass(value)}` }, String(Number(value || 0)));
@@ -256,52 +251,6 @@ export function linkedRisksData(items, framework) {
   };
 }
 
-// A table's cells as a page's own table draws them: text, an element, or
-// several of either.
-function tableCell(column, content) {
-  return cell(
-    column.cellClass || column.align === 'end' ? { class: column.cellClass || 'text-end' } : {},
-    ...[content].flat(),
-  );
-}
-
-export function linkedRisksTable(items, framework) {
-  const { columns, rows } = linkedRisksData(items, framework);
-  return node(
-    'div',
-    { class: 'table-responsive' },
-    node(
-      'table',
-      { class: 'table table-sm align-middle mb-0' },
-      node(
-        'thead',
-        {},
-        node(
-          'tr',
-          {},
-          ...columns.map((column) =>
-            node(
-              'th',
-              {
-                ...(column.align === 'end' ? { class: 'text-end' } : {}),
-                ...(column.width ? { style: `width:${column.width};` } : {}),
-              },
-              column.label,
-            ),
-          ),
-        ),
-      ),
-      node(
-        'tbody',
-        {},
-        ...rows.map((row) =>
-          node('tr', {}, ...row.map((content, index) => tableCell(columns[index], content))),
-        ),
-      ),
-    ),
-  );
-}
-
 // The PESTLE(E) items rated against one clause or control as a table: type,
 // lens, item, relevance to that record, overall relevance, rationale.
 export function pestleItemsData(items, framework, record) {
@@ -312,7 +261,7 @@ export function pestleItemsData(items, framework, record) {
       { label: 'Item' },
       { label: `${record} relevance`, width: '130px' },
       { label: 'Overall relevance' },
-      { label: 'Rationale', cellClass: 'wrap small-muted' },
+      { label: 'Rationale' },
     ],
     rows: items.map((row) => {
       const it = row.pestle_item;
@@ -326,12 +275,4 @@ export function pestleItemsData(items, framework, record) {
       ];
     }),
   };
-}
-
-// The same rows for a page that has the table's heading in its own markup.
-export function pestleItemRows(items, framework) {
-  const { columns, rows } = pestleItemsData(items, framework, 'Record');
-  return rows.map((row) =>
-    node('tr', {}, ...row.map((content, index) => tableCell(columns[index], content))),
-  );
 }

@@ -203,7 +203,19 @@ test('person details separate posture, assurances and related records into tabs'
   ui.el('tab-related').click();
   await settle(ui.idle);
   assert.ok(ui.calls.some((c) => c.url.includes('/people/pe1/quizzes')));
-  assert.equal(ui.el('recordQuizzes').hidden, false);
+  // Quizzes, SWOT items and stories are each a card of the Related items tab.
+  assert.deepEqual(
+    [...ui.el('recordRelated').querySelectorAll('.mosp-related-card-title')].map(
+      (title) => title.textContent,
+    ),
+    ['Quizzes', 'SWOT analysis', 'Stories'],
+  );
+  const quizzes = ui.el('recordQuizzesCard');
+  assert.equal(ui.el('recordQuizzes').closest('.mosp-related-card'), quizzes);
+  assert.ok(quizzes.classList.contains('mosp-related-card-wide'));
+  // The card carries the heading, so the list has none of its own.
+  assert.equal(ui.el('recordQuizzes').querySelector('h2'), null);
+  assert.equal(ui.el('noRelated').hidden, true);
 });
 
 test('read-only person viewers cannot edit or fetch named quizzes and unavailable features stay hidden', async (t) => {
@@ -220,7 +232,8 @@ test('read-only person viewers cannot edit or fetch named quizzes and unavailabl
   assert.equal(ui.el('addAssurance').hidden, true);
   ui.el('tab-related').click();
   await settle(ui.idle);
-  assert.equal(ui.el('recordQuizzes').hidden, true);
+  assert.equal(ui.el('recordQuizzes'), null);
+  assert.equal(ui.el('recordRelated').childNodes.length, 0);
   assert.equal(
     ui.calls.some(
       (c) => c.url.includes('/quizzes') || c.url.includes('/stories') || c.url.includes('/swot'),

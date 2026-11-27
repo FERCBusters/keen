@@ -327,7 +327,7 @@ function renderPestle() {
           .map((x) => {
             const c = x.clause || {};
             const href = withFramework(
-              `/clause.html?id=${encodeURIComponent(c.id || '')}&tab=pestle`,
+              `/clause.html?id=${encodeURIComponent(c.id || '')}&tab=related`,
               c.framework || framework,
             );
             return `<a class="badge badge-soft text-decoration-none me-1 mb-1" href="${esc(href)}" title="${esc(`${c.title || ''} · ${x.relevance?.label || '-'}`)}">${esc(c.ref || 'Clause')}</a>`;

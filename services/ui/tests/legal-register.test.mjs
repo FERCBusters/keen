@@ -3,7 +3,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { loadUi } from './support/load-ui.mjs';
 import { page, settle } from './support/page-fixture.mjs';
 import { SIGNED_IN } from './support/account-storage.mjs';
 
@@ -517,10 +516,10 @@ test('an item shows its details, assessments, related records and history', asyn
     ['q42'],
   );
   const control = ui.el('controlLinks').querySelector('a');
-  assert.equal(control.getAttribute('href'), '/control.html?id=k31&tab=governance&framework=A');
+  assert.equal(control.getAttribute('href'), '/control.html?id=k31&tab=items&framework=A');
   assert.equal(control.title, 'Legal requirements');
   const clause = ui.el('clauseLinks').querySelector('a');
-  assert.equal(clause.getAttribute('href'), '/clause.html?id=q42&tab=isms&framework=A');
+  assert.equal(clause.getAttribute('href'), '/clause.html?id=q42&tab=related&framework=A');
   // A clause without a title is named by its reference.
   assert.equal(clause.title, '4.2');
   assert.equal(ui.el('editor').disabled, false);
@@ -1043,102 +1042,6 @@ test('a new item starts with the control for legal requirements and opens once s
     category_id: 'c2',
   });
   assert.deepEqual(navigations, ['/legal-register.html?id=l9&framework=A']);
-});
-
-// --- The Legal register tab of a related record ------------------------------------
-
-const HOST =
-  '<main><ul class="nav-tabs"></ul><div class="tab-content"></div><div id="status"></div></main>';
-
-async function relatedTab(t, { me = { can_view_isms: true }, id = 'd1', get } = {}) {
-  const calls = [];
-  const ui = await loadUi('pages/legal-related.js', {
-    html: HOST,
-    vendor: {
-      apiGet: async (url) => {
-        calls.push(url);
-        return get(url);
-      },
-      withFramework: (path, framework) => `${path}&framework=${framework}`,
-    },
-  });
-  t.after(() => ui.close());
-  ui.api.mountLegalRelated({ me, type: 'document', id });
-  return Object.assign(ui, { calls, pane: () => ui.document.getElementById('legalRelatedPane') });
-}
-
-test('a related record lists its legal register items when its tab is opened', async (t) => {
-  let answer = () => {
-    throw new Error('Register offline');
-  };
-  const ui = await relatedTab(t, { get: (url) => answer(url) });
-  const tab = ui.document.getElementById('legalRelatedTab');
-  assert.equal(tab.textContent, 'Legal register');
-  assert.equal(tab.dataset.bsTarget, '#legalRelatedPane');
-  // Nothing is requested until the tab is opened.
-  assert.deepEqual(ui.calls, []);
-
-  tab.click();
-  await settle(() => /could not be loaded/.test(ui.pane().textContent));
-  assert.equal(
-    ui.pane().textContent,
-    'Related legal register items could not be loaded: Register offline',
-  );
-  // A later click tries again.
-  answer = () => ({
-    items: [
-      { id: 'l1', title: HOSTILE, in_scope: true },
-      { id: 'l2', title: 'Bribery Act 2010', in_scope: false },
-    ],
-    total: 2,
-  });
-  tab.click();
-  await settle(() => ui.pane().querySelector('h2'));
-  assert.deepEqual(ui.calls, [
-    '/api/v1/isms/legal-register?target_type=document&target_id=d1&limit=100',
-    '/api/v1/isms/legal-register?target_type=document&target_id=d1&limit=100',
-  ]);
-  assert.equal(ui.pane().querySelector('img'), null);
-  assert.deepEqual(
-    [...ui.pane().querySelectorAll('p')].map((entry) => entry.textContent),
-    [HOSTILE + ' In scope', 'Bribery Act 2010 Out of scope'],
-  );
-  const links = [...ui.pane().querySelectorAll('a')].map((link) => [
-    link.textContent,
-    link.getAttribute('href'),
-  ]);
-  assert.deepEqual(links, [
-    [HOSTILE, '/legal-register.html?id=l1&tab=related&framework=F1'],
-    ['Bribery Act 2010', '/legal-register.html?id=l2&tab=related&framework=F1'],
-    [
-      'Open in the legal register (2)',
-      '/legal-register.html?target_type=document&target_id=d1&framework=F1',
-    ],
-  ]);
-  // Once loaded, opening the tab again asks nothing more.
-  tab.click();
-  await tick();
-  assert.equal(ui.calls.length, 2);
-});
-
-test('a record related to no legal register item says so', async (t) => {
-  const ui = await relatedTab(t, { get: () => ({ items: [], total: 0 }) });
-  ui.document.getElementById('legalRelatedTab').click();
-  await settle(() => ui.pane().querySelector('h2'));
-  assert.match(ui.pane().textContent, /No legal register items are related\./);
-});
-
-test('the Legal register tab is left out without a record, access or the feature', async (t) => {
-  for (const options of [
-    { id: '' },
-    { me: { can_view_isms: false } },
-    { me: null },
-    { me: { can_view_isms: true, features: { enabled: { legal_register: false } } } },
-  ]) {
-    const ui = await relatedTab(t, options);
-    assert.equal(ui.document.getElementById('legalRelatedTab'), null);
-    assert.equal(ui.pane(), null);
-  }
 });
 
 // --- Stories ----------------------------------------------------------------------

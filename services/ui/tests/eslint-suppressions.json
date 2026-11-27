@@ -67,7 +67,7 @@
       "count": 2
     },
     "no-unsanitized/property": {
-      "count": 5
+      "count": 4
     }
   },
   "services/ui/public/pages/clauses.js": {
@@ -152,7 +152,7 @@
   },
   "services/ui/public/pages/isms-asset.js": {
     "no-unsanitized/property": {
-      "count": 3
+      "count": 2
     }
   },
   "services/ui/public/pages/isms-document.js": {
@@ -319,11 +319,6 @@
   "services/ui/public/pages/story.js": {
     "no-unsanitized/property": {
       "count": 4
-    }
-  },
-  "services/ui/public/pages/swot-related.js": {
-    "no-unsanitized/property": {
-      "count": 1
     }
   },
   "services/ui/public/pages/swot.js": {

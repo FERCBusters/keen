@@ -192,7 +192,7 @@ function fillSelects() {
 }
 
 function clauseHref(id) {
-  return withFramework(`/clause.html?id=${encodeURIComponent(id)}&tab=pestle`, framework);
+  return withFramework(`/clause.html?id=${encodeURIComponent(id)}&tab=related`, framework);
 }
 
 function setFormReadOnly(readonly) {

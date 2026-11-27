@@ -412,8 +412,8 @@ function renderGraph() {
     detail: row.category?.name || '',
     empty: 'This item is not linked to any control, clause or related record yet.',
     groups: [
-      { title: 'Controls', items: row.controls.map(framed('control', 'governance')) },
-      { title: 'Clauses', items: row.clauses.map(framed('clause', 'isms')) },
+      { title: 'Controls', items: row.controls.map(framed('control', 'items')) },
+      { title: 'Clauses', items: row.clauses.map(framed('clause', 'related')) },
       ...types.map((type) => ({
         title: LINK_TYPES[type],
         items: relatedLinks(type).map((link) => ({
@@ -466,8 +466,8 @@ async function loadDetail() {
   const clauses = row?.clauses || [];
   mappingOptions('controls', isms.controls || [], controls);
   mappingOptions('clauses', isms.clauses || [], clauses);
-  refBadges($('controlLinks'), controls, 'control', 'governance');
-  refBadges($('clauseLinks'), clauses, 'clause', 'isms');
+  refBadges($('controlLinks'), controls, 'control', 'items');
+  refBadges($('clauseLinks'), clauses, 'clause', 'related');
   $('editor').disabled = !manage;
   $('draftNotice').hidden = !isNew;
   for (const tab of TABS.slice(1)) $(tab + 'Tab').disabled = isNew;

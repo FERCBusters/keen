@@ -13,12 +13,13 @@ import {
   refreshPicker,
   withFramework,
   getCurrentFramework,
+  node,
+  relatedCard,
 } from '/app.js';
 import { featureEnabled } from './feature-availability.js';
 import { workstationPosture } from './workstation-posture.js';
 import { cloudPosture } from './cloud-posture.js';
-import { mountSwotRelated } from './swot-related.js';
-import { canViewStories, mountStoryRelated } from './story-related.js';
+import { mountRelatedItems } from './related-items-tab.js';
 import { personQuizzes } from './person-quizzes.js';
 import { unsavedGuard } from './unsaved-guard.js';
 
@@ -76,22 +77,27 @@ export async function assuranceRecord(kind) {
     if (record && tab === 'cloud') posture.select(record);
     if (record && tab === 'related' && !relatedLoaded) {
       relatedLoaded = true;
-      let any = false;
-      if (featureEnabled(me, 'swot')) {
-        any = true;
-        $('recordSwot').hidden = false;
-        mountSwotRelated(kind, record.id, $('recordSwot'));
-      }
-      if (canViewStories(me)) {
-        any = true;
-        $('recordStories').hidden = false;
-        mountStoryRelated({ me, kind, id: record.id, host: $('recordStories') });
-      }
-      if (canQuizzes) {
-        any = true;
-        personQuizzes($('recordQuizzes'), record.id).load();
-      }
-      $('noRelated').hidden = any;
+      const quizzes = node('div', { id: 'recordQuizzes' });
+      const mounted = mountRelatedItems({
+        me,
+        kind,
+        id: record.id,
+        host: $('recordRelated'),
+        first: canQuizzes
+          ? [
+              {
+                card: relatedCard({
+                  id: 'recordQuizzesCard',
+                  title: 'Quizzes',
+                  body: quizzes,
+                  wide: true,
+                }),
+                load: () => personQuizzes(quizzes, record.id).load(),
+              },
+            ]
+          : [],
+      });
+      $('noRelated').hidden = Boolean(mounted);
     }
   }
   for (const button of tabButtons) {

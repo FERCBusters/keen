@@ -353,7 +353,7 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   );
   assert.equal(pestle[1].querySelectorAll('td')[6].textContent, '-');
   const clauseBadges = pestle[0].querySelectorAll('td')[7].querySelectorAll('a');
-  assert.equal(clauseBadges[0].getAttribute('href'), '/clause.html?id=k1&tab=pestle&framework=A');
+  assert.equal(clauseBadges[0].getAttribute('href'), '/clause.html?id=k1&tab=related&framework=A');
   assert.equal(clauseBadges[0].getAttribute('title'), 'Context · High');
   assert.equal(clauseBadges[1].textContent, 'Clause');
   filter(ui, 'pestleFilter', 'a.5.1 ' + HOSTILE.toLowerCase() + 'policies medium');
@@ -373,11 +373,11 @@ test('ISMS objectives, documents, measures, organisation and assets are listed',
   assert.match(o1.textContent, /sam/);
   assert.equal(
     o1.querySelectorAll('td')[5].querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=governance&framework=A',
+    '/control.html?id=c1&tab=items&framework=A',
   );
   assert.equal(
     o1.querySelectorAll('td')[6].querySelector('a').getAttribute('href'),
-    '/clause.html?id=k2&tab=isms&framework=A',
+    '/clause.html?id=k2&tab=related&framework=A',
   );
   assert.equal(
     o1.querySelectorAll('td')[6].querySelector('a').getAttribute('title'),

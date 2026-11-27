@@ -22,7 +22,7 @@ import {
   loadSourceLabels,
   metricHref,
 } from '/app.js';
-import { mountStoryRelated } from '/pages/story-related.js';
+import { mountRelatedItems } from '/pages/related-items-tab.js';
 import { mountMeasurementExamples } from '/pages/measurement-examples.js';
 import {
   activateTabFromHashOrQuery,
@@ -538,5 +538,5 @@ for (const btn of Array.from(document.querySelectorAll('#measureTabs [data-bs-to
   });
 }
 
-mountStoryRelated({ me, kind: 'effectiveness_measure', id: measureId, framework });
+mountRelatedItems({ me, kind: 'effectiveness_measure', id: measureId, framework });
 load();

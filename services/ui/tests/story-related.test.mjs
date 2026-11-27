@@ -1,15 +1,19 @@
-// The stories that include a record, on the record's own page: a Stories tab
-// that loads when first shown, the forms that add the record to a story or
-// start one with it, and what readers, other accounts and failures see.
+// The stories that include a record, on the record's own page: a card of its
+// Related items that loads when the tab is first shown, the forms that add the
+// record to a story or start one with it, and what readers, other accounts and
+// failures see.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadUi } from './support/load-ui.mjs';
 import { page, settle } from './support/page-fixture.mjs';
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
+// The page's Related items tab and, on it, where the card's list goes.
 const PAGE =
-  '<main><ul class="nav nav-tabs"><li><button id="detailsTab">Details</button></li></ul>' +
-  '<div class="tab-content"><section id="detailsPane"></section></div></main>';
+  '<main><ul class="nav nav-tabs"><li><button id="detailsTab">Details</button></li>' +
+  '<li><button id="storiesRelatedTab">Related items</button></li></ul>' +
+  '<div class="tab-content"><section id="detailsPane"></section>' +
+  '<section id="storiesRelatedPane"></section></div></main>';
 const STORIES = [
   {
     id: 's1',
@@ -79,8 +83,15 @@ async function mount(
     },
   });
   t.after(ui.close);
-  const mounted = ui.api.mountStoryRelated({ me, kind, id, ...options });
   const el = (name) => ui.document.getElementById(name);
+  const mounted = ui.api.mountStoryRelated({
+    me,
+    kind,
+    id,
+    host: el('storiesRelatedPane'),
+    trigger: el('storiesRelatedTab'),
+    ...options,
+  });
   const show = () => el('storiesRelatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   const submit = (selector) =>
     ui.document
@@ -89,12 +100,11 @@ async function mount(
   return { ui, calls, mounted, el, show, submit };
 }
 
-test('a Stories tab joins the record page and loads when first shown', async (t) => {
+test('the stories load when the tab they are on is first shown', async (t) => {
   const view = await mount(t);
   const { el, calls } = view;
-  assert.equal(el('storiesRelatedTab').textContent, 'Stories');
-  assert.equal(el('storiesRelatedTab').dataset.bsTarget, '#storiesRelatedPane');
-  assert.match(el('storiesRelatedPane').textContent, /Stories that include this set of minutes/);
+  // The card that holds the list carries the heading; the list has none.
+  assert.equal(el('storiesRelatedPane').querySelector('h2'), null);
   assert.match(el('storiesRelatedPane').textContent, /Loading stories/);
   assert.deepEqual(calls, [], 'nothing loads until the tab is shown');
 
@@ -102,7 +112,8 @@ test('a Stories tab joins the record page and loads when first shown', async (t)
   await settle(() => el('storyRelatedChoice').options.length === 2);
   const pane = el('storiesRelatedPane');
   assert.equal(calls[0].url, '/api/v1/stories/related/meeting/m1');
-  assert.equal(el('storiesRelatedTab').textContent, 'Stories (2)');
+  // The tab is the page's own and keeps its name.
+  assert.equal(el('storiesRelatedTab').textContent, 'Related items');
   const links = [...pane.querySelectorAll('.list-group a')].map((a) => [
     a.textContent,
     a.getAttribute('href'),
@@ -173,7 +184,7 @@ test('authors add the record to an open story or start a new one with it', async
   const status = el('storiesRelatedPane').querySelector('[data-story-related-status]');
   assert.equal(status.textContent, 'Added to Open <i>draft</i>.');
   assert.equal(status.className, 'small mt-2 text-success');
-  assert.equal(el('storiesRelatedTab').textContent, 'Stories (3)');
+  assert.equal(el('storiesRelatedPane').querySelectorAll('.list-group li').length, 3);
   assert.equal(
     el('storyRelatedChoice').options[0].textContent,
     'No other open stories you can edit',
@@ -203,7 +214,7 @@ test('failures are explained where they happen', async (t) => {
     /Stories are unavailable with your current access/,
   );
   assert.equal(unavailable.calls.length, 1, 'no story choices without the list');
-  assert.equal(unavailable.el('storiesRelatedTab').textContent, 'Stories');
+  assert.equal(unavailable.el('storiesRelatedTab').textContent, 'Related items');
 
   let failOpen = true;
   const view = await mount(t, {
@@ -238,7 +249,7 @@ test('failures are explained where they happen', async (t) => {
   assert.equal(el('storyRelatedTitle').value, 'Duplicate');
 });
 
-test('readers see the list alone; others see no tab', async (t) => {
+test('readers see the list alone; others see nothing', async (t) => {
   const reader = await mount(t, {
     me: { can_view_stories: true },
     related: () => ({ items: [] }),
@@ -261,69 +272,29 @@ test('readers see the list alone; others see no tab', async (t) => {
   ]) {
     const view = await mount(t, { me, ...options });
     assert.equal(view.mounted, null);
-    assert.equal(view.el('storiesRelatedTab'), null);
+    assert.equal(view.el('storiesRelatedPane').childNodes.length, 0);
+    assert.deepEqual(view.calls, []);
   }
-  const untabbed = await mount(t, { html: '<main></main>' });
-  assert.equal(untabbed.mounted, null);
 });
 
-test('an address naming the stories tab opens it straight away', async (t) => {
-  const shown = [];
-  const view = await mount(t, {
-    query: '&tab=stories',
-    setup(window) {
-      window.bootstrap = {
-        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
-      };
-    },
-  });
-  await settle(() => view.el('storyRelatedChoice')?.options.length === 2);
-  assert.deepEqual(shown, ['storiesRelatedTab']);
-  assert.equal(view.calls[0].url, '/api/v1/stories/related/meeting/m1');
-});
-
-test('a host on the page frames the list without a heading of its own', async (t) => {
-  const html =
-    '<main><button id="trigger">Stories</button><div id="host"></div><div id="now"></div></main>';
+test('a list with no tab to wait for loads straight away', async (t) => {
   const loads = [];
   const view = await mount(t, {
-    html,
-    kind: 'person',
-    id: 'p1',
-    related: () => ({ items: [STORIES[1]] }),
-    options: {},
-  });
-  // The tab form is skipped on a page without tabs; mount into hosts instead.
-  assert.equal(view.mounted, null);
-  const { ui } = view;
-  const lazy = ui.api.mountStoryRelated({
-    me: { is_admin: true },
-    kind: 'person',
-    id: 'p1',
-    host: ui.document.getElementById('host'),
-    trigger: ui.document.getElementById('trigger'),
-  });
-  assert.equal(lazy.pane.querySelector('h2'), null);
-  assert.match(lazy.pane.textContent, /Loading stories/);
-  ui.document.getElementById('trigger').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => /Restore test/.test(lazy.pane.textContent));
-  // The host's tab is the page's own and keeps its name.
-  assert.equal(ui.document.getElementById('trigger').textContent, 'Stories');
-  assert.match(lazy.pane.querySelector('label').textContent, /Add this person to a story/);
-
-  const now = ui.api.mountStoryRelated({
     me: { can_view_stories: true },
     kind: 'event',
     id: 'e1',
-    host: ui.document.getElementById('now'),
-    onLoad: (stories) => loads.push(stories.map((s) => s.id)),
+    related: () => ({ items: [STORIES[1]] }),
+    options: { trigger: null, onLoad: (stories) => loads.push(stories.map((s) => s.id)) },
   });
   await settle(() => loads.length === 1);
   assert.deepEqual(plain(loads), [['s2']]);
-  assert.equal(now.tab, null);
-  assert.equal(ui.api.KIND_NAMES.effectiveness_measure, 'effectiveness measure');
-  assert.equal(ui.api.canManageStories({ can_view_stories: true }), false);
-  assert.equal(ui.api.canManageStories({ can_view_stories: true, can_manage_stories: true }), true);
+  assert.equal(view.mounted.tab, null);
+  assert.equal(view.calls[0].url, '/api/v1/stories/related/event/e1');
+  assert.match(view.el('storiesRelatedPane').textContent, /Restore test/);
+  const { api } = view.ui;
+  assert.equal(api.KIND_NAMES.effectiveness_measure, 'effectiveness measure');
+  assert.equal(api.canManageStories({ can_view_stories: true }), false);
+  assert.equal(api.canManageStories({ can_view_stories: true, can_manage_stories: true }), true);
 });
 
 test('meeting minutes offer to join a story from their own page', async (t) => {
@@ -346,28 +317,36 @@ test('meeting minutes offer to join a story from their own page', async (t) => {
     },
   });
   await settle(() => ui.el('meetingTitle').textContent === 'Monthly review');
-  const tab = ui.el('storiesRelatedTab');
-  assert.equal(tab.closest('#meetingTabs') !== null, true);
+  // The minutes' stories are a card of their Related items, ahead of the
+  // Changelog.
+  const tab = ui.el('relatedItemsTab');
+  assert.equal(tab.textContent, 'Related items');
+  assert.deepEqual(
+    [...ui.el('meetingTabs').querySelectorAll('button')].map((button) => button.id),
+    ['meetingDetailsTab', 'relatedItemsTab', 'meetingChangelogTab'],
+  );
+  const card = ui.el('relatedStoriesCard');
+  assert.equal(card.closest('#relatedItemsPane') !== null, true);
+  assert.deepEqual(
+    [...ui.el('relatedItemsPane').querySelectorAll('.mosp-related-card-title')].map(
+      (title) => title.textContent,
+    ),
+    ['Stories'],
+  );
   tab.dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => ui.el('storyRelatedChoice')?.options.length === 2);
-  assert.match(
-    ui.el('storiesRelatedPane').textContent,
-    /This set of minutes is not in a story yet/,
-  );
+  assert.match(card.textContent, /This set of minutes is not in a story yet/);
   ui.el('storyRelatedChoice').value = 's3';
   ui.document
     .querySelector('[data-story-add]')
     .dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
-  await settle(
-    () =>
-      posted.length === 1 &&
-      /Open <i>draft<\/i>/.test(tab.textContent + ui.el('storiesRelatedPane').textContent),
-  );
+  await settle(() => posted.length === 1 && /Open <i>draft<\/i>/.test(card.textContent));
   assert.deepEqual(posted[0], [
     '/api/v1/stories/s3/items',
     { items: [{ kind: 'meeting', entity_id: 'm1' }], expected_version: 7 },
   ]);
-  await settle(() => tab.textContent === 'Stories (1)');
+  await settle(() => card.querySelector('.mosp-related-card-count').textContent === '1');
+  assert.equal(tab.textContent, 'Related items');
 });
 
 // --- Stories assigned to a control or clause ---------------------------------------
@@ -389,10 +368,13 @@ const ASSIGNED = [
   },
 ];
 const HOSTED =
-  '<main><ul class="nav nav-tabs"><li><button id="govTab">Governance</button></li></ul>' +
+  '<main><ul class="nav nav-tabs"><li><button id="govTab">Related items</button></li></ul>' +
   '<div class="tab-content"><section><div id="host">old</div></section></div></main>';
 
-async function assigned(t, { html = PAGE, items = ASSIGNED, me = { is_admin: true }, fail } = {}) {
+async function assigned(
+  t,
+  { html = HOSTED, items = ASSIGNED, me = { is_admin: true }, fail } = {},
+) {
   const calls = [];
   const world = { fail };
   const ui = await loadUi('pages/story-related.js', {
@@ -419,29 +401,27 @@ async function assigned(t, { html = PAGE, items = ASSIGNED, me = { is_admin: tru
     el,
     show,
     me,
-    mount: (options) => ui.api.mountAssignedStories({ me, ...options }),
+    mount: (options) =>
+      ui.api.mountAssignedStories({ me, host: el('host'), trigger: el('govTab'), ...options }),
   };
 }
 
-test('a clause page gains a Stories tab listing the stories assigned to it', async (t) => {
+test('the stories assigned to a clause are listed when the tab they are on is shown', async (t) => {
   const view = await assigned(t);
   const mounted = view.mount({ kind: 'clause', id: 'k/1' });
-  const pane = view.el('storiesRelatedPane');
+  const pane = view.el('host');
   assert.equal(mounted.pane, pane);
-  assert.equal(view.el('storiesRelatedTab').textContent, 'Stories');
-  assert.equal(pane.querySelector('h2').textContent, 'Stories');
-  assert.match(
-    pane.textContent,
-    /assigned them to this clause, on the story's Controls and clauses tab/,
-  );
-  assert.match(pane.textContent, /Loading stories/);
+  assert.equal(mounted.tab, view.el('govTab'));
+  // The card that holds the list carries the heading; the list has none.
+  assert.equal(pane.querySelector('h2'), null);
+  assert.equal(pane.textContent, 'Loading stories');
   assert.deepEqual(view.calls, [], 'nothing loads until the tab is shown');
 
-  view.show('storiesRelatedTab');
+  view.show('govTab');
   await settle(() => pane.querySelector('.list-group'));
-  view.show('storiesRelatedTab');
+  view.show('govTab');
   assert.deepEqual(view.calls, ['/api/v1/stories/related/clause/k%2F1'], 'read once');
-  assert.equal(view.el('storiesRelatedTab').textContent, 'Stories (2)');
+  assert.equal(view.el('govTab').textContent, 'Related items', 'the tab keeps its name');
   assert.deepEqual(
     [...pane.querySelectorAll('.list-group a')].map((a) => [a.textContent, a.getAttribute('href')]),
     [
@@ -467,34 +447,10 @@ test('a clause page gains a Stories tab listing the stories assigned to it', asy
   assert.equal(pane.querySelector('form'), null);
 });
 
-test('a control or clause with no story says so and keeps the plain tab name', async (t) => {
+test('a control or clause with no story says so', async (t) => {
   const view = await assigned(t, { items: [] });
   await view.mount({ kind: 'control', id: 'c1' }).load();
-  assert.equal(view.el('storiesRelatedTab').textContent, 'Stories');
-  assert.match(
-    view.el('storiesRelatedPane').textContent,
-    /No story is assigned to this control yet\.$/,
-  );
-});
-
-test('a host on the page lists the stories when its tab is shown, without a heading or a count', async (t) => {
-  const view = await assigned(t, { html: HOSTED });
-  const mounted = view.mount({
-    kind: 'control',
-    id: 'c1',
-    host: view.el('host'),
-    trigger: view.el('govTab'),
-  });
-  assert.equal(mounted.tab, view.el('govTab'));
-  assert.equal(view.el('storiesRelatedTab'), null, 'no tab of its own');
-  assert.equal(view.el('host').querySelector('h2'), null);
-  assert.equal(view.el('host').textContent, 'Loading stories');
-  assert.deepEqual(view.calls, []);
-  view.show('govTab');
-  await settle(() => view.el('host').querySelector('.list-group'));
-  assert.deepEqual(view.calls, ['/api/v1/stories/related/control/c1']);
-  assert.equal(view.el('govTab').textContent, 'Governance', 'the host tab keeps its name');
-  assert.equal(view.el('host').querySelectorAll('li').length, 2);
+  assert.equal(view.el('host').textContent, 'No story is assigned to this control yet.');
 });
 
 test('a host whose tab is already open loads straight away', async (t) => {
@@ -509,33 +465,31 @@ test('a host whose tab is already open loads straight away', async (t) => {
 test('stories that cannot be read are explained, and the next opening tries again', async (t) => {
   const view = await assigned(t, { fail: true });
   view.mount({ kind: 'clause', id: 'k1' });
-  const pane = view.el('storiesRelatedPane');
-  view.show('storiesRelatedTab');
+  const pane = view.el('host');
+  view.show('govTab');
   await settle(() => /unavailable/.test(pane.textContent));
-  assert.match(pane.textContent, /Stories are unavailable with your current access\.$/);
-  assert.equal(view.el('storiesRelatedTab').textContent, 'Stories');
+  assert.equal(pane.textContent, 'Stories are unavailable with your current access.');
   view.world.fail = false;
-  view.show('storiesRelatedTab');
+  view.show('govTab');
   await settle(() => pane.querySelector('.list-group'));
   assert.equal(view.calls.length, 2);
-  assert.equal(view.el('storiesRelatedTab').textContent, 'Stories (2)');
+  assert.equal(pane.querySelectorAll('li').length, 2);
 });
 
-test('nothing is mounted without a record, story access or a tab bar', async (t) => {
+test('nothing is mounted without a record or story access', async (t) => {
   const view = await assigned(t);
   assert.equal(view.mount({ kind: 'clause', id: '' }), null);
-  assert.equal(view.ui.api.mountAssignedStories({ me: {}, kind: 'clause', id: 'k1' }), null);
-  assert.equal(view.el('storiesRelatedTab'), null);
-  const bare = await assigned(t, { html: '<main><div id="host"></div></main>' });
-  assert.equal(bare.mount({ kind: 'clause', id: 'k1' }), null);
-  assert.deepEqual(bare.calls, []);
+  assert.equal(view.mount({ me: {}, kind: 'clause', id: 'k1' }), null);
+  assert.equal(view.el('host').textContent, 'old');
+  view.show('govTab');
+  assert.deepEqual(view.calls, []);
 });
 
-test('a legal register item is named in its Stories tab', async (t) => {
+test('a legal register item is named in the forms of its stories', async (t) => {
   const view = await mount(t, { kind: 'legal_item', id: 'l1' });
   assert.equal(view.ui.api.KIND_NAMES.legal_item, 'legal register item');
   assert.match(
-    view.el('storiesRelatedPane').textContent,
-    /Stories that include this legal register item/,
+    view.el('storiesRelatedPane').querySelector('label').textContent,
+    /Add this legal register item to a story/,
   );
 });

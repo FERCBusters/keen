@@ -1,6 +1,6 @@
-// The stories that include one record, shown on the record's own page. Story
-// authors can add the record to one of their open stories or start a new one
-// from here. The list loads when its tab is first shown.
+// The stories that include one record, shown as a card of the record's
+// Related items. Story authors can add the record to one of their open
+// stories or start a new one from here.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
   errorText,
@@ -72,60 +72,29 @@ function formHtml(kind) {
     </form>`;
 }
 
-function insertTab(label) {
-  const tabs = document.querySelector('main .nav-tabs');
-  const content = document.querySelector('main .tab-content');
-  if (!tabs || !content) return null;
-  const item = document.createElement('li');
-  item.className = 'nav-item';
-  item.setAttribute('role', 'presentation');
-  item.innerHTML = `<button class="nav-link" id="storiesRelatedTab" type="button" role="tab" data-bs-toggle="tab" data-bs-target="#storiesRelatedPane" aria-controls="storiesRelatedPane" aria-selected="false">${esc(label)}</button>`;
-  tabs.append(item);
-  const pane = document.createElement('section');
-  pane.className = 'tab-pane fade';
-  pane.id = 'storiesRelatedPane';
-  pane.setAttribute('role', 'tabpanel');
-  pane.setAttribute('aria-labelledby', 'storiesRelatedTab');
-  pane.tabIndex = 0;
-  content.append(pane);
-  return { tab: item.firstElementChild, pane };
-}
-
 /**
- * Show the stories that include a record.
+ * Show the stories that include a record, in `host`: a card of the record's
+ * Related items.
  *
- * Without a host, a "Stories" tab joins the page's tabs and loads when first
- * shown. With a host, the list renders there, loading when `trigger` (a tab
- * button, which keeps its name) is first shown or straight away when there is
- * no trigger. A page with a Related items tab hosts the list in a card there.
- * `onLoad` receives the stories each time the list loads.
+ * The list loads when `trigger`, the tab the card is on, is first shown, or
+ * straight away when there is no trigger. `onLoad` receives the stories each
+ * time the list loads.
  */
 export function mountStoryRelated({
   me,
   kind,
   id,
-  host = null,
+  host,
   trigger = null,
   framework = getCurrentFramework(),
   onLoad = () => {},
 }) {
   if (!id || !KIND_NAMES[kind] || !canViewStories(me)) return null;
-  let pane = host;
-  let tab = trigger;
-  if (!pane) {
-    const inserted = insertTab('Stories');
-    if (!inserted) return null;
-    ({ pane, tab } = inserted);
-  }
+  const pane = host;
+  const tab = trigger;
   const manage = canManageStories(me);
   const recordUrl = `/api/v1/stories/related/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`;
-  // A host frames the list itself; a tab of its own carries a heading.
-  const heading = host
-    ? ''
-    : `<h2 class="h5">Stories</h2>
-    <p class="small-muted">Stories that include this ${esc(KIND_NAMES[kind])}, with the events and records around it.</p>`;
-  pane.innerHTML = `${heading}
-    <div data-story-related-list><p class="small-muted mb-0">Loading stories</p></div>
+  pane.innerHTML = `<div data-story-related-list><p class="small-muted mb-0">Loading stories</p></div>
     <div data-story-related-status class="small mt-2" role="status"></div>
     ${manage ? formHtml(kind) : ''}`;
   const list = pane.querySelector('[data-story-related-list]');
@@ -164,8 +133,6 @@ export function mountStoryRelated({
       const stories = data.items;
       included = new Set(stories.map((s) => s.id));
       list.innerHTML = relatedListHtml(stories, kind, framework);
-      // A tab of its own counts its stories; a host's tab keeps its name.
-      if (!host) tab.textContent = stories.length ? `Stories (${stories.length})` : 'Stories';
       onLoad(stories);
     } catch {
       list.innerHTML =
@@ -216,14 +183,8 @@ export function mountStoryRelated({
     say(`Started the story ${story.title}.`, 'success');
   });
 
-  if (!tab) load();
-  else {
-    tab.addEventListener('shown.bs.tab', load);
-    if (!host && new URLSearchParams(location.search).get('tab') === 'stories') {
-      if (window.bootstrap?.Tab) window.bootstrap.Tab.getOrCreateInstance(tab).show();
-      load();
-    }
-  }
+  if (tab) tab.addEventListener('shown.bs.tab', load);
+  else load();
   return { tab, pane, load, refresh };
 }
 
@@ -271,45 +232,27 @@ function assignedList(stories, kind, framework) {
 }
 
 /**
- * Show, on a control's or clause's page, the stories assigned to it.
+ * Show, on a control's or clause's page, the stories assigned to it, in
+ * `host`: a card of the page's Related items.
  *
- * Without a host, a "Stories" tab joins the page's tabs and loads when first
- * shown. With a host, the list renders there and loads when `trigger` (a tab
- * button) is shown, or straight away when that tab is already open. Stories
- * are assigned controls and clauses on the story's own page, so the list has
- * none of the forms a record's Stories tab has.
+ * The list loads when `trigger`, the tab the card is on, is shown, or
+ * straight away when that tab is already open. Stories are assigned controls
+ * and clauses on the story's own page, so the list has none of the forms a
+ * record's Stories card has.
  */
 export function mountAssignedStories({
   me,
   kind,
   id,
-  host = null,
-  trigger = null,
+  host,
+  trigger,
   framework = getCurrentFramework(),
 }) {
   if (!id || !canViewStories(me)) return null;
-  let pane = host;
-  let tab = trigger;
-  if (!pane) {
-    const inserted = insertTab('Stories');
-    if (!inserted) return null;
-    ({ pane, tab } = inserted);
-  }
+  const pane = host;
+  const tab = trigger;
   const list = node('div', {}, node('p', { class: 'small-muted mb-0' }, 'Loading stories'));
-  // A host frames the list itself; a tab of its own carries a heading.
-  pane.replaceChildren(
-    ...(host
-      ? []
-      : [
-          node('h2', { class: 'h5' }, 'Stories'),
-          node(
-            'p',
-            { class: 'small-muted' },
-            `Stories whose authors assigned them to this ${kind}, on the story's Controls and clauses tab.`,
-          ),
-        ]),
-    list,
-  );
+  pane.replaceChildren(list);
   let loaded = null;
 
   async function refresh() {
@@ -318,8 +261,6 @@ export function mountAssignedStories({
         `/api/v1/stories/related/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
       );
       list.replaceChildren(assignedList(data.items, kind, framework));
-      // A tab of its own counts its stories; a host's tab keeps its name.
-      if (!host) tab.textContent = data.items.length ? `Stories (${data.items.length})` : 'Stories';
     } catch {
       // A later opening of the tab tries again.
       loaded = null;

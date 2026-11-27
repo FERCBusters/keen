@@ -29,9 +29,7 @@ import {
 } from '/pages/risk-common.js';
 import { affectedBadgesHtml } from '/pages/affected-common.js';
 import { renderRecordLinksGraph } from '/pages/record-links-graph.js';
-import { mountSwotRelated } from '/pages/swot-related.js';
-import { mountLegalRelated } from '/pages/legal-related.js';
-import { mountStoryRelated } from '/pages/story-related.js';
+import { mountRelatedItems } from '/pages/related-items-tab.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -362,6 +360,4 @@ async function loadRisk() {
 
 await loadRisk();
 
-mountSwotRelated('risk', new URLSearchParams(location.search).get('id'));
-mountStoryRelated({ me, kind: 'risk', id: new URLSearchParams(location.search).get('id') });
-mountLegalRelated({ me, type: 'risk', id: new URLSearchParams(location.search).get('id') });
+mountRelatedItems({ me, kind: 'risk', id, framework });

@@ -2,7 +2,7 @@ import { mountAssignedStories } from '/pages/story-related.js';
 import { catalogueLabel } from '/pages/catalogue-options.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
-import { linkedRisksTable, pestleItemRows } from '/pages/risk-common.js';
+import { linkedRisksData, pestleItemsData } from '/pages/risk-common.js';
 import {
   fmtTs,
   errorText,
@@ -21,6 +21,10 @@ import {
   node,
   loadEntityChangelog,
   applicabilityBadge,
+  relatedCard,
+  relatedCards,
+  shorten,
+  updateRelatedCard,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -51,12 +55,67 @@ const clauseEvidenceUrlInputs = document.getElementById('clauseEvidenceUrlInputs
 const addClauseEvidenceUrl = document.getElementById('addClauseEvidenceUrl');
 const saveClauseEvidenceUrls = document.getElementById('saveClauseEvidenceUrls');
 const clauseControlsTab = document.getElementById('clauseControlsTab');
-const clauseIsmsTab = document.getElementById('clauseIsmsTab');
-const clauseIsmsView = document.getElementById('clauseIsmsView');
+const clauseItemsTab = document.getElementById('clauseItemsTab');
 const clauseChangelogTab = document.getElementById('clauseChangelogTab');
-const clausePestleTab = document.getElementById('clausePestleTab');
-const clausePestleRows = document.getElementById('clausePestleRows');
-const openPestleFromClause = document.getElementById('openPestleFromClause');
+// The Related items tab: every card is the design system's related-item
+// card, as on a control's page.
+const clauseRisksCard = relatedCard({
+  id: 'clauseRisksCard',
+  title: 'Cross-referenced risks',
+  description: 'Risks linked to this clause.',
+  count: 0,
+  wide: true,
+});
+const openPestleFromClause = node(
+  'a',
+  { id: 'openPestleFromClause', class: 'btn btn-sm btn-outline-primary', href: '/pestle.html' },
+  'Open PESTLE(E)',
+);
+const clausePestleCard = relatedCard({
+  id: 'clausePestleCard',
+  title: 'PESTLE(E) relevance',
+  description: 'PESTLE(E) items linked to this clause for the selected framework.',
+  action: openPestleFromClause,
+  wide: true,
+});
+const clauseIsmsCard = relatedCard({
+  id: 'clauseIsmsCard',
+  title: 'ISMS references',
+  description:
+    'SWOT items, legal register items, objectives, documents, organisation roles, assets and meetings linked to this clause.',
+  action: node(
+    'a',
+    { class: 'btn btn-sm btn-outline-primary', 'data-nav-fw': '1', href: '/isms.html' },
+    'Open ISMS',
+  ),
+  empty: 'Loading ISMS references',
+  wide: true,
+});
+const clauseStoriesHost = node('div', { id: 'clauseStories' });
+const clauseStoriesCard = relatedCard({
+  id: 'clauseStoriesCard',
+  title: 'Stories',
+  description:
+    "Stories whose authors assigned them to this clause, on the story's Controls and clauses tab.",
+  body: clauseStoriesHost,
+  wide: false,
+});
+// A card shows once its records are loaded for a reader who may see them.
+for (const card of [clauseRisksCard, clausePestleCard, clauseStoriesCard]) card.hidden = true;
+clauseIsmsCard.hidden = !featureEnabled(me, 'isms');
+// Each card's content and count keep the names the rest of the page knows.
+for (const [card, body, count] of [
+  [clauseRisksCard, 'clauseRisksView', 'clauseRisksCount'],
+  [clauseIsmsCard, 'clauseIsmsView', ''],
+  [clausePestleCard, 'clausePestleView', ''],
+]) {
+  card.querySelector('.mosp-related-card-body').id = body;
+  if (count) card.querySelector('.mosp-related-card-count').id = count;
+}
+relatedCards(
+  [clauseStoriesCard, clauseRisksCard, clauseIsmsCard, clausePestleCard],
+  document.getElementById('clauseRelatedItems'),
+);
 const clauseChangelogEl = document.getElementById('clauseChangelog');
 const canViewIsms = !!(
   me?.is_admin ||
@@ -66,10 +125,20 @@ const canViewIsms = !!(
   me?.can_manage_risks
 );
 let ismsLoaded = false;
+let pestleLoaded = false;
+
+// Earlier addresses named a tab for each kind of related record; they open
+// Related items now.
+const TAB_NAMES = { isms: 'related', pestle: 'related', stories: 'related', items: 'related' };
+
+function openTab() {
+  const name = qs('tab', 'controls');
+  return TAB_NAMES[name] || name;
+}
 
 function setClauseTabQuery(tabName) {
   const p = new URLSearchParams(location.search);
-  if (!tabName || tabName === 'controls') p.delete('tab');
+  if (tabName === 'controls') p.delete('tab');
   else p.set('tab', tabName);
   history.replaceState({}, '', `${location.pathname}?${p.toString()}`);
 }
@@ -78,12 +147,10 @@ function activateClauseTab(tabName) {
   const tab =
     tabName === 'changelog'
       ? clauseChangelogTab
-      : tabName === 'isms'
-        ? clauseIsmsTab
-        : tabName === 'pestle'
-          ? clausePestleTab
-          : clauseControlsTab;
-  if (!tab || !window.bootstrap?.Tab) return;
+      : tabName === 'related'
+        ? clauseItemsTab
+        : clauseControlsTab;
+  if (!window.bootstrap?.Tab) return;
   window.bootstrap.Tab.getOrCreateInstance(tab).show();
 }
 
@@ -91,38 +158,36 @@ function activateClauseTab(tabName) {
 async function loadClauseRisks() {
   if (!featureEnabled(me, 'risk_cia')) return;
   if (!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks)) return;
-  const card = document.getElementById('clauseRisksCard');
   try {
     const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/risks`);
-    document.getElementById('clauseRisksCount').textContent = String(data.items.length);
-    const view = document.getElementById('clauseRisksView');
-    if (data.items.length) view.replaceChildren(linkedRisksTable(data.items, data.framework));
-    else view.textContent = 'No risks are linked to this clause.';
-    card.style.display = '';
+    updateRelatedCard(clauseRisksCard, {
+      count: data.items.length,
+      table: linkedRisksData(data.items, data.framework),
+      empty: 'No risks are linked to this clause.',
+    });
+    clauseRisksCard.hidden = false;
   } catch (e) {
-    card.style.display = 'none';
+    clauseRisksCard.hidden = true;
   }
 }
 
-async function loadClausePestle() {
-  if (!featureEnabled(me, 'pestle')) return;
-  if (!id) return;
-  clausePestleRows.innerHTML =
-    '<tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance</td></tr>';
+// PESTLE(E) readers see the items rated against the clause.
+async function loadClausePestle({ force = false } = {}) {
+  if (!id || !featureEnabled(me, 'pestle')) return;
+  if (!(me?.is_admin || me?.can_view_pestle || me?.can_manage_pestle)) return;
+  if (pestleLoaded && !force) return;
   try {
     const data = await apiGet(`/api/v1/clauses/${encodeURIComponent(id)}/pestle`);
-    const items = data.items;
-    if (openPestleFromClause)
-      openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
-    if (!items.length) {
-      clausePestleRows.innerHTML =
-        '<tr><td colspan="6" class="p-4 small-muted">No PESTLE(E) items are currently linked to this clause.</td></tr>';
-      return;
-    }
-    clausePestleRows.replaceChildren(...pestleItemRows(items, clause?.framework || framework));
+    pestleLoaded = true;
+    openPestleFromClause.href = withFramework('/pestle.html', clause?.framework || framework);
+    updateRelatedCard(clausePestleCard, {
+      table: pestleItemsData(data.items, clause?.framework || framework, 'Clause'),
+      empty: 'No PESTLE(E) items are currently linked to this clause.',
+    });
+    clausePestleCard.hidden = false;
   } catch (e) {
-    clausePestleRows.innerHTML =
-      '<tr><td colspan="6" class="p-4 text-danger">Failed to load PESTLE(E) relevance.</td></tr>';
+    pestleLoaded = false;
+    clausePestleCard.hidden = true;
   }
 }
 
@@ -137,68 +202,82 @@ async function loadClauseChangelog() {
 
 function _ismsEntityRows(data) {
   const groups = [
-    ['SWOT', data.swot, (x) => x.title, '/swot.html'],
-    ['Legal register', data.legal_items || [], (x) => x.title, '/legal-register.html'],
+    ['SWOT', data.swot, (x) => x.title, (x) => `/swot.html?id=${encodeURIComponent(x.id)}`],
+    [
+      'Legal register',
+      data.legal_items,
+      (x) => x.title,
+      (x) => `/legal-register.html?id=${encodeURIComponent(x.id)}`,
+    ],
     [
       'Objectives',
       data.objectives,
       (x) => x.goal || x.requirement || 'Objective',
-      '/isms.html?tab=objectives',
+      () => '/isms.html?tab=objectives',
     ],
-    ['Documents', data.documents, (x) => x.title || 'Document', '/isms.html?tab=documents'],
-    ['Organisation chart', data.org_nodes, (x) => x.name || 'Org node', '/isms.html?tab=org'],
-    ['Assets', data.assets, (x) => x.asset || 'Asset', '/isms.html?tab=assets'],
-    ['Meetings', data.meetings, (x) => x.title || 'Meeting', '/isms.html?tab=meetings'],
+    ['Documents', data.documents, (x) => x.title || 'Document', () => '/isms.html?tab=documents'],
+    ['Organisation chart', data.org_nodes, (x) => x.name || 'Org node', () => '/isms.html?tab=org'],
+    ['Assets', data.assets, (x) => x.asset || 'Asset', () => '/isms.html?tab=assets'],
+    ['Meetings', data.meetings, (x) => x.title || 'Meeting', () => '/isms.html?tab=meetings'],
   ];
   const rows = [];
-  for (const [label, items, titleFn, href] of groups) {
-    for (const item of items)
-      rows.push(
-        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(label === 'SWOT' || label === 'Legal register' ? `${href}?id=${encodeURIComponent(item.id)}` : href, clause?.framework || framework))}">${esc(titleFn(item))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at))}</td></tr>`,
-      );
+  for (const [label, items, titleFn, hrefFn] of groups) {
+    for (const item of items || []) {
+      rows.push([
+        label,
+        {
+          text: shorten(titleFn(item), 180),
+          href: withFramework(hrefFn(item), clause?.framework || framework),
+        },
+        fmtTs(item.updated_at),
+      ]);
+    }
   }
-  if (!rows.length)
-    return '<div class="small-muted">No ISMS entities are currently linked to this clause.</div>';
-  return `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th style="width:190px;">Type</th><th>Entity</th><th style="width:190px;">Updated</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  return {
+    table: {
+      columns: [{ label: 'Type', width: '190px' }, 'Entity', { label: 'Updated', width: '170px' }],
+      rows,
+    },
+    empty: 'No ISMS entities are currently linked to this clause.',
+  };
 }
 
 async function loadClauseIsms({ force = false } = {}) {
   if (!featureEnabled(me, 'isms')) return;
   if (!id) return;
   if (!canViewIsms) {
-    clauseIsmsView.innerHTML =
-      '<span class="small-muted">You do not have permission to view ISMS references.</span>';
+    updateRelatedCard(clauseIsmsCard, {
+      empty: 'You do not have permission to view ISMS references.',
+    });
     return;
   }
   if (ismsLoaded && !force) return;
-  clauseIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references</span>';
+  updateRelatedCard(clauseIsmsCard, { empty: 'Loading ISMS references' });
   try {
     const data = await apiGet(
       `/api/v1/clauses/${encodeURIComponent(id)}/isms?framework=${encodeURIComponent(clause?.framework || framework)}`,
     );
     ismsLoaded = true;
-    clauseIsmsView.innerHTML = _ismsEntityRows(data);
+    updateRelatedCard(clauseIsmsCard, _ismsEntityRows(data));
   } catch (e) {
     ismsLoaded = false;
-    clauseIsmsView.innerHTML = '<span class="text-danger">Failed to load ISMS references.</span>';
+    updateRelatedCard(clauseIsmsCard, {
+      body: node('span', { class: 'text-danger' }, 'Failed to load ISMS references.'),
+    });
   }
 }
 
 function wireClauseTabs() {
-  clauseControlsTab?.addEventListener('shown.bs.tab', () => setClauseTabQuery('controls'));
-  clausePestleTab?.addEventListener('shown.bs.tab', () => {
-    setClauseTabQuery('pestle');
-    loadClausePestle();
+  clauseControlsTab.addEventListener('shown.bs.tab', () => setClauseTabQuery('controls'));
+  clauseItemsTab.addEventListener('shown.bs.tab', async () => {
+    setClauseTabQuery('related');
+    await Promise.all([loadClausePestle(), loadClauseIsms()]);
   });
-  clauseIsmsTab?.addEventListener('shown.bs.tab', async () => {
-    setClauseTabQuery('isms');
-    await loadClauseIsms();
-  });
-  clauseChangelogTab?.addEventListener('shown.bs.tab', () => {
+  clauseChangelogTab.addEventListener('shown.bs.tab', () => {
     setClauseTabQuery('changelog');
     loadClauseChangelog();
   });
-  activateClauseTab(qs('tab', 'controls'));
+  activateClauseTab(openTab());
 }
 
 wireClauseTabs();
@@ -335,8 +414,7 @@ function renderClauseHeader() {
     adminControlsCard.style.display = me?.is_admin && linkedControlsEditMode ? '' : 'none';
   }
   renderEvidenceMapping();
-  if (openPestleFromClause)
-    openPestleFromClause.href = withFramework('/pestle.html', clause.framework);
+  openPestleFromClause.href = withFramework('/pestle.html', clause.framework);
 }
 
 function renderControls(rows) {
@@ -419,7 +497,7 @@ async function reloadLinkedControls() {
   renderClauseHeader();
   renderControls(linkedControls);
   renderAdminControls();
-  if (qs('tab') === 'pestle') await loadClausePestle();
+  if (openTab() === 'related') await loadClausePestle({ force: true });
 }
 
 async function load() {
@@ -539,7 +617,7 @@ saveClauseControls?.addEventListener('click', async () => {
     }
     await reloadLinkedControls();
     if (qs('tab') === 'changelog') await loadClauseChangelog();
-    if (qs('tab') === 'isms') await loadClauseIsms({ force: true });
+    if (openTab() === 'related') await loadClauseIsms({ force: true });
   } catch (e) {
     toast(status, `Failed to save linked controls: ${errorText(e)}`, 'danger');
   } finally {
@@ -549,5 +627,12 @@ saveClauseControls?.addEventListener('click', async () => {
 
 load();
 
-// The stories whose authors assigned them to this clause.
-mountAssignedStories({ me, kind: 'clause', id });
+// The stories whose authors assigned them to this clause, among its related items.
+const stories = mountAssignedStories({
+  me,
+  kind: 'clause',
+  id,
+  host: clauseStoriesHost,
+  trigger: clauseItemsTab,
+});
+clauseStoriesCard.hidden = !stories;

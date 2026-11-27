@@ -207,7 +207,7 @@ test('clauses without mappings or controls show empty states to readers', async 
   for (const id of ['adminClauseUrlCard', 'editLinkedControls', 'editClauseEvidence'])
     assert.equal(ui.el(id).style.display, 'none', id);
   assert.ok(!ui.calls.some((c) => c.url.startsWith('/api/v1/controls?')));
-  tab(ui, 'clauseIsmsTab');
+  tab(ui, 'clauseItemsTab');
   await settle(() =>
     /do not have permission to view ISMS/.test(ui.el('clauseIsmsView').textContent),
   );
@@ -338,24 +338,48 @@ test('intermediate parent clauses cannot have controls linked directly', async (
   assert.equal(ui.el('clauseControls').options.length, 0);
 });
 
-test('PESTLE and ISMS tabs load linked records on demand', async (t) => {
+test('the Related items tab loads PESTLE(E) items and ISMS references on demand', async (t) => {
   const { ui } = await clausePage(t);
-  tab(ui, 'clausePestleTab');
-  await settle(() => ui.el('clausePestleRows').querySelectorAll('tr').length === 2);
-  assert.match(ui.window.location.search, /tab=pestle/);
-  assert.equal(ui.el('clausePestleRows').querySelector('script'), null);
-  const first = ui.el('clausePestleRows').querySelector('tr');
+  // The records related to the clause share one tab, between its linked
+  // controls and its changelog, a card for each kind.
+  assert.deepEqual(
+    [...ui.el('clausePageTabs').querySelectorAll('button')].map((b) => b.textContent),
+    ['Linked controls', 'Related items', 'Changelog'],
+  );
+  assert.deepEqual(
+    [...ui.el('clauseRelatedItems').querySelectorAll('.mosp-related-card')].map((card) => [
+      card.id,
+      card.querySelector('.mosp-related-card-title').textContent,
+    ]),
+    [
+      ['clauseStoriesCard', 'Stories'],
+      ['clauseRisksCard', 'Cross-referenced risks'],
+      ['clauseIsmsCard', 'ISMS references'],
+      ['clausePestleCard', 'PESTLE(E) relevance'],
+    ],
+  );
+  assert.equal(ui.el('clausePestleCard').hidden, true);
+  assert.ok(!ui.calls.some((c) => /\/(pestle|isms)/.test(c.url)), 'loads when shown');
+  tab(ui, 'clauseItemsTab');
+  await settle(() => ui.el('clausePestleView').querySelectorAll('tbody tr').length === 2);
+  assert.equal(ui.el('clausePestleCard').hidden, false);
+  assert.match(ui.window.location.search, /tab=related/);
+  assert.equal(ui.el('clausePestleView').querySelector('script'), null);
+  assert.deepEqual(
+    [...ui.el('clausePestleView').querySelectorAll('th')].map((th) => th.textContent),
+    ['Type', 'Lens', 'Item', 'Clause relevance', 'Overall relevance', 'Rationale'],
+  );
+  const first = ui.el('clausePestleView').querySelector('tbody tr');
   assert.match(first.innerHTML, /text-bg-warning">2 Medium[\s\S]*text-bg-danger">1 High/);
   assert.match(
     first.querySelector('a').getAttribute('href'),
     /pestle_item\.html\?id=p1&tab=details&framework=A/,
   );
   assert.equal(
-    ui.el('clausePestleRows').querySelectorAll('tr')[1].cells[5].textContent.trim(),
+    ui.el('clausePestleView').querySelectorAll('tbody tr')[1].cells[5].textContent.trim(),
     '-',
   );
 
-  tab(ui, 'clauseIsmsTab');
   await settle(() => ui.el('clauseIsmsView').querySelector('table'));
   const rows = [...ui.el('clauseIsmsView').querySelectorAll('tbody tr')];
   assert.deepEqual(
@@ -377,21 +401,31 @@ test('PESTLE and ISMS tabs load linked records on demand', async (t) => {
   assert.doesNotMatch(ui.window.location.search, /tab=/);
 });
 
-test('empty and failed PESTLE/ISMS lookups are explained', async (t) => {
-  const empty = await clausePage(t, { pestle: [], query: '&id=k1&tab=pestle' });
-  assert.match(
-    empty.ui.el('clausePestleRows').textContent,
-    /No PESTLE\(E\) items are currently linked/,
+test('empty and failed PESTLE(E) and ISMS lookups are explained', async (t) => {
+  const empty = await clausePage(t, { pestle: [] });
+  tab(empty.ui, 'clauseItemsTab');
+  await settle(() => empty.ui.el('clausePestleCard').hidden === false);
+  assert.equal(
+    empty.ui.el('clausePestleView').textContent,
+    'No PESTLE(E) items are currently linked to this clause.',
   );
   const failed = await clausePage(t, { fail: { pestle: true, isms: true } });
-  tab(failed.ui, 'clausePestleTab');
-  await settle(() =>
-    /Failed to load PESTLE\(E\) relevance/.test(failed.ui.el('clausePestleRows').textContent),
-  );
-  tab(failed.ui, 'clauseIsmsTab');
+  tab(failed.ui, 'clauseItemsTab');
   await settle(() =>
     /Failed to load ISMS references/.test(failed.ui.el('clauseIsmsView').textContent),
   );
+  assert.equal(failed.ui.el('clauseIsmsView').querySelector('.text-danger') !== null, true);
+  // A reader who cannot have the PESTLE(E) items is not shown an empty card.
+  assert.equal(failed.ui.el('clausePestleCard').hidden, true);
+  // The next showing of the tab asks for both again.
+  tab(failed.ui, 'clauseItemsTab');
+  await settle(() => failed.ui.calls.filter((c) => /\/(pestle|isms)/.test(c.url)).length === 4);
+  // Without permission to read PESTLE(E), nothing is asked for.
+  const reader = await clausePage(t, { me: { can_view_controls: true, can_view_isms: true } });
+  tab(reader.ui, 'clauseItemsTab');
+  await settle(() => reader.ui.el('clauseIsmsView').querySelector('table'));
+  assert.ok(!reader.ui.calls.some((c) => c.url.includes('/pestle')));
+  assert.equal(reader.ui.el('clausePestleCard').hidden, true);
 });
 
 test('clause load failures and a missing id are reported', async (t) => {
@@ -458,31 +492,41 @@ test("a clause's owners show in its header, and administrators change them", asy
 const ismsCalls = (ui) =>
   ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses/k1/isms')).length;
 
-test('a deep link to the ISMS tab is shown through the tab component', async (t) => {
-  const shown = [];
-  await clausePage(t, {
-    query: '&id=k1&tab=isms',
-    setup(window) {
-      window.bootstrap = {
-        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
-      };
-    },
-  });
-  assert.deepEqual(shown, ['clauseIsmsTab']);
+test('an address naming Related items, or a tab a kind once had, opens the tab', async (t) => {
+  for (const [name, target] of [
+    ['related', 'clauseItemsTab'],
+    ['isms', 'clauseItemsTab'],
+    ['pestle', 'clauseItemsTab'],
+    ['stories', 'clauseItemsTab'],
+    ['items', 'clauseItemsTab'],
+    ['changelog', 'clauseChangelogTab'],
+    ['controls', 'clauseControlsTab'],
+    ['unknown', 'clauseControlsTab'],
+  ]) {
+    const shown = [];
+    await clausePage(t, {
+      query: `&id=k1&tab=${name}`,
+      setup(window) {
+        window.bootstrap = {
+          Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+        };
+      },
+    });
+    assert.deepEqual(shown, [target], name);
+  }
 });
 
-test('PESTLE and ISMS opened while the clause loads use the framework in the address', async (t) => {
+test('related items opened while the clause loads use the framework in the address', async (t) => {
   let release;
   const gate = new Promise((resolve) => (release = resolve));
   const { ui } = await clausePage(t, { gate, clause: clause({ framework: 'B' }) });
-  tab(ui, 'clausePestleTab');
-  await settle(() => ui.el('clausePestleRows').querySelectorAll('tr').length === 2);
+  tab(ui, 'clauseItemsTab');
+  await settle(() => ui.el('clausePestleView').querySelectorAll('tbody tr').length === 2);
   assert.equal(
-    ui.el('clausePestleRows').querySelector('a').getAttribute('href'),
+    ui.el('clausePestleView').querySelector('a').getAttribute('href'),
     '/pestle_item.html?id=p1&tab=details&framework=A',
   );
   assert.equal(ui.el('openPestleFromClause').getAttribute('href'), '/pestle.html?framework=A');
-  tab(ui, 'clauseIsmsTab');
   await settle(() => ui.el('clauseIsmsView').querySelector('table'));
   const isms = new URL(
     ui.calls.find((c) => c.url.startsWith('/api/v1/clauses/k1/isms')).url,
@@ -499,7 +543,7 @@ test('PESTLE and ISMS opened while the clause loads use the framework in the add
   assert.equal(ui.el('clausesBreadcrumb').getAttribute('href'), '/clauses.html?framework=B');
 });
 
-test('switched-off PESTLE and ISMS load nothing, even after a save on their tab', async (t) => {
+test('switched-off PESTLE(E) and ISMS load nothing, even after a save on the tab', async (t) => {
   const me = { is_admin: true, features: { enabled: { pestle: false, isms: false } } };
   const pestle = await clausePage(t, { me, query: '&id=k1&tab=pestle' });
   assert.equal(
@@ -515,9 +559,11 @@ test('switched-off PESTLE and ISMS load nothing, even after a save on their tab'
   assert.equal(state.patched.length, 1);
   assert.equal(ismsCalls(ui), 0);
   assert.equal(ui.el('clauseIsmsView').querySelector('table'), null);
+  assert.equal(ui.el('clauseIsmsCard').hidden, true);
+  assert.equal(ui.el('clausePestleCard').hidden, true);
 });
 
-test('saving linked controls on the ISMS tab reloads the ISMS references', async (t) => {
+test('saving linked controls on the Related items tab reloads what it shows', async (t) => {
   const { ui } = await clausePage(t, { query: '&id=k1&tab=isms' });
   assert.equal(ismsCalls(ui), 0);
   ui.el('editLinkedControls').click();
@@ -525,9 +571,12 @@ test('saving linked controls on the ISMS tab reloads the ISMS references', async
   ui.el('saveClauseControls').click();
   await settle(() => ui.el('clauseIsmsView').querySelector('table'));
   assert.equal(ismsCalls(ui), 1);
+  await settle(() => ui.el('clausePestleView').querySelector('table'));
+  // Once with the linked controls the page loaded, and again after the save.
+  assert.equal(ui.calls.filter((c) => c.url.includes('/pestle')).length, 2);
 });
 
-test('the ISMS tab loads once, names unnamed records by kind and says when nothing is linked', async (t) => {
+test('the ISMS references load once, names unnamed records by kind and says when nothing is linked', async (t) => {
   const { ui } = await clausePage(t, {
     isms: {
       swot: [],
@@ -542,7 +591,7 @@ test('the ISMS tab loads once, names unnamed records by kind and says when nothi
       meetings: [{ id: 'mt1', title: '' }],
     },
   });
-  tab(ui, 'clauseIsmsTab');
+  tab(ui, 'clauseItemsTab');
   await settle(() => ui.el('clauseIsmsView').querySelector('table'));
   assert.deepEqual(
     [...ui.el('clauseIsmsView').querySelectorAll('tbody tr')].map((r) => [
@@ -558,7 +607,7 @@ test('the ISMS tab loads once, names unnamed records by kind and says when nothi
     ],
   );
   // Opening the tab again keeps what it loaded.
-  tab(ui, 'clauseIsmsTab');
+  tab(ui, 'clauseItemsTab');
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(ismsCalls(ui), 1);
 
@@ -574,7 +623,7 @@ test('the ISMS tab loads once, names unnamed records by kind and says when nothi
       meetings: [],
     },
   });
-  tab(empty.ui, 'clauseIsmsTab');
+  tab(empty.ui, 'clauseItemsTab');
   await settle(() => !/Loading/.test(empty.ui.el('clauseIsmsView').textContent));
   assert.equal(
     empty.ui.el('clauseIsmsView').textContent,
@@ -589,8 +638,8 @@ test('a clause page without an id opens its tabs without requests', async (t) =>
     },
   });
   await settle(() => ui.el('status').textContent === 'Missing clause id.');
-  const before = [ui.el('clausePestleRows').textContent, ui.el('clauseIsmsView').textContent];
-  for (const id of ['clausePestleTab', 'clauseIsmsTab', 'clauseChangelogTab'])
+  const before = [ui.el('clausePestleView').textContent, ui.el('clauseIsmsView').textContent];
+  for (const id of ['clauseItemsTab', 'clauseItemsTab', 'clauseChangelogTab'])
     ui.el(id).dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(
@@ -598,7 +647,7 @@ test('a clause page without an id opens its tabs without requests', async (t) =>
     ['/api/v1/frameworks'],
   );
   assert.deepEqual(
-    [ui.el('clausePestleRows').textContent, ui.el('clauseIsmsView').textContent],
+    [ui.el('clausePestleView').textContent, ui.el('clauseIsmsView').textContent],
     before,
   );
 });
@@ -662,7 +711,8 @@ test('risk readers see the risks linked to the clause, as text', async (t) => {
     ],
   });
   await settle(() => ui.el('clauseRisksView').querySelector('tbody tr'));
-  assert.equal(ui.el('clauseRisksCard').style.display, '');
+  assert.equal(ui.el('clauseRisksCard').hidden, false);
+  assert.equal(ui.el('clauseRisksCard').closest('#clauseItemsPane') !== null, true);
   assert.equal(ui.el('clauseRisksCount').textContent, '1');
   const row = ui.el('clauseRisksView').querySelector('tbody tr');
   assert.equal(row.querySelector('b'), null);
@@ -673,13 +723,13 @@ test('risk readers see the risks linked to the clause, as text', async (t) => {
 
 test('a clause without linked risks says so, and the card stays hidden when risks cannot be read', async (t) => {
   const none = await clausePage(t);
-  await settle(() => none.ui.el('clauseRisksCard').style.display === '');
+  await settle(() => none.ui.el('clauseRisksCard').hidden === false);
   assert.equal(none.ui.el('clauseRisksView').textContent, 'No risks are linked to this clause.');
   assert.equal(none.ui.el('clauseRisksCount').textContent, '0');
 
   const failed = await clausePage(t, { fail: { risks: true } });
   await settle(() => failed.ui.idle());
-  assert.equal(failed.ui.el('clauseRisksCard').style.display, 'none');
+  assert.equal(failed.ui.el('clauseRisksCard').hidden, true);
   assert.equal(failed.ui.el('status').textContent, '');
 
   // Without the feature, or without permission to read risks, nothing is requested.
@@ -689,7 +739,7 @@ test('a clause without linked risks says so, and the card stays hidden when risk
   ]) {
     const hidden = await clausePage(t, { me });
     await settle(() => hidden.ui.idle());
-    assert.equal(hidden.ui.el('clauseRisksCard').style.display, 'none');
+    assert.equal(hidden.ui.el('clauseRisksCard').hidden, true);
     assert.equal(
       hidden.ui.calls.some((c) => c.url.includes('/risks')),
       false,
@@ -697,29 +747,31 @@ test('a clause without linked risks says so, and the card stays hidden when risk
   }
 });
 
-test('story readers get a Stories tab listing the stories assigned to the clause', async (t) => {
+test('story readers see the stories assigned to the clause among its related items', async (t) => {
   const { ui } = await clausePage(t, {
     stories: [{ id: 's1', title: 'Audit <i>gap</i>', status: 'closed', updated_at: '2026-05-01' }],
   });
-  const tab = ui.document.getElementById('storiesRelatedTab');
-  assert.equal(tab.textContent, 'Stories');
+  // Stories are related items: there is no tab of their own.
+  assert.equal(ui.el('storiesRelatedTab'), null);
+  const card = ui.el('clauseStoriesCard');
+  assert.equal(card.hidden, false);
+  assert.match(card.textContent, /assigned them to this clause/);
   assert.ok(!ui.calls.some((c) => c.url.includes('/stories/')), 'loads when shown');
-  tab.dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  const pane = ui.document.getElementById('storiesRelatedPane');
-  await settle(() => pane.querySelector('.list-group'));
-  assert.equal(tab.textContent, 'Stories (1)');
-  assert.match(pane.textContent, /assigned them to this clause/);
+  tab(ui, 'clauseItemsTab');
+  const list = ui.el('clauseStories');
+  await settle(() => list.querySelector('.list-group'));
+  assert.equal(ui.el('clauseItemsTab').textContent, 'Related items');
   assert.equal(
-    pane.querySelector('.list-group a').getAttribute('href'),
+    list.querySelector('.list-group a').getAttribute('href'),
     '/story.html?id=s1&framework=A',
   );
-  assert.equal(pane.querySelector('.list-group a').textContent, 'Audit <i>gap</i>');
-  assert.equal(pane.querySelector('i'), null);
+  assert.equal(list.querySelector('.list-group a').textContent, 'Audit <i>gap</i>');
+  assert.equal(list.querySelector('i'), null);
 });
 
-test('a clause page shows no Stories tab without story access or without a clause', async (t) => {
+test('a clause page shows no Stories card without story access or without a clause', async (t) => {
   const reader = await clausePage(t, { me: { can_view_isms: true } });
-  assert.equal(reader.ui.document.getElementById('storiesRelatedTab'), null);
+  assert.equal(reader.ui.el('clauseStoriesCard').hidden, true);
   const blank = await clausePage(t, { query: '' });
-  assert.equal(blank.ui.document.getElementById('storiesRelatedTab'), null);
+  assert.equal(blank.ui.el('clauseStoriesCard').hidden, true);
 });
