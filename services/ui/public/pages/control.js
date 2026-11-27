@@ -593,7 +593,7 @@ async function loadControlPestle() {
           {},
           node(
             'td',
-            { colspan: '6', class: 'p-4 small-muted' },
+            { colspan: '6', class: 'small-muted' },
             'No PESTLE(E) items are rated against this control.',
           ),
         ),

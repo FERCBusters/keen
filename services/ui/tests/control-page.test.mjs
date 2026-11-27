@@ -582,6 +582,12 @@ test('each tab holds its own cards: related items, governance and the changelog'
       'PESTLE(E) relevance',
     ],
   );
+  // Every table on the tab is framed alike: inside a padded card body, in
+  // the small text the tables built by the page use.
+  for (const id of ['risksView', 'controlIsmsView', 'controlPestleRows']) {
+    assert.ok(ui.el(id).closest('.small-muted'), id);
+    assert.ok(!ui.el(id).closest('.card-body').classList.contains('p-0'), id);
+  }
   // The short cards share a row; each card that holds a table has its own.
   assert.deepEqual(
     [...cards.children].map((card) => card.classList.contains('related-card-wide')),
