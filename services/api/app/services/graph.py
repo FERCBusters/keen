@@ -174,6 +174,7 @@ def graph_control_source(
     scope: EventFilters | None = None,
     breakdown: str | None = None,
     within_ms: int | None = None,
+    max_links: int | None = None,
     db: Session,
 ):
     """Graph for visualisation: sources × controls.
@@ -182,6 +183,10 @@ def graph_control_source(
     count of mappings would inflate totals. With a breakdown, each source node
     is split by that event field. ``within_ms`` is how long each statement of
     the count may run; without it only a regular expression search is timed.
+
+    ``max_links`` has the database return no more than that many source and
+    control pairs, those with the most events, and the answer then says
+    whether it was ``truncated``. A control's total is of the pairs returned.
     """
 
     user = context.actor
@@ -196,6 +201,7 @@ def graph_control_source(
         "scope": scope.cache_parts(),
         "breakdown": breakdown,
         "user": user_cache_scope(user),
+        "max_links": max_links,
     }
 
     def _load():
@@ -207,9 +213,7 @@ def graph_control_source(
         width = len(group)
         scan_budget(db, scope, within_ms=within_ms)
 
-        edge_rows = run_scan(
-            db,
-            scope,
+        edges = (
             db.query(
                 *group,
                 ControlItem.id,
@@ -222,8 +226,15 @@ def graph_control_source(
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(*group, ControlItem.id, ControlItem.ref, ControlItem.title)
-            .all,
         )
+        if max_links is not None:
+            edges = edges.order_by(
+                func.count(func.distinct(Event.id)).desc(), ControlItem.id
+            ).limit(max_links + 1)
+        edge_rows = run_scan(db, scope, edges.all)
+        cut = max_links is not None and len(edge_rows) > max_links
+        if cut:
+            edge_rows = edge_rows[:max_links]
 
         src_totals_rows = run_scan(
             db,
@@ -299,11 +310,14 @@ def graph_control_source(
                     control
                 )
 
-        return {
+        answer: dict[str, Any] = {
             "nodes": list(nodes.values()),
             "links": links,
             "graph_kind": "source_control_events",
         }
+        if max_links is not None:
+            answer["truncated"] = cut
+        return answer
 
     return cached_json("graph:control_source", cache_parts, _load)
 

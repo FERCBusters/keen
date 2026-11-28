@@ -766,7 +766,7 @@ def test_a_request_reads_a_bounded_number_of_relationships_in_all(world, monkeyp
     monkeypatch.setattr(record_map, "MAX_REQUEST_ROWS", 3)
     data = read(world.admin, "&evidence=true")
     assert data["truncated"] is True
-    assert 0 < len(data["links"]) <= 3 < len(whole["links"])
+    assert len(data["links"]) <= 3 < len(whole["links"])
     # Evidence shares it: with the allowance spent, none is added.
     assert [link for link in data["links"] if link["relation"] == "evidence"] == []
     assert read(world.admin)["truncated"] is True
@@ -796,6 +796,45 @@ def test_a_request_reads_a_bounded_number_of_relationships_in_all(world, monkeyp
     graph, links = evidence(0)
     assert (links, graph.rows_left, graph.truncated) == ([], 0, True)
 
+    # A control's own evidence is chosen before the allowance is applied: the
+    # heavier evidence of the other controls its events map to does not take
+    # its place.
+    def of(control, left):
+        graph = record_map._Graph(world.db, context, "A")
+        graph.load_records()
+        graph.rows_left = left
+        graph.load_evidence(control=str(control.id))
+        return graph, [
+            (link["source"], link["target"], link["value"])
+            for link in graph.links.values()
+        ]
+
+    graph, links = of(world.change, 1)
+    assert links == [("source:jenkins", f"control:{world.change.id}", 1)]
+    assert (graph.rows_left, graph.truncated) == (0, False)
+
+    # The database returns no more evidence than one table's limit, the
+    # heaviest first, and says when there was more.
+    monkeypatch.setattr(record_map, "MAX_LINK_ROWS", 1)
+    graph, links = evidence(10)
+    assert links == [("source:jenkins", 2)]
+    assert (graph.rows_left, graph.truncated) == (9, True)
+    monkeypatch.setattr(record_map, "MAX_LINK_ROWS", 20000)
+    bounded = graph_control_source(
+        context=context, framework="A", max_links=1, db=world.db
+    )
+    assert [(link["source"], link["value"]) for link in bounded["links"]] == [
+        ("source:jenkins", 2)
+    ]
+    assert bounded["truncated"] is True
+    fitting = graph_control_source(
+        context=context, framework="A", max_links=3, db=world.db
+    )
+    assert (len(fitting["links"]), fitting["truncated"]) == (3, False)
+    # The Visualisations page's own answer is as it was.
+    unbounded = graph_control_source(context=context, framework="A", db=world.db)
+    assert len(unbounded["links"]) == 3 and "truncated" not in unbounded
+
     # The count behind the evidence is given a fixed time by the database; the
     # Visualisations page's own count is timed as it was, by its filters.
     def statements(call):
@@ -820,3 +859,81 @@ def test_a_request_reads_a_bounded_number_of_relationships_in_all(world, monkeyp
         )
         == []
     )
+
+
+def test_a_reader_spends_the_allowance_only_on_what_they_can_see(world, monkeypatch):
+    from app.services import record_map
+    from mosp.services.context import ChangeContext
+    from sqlalchemy import event as sql_event
+
+    def read_all(user, left=None):
+        found = []
+
+        def capture(conn, cursor, statement, parameters, context, executemany):
+            found.append(statement)
+
+        graph = record_map._Graph(world.db, ChangeContext(actor=user), "A")
+        if left is not None:
+            graph.rows_left = left
+        sql_event.listen(world.db.get_bind(), "before_cursor_execute", capture)
+        try:
+            graph.load_records()
+            graph.load_links()
+        finally:
+            sql_event.remove(world.db.get_bind(), "before_cursor_execute", capture)
+        return graph, "\n".join(found)
+
+    # Only the columns a node shows are read: no document's body, no minutes.
+    admin = world.keen.user(role="admin")
+    everything, statements = read_all(admin)
+    for column in ("content_html", "agenda_minutes_notes", "story_items.note"):
+        assert column not in statements, column
+    spent_by_admin = record_map.MAX_REQUEST_ROWS - everything.rows_left
+
+    # A reader of the catalogue alone: the tables that join kinds they do not
+    # see are not read, and rows naming such kinds are not asked for.
+    reader = world.keen.user()
+    graph, statements = read_all(reader)
+    assert graph.allowed == {"control", "clause", "risk", "meeting", "audit"}
+    for table in (
+        "isms_swot_links",
+        "isms_legal_item_links",
+        "story_items",
+        "story_control_links",
+        "pestle_control_relevance",
+        "pestle_clause_relevance",
+        "affected_links",
+        "isms_person_assets",
+        "bookstack_section_evidence",
+    ):
+        assert f"FROM {table}" not in statements, table
+    assert "FROM control_clause_links" in statements
+    spent = record_map.MAX_REQUEST_ROWS - graph.rows_left
+    assert 0 < spent < spent_by_admin
+    assert graph.truncated is False
+    # So an allowance no larger than what they can see still shows them all of
+    # it; one row fewer and the answer says it is partial.
+    exact, _ = read_all(reader, left=spent)
+    assert (exact.truncated, sorted(exact.links)) == (False, sorted(graph.links))
+    short, _ = read_all(reader, left=spent - 1)
+    assert short.truncated is True
+
+    # The tables read whole are read last, so they cannot leave the catalogue
+    # and risk relationships short.
+    _, statements = read_all(admin)
+    order = [
+        statements.index(f"FROM {table}")
+        for table in (
+            "control_clause_links",
+            "risk_control_links",
+            "story_items",
+            "pestle_control_relevance",
+            "affected_links",
+        )
+    ]
+    assert order == sorted(order)
+    # Relationships between the catalogue of another framework are not read.
+    other = record_map._Graph(world.db, ChangeContext(actor=admin), "B")
+    other.load_records()
+    other.load_links()
+    assert other.rows_left > everything.rows_left

@@ -268,7 +268,12 @@ def add_link(db, model, owner: dict, kind: str, target_id) -> None:
         return
     # The far end's own saves count its relationships under its row lock, so
     # this count waits for one in progress and holds until this change is kept.
-    db.query(mirror.record).filter_by(id=target_id).with_for_update().first()
+    locked = (
+        db.query(mirror.record.id).filter_by(id=target_id).with_for_update().first()
+    )
+    if locked is None:
+        # Removed since it was chosen.
+        raise DomainError(404, f"{mirror.noun.capitalize()} not found")
     held = db.query(mirror.model).filter_by(**{mirror.column: target_id}).count()
     if held >= mirror.limit:
         raise DomainError(

@@ -1206,9 +1206,11 @@ def test_a_register_items_limit_holds_while_the_item_is_being_saved(
     from concurrent.futures import ThreadPoolExecutor
     from dataclasses import replace
 
+    import pytest
     from app.db.models import IsmsLegalItem, IsmsLegalItemLink, IsmsSwotLink
     from app.services.isms import related_records
     from mosp.services.errors import DomainError
+    from sqlalchemy import text
     from sqlalchemy.orm import Session
 
     from tests.db_helpers import schema_engine
@@ -1252,14 +1254,44 @@ def test_a_register_items_limit_holds_while_the_item_is_being_saved(
             )
             saving.flush()
             waiting = pool.submit(relate)
-            time.sleep(0.5)
-            assert not waiting.done(), "the SWOT side counted without waiting"
-            saving.commit()
+            try:
+                # Wait until the other connection is seen waiting for the row, so
+                # the test cannot pass because it merely started late.
+                with Session(workers) as watching:
+                    blocked = text(
+                        "SELECT query FROM pg_stat_activity "
+                        "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+                    )
+                    deadline = time.monotonic() + 10
+                    queries: list[str] = []
+                    while not queries and time.monotonic() < deadline:
+                        queries = list(watching.execute(blocked).scalars())
+                        watching.rollback()
+                        time.sleep(0.02)
+                # What it waits on is the register item's own row, before counting.
+                assert len(queries) == 1 and "FROM isms_legal_items" in queries[0]
+                assert "FOR UPDATE" in queries[0]
+                assert not waiting.done()
+                saving.commit()
+            finally:
+                # Whatever was found, let the other connection go.
+                saving.rollback()
             assert waiting.result(timeout=10) == (
                 "A legal register item supports up to 1 relationships"
             )
         with Session(workers) as db:
             assert db.query(IsmsLegalItemLink).filter_by(item_id=law_id).count() == 1
+
+        # A register item removed since it was chosen is said to be gone.
+        with Session(workers, autoflush=False) as db:
+            with pytest.raises(DomainError) as gone:
+                related_records.add_link(
+                    db, IsmsSwotLink, {"swot_id": swot_id}, "legal_item", uuid.uuid4()
+                )
+            assert (gone.value.status_code, gone.value.detail) == (
+                404,
+                "Legal register item not found",
+            )
     finally:
         with Session(workers) as db:
             db.query(IsmsLegalItemLink).filter_by(item_id=law_id).delete()

@@ -245,12 +245,19 @@ class _Graph:
 
     def load_records(self) -> None:
         db, fw = self.db, self.framework
+        # Only the columns a node shows are read, never a record's body.
         for row in self._rows(
-            "control", db.query(ControlItem).filter_by(framework_slug=fw)
+            "control",
+            db.query(ControlItem.id, ControlItem.ref, ControlItem.title).filter(
+                ControlItem.framework_slug == fw
+            ),
         ):
             self.node("control", row.id, row.ref, row.title)
         for row in self._rows(
-            "clause", db.query(FrameworkClause).filter_by(framework_slug=fw)
+            "clause",
+            db.query(
+                FrameworkClause.id, FrameworkClause.ref, FrameworkClause.title
+            ).filter(FrameworkClause.framework_slug == fw),
         ):
             self.node("clause", row.id, row.ref, row.title)
         risks = db.query(Risk.id, Risk.threat_summary, RiskAsset.name).outerjoin(
@@ -261,40 +268,65 @@ class _Graph:
         for risk_id, threat, asset in self._rows("risk", risks):
             self.node("risk", risk_id, threat or asset, asset)
         for row in self._rows(
-            "pestle_item", db.query(PestleItem).filter_by(framework_slug=fw)
+            "pestle_item",
+            db.query(
+                PestleItem.id, PestleItem.item, PestleItem.type, PestleItem.lens
+            ).filter(PestleItem.framework_slug == fw),
         ):
             self.node("pestle_item", row.id, row.item, f"{row.type} · {row.lens}")
-        for row in self._rows("document", db.query(IsmsDocument)):
+        for row in self._rows(
+            "document",
+            db.query(IsmsDocument.id, IsmsDocument.title, IsmsDocument.document_type),
+        ):
             self.node("document", row.id, row.title, row.document_type)
-        for row in self._rows("objective", db.query(IsmsObjective)):
+        for row in self._rows(
+            "objective",
+            db.query(IsmsObjective.id, IsmsObjective.goal, IsmsObjective.requirement),
+        ):
             self.node("objective", row.id, row.goal or row.requirement)
-        for row in self._rows("asset", db.query(RiskAsset)):
+        for row in self._rows("asset", db.query(RiskAsset.id, RiskAsset.name)):
             self.node("asset", row.id, row.name)
-        for row in self._rows("person", db.query(IsmsPerson)):
+        for row in self._rows(
+            "person", db.query(IsmsPerson.id, IsmsPerson.name, IsmsPerson.position)
+        ):
             self.node("person", row.id, row.name, row.position)
-        for row in self._rows("vendor", db.query(IsmsVendor)):
+        for row in self._rows("vendor", db.query(IsmsVendor.id, IsmsVendor.name)):
             self.node("vendor", row.id, row.name)
-        for row in self._rows("swot", db.query(IsmsSwot)):
+        for row in self._rows(
+            "swot", db.query(IsmsSwot.id, IsmsSwot.title, IsmsSwot.kind)
+        ):
             self.node("swot", row.id, row.title, row.kind)
-        for row in self._rows("legal_item", db.query(IsmsLegalItem)):
+        for row in self._rows(
+            "legal_item",
+            db.query(IsmsLegalItem.id, IsmsLegalItem.title, IsmsLegalItem.jurisdiction),
+        ):
             self.node("legal_item", row.id, row.title, row.jurisdiction)
         for row in self._rows(
             "effectiveness_measure",
-            db.query(IsmsEffectivenessMeasure).filter_by(framework_slug=fw),
+            db.query(
+                IsmsEffectivenessMeasure.id,
+                IsmsEffectivenessMeasure.summary,
+                IsmsEffectivenessMeasure.metric_key,
+            ).filter(IsmsEffectivenessMeasure.framework_slug == fw),
         ):
             self.node("effectiveness_measure", row.id, row.summary or row.metric_key)
-        meetings = db.query(IsmsMeeting)
+        meetings = db.query(IsmsMeeting.id, IsmsMeeting.title, IsmsMeeting.date)
         if not self.reads_isms:
             meetings = meetings.filter(
                 IsmsMeeting.id.in_(select(meeting_ids_for(self.user).subquery()))
             )
         for row in self._rows("meeting", meetings):
             self.node("meeting", row.id, row.title or "Meeting minutes", row.date)
-        for row in self._rows("org_node", db.query(IsmsOrgNode)):
+        for row in self._rows(
+            "org_node",
+            db.query(IsmsOrgNode.id, IsmsOrgNode.name, IsmsOrgNode.node_type),
+        ):
             self.node("org_node", row.id, row.name, row.node_type)
-        for row in self._rows("story", db.query(Story)):
+        for row in self._rows("story", db.query(Story.id, Story.title, Story.status)):
             self.node("story", row.id, row.title, row.status)
-        audits = db.query(Audit).filter_by(framework_slug=fw)
+        audits = db.query(Audit.id, Audit.title, Audit.audit_type).filter(
+            Audit.framework_slug == fw
+        )
         if not can_read_audits(db, self.user):
             audits = audits.filter(
                 Audit.id.in_(select(AuditAttendee.audit_id).where(attends(self.user)))
@@ -320,6 +352,10 @@ class _Graph:
         where a row names an end's kind itself, the kind is read from the
         ``..._kind_column`` instead.
         """
+        # A table with an end the reader sees none of has no link to give, so
+        # it is not read and spends none of the request's allowance.
+        if not {a[0], b[0]} - {""} <= self.allowed:
+            return
         if not isinstance(rows, list):
             rows = self._link_rows(rows)
         for row in rows:
@@ -333,10 +369,20 @@ class _Graph:
         db, fw = self.db, self.framework
         control = ("control", "control_item_id")
         clause = ("clause", "clause_id")
+        seen = sorted(self.allowed)
         # (rows, one end, the other end, relation), for the tables whose
         # columns say which kinds they join.
         plain: list[tuple[Any, tuple[str, str], tuple[str, str], str]] = [
-            (db.query(ControlClauseLink), clause, control, "applies"),
+            (
+                db.query(ControlClauseLink).filter(
+                    ControlClauseLink.control_item_id.in_(
+                        select(ControlItem.id).where(ControlItem.framework_slug == fw)
+                    )
+                ),
+                clause,
+                control,
+                "applies",
+            ),
             (
                 db.query(RiskControlLink).filter_by(framework_slug=fw),
                 ("risk", "risk_id"),
@@ -348,18 +394,6 @@ class _Graph:
                 ("risk", "risk_id"),
                 clause,
                 "mitigates",
-            ),
-            (
-                rated_links(self._link_rows(db.query(PestleControlRelevance))),
-                ("pestle_item", "pestle_item_id"),
-                control,
-                "relevant",
-            ),
-            (
-                rated_links(self._link_rows(db.query(PestleClauseRelevance))),
-                ("pestle_item", "pestle_item_id"),
-                clause,
-                "relevant",
             ),
             (
                 db.query(BookStackSectionEvidence),
@@ -466,48 +500,70 @@ class _Graph:
                 "attends",
             ),
         ]
-        affected = self._link_rows(db.query(AffectedLink))
-        for owner in (("risk", "risk_id"), ("pestle_item", "pestle_item_id")):
-            for target in ("person", "vendor", "asset"):
-                plain.append((affected, owner, (target, f"{target}_id"), "affects"))
         for rows, a, b, relation in plain:
             self._relate(rows, a, b, relation)
         # Tables whose rows name the kind of record at one end.
         self._relate(
-            db.query(IsmsEntityControlLink).filter_by(framework_slug=fw),
+            db.query(IsmsEntityControlLink)
+            .filter_by(framework_slug=fw)
+            .filter(IsmsEntityControlLink.entity_type.in_(seen)),
             ("", "entity_id"),
             control,
             "mapped",
             a_kind_column="entity_type",
         )
         self._relate(
-            db.query(IsmsEntityClauseLink).filter_by(framework_slug=fw),
+            db.query(IsmsEntityClauseLink)
+            .filter_by(framework_slug=fw)
+            .filter(IsmsEntityClauseLink.entity_type.in_(seen)),
             ("", "entity_id"),
             clause,
             "mapped",
             a_kind_column="entity_type",
         )
         self._relate(
-            db.query(IsmsSwotLink),
+            db.query(IsmsSwotLink).filter(IsmsSwotLink.target_type.in_(seen)),
             ("swot", "swot_id"),
             ("", "target_id"),
             "related",
             b_kind_column="target_type",
         )
         self._relate(
-            db.query(IsmsLegalItemLink),
+            db.query(IsmsLegalItemLink).filter(IsmsLegalItemLink.target_type.in_(seen)),
             ("legal_item", "item_id"),
             ("", "target_id"),
             "related",
             b_kind_column="target_type",
         )
+        # A story's notes and events are not records the Map draws.
         self._relate(
-            db.query(StoryItem),
+            db.query(StoryItem.story_id, StoryItem.entity_id, StoryItem.kind).filter(
+                StoryItem.kind.in_(seen)
+            ),
             ("story", "story_id"),
             ("", "entity_id"),
             "story",
             b_kind_column="kind",
         )
+        # Last, the tables read whole before their rows are sorted into links,
+        # so they cannot leave the ones above short.
+        if "pestle_item" in self.allowed:
+            items = select(PestleItem.id).where(PestleItem.framework_slug == fw)
+            for model, end in (
+                (PestleControlRelevance, control),
+                (PestleClauseRelevance, clause),
+            ):
+                rated = rated_links(
+                    self._link_rows(
+                        db.query(model).filter(model.pestle_item_id.in_(items))
+                    )
+                )
+                self._relate(rated, ("pestle_item", "pestle_item_id"), end, "relevant")
+        if {"person", "vendor", "asset"} & self.allowed:
+            affected = self._link_rows(db.query(AffectedLink))
+            for owner in (("risk", "risk_id"), ("pestle_item", "pestle_item_id")):
+                for target in ("person", "vendor", "asset"):
+                    self._relate(affected, owner, (target, f"{target}_id"), "affects")
 
     def load_evidence(self, *, control: str | None = None, source: str | None = None):
         """Add the sources that supply evidence, weighted by their events.
@@ -528,6 +584,7 @@ class _Graph:
                 framework=self.framework,
                 scope=scope,
                 within_ms=EVIDENCE_BUDGET_MS,
+                max_links=MAX_LINK_ROWS,
                 db=self.db,
             )
         except DomainError as exc:
@@ -541,24 +598,27 @@ class _Graph:
                     node["label"],
                     f"{node['mapped_events']} mapped events",
                 )
+        # Events chosen for one control also count towards the others they map
+        # to; only that control's own count is whole, so only it is shown.
+        links = [
+            link
+            for link in data["links"]
+            if control in (None, link["target"].removeprefix("control:"))
+        ]
         # Evidence counts towards the request's relationships like any other;
         # when there is more than it has left, the heaviest is kept.
-        links = sorted(data["links"], key=lambda link: -link["value"])
-        if len(links) > self.rows_left:
+        links.sort(key=lambda link: -link["value"])
+        if data["truncated"] or len(links) > self.rows_left:
             self.truncated = True
-            links = links[: max(0, self.rows_left)]
+        links = links[: max(0, self.rows_left)]
         self.rows_left -= len(links)
         for link in links:
-            target = link["target"].removeprefix("control:")
-            # Events chosen for one control also count towards the others they
-            # map to; only that control's own count is whole.
-            if control in (None, target):
-                self.link(
-                    ("source", link["source"].removeprefix("source:")),
-                    ("control", target),
-                    "evidence",
-                    link["value"],
-                )
+            self.link(
+                ("source", link["source"].removeprefix("source:")),
+                ("control", link["target"].removeprefix("control:")),
+                "evidence",
+                link["value"],
+            )
 
     # --- Output ----------------------------------------------------------------
 
