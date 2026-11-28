@@ -599,11 +599,207 @@ def test_refresh_rotates_and_presenting_a_used_refresh_token_revokes(mcp):
         ).status_code
         == 401
     )
+    # Once its grace period has passed, only a copy could present a used
+    # token: the whole grant ends.
+    spent = mcp.db.query(McpToken).filter(McpToken.used_at.isnot(None)).one()
+    spent.used_at -= timedelta(seconds=mcp_tokens.REFRESH_GRACE_SECONDS + 1)
+    mcp.db.commit()
     reused = mcp.token(**form, refresh_token=connection.refresh_token)
-    assert reused.status_code == 401
-    # Only a copy could present a used token: the whole grant ends.
+    assert (reused.status_code, reused.json()["error"]) == (401, "invalid_grant")
     assert inner("/v1/isms/swot", fresh["access_token"]).status_code == 401
     assert mcp.token(**form, refresh_token=fresh["refresh_token"]).status_code == 401
+
+
+def test_a_refresh_token_presented_again_at_once_is_answered_with_the_same_tokens(
+    mcp,
+):
+    # A client whose access token lapsed while it had several requests in
+    # flight refreshes once for each, and one whose answer was lost asks again.
+    # Each is given the pair the first was, and the connection carries on.
+    connection = mcp.connect(
+        mcp.keen.user("isms.read", "risk.read"), ["isms.read", "risk.read"]
+    )
+    form = dict(grant_type="refresh_token", client_id=connection.client["client_id"])
+    first = mcp.token(**form, refresh_token=connection.refresh_token, scope="isms.read")
+    assert first.status_code == 200, first.text
+    pair = first.json()
+    tokens = mcp.db.query(McpToken).count()
+
+    for _ in range(3):
+        again = mcp.token(**form, refresh_token=connection.refresh_token)
+        assert again.status_code == 200, again.text
+        answer = again.json()
+        assert (answer["access_token"], answer["refresh_token"], answer["scope"]) == (
+            pair["access_token"],
+            pair["refresh_token"],
+            "isms.read",
+        )
+        assert 0 < answer["expires_in"] <= pair["expires_in"]
+    # No second chain: the same two tokens, and the grant stands.
+    assert mcp.db.query(McpToken).count() == tokens
+    mcp.db.expire_all()
+    assert mcp.db.query(McpGrant).one().revoked_at is None
+    assert inner("/v1/isms/swot", pair["access_token"]).status_code == 200
+    # The scopes are the first answer's, whatever a repeat asks for.
+    assert inner("/v1/risks", pair["access_token"]).status_code == 403
+
+    # Another client is not answered, and nothing is revoked for its asking.
+    other = mcp.register().json()["client_id"]
+    refused = mcp.token(
+        **dict(form, client_id=other), refresh_token=connection.refresh_token
+    )
+    assert refused.status_code == 401
+    assert inner("/v1/isms/swot", pair["access_token"]).status_code == 200
+
+    # Keen stores digests and a salt: neither token, and nothing they could be
+    # worked out from without the refresh token the client held.
+    stored = {row.token_hash for row in mcp.db.query(McpToken)}
+    spent = mcp.db.query(McpToken).filter(McpToken.used_at.isnot(None)).one()
+    assert spent.rotation_salt and len(spent.rotation_salt) == 43
+    assert mcp_tokens.well_formed(pair["refresh_token"], "krt_")
+    assert mcp_tokens.well_formed(pair["access_token"], "kat_")
+    for value in (pair["access_token"], pair["refresh_token"]):
+        assert (
+            value not in stored and hashlib.sha256(value.encode()).hexdigest() in stored
+        )
+    assert pair["refresh_token"] == mcp_tokens.successor(
+        connection.refresh_token, spent.rotation_salt, "krt_"
+    )
+    assert pair["refresh_token"] != mcp_tokens.successor(
+        connection.refresh_token, "another-salt", "krt_"
+    )
+
+    # The pair rotates on as usual, and the salt goes once the period is over:
+    # the first token then ends the grant like any used token.
+    onward = mcp.token(**form, refresh_token=pair["refresh_token"])
+    assert onward.status_code == 200, onward.text
+    assert onward.json()["refresh_token"] != pair["refresh_token"]
+    spent.used_at -= timedelta(seconds=mcp_tokens.REFRESH_GRACE_SECONDS + 1)
+    mcp.db.commit()
+    mcp_oauth.remove_expired(mcp.db)
+    mcp.db.commit()
+    mcp.db.expire_all()
+    salts = sorted(
+        bool(row.rotation_salt)
+        for row in mcp.db.query(McpToken).filter(McpToken.used_at.isnot(None))
+    )
+    assert salts == [False, True]
+    late = mcp.token(**form, refresh_token=connection.refresh_token)
+    assert late.status_code == 401
+    mcp.db.expire_all()
+    assert mcp.db.query(McpGrant).one().revoked_at is not None
+    assert inner("/v1/isms/swot", onward.json()["access_token"]).status_code == 401
+
+
+def test_a_repeat_that_finds_no_tokens_to_give_again_ends_the_grant(mcp):
+    # The pair a used token issued can be gone, or belong to another grant,
+    # only if the records were tampered with: nothing is given.
+    connection = mcp.connect(mcp.keen.user("isms.read"), ["isms.read"])
+    form = dict(grant_type="refresh_token", client_id=connection.client["client_id"])
+    pair = mcp.token(**form, refresh_token=connection.refresh_token).json()
+    mcp.db.query(McpToken).filter_by(
+        token_hash=hashlib.sha256(pair["access_token"].encode()).hexdigest()
+    ).delete()
+    mcp.db.commit()
+    again = mcp.token(**form, refresh_token=connection.refresh_token)
+    assert again.status_code == 401
+    mcp.db.expire_all()
+    assert mcp.db.query(McpGrant).one().revoked_at is not None
+
+    connection = mcp.connect(mcp.keen.user("isms.read"), ["isms.read"])
+    form = dict(grant_type="refresh_token", client_id=connection.client["client_id"])
+    pair = mcp.token(**form, refresh_token=connection.refresh_token).json()
+    elsewhere = mcp.connect(mcp.keen.user("isms.read"), ["isms.read"])
+    other_grant = (
+        mcp.db.query(McpToken)
+        .filter_by(
+            token_hash=hashlib.sha256(elsewhere.access_token.encode()).hexdigest()
+        )
+        .one()
+        .grant_id
+    )
+    mcp.db.query(McpToken).filter_by(
+        token_hash=hashlib.sha256(pair["access_token"].encode()).hexdigest()
+    ).update({McpToken.grant_id: other_grant})
+    mcp.db.commit()
+    again = mcp.token(**form, refresh_token=connection.refresh_token)
+    assert again.status_code == 401
+    assert inner("/v1/isms/swot", elsewhere.access_token).status_code == 200
+
+
+def test_refreshes_racing_on_separate_connections_all_receive_one_pair(
+    postgres_engine, monkeypatch
+):
+    # The race as it happens: an access token lapses, and each of a client's
+    # requests in flight refreshes with the same token, on its own database
+    # connection. One rotates; the others wait for it and get what it issued.
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.db.models import McpClient
+    from sqlalchemy.orm import Session
+
+    from tests.db_helpers import schema_engine
+
+    monkeypatch.setattr(settings, "mcp_enabled", True)
+    with postgres_engine.connect() as connection:
+        schema = connection.exec_driver_sql("SELECT current_schema()").scalar()
+    workers = schema_engine(
+        postgres_engine.url.render_as_string(hide_password=False),
+        schema,
+        pool_size=8,
+    )
+    token = mcp_tokens.new_secret("krt_")
+    now = utc_now_naive()
+    try:
+        with Session(workers) as db:
+            user = User(
+                username="racer-" + uuid.uuid4().hex[:8],
+                password_hash="x",
+                role="normal",
+                is_active=True,
+            )
+            client = McpClient(client_id="client-" + uuid.uuid4().hex, info={})
+            db.add_all([user, client])
+            db.flush()
+            grant = McpGrant(
+                user_id=user.id,
+                client_pk=client.id,
+                scopes=["isms.read"],
+                session_version=user.session_version,
+                mfa_version=user.mfa_version,
+                expires_at=now + timedelta(days=90),
+            )
+            db.add(grant)
+            db.flush()
+            db.add(
+                McpToken(
+                    token_hash=hashlib.sha256(token.encode()).hexdigest(),
+                    grant_id=grant.id,
+                    kind="refresh",
+                    scopes=["isms.read"],
+                    expires_at=now + timedelta(days=30),
+                )
+            )
+            db.commit()
+            client_id, grant_id = client.client_id, grant.id
+
+        def refresh(_):
+            with Session(workers) as db:
+                checked = mcp_oauth.refresh_token(db, client_id=client_id, token=token)
+                assert checked is not None
+                return mcp_oauth.exchange_refresh(db, token=token, scopes=["isms.read"])
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            answers = list(pool.map(refresh, range(8)))
+
+        assert all(answer is not None for answer in answers)
+        assert len({(a.access_token, a.refresh_token) for a in answers}) == 1
+        with Session(workers) as db:
+            assert db.get(McpGrant, grant_id).revoked_at is None
+            assert db.query(McpToken).filter_by(grant_id=grant_id).count() == 3
+            assert mcp_oauth.access_token(db, answers[0].access_token) is not None
+    finally:
+        workers.dispose()
 
 
 def test_an_expired_refresh_token_or_access_token_is_refused(mcp):
@@ -630,6 +826,7 @@ def test_a_spent_refresh_token_revokes_its_grant_after_its_own_expiry_too(mcp):
     fresh = mcp.token(**form, refresh_token=connection.refresh_token).json()
     spent = mcp.db.query(McpToken).filter(McpToken.used_at.isnot(None)).one()
     spent.expires_at = utc_now_naive() - timedelta(seconds=1)
+    spent.used_at = utc_now_naive() - timedelta(days=31)
     mcp.db.commit()
     assert inner("/v1/isms/swot", fresh["access_token"]).status_code == 200
 
@@ -1180,6 +1377,79 @@ def test_a_risk_scope_reads_no_isms_or_pestle_records_through_any_tool(mcp):
         assert refused.status_code == 403, (path, refused.text)
     # Its own domain still answers.
     assert mcp.tool(risk_only, "list_risks").get("isError") is not True
+
+
+def test_a_connection_never_reads_a_risk_because_its_person_owns_it(mcp):
+    # A person reads the risks they own without risk.read. That is theirs as
+    # an account: a connection they gave the ISMS scope alone must not be
+    # shown the risk, asked for directly or met as a related record.
+    from app.db.models import (
+        IsmsLegalItem,
+        IsmsLegalItemLink,
+        IsmsSwot,
+        IsmsSwotLink,
+        Risk,
+        RiskAsset,
+        RiskAssetSubcategory,
+        RiskCategory,
+    )
+
+    owner = mcp.keen.user("isms.read")
+    category = RiskCategory(name="Category")
+    mcp.db.add(category)
+    mcp.db.flush()
+    sub = RiskAssetSubcategory(name="Sub", category_id=category.id)
+    mcp.db.add(sub)
+    mcp.db.flush()
+    asset = RiskAsset(name="Payroll", category_id=category.id, subcategory_id=sub.id)
+    mcp.db.add(asset)
+    mcp.db.flush()
+    risk = Risk(
+        asset_id=asset.id,
+        threat_summary="Owned risk secret",
+        risk_owner_user_id=owner.id,
+    )
+    swot = IsmsSwot(title="Key person", kind="threat")
+    law = IsmsLegalItem(title="Privacy Act")
+    mcp.db.add_all([risk, swot, law])
+    mcp.db.flush()
+    mcp.db.add_all(
+        [
+            IsmsSwotLink(swot_id=swot.id, target_type="risk", target_id=risk.id),
+            IsmsLegalItemLink(item_id=law.id, target_type="risk", target_id=risk.id),
+        ]
+    )
+    mcp.db.commit()
+    paths = (f"/v1/isms/swot/{swot.id}", f"/v1/isms/legal-register/{law.id}")
+
+    # Signed in, the owner sees their risk on both records and opens it.
+    mcp.sign_in(owner)
+    for path in paths:
+        links = mcp.client.get(path, params={"framework": FW}).json()["links"]
+        assert [link["title"] for link in links] == ["Owned risk secret"], path
+    assert mcp.client.get(f"/v1/risks/{risk.id}").status_code == 200
+    mcp.client.cookies.clear()
+
+    # The connection has the ISMS scope and nothing of the risk.
+    token = mcp.connect(owner, ["isms.read"]).access_token
+    for path in paths:
+        seen = inner(path, token, params={"framework": FW})
+        assert seen.status_code == 200, seen.text
+        assert seen.json()["links"] == [], path
+        assert "Owned risk secret" not in seen.text
+    for tool, argument in (("get_swot_item", swot.id), ("get_legal_item", law.id)):
+        answer = mcp.tool(token, tool, {"item_id": str(argument)})
+        assert "Owned risk secret" not in str(answer), tool
+        assert str(risk.id) not in str(answer), tool
+    refused = inner(f"/v1/risks/{risk.id}", token)
+    assert refused.status_code == 403, refused.text
+    assert "Owned risk secret" not in refused.text
+
+    # With the risk scope the connection reads it, as its scopes name.
+    reader = mcp.keen.user("isms.read", "risk.read")
+    wide = mcp.connect(reader, ["isms.read", "risk.read"]).access_token
+    seen = inner(paths[0], wide, params={"framework": FW})
+    assert [link["title"] for link in seen.json()["links"]] == ["Owned risk secret"]
 
 
 def test_a_connection_reads_only_the_link_entries_its_own_scopes_name(mcp):

@@ -24,8 +24,9 @@ class Settings(MospSettings):
     # 0 means scheduled audits are created only on their scheduled begin date.
     # N means they may be created up to N calendar days before their begin date.
     scheduled_audit_create_days_ahead: int = Field(default=0)
-    # Days before an audit starts, or a quiz round falls due, that Keen emails
-    # attendees and unfinished participants a reminder. 0 sends no reminders.
+    # Days before an audit starts, a quiz round falls due, or a legal register
+    # item's assessment is due, that Keen emails attendees, unfinished
+    # participants and item owners a reminder. 0 sends no reminders.
     reminder_days_before: int = Field(default=2)
 
     # -----------------------------------------------------------------------------

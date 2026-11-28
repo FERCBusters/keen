@@ -132,7 +132,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.tasks.quiz_rounds_task",
         "schedule": crontab(hour=0, minute=20),
     },
-    # Each audit attendee and quiz participant is reminded at most once.
+    # Each audit attendee and quiz participant is reminded at most once, and
+    # each legal register owner once for each assessment date.
     "send-reminders-daily": {
         "task": "app.worker.tasks.send_reminders_task",
         "schedule": crontab(hour=6, minute=45),

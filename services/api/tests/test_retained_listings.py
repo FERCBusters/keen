@@ -263,6 +263,36 @@ def test_gitea_activity_stops_at_the_allowance(upstream):
     assert len(upstream.served) == 5
 
 
+def test_jenkins_builds_stop_at_the_allowance(upstream, monkeypatch):
+    """The pages a Jenkins run keeps are fetched by a helper, outside the loop
+    the inventory reads, so the collection itself is held to the allowance."""
+    from unittest.mock import MagicMock
+
+    from app.ingest import jenkins
+
+    def page(request, number):
+        newest = 100_000 - number * jenkins.PAGE
+        builds = [
+            {"number": newest - i, "timestamp": 1, "url": "x" * (PAGE // jenkins.PAGE)}
+            for i in range(jenkins.PAGE)
+        ]
+        return json.dumps({"allBuilds": builds}).encode()
+
+    upstream.page = page
+    monkeypatch.setattr(jenkins.settings, "jenkins_base_url", "https://ci.example.com")
+    # A cursor far behind the newest build: every page holds builds to keep.
+    cursor = MagicMock(last_ts=None, meta={"last_number": 1})
+    monkeypatch.setattr(jenkins, "_get_or_create_cursor", lambda db, name: cursor)
+    with pytest.raises(
+        http.ListingTooLarge,
+        match=r"^Listing exceeds the upstream data one collection holds \(1 MiB\); narrow the input$",
+    ):
+        jenkins.ingest_jenkins_job(MagicMock(), "deploy", None, None)
+    assert len(upstream.served) == 4
+    assert cursor.meta == {"last_number": 1}
+    assert http._listings.get() == ()
+
+
 def test_gitea_activity_paging_stops_at_the_cursor(upstream):
     start = datetime(2026, 1, 1)
 

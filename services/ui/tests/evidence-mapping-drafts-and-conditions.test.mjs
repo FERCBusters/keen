@@ -1,6 +1,7 @@
 // Drafting a mapping from an event and building its field conditions: events
 // with unusual sources or no payload, malformed event links, sample events
 // without an activity, and condition rows edited in different orders.
+import { chooseTarget, chosenTargets } from './support/rule-targets.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { editor } from './support/evidence-mapping-editor.mjs';
@@ -10,8 +11,7 @@ const id = '22222222-2222-4222-8222-222222222222';
 async function publish(ui, description = 'Collected evidence') {
   await ui.click('next-step');
   ui.$('description').value = description;
-  ui.$('control').value = 'A1';
-  ui.$('add-target').click();
+  chooseTarget(ui.$('control'), 'A1');
   await ui.click('next-step');
   ui.$('predefine').checked = true;
   await ui.click('save-rule');

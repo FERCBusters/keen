@@ -28,6 +28,7 @@ from app.db.models import (
     EventQuestionPost,
     EventQuestionPostAttachment,
     EventQuestionThread,
+    IsmsLegalItem,
     IsmsSwot,
     PestleItem,
     Risk,
@@ -43,7 +44,7 @@ QUESTION_CREATE_PERMISSION = "question.create"
 # Question routes accept exactly these names, so the type in a request path is
 # always the one the route's feature policy checks.
 QUESTION_TARGET_TYPES = frozenset(
-    {"event", "risk", "pestle_item", "isms_swot", "story"}
+    {"event", "risk", "pestle_item", "isms_swot", "isms_legal_item", "story"}
 )
 MAX_ATTACHMENT_BYTES = 40 * 1024 * 1024
 
@@ -159,6 +160,19 @@ def _ensure_question_target_visible(
         if not row:
             raise DomainError(404, "SWOT item not found")
         return (row.kind, row.title, f"/swot.html?id={row.id}&tab=questions", None)
+    if target_type == "isms_legal_item":
+        from app.services.isms.legal_register import require_access as legal_access
+
+        legal_access(db, user)
+        item = db.get(IsmsLegalItem, entity_id)
+        if not item:
+            raise DomainError(404, "Legal register item not found")
+        return (
+            (item.category.name if item.category else "Legal register")[:128],
+            item.title,
+            f"/legal-register.html?id={item.id}&tab=questions",
+            None,
+        )
     if target_type == "story":
         from app.services.stories import readable_story, require_read
 
@@ -193,6 +207,8 @@ def _question_target_label(thread: EventQuestionThread) -> str:
     title = (thread.target_title or "").strip()
     if typ == "isms_swot":
         prefix = "SWOT item"
+    elif typ == "isms_legal_item":
+        prefix = "Legal register item"
     elif typ == "story":
         prefix = "Story"
     elif typ == "risk":
@@ -216,6 +232,8 @@ def _question_target_url(thread: EventQuestionThread) -> str:
     target_id = str(thread.target_id or thread.event_id or "")
     if typ == "isms_swot" and target_id:
         return f"/swot.html?id={target_id}&tab=questions&thread={tid}"
+    if typ == "isms_legal_item" and target_id:
+        return f"/legal-register.html?id={target_id}&tab=questions&thread={tid}"
     if typ == "story" and target_id:
         return f"/story.html?id={target_id}&tab=questions&thread={tid}"
     if typ == "risk" and target_id:

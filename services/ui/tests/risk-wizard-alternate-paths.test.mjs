@@ -172,6 +172,18 @@ const check = (ui, selector, checked = true) => {
   box.checked = checked;
   box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
 };
+// The control and clause steps are multiple selects, which the design system
+// presents as its picker; a test chooses as the picker would, by selecting the
+// option and reporting the change.
+const linkList = (ui, kind) => ui.el(kind === 'control' ? 'controlList' : 'clauseList');
+const link = (ui, kind, id) => [...linkList(ui, kind).options].find((o) => o.value === id);
+const pick = (ui, kind, id, on = true, level) => {
+  link(ui, kind, id).selected = on;
+  if (level) link(ui, kind, id).dataset.extra = level;
+  linkList(ui, kind).dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+};
+const picked = (ui, kind) => [...linkList(ui, kind).selectedOptions].map((o) => o.value);
+const levelsOffered = (ui, kind) => JSON.parse(linkList(ui, kind).dataset.pickerExtra || 'null');
 const reviewValue = (ui, label) =>
   [...ui.el('reviewSummary').querySelectorAll('dt')]
     .find((dt) => dt.textContent === label)
@@ -525,20 +537,21 @@ async function pestleDescribed(t, options = {}) {
   return { ui, state };
 }
 
-test('a clause search keeps ticked clauses ticked, and says when nothing matches', async (t) => {
+test('a chosen clause stays chosen when its step is drawn again, with the relevance it was given', async (t) => {
   const { ui } = await pestleDescribed(t);
   next(ui);
   next(ui);
   assert.equal(visibleStep(ui), 'clauses');
-  check(ui, '[data-clause="cl1"]');
-  input(ui, 'clauseSearch', 'risk');
-  await pause();
-  assert.equal(ui.el('clauseList').querySelectorAll('[data-clause]').length, 1);
-  assert.equal(ui.el('clauseList').querySelector('[data-clause="cl1"]').checked, true);
-  assert.equal(ui.el('clauseList').querySelector('[data-clause-level="cl1"]').disabled, false);
-  input(ui, 'clauseSearch', 'zzz');
-  await pause();
-  assert.equal(ui.el('clauseList').textContent, 'No clauses match.');
+  pick(ui, 'clause', 'cl1', true, 'high');
+  ui.el('backStep').click();
+  next(ui);
+  assert.equal(visibleStep(ui), 'clauses');
+  assert.deepEqual(picked(ui, 'clause'), ['cl1']);
+  assert.equal(link(ui, 'clause', 'cl1').dataset.extra, 'high');
+  // A clause that is not chosen carries no relevance.
+  assert.ok(
+    [...ui.el('clauseList').options].filter((o) => !o.selected).every((o) => !o.dataset.extra),
+  );
 });
 
 test('with an overall relevance of not applicable, links start at the first level', async (t) => {
@@ -546,11 +559,9 @@ test('with an overall relevance of not applicable, links start at the first leve
   input(ui, 'pestleRelevance', 'na', 'change');
   next(ui);
   // Levels start at the first one when the factor itself is not applicable.
-  check(ui, '[data-control="c2"]');
-  assert.equal(ui.el('controlList').querySelector('[data-control-level="c2"]').value, 'high');
+  pick(ui, 'control', 'c2');
   next(ui);
-  check(ui, '[data-clause="cl2"]');
-  assert.equal(ui.el('clauseList').querySelector('[data-clause-level="cl2"]').value, 'high');
+  pick(ui, 'clause', 'cl2');
   next(ui);
   assert.equal(reviewValue(ui, 'Overall relevance'), 'Not applicable');
   next(ui);
@@ -568,9 +579,9 @@ test('links ticked for a register risk take the item’s relevance when the kind
   const { ui, state } = await wizard(t);
   toRating(ui);
   next(ui);
-  check(ui, '[data-control="c1"]');
+  pick(ui, 'control', 'c1');
   next(ui);
-  check(ui, '[data-clause="cl1"]');
+  pick(ui, 'clause', 'cl1');
   // Back to the first step to make it a factor instead.
   ui.el('wizardSteps').querySelector('[data-goto-step="method"]').click();
   check(ui, 'input[name="riskMethod"][value="pestle"]');
@@ -581,8 +592,9 @@ test('links ticked for a register risk take the item’s relevance when the kind
   input(ui, 'pestleRelevance', 'low', 'change');
   next(ui);
   // The control is still ticked, and shows the overall relevance.
-  assert.equal(ui.el('controlList').querySelector('[data-control="c1"]').checked, true);
-  assert.equal(ui.el('controlList').querySelector('[data-control-level="c1"]').value, 'low');
+  assert.equal(link(ui, 'control', 'c1').selected, true);
+  assert.equal(link(ui, 'control', 'c1').dataset.extra, undefined);
+  assert.equal(levelsOffered(ui, 'control').default, 'low');
   next(ui);
   next(ui);
   assert.equal(visibleStep(ui), 'review');
@@ -623,16 +635,12 @@ test('without a selected framework the controls step names this framework', asyn
   assert.equal(ui.el('controlsFramework').textContent, 'this framework');
 });
 
-test('a control search without matches says so, and a control without a title shows its reference', async (t) => {
+test('a control without a title is listed by its reference', async (t) => {
   const { ui } = await wizard(t);
   toRating(ui);
   next(ui);
-  const labels = [...ui.el('controlList').querySelectorAll('label')].map((l) =>
-    l.textContent.replace(/\s+/g, ' ').trim(),
-  );
+  const labels = [...ui.el('controlList').options].map((o) => o.textContent);
   assert.deepEqual(labels, ['A.5.1 Policies', 'A.8.13']);
-  input(ui, 'controlSearch', 'zzz');
-  assert.equal(ui.el('controlList').textContent, 'No controls match.');
 });
 
 test('two controls suggested by the Mitigator are counted in the plural', async (t) => {
@@ -697,8 +705,8 @@ test('without the controls feature no controls are fetched, and an edited risk�
   next(ui);
   next(ui);
   assert.equal(visibleStep(ui), 'controls');
-  assert.equal(ui.el('controlList').textContent, 'No controls match.');
-  assert.equal(ui.el('controlCount').textContent, '1');
+  // Nothing is offered, and the control the risk already has stays linked.
+  assert.equal(ui.el('controlList').options.length, 0);
   next(ui);
   next(ui);
   assert.equal(reviewValue(ui, 'Controls'), 'c2');
@@ -720,7 +728,7 @@ test('records and controls skipped after ticking are shown unticked when the rev
   ui.el('riskTitle').value = 'Laptop theft';
   next(ui);
   next(ui);
-  check(ui, '[data-control="c1"]');
+  pick(ui, 'control', 'c1');
   ui.el('skipStep').click();
   ui.el('skipStep').click();
   assert.equal(visibleStep(ui), 'review');
@@ -731,8 +739,8 @@ test('records and controls skipped after ticking are shown unticked when the rev
 
   change('controls');
   assert.equal(visibleStep(ui), 'controls');
-  assert.equal(ui.el('controlList').querySelector('[data-control="c1"]').checked, false);
-  assert.equal(ui.el('controlCount').textContent, '0');
+  assert.equal(link(ui, 'control', 'c1').selected, false);
+  assert.equal(picked(ui, 'control').length, 0);
   next(ui);
   next(ui);
   change('parties');

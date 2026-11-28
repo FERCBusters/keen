@@ -160,6 +160,7 @@ function _patchIsmsNavDropdown() {
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html'))}">ISMS overview</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=objectives'))}">Objectives</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/swot.html'))}">SWOT analysis</a></li>
+      <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/legal-register.html'))}">Legal register</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=effectiveness'))}">Effectiveness measures</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/quizzes.html'))}">Quizzes</a></li>
       <li><a class="dropdown-item" href="${esc(_withCurrentFramework('/isms.html?tab=documents'))}">Policies &amp; processes</a></li>
@@ -323,6 +324,17 @@ export function forgetAccountStorage() {
   }
 }
 
+// Present the multiple selects a page built after it loaded as pickers too.
+export function enhancePickers(root) {
+  mosp.enhanceMultiSelects?.(root);
+}
+
+// Redraw a list's picker after code set `option.selected` on options that
+// were already there; replaced options and change events redraw by themselves.
+export function refreshPicker(select) {
+  mosp.refreshMultiSelect?.(select);
+}
+
 let navbarInitialisation;
 // A document can load several page modules. Share its complete shell setup,
 // including notification polling, without persisting account data across loads.
@@ -348,6 +360,23 @@ export function withStoriesLink(links = []) {
   };
   const after = list.findIndex((link) => link?.key === 'audits');
   list.splice(after < 0 ? list.length : after + 1, 0, stories);
+  return list;
+}
+
+// The Map follows Stories (or Audits) and is offered to everyone signed in:
+// it shows each person only the records they can open.
+export function withMapLink(links) {
+  const list = [...links];
+  if (list.some((link) => link?.key === 'map')) return list;
+  const after = Math.max(
+    list.findIndex((link) => link?.key === 'stories'),
+    list.findIndex((link) => link?.key === 'audits'),
+  );
+  list.splice(after < 0 ? list.length : after + 1, 0, {
+    key: 'map',
+    label: 'Map',
+    href: '/map.html',
+  });
   return list;
 }
 
@@ -388,13 +417,17 @@ export function bellItems(me) {
 
 async function initialiseNavbar(...args) {
   initContextHelp();
+  // Every list a person chooses several entries from is the same picker: a
+  // search box, a short list to browse and the chosen entries as chips. A
+  // design system from before the picker leaves the native lists in place.
+  mosp.enhanceMultiSelects?.();
   const cfg = getUiConfig(args[0]);
   // A design system with bell menus lists `items` among its bell defaults; an
   // older one keeps the questions bell that summaryEndpoint describes.
   const menus = Object.prototype.hasOwnProperty.call(cfg.bell || {}, 'items');
   const me = await _mospInitNavbar({
     ...cfg,
-    links: withStoriesLink(cfg.links),
+    links: withMapLink(withStoriesLink(cfg.links)),
     auth: { ...cfg.auth, meCacheMs: 0 },
     bell: {
       ...cfg.bell,
@@ -1522,18 +1555,25 @@ export function effectivenessMetricThresholdState(measure, entry) {
   };
 }
 
+// A metric entry's value in words: as recorded for display, else its number,
+// unit and qualitative value, else the fallback.
+export function effectivenessMetricValueText(entry, fallback = 'Metric entry') {
+  return (
+    entry.value_display ||
+    [entry.metric_value ?? '', entry.metric_unit || '', entry.qualitative_value || '']
+      .filter(Boolean)
+      .join(' ') ||
+    fallback
+  );
+}
+
 export function effectivenessMetricValueHtml(
   entry,
   measure,
   { href = '', fallback = 'Metric entry', className = '' } = {},
 ) {
   if (!entry) return `<span class="small-muted">${esc(fallback)}</span>`;
-  const value =
-    entry.value_display ||
-    [entry.metric_value ?? '', entry.metric_unit || '', entry.qualitative_value || '']
-      .filter(Boolean)
-      .join(' ') ||
-    fallback;
+  const value = effectivenessMetricValueText(entry, fallback);
   const state = effectivenessMetricThresholdState(measure, entry);
   const baseClass = className || 'fw-semibold';
   if (!state) {
@@ -1618,11 +1658,17 @@ export async function loadEntityChangelog(
 }
 
 // How far a control applies to a clause, as the control and clause pages show it.
-export function applicabilityBadge(v) {
+// How far a control supports a clause, as a badge: an element, or its markup
+// for the pages that still write table rows as text.
+export function applicabilityPill(v) {
   if (v === 'partially_applicable')
-    return '<span class="badge text-bg-warning">Partially applicable</span>';
-  if (v === 'applicable') return '<span class="badge badge-soft">Applicable</span>';
-  return '<span class="badge text-bg-light">Not applicable</span>';
+    return node('span', { class: 'badge text-bg-warning' }, 'Partially applicable');
+  if (v === 'applicable') return node('span', { class: 'badge badge-soft' }, 'Applicable');
+  return node('span', { class: 'badge text-bg-light' }, 'Not applicable');
+}
+
+export function applicabilityBadge(v) {
+  return applicabilityPill(v).outerHTML;
 }
 
 // The entries of a comma-separated value, as filters arrive in an address.

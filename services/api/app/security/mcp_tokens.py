@@ -18,6 +18,9 @@ configured redirect URIs with it.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import secrets
 import string
 from urllib.parse import urlsplit
@@ -25,6 +28,11 @@ from urllib.parse import urlsplit
 ACCESS_TOKEN_SECONDS = 3600
 # A refresh token rotates on every use and lapses after 30 days unused.
 REFRESH_TOKEN_SECONDS = 30 * 24 * 3600
+# A client that sends several requests at once refreshes once for each when its
+# access token lapses, and one whose refresh went unanswered asks again. For
+# this long after a refresh token is used, presenting it again returns the
+# tokens that use issued; after it, presenting it revokes the grant.
+REFRESH_GRACE_SECONDS = 30
 # However often it is refreshed, a grant ends 90 days after consent.
 GRANT_SECONDS = 90 * 24 * 3600
 AUTHORIZATION_CODE_SECONDS = 60
@@ -53,8 +61,8 @@ _URLSAFE = frozenset(string.ascii_letters + string.digits + "-_")
 # implies events.read and isms.read; with_implied_permissions adds those first.
 SCOPES: dict[str, tuple[str, frozenset[str]]] = {
     "isms.read": (
-        "ISMS records: objectives, SWOT, policies and processes, assets, people "
-        "and vendors / 3rd parties",
+        "ISMS records: objectives, SWOT, the legal register, policies and "
+        "processes, assets, people and vendors / 3rd parties",
         frozenset({"isms.read", "isms.manage"}),
     ),
     "risk.read": (
@@ -73,8 +81,8 @@ SCOPES: dict[str, tuple[str, frozenset[str]]] = {
     # deletes them, and is granted only by that domain's manage permission.
     "isms.manage": (
         "Add and update ISMS records: policies and processes, objectives, SWOT, "
-        "assets, the access matrix, the organisation chart, measures, meetings, "
-        "people and vendors / 3rd parties",
+        "the legal register, assets, the access matrix, the organisation chart, "
+        "measures, meetings, people and vendors / 3rd parties",
         frozenset({"isms.manage"}),
     ),
     "risk.manage": (
@@ -124,6 +132,10 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("GET", "/v1/risks/{risk_id:uuid}"): None,
     ("GET", "/v1/risks/{risk_id:uuid}/controls"): None,
     ("GET", "/v1/isms/swot"): None,
+    ("GET", "/v1/isms/swot/{item_id:uuid}"): None,
+    ("GET", "/v1/isms/legal-register"): None,
+    ("GET", "/v1/isms/legal-register/meta"): None,
+    ("GET", "/v1/isms/legal-register/{item_id:uuid}"): None,
     ("GET", "/v1/isms/objectives"): None,
     ("GET", "/v1/isms/documents"): None,
     ("GET", "/v1/isms/documents/{document_id:uuid}"): None,
@@ -151,6 +163,8 @@ INNER_ROUTES: dict[tuple[str, str], str | None] = {
     ("POST", "/v1/isms/swot"): _ISMS,
     ("PATCH", "/v1/isms/swot/{item_id:uuid}"): _ISMS,
     ("POST", "/v1/isms/swot/import"): _ISMS,
+    ("POST", "/v1/isms/legal-register"): _ISMS,
+    ("PATCH", "/v1/isms/legal-register/{item_id:uuid}"): _ISMS,
     ("POST", "/v1/isms/assets"): _ISMS,
     ("PATCH", "/v1/isms/assets/{asset_id:uuid}"): _ISMS,
     ("POST", "/v1/isms/licenses"): _ISMS,
@@ -192,6 +206,21 @@ _URI_LIMIT = 2048
 
 def new_secret(prefix: str) -> str:
     return prefix + secrets.token_urlsafe(_SECRET_BYTES)
+
+
+def successor(refresh_token: str, salt: str, prefix: str) -> str:
+    """The token a used refresh token was exchanged for.
+
+    Keen keeps only digests, so it cannot hand out again a token it issued.
+    A refresh token's successors are instead derived from the token itself,
+    which Keen never stores, and a random salt kept beside its digest for the
+    grace period. Presented again in that period, the token yields the same
+    pair; neither the token nor the database alone yields anything.
+    """
+    mac = hmac.new(
+        refresh_token.encode(), f"{prefix}{salt}".encode(), hashlib.sha256
+    ).digest()
+    return prefix + base64.urlsafe_b64encode(mac).rstrip(b"=").decode()
 
 
 def well_formed(value: str, prefix: str) -> bool:

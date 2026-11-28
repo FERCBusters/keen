@@ -40,7 +40,7 @@
         <div id="ownersEditor" class="mt-3 no-print" hidden>
           <label class="form-label small-muted mb-1" for="ownersSelect">Owners</label>
           <select id="ownersSelect" class="form-select" multiple size="6"></select>
-          <div class="form-text">Active accounts only. Hold Ctrl or Cmd to choose several, or to clear one.</div>
+          <div class="form-text">Active accounts only. Search to add an account, or tick accounts in the list.</div>
           <button id="ownersSave" class="btn btn-sm btn-primary mt-2" type="button">Save owners</button>
         </div>
       </div>
@@ -75,12 +75,12 @@
       </div>
       <div class="card-body">
         <div class="row g-3">
-          <div class="col-12 col-lg-8">
+          <div class="col-12 col-lg">
             <label class="form-label small-muted mb-1" for="clauseUpstreamUrl">Clause upstream URL</label>
             <input id="clauseUpstreamUrl" class="form-control" type="url" placeholder="https://">
           </div>
-          <div class="col-12 col-lg-4 d-flex align-items-end">
-            <button id="saveClauseUpstreamUrl" class="btn btn-outline-primary w-100" type="button">Save clause URL</button>
+          <div class="col-12 col-lg-auto d-flex align-items-end">
+            <button id="saveClauseUpstreamUrl" class="btn btn-outline-primary" type="button">Save clause URL</button>
           </div>
         </div>
       </div>
@@ -98,15 +98,15 @@
       <div id="adminControlsCollapse" class="collapse show">
         <div class="card-body">
           <div class="row g-2 mb-3">
-            <div class="col-12 col-lg-8">
-              <label class="form-label small-muted mb-1" for="controlSearch">Search controls</label>
-              <input id="controlSearch" class="form-control" type="text" placeholder="Control ref or title">
+            <div class="col-12 col-lg">
+              <label class="form-label small-muted mb-1" for="clauseControls">Controls linked to this clause</label>
+              <select id="clauseControls" class="form-select" multiple size="8"></select>
             </div>
-            <div class="col-12 col-lg-4 d-flex align-items-end">
-              <button id="saveClauseControls" class="btn btn-primary w-100" type="button">Save controls</button>
+            <div class="col-12 col-lg-auto d-flex align-items-end">
+              <button id="saveClauseControls" class="btn btn-primary" type="button">Save controls</button>
             </div>
           </div>
-          <div id="adminControlsList" class="border rounded p-2 small-muted">Loading controls</div>
+          <div id="adminControlsList" class="small-muted">Loading controls</div>
         </div>
       </div>
     </div>
@@ -115,11 +115,8 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="clauseControlsTab" data-bs-toggle="tab" data-bs-target="#clauseControlsPane" type="button" role="tab" aria-controls="clauseControlsPane" aria-selected="true">Linked controls</button>
       </li>
-      <li class="nav-item" role="presentation" id="clausePestleTabItem">
-        <button class="nav-link" id="clausePestleTab" data-feature="pestle" data-bs-toggle="tab" data-bs-target="#clausePestlePane" type="button" role="tab" aria-controls="clausePestlePane" aria-selected="false">PESTLE(E)</button>
-      </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="clauseIsmsTab" data-feature="isms" data-bs-toggle="tab" data-bs-target="#clauseIsmsPane" type="button" role="tab" aria-controls="clauseIsmsPane" aria-selected="false">ISMS</button>
+        <button class="nav-link" id="clauseItemsTab" data-bs-toggle="tab" data-bs-target="#clauseItemsPane" type="button" role="tab" aria-controls="clauseItemsPane" aria-selected="false">Related items</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="clauseChangelogTab" data-bs-toggle="tab" data-bs-target="#clauseChangelogPane" type="button" role="tab" aria-controls="clauseChangelogPane" aria-selected="false">Changelog</button>
@@ -152,58 +149,12 @@
             </div>
           </div>
         </div>
-
-        <div id="clauseRisksCard" class="card mt-3" style="display:none;">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">Cross-referenced risks</div>
-              <div class="small-muted">Risks linked to this clause.</div>
-            </div>
-            <span id="clauseRisksCount" class="badge text-bg-light">0</span>
-          </div>
-          <div class="card-body">
-            <div id="clauseRisksView" class="small-muted">No risks linked.</div>
-          </div>
-        </div>
       </section>
 
-      <section class="tab-pane fade" id="clausePestlePane" role="tabpanel" aria-labelledby="clausePestleTab" tabindex="0">
-        <div id="clausePestleCard" class="card mb-3">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div>
-              <div class="fw-bold">PESTLE(E) relevance</div>
-              <div class="small-muted">PESTLE(E) items linked to this clause for the selected framework.</div>
-            </div>
-            <a id="openPestleFromClause" class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/pestle.html">Open PESTLE(E)</a>
-          </div>
-          <div class="card-body p-0">
-            <div class="table-responsive">
-              <table class="table table-sm align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th style="width:150px;">Type</th>
-                    <th style="width:110px;">Lens</th>
-                    <th>Item</th>
-                    <th style="width:130px;">Clause relevance</th>
-                    <th>Overall relevance</th>
-                    <th>Rationale</th>
-                  </tr>
-                </thead>
-                <tbody id="clausePestleRows"><tr><td colspan="6" class="p-4 small-muted">Loading PESTLE(E) relevance</td></tr></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="tab-pane fade" id="clauseIsmsPane" role="tabpanel" aria-labelledby="clauseIsmsTab" tabindex="0">
-        <div class="card mb-3">
-          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
-            <div><div class="fw-bold">ISMS references</div><div class="small-muted">ISMS objectives, documents, org roles, assets and meetings linked to this clause.</div></div>
-            <a class="btn btn-sm btn-outline-primary" data-nav-fw="1" href="/isms.html">Open ISMS</a>
-          </div>
-          <div id="clauseIsmsView" class="card-body small-muted">Loading ISMS references</div>
-        </div>
+      <section class="tab-pane fade" id="clauseItemsPane" role="tabpanel" aria-labelledby="clauseItemsTab" tabindex="0">
+        <!-- The cards are built by pages/clause.js with the design system's
+             relatedCard, so each has the same frame as on every other page. -->
+        <div id="clauseRelatedItems" class="mb-3"></div>
       </section>
 
       <section class="tab-pane fade" id="clauseChangelogPane" role="tabpanel" aria-labelledby="clauseChangelogTab" tabindex="0">

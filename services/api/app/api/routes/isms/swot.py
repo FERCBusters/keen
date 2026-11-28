@@ -1,6 +1,5 @@
 """SWOT HTTP adapters; all routes use the application's protected middleware."""
 
-from typing import Literal
 from uuid import UUID
 
 from fastapi import Depends, Query, Request
@@ -163,7 +162,7 @@ def add_link(
 @router.delete("/v1/isms/swot/{item_id}/links/{target_type}/{target_id}")
 def remove_link(
     item_id: str,
-    target_type: Literal["objective", "document", "asset", "person", "vendor", "risk"],
+    target_type: service.LinkType,
     target_id: UUID,
     request: Request,
     expected_version: int = Query(..., ge=1),

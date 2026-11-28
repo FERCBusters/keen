@@ -70,6 +70,7 @@ _LABELS = {
     "asset": "Asset",
     "meeting": "Meeting",
     "effectiveness_measure": "Effectiveness measure",
+    "legal_item": "Legal register item",
     "risk": "Risk",
 }
 # Record pages take only the record UUID. Organisation chart nodes have no
@@ -81,6 +82,7 @@ _RECORD_PAGES = {
     "asset": "/isms-asset.html?id={id}",
     "meeting": "/isms-meeting.html?id={id}",
     "effectiveness_measure": "/isms-effectiveness-measure.html?id={id}",
+    "legal_item": "/legal-register.html?id={id}",
     "risk": "/risk.html?id={id}",
 }
 # Risks keep their control links in a table of their own.

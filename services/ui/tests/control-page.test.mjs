@@ -139,6 +139,10 @@ async function controlPage(t, options = {}) {
           ],
         };
       }
+      if (p === '/api/v1/stories/related/control/c1') {
+        if (fail.stories) throw new Error('Stories offline');
+        return { items: options.stories || [] };
+      }
       if (p === '/api/v1/controls/c1/pestle') {
         if (fail.pestle) throw new Error('PESTLE forbidden');
         return { items: options.pestle || [] };
@@ -154,6 +158,7 @@ async function controlPage(t, options = {}) {
           };
         return {
           swot: [{ id: 's1', title: 'Strength <b>x</b>', updated_at: '2026-01-01' }],
+          legal_items: [{ id: 'l1', title: 'Data <b>Act</b>', updated_at: '2026-01-02' }],
           objectives: [{ requirement: 'Reduce incidents' }],
           documents: empty.documents
             ? []
@@ -446,44 +451,63 @@ test('the Keen Assurance Framework attribution is shown for its controls', async
 
 test('readers without risk or ISMS permission do not request restricted links', async (t) => {
   const { ui } = await controlPage(t, { me: { can_view_controls: true } });
-  assert.ok(ui.el('risksCard').classList.contains('d-none'));
-  assert.ok(ui.el('controlGovernancePane').contains(ui.el('risksCard')));
-  assert.equal(ui.el('risksCard').style.display, 'none');
+  assert.ok(ui.el('controlItemsPane').contains(ui.el('risksCard')));
+  assert.equal(ui.el('risksCard').hidden, true);
   assert.ok(!ui.calls.some((c) => /\/risks\?/.test(c.url)));
-  assert.equal(ui.el('editClauseApplicability').style.display, 'none');
+  assert.equal(ui.el('editClauseApplicability').hidden, true);
   assert.equal(ui.el('controlJustificationCard').style.display, 'none');
   await openRelated(ui);
   assert.ok([...ui.el('crossFrameworkView').options].some((o) => o.value === 'B'));
   assert.notEqual(ui.el('crossFrameworkForm').style.display, '');
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() =>
     /do not have permission to view ISMS/.test(ui.el('controlIsmsView').textContent),
   );
   assert.ok(!ui.calls.some((c) => c.url.includes('/isms?')));
 });
 
-test('the governance pane loads ISMS and changelog on demand and updates the URL', async (t) => {
+test('Related items and Changelog load on demand and each tab updates the URL', async (t) => {
   const { ui } = await controlPage(t);
   const ismsCalls = () =>
     ui.calls.filter((c) => c.url.startsWith('/api/v1/controls/c1/isms?')).length;
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => ui.el('controlIsmsView').querySelector('table'));
-  assert.match(ui.window.location.search, /tab=governance/);
+  assert.match(ui.window.location.search, /tab=items/);
   const rows = [...ui.el('controlIsmsView').querySelectorAll('tbody tr')];
   assert.deepEqual(
     rows.map((r) => r.cells[0].textContent),
-    ['SWOT', 'Objectives', 'Organisation chart', 'Assets', 'Meetings', 'Meetings'],
+    [
+      'SWOT',
+      'Legal register',
+      'Objectives',
+      'Organisation chart',
+      'Assets',
+      'Meetings',
+      'Meetings',
+    ],
   );
   assert.equal(ui.el('controlIsmsView').querySelector('b'), null);
   const hrefs = rows.map((r) => r.querySelector('a').getAttribute('href'));
   assert.match(hrefs[0], /^\/swot\.html\?id=s1&framework=A$/);
-  assert.match(hrefs[4], /isms-meeting\.html\?id=mt1/);
-  assert.match(hrefs[5], /isms\.html\?tab=meetings/);
+  // A legal register item opens its own page, with its title shown as text.
+  assert.equal(hrefs[1], '/legal-register.html?id=l1&framework=A');
+  assert.equal(rows[1].cells[1].textContent, 'Data <b>Act</b>');
+  assert.match(hrefs[5], /isms-meeting\.html\?id=mt1/);
+  assert.match(hrefs[6], /isms\.html\?tab=meetings/);
+  // The changelog waits for its own tab.
+  assert.equal(ui.el('controlChangelog').textContent, 'Loading changelog');
+  ui.el('controlChangelogTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.match(ui.window.location.search, /tab=changelog/);
   await settle(() => /Justification changed/.test(ui.el('controlChangelog').textContent));
   assert.equal(ui.el('controlChangelog').querySelector('b'), null);
+  // Governance holds what loaded with the control, so it asks for nothing.
+  const asked = ui.calls.length;
+  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.match(ui.window.location.search, /tab=governance/);
+  assert.equal(ui.calls.length, asked);
   // A second activation reuses the loaded references.
   const before = ismsCalls();
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(ismsCalls(), before);
 
@@ -492,23 +516,25 @@ test('the governance pane loads ISMS and changelog on demand and updates the URL
   // Requirements is the default tab, so the address drops the tab name.
   ui.el('controlRequirementsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   assert.doesNotMatch(ui.window.location.search, /tab=/);
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  assert.match(ui.window.location.search, /tab=governance/);
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.match(ui.window.location.search, /tab=items/);
 });
 
 test('deep links to the ISMS and changelog tabs load their data with the page', async (t) => {
-  const isms = await controlPage(t, { query: '&id=c1&tab=governance' });
+  const isms = await controlPage(t, { query: '&id=c1&tab=items' });
   assert.ok(isms.ui.el('controlIsmsView').querySelector('table'));
-  const log = await controlPage(t, { query: '&id=c1&tab=governance' });
+  assert.equal(isms.ui.el('controlChangelog').textContent, 'Loading changelog');
+  const log = await controlPage(t, { query: '&id=c1&tab=changelog' });
   assert.match(log.ui.el('controlChangelog').textContent, /Justification changed/);
+  assert.equal(log.ui.el('controlIsmsView').querySelector('table'), null);
   const related = await controlPage(t, { query: '&id=c1&tab=related' });
   assert.ok([...related.ui.el('crossFrameworkView').options].some((o) => o.value === 'B'));
   // A second activation reuses the loaded links.
   const before = related.ui.calls.length;
   related.ui.el('controlRelatedTab').dispatchEvent(new related.ui.window.Event('shown.bs.tab'));
   assert.equal(related.ui.calls.length, before);
-  related.ui.el('controlGovernanceTab').dispatchEvent(new related.ui.window.Event('shown.bs.tab'));
-  assert.match(related.ui.window.location.search, /tab=governance/);
+  related.ui.el('controlItemsTab').dispatchEvent(new related.ui.window.Event('shown.bs.tab'));
+  assert.match(related.ui.window.location.search, /tab=items/);
 });
 
 test('a reader deep-linked to the justification tab sees Requirements', async (t) => {
@@ -525,22 +551,73 @@ test('a reader deep-linked to the justification tab sees Requirements', async (t
   assert.deepEqual(shown, ['controlRequirementsTab']);
 });
 
-test('the tab bar shows four top-level tabs and the governance pane holds the rest', async (t) => {
+test('each tab holds its own cards: related items, governance and the changelog', async (t) => {
   const { ui } = await controlPage(t);
   assert.deepEqual(
-    [...ui.el('controlPageTabs').querySelectorAll('[role="tab"]')].map((b) => b.id),
-    ['controlRequirementsTab', 'controlEvidenceTab', 'controlRelatedTab', 'controlGovernanceTab'],
+    [...ui.el('controlPageTabs').querySelectorAll('[role="tab"]')].map((b) => [
+      b.id,
+      b.textContent,
+    ]),
+    [
+      ['controlRequirementsTab', 'Requirements'],
+      ['controlEvidenceTab', 'Evidence'],
+      ['controlItemsTab', 'Related items'],
+      ['controlRelatedTab', 'Related controls'],
+      ['controlGovernanceTab', 'Governance'],
+      ['controlChangelogTab', 'Changelog'],
+    ],
   );
-  for (const id of [
-    'controlJustificationCard',
-    'clausesCard',
-    'adminClausesCard',
-    'risksCard',
-    'controlChangelog',
-  ]) {
-    assert.ok(ui.el('controlGovernancePane').contains(ui.el(id)), id);
+  // The records that refer to the control are the design system's
+  // related-item cards, laid out as one group.
+  const cards = ui.el('controlRelatedItems');
+  assert.ok(cards.classList.contains('mosp-related-cards'));
+  assert.ok(ui.el('controlItemsPane').contains(cards));
+  assert.deepEqual(
+    [...cards.children].map((card) => [
+      card.id,
+      card.querySelector('.mosp-related-card-title').textContent,
+    ]),
+    [
+      ['clausesCard', 'Clauses'],
+      ['controlStoriesCard', 'Stories'],
+      ['adminClausesCard', 'Admin: clause applicability'],
+      ['risksCard', 'Cross-referenced risks'],
+      ['controlIsmsCard', 'ISMS references'],
+      ['controlPestleCard', 'PESTLE(E) relevance'],
+    ],
+  );
+  // Every card has the one frame: none is written out by hand.
+  for (const card of cards.children) {
+    assert.ok(card.classList.contains('mosp-related-card'), card.id);
+    assert.ok(card.querySelector('.card-body.mosp-related-card-body'), card.id);
   }
-  assert.ok(ui.el('controlIsmsView').closest('#controlGovernancePane'));
+  // Clauses and Stories are short and share a row; a card that holds a table
+  // has a row of its own, as the clause list does once it has clauses.
+  const wide = (id) => ui.el(id).classList.contains('mosp-related-card-wide');
+  assert.deepEqual(
+    [
+      'controlStoriesCard',
+      'adminClausesCard',
+      'risksCard',
+      'controlIsmsCard',
+      'controlPestleCard',
+    ].map(wide),
+    [false, true, true, true, true],
+  );
+  assert.equal(wide('clausesCard'), true);
+  assert.equal(ui.el('clausesView').querySelectorAll('tbody tr').length, 3);
+  // The clause editor's form is the page's own, inside the shared frame.
+  assert.ok(ui.el('adminClausesCard').contains(ui.el('controlClauses')));
+  assert.equal(ui.el('controlIsmsCard').querySelector('a.btn').getAttribute('href'), '/isms.html');
+  // Governance is who answers for the control and why it applies.
+  assert.deepEqual(
+    [...ui.el('controlGovernancePane').children].map((card) => card.id),
+    ['ownersCard', 'controlJustificationCard'],
+  );
+  assert.deepEqual(
+    [...ui.el('controlChangelogPane').children].map((card) => card.id),
+    ['controlChangelog'],
+  );
   assert.equal(ui.el('controlJustificationCard').style.display, '');
 });
 
@@ -648,28 +725,47 @@ test('a selected source with no remaining results stays selectable', async (t) =
 
 test('administrators edit clause applicability with inferred parent values', async (t) => {
   const { ui, state } = await controlPage(t);
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   assert.equal(ui.el('editClauseApplicability').textContent, 'Hide edit');
   assert.equal(ui.el('controlUpstreamUrl').value, 'https://guidance.example/a51');
-  const sel = (id) => ui.el('adminClausesList').querySelector(`[data-clause-id="${id}"]`);
-  // Existing link values are selected; k2 is an intermediate parent, so its value
-  // is inferred and its select stays blank.
-  assert.equal(sel('k10').value, 'applicable');
-  assert.equal(sel('k2').value, '');
-  assert.equal(sel('k4').value, '');
-  sel('k41').value = 'applicable';
-  sel('k41').dispatchEvent(new ui.window.Event('change'));
-  assert.equal(sel('k4').value, 'partially_applicable');
-  sel('k421').value = 'applicable';
-  sel('k422').value = 'applicable';
-  sel('k422').dispatchEvent(new ui.window.Event('change'));
-  assert.equal(sel('k4').value, 'applicable');
-  assert.equal(sel('k2').value, '');
-  sel('k422').value = 'partially_applicable';
-  sel('k422').dispatchEvent(new ui.window.Event('change'));
-  assert.equal(sel('k4').value, 'partially_applicable');
+  // The clauses are a multiple select, which the design system presents as its
+  // picker: a chosen clause carries its applicability, one left out is not
+  // applicable.
+  const select = ui.el('controlClauses');
+  const option = (id) => [...select.options].find((o) => o.value === id);
+  const value = (id) => (option(id).selected ? option(id).dataset.extra : '');
+  const set = (id, applicability) => {
+    option(id).selected = Boolean(applicability);
+    if (applicability) option(id).dataset.extra = applicability;
+    select.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  };
+  assert.equal(select.multiple, true);
+  assert.equal(ui.el('adminClausesList').textContent, '');
+  assert.deepEqual(JSON.parse(select.dataset.pickerExtra).choices, [
+    ['applicable', 'Applicable'],
+    ['partially_applicable', 'Partially applicable'],
+  ]);
+  // Existing link values are chosen; k2 is an intermediate parent, so its value
+  // is inferred and it stays unchosen.
+  assert.equal(value('k10'), 'applicable');
+  assert.equal(value('k2'), '');
+  assert.equal(value('k4'), '');
+  const redraws = ui.pickers.refreshed.length;
+  set('k41', 'applicable');
+  assert.equal(value('k4'), 'partially_applicable');
+  // The parent was set from code, so the picker is asked to show it.
+  assert.ok(ui.pickers.refreshed.length > redraws);
+  assert.equal(ui.pickers.refreshed.at(-1), 'controlClauses');
+  option('k421').selected = true;
+  set('k422', 'applicable');
+  // k421 is chosen without a value of its own; it is saved as applicable below.
+  assert.equal(option('k421').dataset.extra, undefined);
+  assert.equal(value('k4'), 'applicable');
+  assert.equal(value('k2'), '');
+  set('k422', 'partially_applicable');
+  assert.equal(value('k4'), 'partially_applicable');
 
   ui.el('saveClauseLinks').click();
   await settle(() => state.patched.length === 1);
@@ -688,7 +784,7 @@ test('administrators edit clause applicability with inferred parent values', asy
   await settle(() => ui.el('status').textContent === 'Clause applicability saved');
   await settle(() => ui.el('saveClauseLinks').disabled === false);
   ui.el('editClauseApplicability').click();
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
   // The clause catalogue is fetched once.
   assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses?')).length, 1);
 });
@@ -698,7 +794,7 @@ test('a clause catalogue failure leaves edit mode closed with an error', async (
   ui.el('editClauseApplicability').click();
   await settle(() => /Failed to load clauses: Clauses offline/.test(ui.el('status').textContent));
   assert.equal(ui.el('editClauseApplicability').textContent, 'Edit');
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
 });
 
 test('administrators save justification and guidance URL, refreshing the guidance link', async (t) => {
@@ -713,7 +809,7 @@ test('administrators save justification and guidance URL, refreshing the guidanc
   await settle(() => ui.el('ctrlMeta').textContent === 'A · control · in scope');
 
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('controlUpstreamUrl').value = ' javascript:alert(1) ';
   ui.el('saveControlUpstreamUrl').click();
   await settle(() => state.patched.length === 2);
@@ -794,21 +890,22 @@ test('a control with nothing linked says so in every tab', async (t) => {
   assert.equal(ui.el('status').dataset.alert, undefined);
   ui.el('editClauseApplicability').click();
   await settle(() => /No clauses are loaded/.test(ui.el('adminClausesList').textContent));
-  assert.equal(ui.el('adminClausesList').querySelector('select'), null);
+  assert.equal(ui.el('controlClauses').options.length, 0);
 });
 
 test('failed or forbidden link lookups are contained in their own panels', async (t) => {
   const { ui } = await controlPage(t, {
     fail: { risks: true, isms: true, changelog: true, cross: true },
   });
-  await settle(() => ui.el('risksCard').style.display === 'none');
+  await settle(() => ui.el('risksCard').hidden === true);
   await openRelated(ui);
   assert.equal(
     ui.el('crossFrameworkLinks').textContent,
     'Could not load control links: Links offline',
   );
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => /Failed to load ISMS references/.test(ui.el('controlIsmsView').textContent));
+  ui.el('controlChangelogTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => /Failed to load changelog/.test(ui.el('controlChangelog').textContent));
   // The evidence table is unaffected.
   assert.match(ui.el('rows').textContent, /pushed/);
@@ -823,7 +920,7 @@ test('refused saves and link changes are reported and leave the controls usable'
   assert.equal(ui.el('saveControlJustification').disabled, false);
 
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('saveClauseLinks').click();
   await settle(() => ui.el('status').textContent === 'Failed to save clauses: Patch refused');
   assert.equal(ui.el('saveClauseLinks').disabled, false);
@@ -858,7 +955,7 @@ test('a saved guidance URL becomes the Guidance link, and a failed saved search 
   });
   assert.equal(ui.el('ctrlLinks').querySelector('a'), null);
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('controlUpstreamUrl').value = 'https://guidance.example/a51 ';
   ui.el('saveControlUpstreamUrl').click();
   await settle(() => ui.el('ctrlLinks').querySelector('a'));
@@ -881,14 +978,14 @@ test('a saved guidance URL becomes the Guidance link, and a failed saved search 
 test('a deep-linked tab is shown through Bootstrap when it is available', async (t) => {
   const shown = [];
   const { ui } = await controlPage(t, {
-    query: '&id=c1&tab=governance',
+    query: '&id=c1&tab=items',
     setup(window) {
       window.bootstrap = {
         Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
       };
     },
   });
-  assert.deepEqual(shown, ['controlGovernanceTab']);
+  assert.deepEqual(shown, ['controlItemsTab']);
   assert.ok(ui.el('controlIsmsView').querySelector('table'));
 });
 
@@ -982,7 +1079,7 @@ test('Requirements opens first and assembles policies, evidence and measures', a
     ui.calls.some((c) => c.url.startsWith('/api/v1/events?')),
     false,
   );
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => ui.el('controlIsmsView').querySelector('table'));
   assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/controls/c1/isms?')).length, 1);
   ui.el('controlEvidenceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
@@ -1086,8 +1183,8 @@ test('requirement load failures stay in their own sections', async (t) => {
   assert.match(text, /Failed to load the evidence summary/);
   assert.match(text, /Failed to load linked effectiveness measures/);
   assert.equal(tileTexts(ui).filter((tile) => /Not available/.test(tile)).length, 3);
-  // A failed reference load is tried again when the governance tab opens.
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  // A failed reference load is tried again when the Related items tab opens.
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => /Failed to load ISMS references/.test(ui.el('controlIsmsView').textContent));
   assert.equal(ui.calls.filter((c) => c.url.startsWith('/api/v1/controls/c1/isms?')).length, 2);
 });
@@ -1178,19 +1275,19 @@ test('linking or unlinking a control reloads Requirements and evidence when next
 
 test('the ISMS tab names what it lists when only policies or measures are linked', async (t) => {
   const { ui } = await controlPage(t, {
-    query: '&id=c1&tab=governance',
+    query: '&id=c1&tab=items',
     empty: { ismsRecords: true },
   });
   await settle(() => !/Loading/.test(ui.el('controlIsmsView').textContent));
   assert.equal(
     ui.el('controlIsmsView').textContent,
-    'No SWOT items, objectives, organisation roles, assets or meetings are linked to this control.',
+    'No SWOT items, legal register items, objectives, organisation roles, assets or meetings are linked to this control.',
   );
 });
 
-test('a deep link to Governance loads its linked records as the page starts', async (t) => {
+test('a deep link to Related items loads its linked records as the page starts', async (t) => {
   const { ui } = await controlPage(t, {
-    query: '&id=c1&tab=governance',
+    query: '&id=c1&tab=items',
     setup(window) {
       window.bootstrap = {
         Tab: {
@@ -1208,7 +1305,7 @@ test('a deep link to Governance loads its linked records as the page starts', as
 
 test('administrators choose owners from active accounts, loaded when the editor opens', async (t) => {
   const { ui, state } = await controlPage(t, {
-    query: '&id=c1&tab=governance',
+    query: '&id=c1&tab=changelog',
     control: baseControl({ owners: [{ id: 'u1', username: 'dana' }] }),
   });
   await settle(() => /Justification changed/.test(ui.el('controlChangelog').textContent));
@@ -1261,7 +1358,7 @@ test('owners are read-only for readers, and failed loads and saves are reported'
   assert.equal(reader.ui.el('ownersList').textContent, 'No owners yet.');
   assert.equal(reader.ui.el('ownersEdit').hidden, true);
 
-  const offline = await controlPage(t, { query: '&id=c1&tab=governance', fail: { users: true } });
+  const offline = await controlPage(t, { query: '&id=c1&tab=items', fail: { users: true } });
   offline.ui.el('ownersEdit').click();
   await settle(() => /Users offline/.test(offline.ui.el('status').textContent));
   assert.equal(
@@ -1271,7 +1368,7 @@ test('owners are read-only for readers, and failed loads and saves are reported'
   assert.equal(offline.ui.el('ownersEditor').hidden, true);
   assert.equal(offline.ui.el('ownersEdit').disabled, false);
 
-  const refused = await controlPage(t, { query: '&id=c1&tab=governance', fail: { put: true } });
+  const refused = await controlPage(t, { query: '&id=c1&tab=items', fail: { put: true } });
   refused.ui.el('ownersEdit').click();
   await settle(() => !refused.ui.el('ownersEditor').hidden);
   refused.ui.el('ownersSave').click();
@@ -1367,7 +1464,7 @@ test('an untitled control out of scope shows its reference and scope', async (t)
   );
 });
 
-test('a control page without an id opens Governance without requests', async (t) => {
+test('a control page without an id opens every tab without requests', async (t) => {
   const ui = await page(t, 'control', {
     get: async (u) => {
       throw new Error('Unexpected GET ' + u);
@@ -1379,10 +1476,12 @@ test('a control page without an id opens Governance without requests', async (t)
     changelog: ui.el('controlChangelog').textContent,
   };
   for (const id of [
-    'controlGovernanceTab',
+    'controlItemsTab',
     'controlRequirementsTab',
     'controlEvidenceTab',
     'controlRelatedTab',
+    'controlGovernanceTab',
+    'controlChangelogTab',
   ])
     ui.el(id).dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await new Promise((r) => setTimeout(r, 20));
@@ -1401,27 +1500,28 @@ test('a control page without an id opens Governance without requests', async (t)
   assert.equal(ui.el('status').textContent, 'Missing control id.');
 });
 
-test('switched-off risks and ISMS leave Governance without those requests', async (t) => {
+test('switched-off risks and ISMS leave Related items without those requests', async (t) => {
   const { ui } = await controlPage(t, {
     me: {
       is_admin: true,
       features: { enabled: { risk_cia: false, isms: false } },
     },
   });
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlChangelogTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await settle(() => /Justification changed/.test(ui.el('controlChangelog').textContent));
   assert.equal(
     ui.calls.some((c) => /\/controls\/c1\/(risks|isms)\?/.test(c.url)),
     false,
   );
   // Their panels keep the page's own placeholders.
-  assert.equal(ui.el('risksCard').style.display, 'none');
+  assert.equal(ui.el('risksCard').hidden, true);
   assert.equal(ui.el('controlIsmsView').textContent, 'Loading ISMS references');
 });
 
 test('ISMS records without names are listed by their kind', async (t) => {
   const { ui } = await controlPage(t, {
-    query: '&id=c1&tab=governance',
+    query: '&id=c1&tab=items',
     isms: {
       swot: [],
       objectives: [{ id: 'o1', goal: '', requirement: '' }],
@@ -1450,19 +1550,19 @@ test('reopening clause editing reuses the clause catalogue already loaded', asyn
   const { ui } = await controlPage(t);
   const clauseCalls = () => ui.calls.filter((c) => c.url.startsWith('/api/v1/clauses?')).length;
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('editClauseApplicability').click();
-  assert.equal(ui.el('adminClausesCard').style.display, 'none');
+  assert.equal(ui.el('adminClausesCard').hidden, true);
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesCard').style.display === '');
-  assert.ok(ui.el('adminClausesList').querySelector('[data-clause-id="k10"]'));
+  await settle(() => ui.el('adminClausesCard').hidden === false);
+  assert.ok([...ui.el('controlClauses').options].some((o) => o.value === 'k10'));
   assert.equal(clauseCalls(), 1);
 });
 
 test('clearing the guidance URL saves no URL', async (t) => {
   const { ui, state } = await controlPage(t);
   ui.el('editClauseApplicability').click();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
   ui.el('controlUpstreamUrl').value = '   ';
   ui.el('saveControlUpstreamUrl').click();
   await settle(() => state.patched.length === 1);
@@ -1643,13 +1743,13 @@ test('saving the justification while the clause catalogue loads reports the save
   await settle(() => ui.el('saveControlJustification').disabled === false);
   assert.equal(ui.el('status').textContent, 'Control justification saved');
   release();
-  await settle(() => ui.el('adminClausesList').querySelector('select'));
+  await settle(() => ui.el('controlClauses').options.length);
 });
 
 const governance = (ui) =>
-  ui.el('controlGovernanceTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
 
-test('PESTLE(E) readers see the items rated against the control on the Governance tab', async (t) => {
+test('PESTLE(E) readers see the items rated against the control on the Related items tab', async (t) => {
   const { ui } = await controlPage(t, {
     pestle: [
       {
@@ -1666,9 +1766,13 @@ test('PESTLE(E) readers see the items rated against the control on the Governanc
     ],
   });
   governance(ui);
-  await settle(() => ui.el('controlPestleRows').querySelector('a'));
-  assert.equal(ui.el('controlPestleCard').style.display, '');
-  const row = ui.el('controlPestleRows').querySelector('tr');
+  await settle(() => ui.el('controlPestleView').querySelector('a'));
+  assert.equal(ui.el('controlPestleCard').hidden, false);
+  assert.deepEqual(
+    [...ui.el('controlPestleView').querySelectorAll('th')].map((th) => th.textContent),
+    ['Type', 'Lens', 'Item', 'Control relevance', 'Overall relevance', 'Rationale'],
+  );
+  const row = ui.el('controlPestleView').querySelector('tbody tr');
   assert.equal(row.querySelector('b'), null);
   assert.equal(row.querySelector('a').textContent, '<b>Privacy law</b>');
   assert.equal(
@@ -1693,16 +1797,16 @@ test('PESTLE(E) readers see the items rated against the control on the Governanc
 test('a control with no rated items says so, and the card stays hidden when they cannot be read', async (t) => {
   const none = await controlPage(t);
   governance(none.ui);
-  await settle(() => none.ui.el('controlPestleCard').style.display === '');
+  await settle(() => none.ui.el('controlPestleCard').hidden === false);
   assert.equal(
-    none.ui.el('controlPestleRows').textContent,
+    none.ui.el('controlPestleView').textContent,
     'No PESTLE(E) items are rated against this control.',
   );
 
   const failed = await controlPage(t, { fail: { pestle: true } });
   governance(failed.ui);
   await settle(() => failed.ui.idle());
-  assert.equal(failed.ui.el('controlPestleCard').style.display, 'none');
+  assert.equal(failed.ui.el('controlPestleCard').hidden, true);
 
   for (const me of [
     { is_admin: true, features: { enabled: { pestle: false } } },
@@ -1711,7 +1815,7 @@ test('a control with no rated items says so, and the card stays hidden when they
     const hidden = await controlPage(t, { me });
     governance(hidden.ui);
     await settle(() => hidden.ui.idle());
-    assert.equal(hidden.ui.el('controlPestleCard').style.display, 'none');
+    assert.equal(hidden.ui.el('controlPestleCard').hidden, true);
     assert.equal(
       hidden.ui.calls.some((c) => c.url.endsWith('/pestle')),
       false,
@@ -1773,4 +1877,60 @@ test('a control OSA has dropped says so and why it is still here', async (t) => 
   assert.match(note.textContent, /records here depend on it/);
   // The note comes before what OSA last said of the control.
   assert.equal(note.nextElementSibling, ui.el('osaCrosswalk'));
+});
+
+test('the related items list the stories assigned to the control for story readers', async (t) => {
+  const { ui } = await controlPage(t, {
+    stories: [
+      {
+        id: 's1',
+        title: 'Payroll <b>export</b>',
+        status: 'open',
+        updated_at: '2026-05-01',
+        created_by: 'alice',
+      },
+    ],
+  });
+  const storyCalls = () =>
+    ui.calls.filter((c) => c.url.startsWith('/api/v1/stories/related/control/c1')).length;
+  assert.equal(ui.el('controlStoriesCard').hidden, false);
+  assert.equal(ui.el('controlStoriesCard').dataset.feature, 'stories');
+  assert.equal(ui.document.getElementById('storiesRelatedTab'), null, 'no extra top-level tab');
+  assert.equal(storyCalls(), 0, 'the list waits for Related items');
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('controlStories').querySelector('.list-group'));
+  const links = [...ui.el('controlStories').querySelectorAll('a')].map((a) => [
+    a.textContent,
+    a.getAttribute('href'),
+  ]);
+  assert.deepEqual(links, [
+    ['Payroll <b>export</b>', '/story.html?id=s1&framework=A'],
+    ['Controls and clauses', '/story.html?id=s1&tab=framework&framework=A'],
+  ]);
+  assert.equal(ui.el('controlStories').querySelector('b'), null);
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  assert.equal(storyCalls(), 1);
+});
+
+test('the stories card says when no story is assigned or the list cannot be read', async (t) => {
+  const { ui } = await controlPage(t);
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /No story/.test(ui.el('controlStories').textContent));
+  assert.equal(ui.el('controlStories').textContent, 'No story is assigned to this control yet.');
+
+  const { ui: offline } = await controlPage(t, { fail: { stories: true } });
+  offline.el('controlItemsTab').dispatchEvent(new offline.window.Event('shown.bs.tab'));
+  await settle(() => /unavailable/.test(offline.el('controlStories').textContent));
+  assert.equal(
+    offline.el('controlStories').textContent,
+    'Stories are unavailable with your current access.',
+  );
+});
+
+test('accounts that cannot read stories get no stories card and no request for one', async (t) => {
+  const { ui } = await controlPage(t, { me: { can_view_isms: true } });
+  assert.equal(ui.el('controlStoriesCard').hidden, true);
+  ui.el('controlItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => !/Loading ISMS/.test(ui.el('controlIsmsView').textContent));
+  assert.ok(!ui.calls.some((c) => c.url.includes('/stories/')));
 });

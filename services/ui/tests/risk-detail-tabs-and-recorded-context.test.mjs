@@ -60,7 +60,7 @@ async function riskPage(t, { query = '&id=r1', record = risk(), setup, scripts }
       throw new Error('Unexpected GET ' + u);
     },
   });
-  await settle(() => ui.el('swotRelatedPane')?.textContent || ui.el('status').textContent);
+  await settle(() => (ui.calls.length && ui.idle()) || ui.el('status').textContent);
   return ui;
 }
 

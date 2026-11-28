@@ -1,5 +1,6 @@
 // Questions: the thread panel shared by every record that takes questions
-// (evidence events, risks, PESTLE(E) items, SWOT items and stories), and the
+// (evidence events, risks, PESTLE(E) items, SWOT items, legal register items
+// and stories), and the
 // row helpers for the question queue and each person's own questions.
 import { featureEnabled } from '/pages/feature-availability.js';
 import {
@@ -55,7 +56,11 @@ export function questionTitle(item) {
 }
 
 // Record types whose stored name is not what the application calls them.
-const TARGET_KINDS = { pestle_item: 'PESTLE(E) item', isms_swot: 'SWOT item' };
+const TARGET_KINDS = {
+  pestle_item: 'PESTLE(E) item',
+  isms_swot: 'SWOT item',
+  isms_legal_item: 'Legal register item',
+};
 
 export function questionSubline(item) {
   const kind =

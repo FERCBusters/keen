@@ -125,7 +125,5 @@ window.addEventListener('hashchange', () =>
 );
 load();
 
-import { mountSwotRelated } from '/pages/swot-related.js';
-import { mountStoryRelated } from '/pages/story-related.js';
-mountSwotRelated('objective', new URLSearchParams(location.search).get('id'));
-mountStoryRelated({ me, kind: 'objective', id: new URLSearchParams(location.search).get('id') });
+import { mountRelatedItems } from '/pages/related-items-tab.js';
+mountRelatedItems({ me, kind: 'objective', id: new URLSearchParams(location.search).get('id') });

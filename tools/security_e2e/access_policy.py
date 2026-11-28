@@ -117,6 +117,11 @@ AFFECTED_RULE = (
 # Additional object rules. The matrix probe account owns nothing, so these
 # operations are checked with their permission gate only.
 OBJECT_RULES = {
+    "GET /v1/map": (
+        "Each node is a record the caller can read with its feature switched on, "
+        "and a link joins two such records."
+    ),
+    "GET /v1/map/neighbours": "As the Map: the record and its neighbours are those the caller can read.",
     "GET /v1/risks/{risk_id}": "Members of the risk's owning organisation role can read it.",
     "POST /v1/risks": AFFECTED_RULE,
     "POST /v1/risks/import": AFFECTED_RULE,
@@ -493,6 +498,8 @@ POLICY = {
     "GET /v1/graph/clause_source": EVENTS_READ,
     "GET /v1/graph/control_source": EVENTS_READ,
     "GET /v1/graph/risk_control": RISK_READ,
+    "GET /v1/map": SIGNED_IN,
+    "GET /v1/map/neighbours": SIGNED_IN,
     "GET /v1/home": SIGNED_IN,
     "GET /v1/sources": EVENTS_READ,
     "GET /v1/sources/meta": EVENTS_READ,
@@ -598,6 +605,21 @@ POLICY = {
     "GET /v1/isms/meetings/{meeting_id}": ISMS_READ,
     "PATCH /v1/isms/meetings/{meeting_id}": ISMS_MANAGE,
     "GET /v1/isms/meta": ISMS_READ,
+    "GET /v1/isms/legal-register": ISMS_READ,
+    "POST /v1/isms/legal-register": ISMS_MANAGE,
+    "GET /v1/isms/legal-register/meta": ISMS_READ,
+    "GET /v1/isms/legal-register/export.csv": ISMS_READ,
+    "GET /v1/isms/legal-register/choices/{target_type}": ISMS_READ,
+    "POST /v1/isms/legal-register/categories": ISMS_MANAGE,
+    "PATCH /v1/isms/legal-register/categories/{category_id}": ISMS_MANAGE,
+    "DELETE /v1/isms/legal-register/categories/{category_id}": ISMS_MANAGE,
+    "GET /v1/isms/legal-register/{item_id}": ISMS_READ,
+    "PATCH /v1/isms/legal-register/{item_id}": ISMS_MANAGE,
+    "DELETE /v1/isms/legal-register/{item_id}": ISMS_MANAGE,
+    "POST /v1/isms/legal-register/{item_id}/links": ISMS_MANAGE,
+    "DELETE /v1/isms/legal-register/{item_id}/links/{target_type}/{target_id}": ISMS_MANAGE,
+    "POST /v1/isms/legal-register/{item_id}/assessments": ISMS_MANAGE,
+    "DELETE /v1/isms/legal-register/{item_id}/assessments/{assessment_id}": ISMS_MANAGE,
     "GET /v1/isms/swot": ISMS_READ,
     "POST /v1/isms/swot": ISMS_MANAGE,
     "POST /v1/isms/swot/import": ISMS_MANAGE,
@@ -705,6 +727,7 @@ POLICY = {
     "POST /v1/me/mcp/consent": SIGNED_IN,
     "DELETE /v1/me/mcp/grants/{grant_id}": SIGNED_IN,
     "GET /v1/me/isms-assets": SIGNED_IN,
+    "GET /v1/me/isms-legal-items": SIGNED_IN,
     "GET /v1/me/isms-meetings": SIGNED_IN,
     "GET /v1/me/isms-objectives": SIGNED_IN,
     "GET /v1/me/isms-role": SIGNED_IN,

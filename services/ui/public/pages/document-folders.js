@@ -105,11 +105,27 @@ export function mountDocumentFolders({ panel, canManage, status, framework, onSe
     if (selected !== ALL && selected !== UNFILED && !byId.has(selected)) selected = ALL;
   }
 
-  function countBadge(count) {
-    return node('span', { class: 'badge text-bg-light ms-auto' }, String(count));
+  function countBadge(count, title) {
+    return node(
+      'span',
+      { class: 'badge text-bg-light ms-auto', ...(title ? { title } : {}) },
+      String(count),
+    );
   }
 
-  function item(view, label, iconName, count, level, folder = null) {
+  // A folder counts the documents filed in it and in every folder inside it,
+  // as a file manager does; where those differ, pointing at the count says how.
+  function folderCount(folder) {
+    const own = folder.document_count;
+    let total = 0;
+    for (const id of within(folder.id)) total += byId.get(id).document_count;
+    return {
+      total,
+      title: total === own ? '' : `${own} in this folder, ${total} with the folders inside it`,
+    };
+  }
+
+  function item(view, label, iconName, count, level, folder = null, countTitle = '') {
     const key = keyOf(view);
     const kids = folder ? children.get(folder.id) || [] : [];
     const open = folder && expanded.has(folder.id);
@@ -134,7 +150,7 @@ export function mountDocumentFolders({ panel, canManage, status, framework, onSe
       toggle,
       icon(`${iconName} keen-folder-icon`),
       node('span', { class: 'keen-folder-name', 'data-folder-name': key }, label),
-      countBadge(count),
+      countBadge(count, countTitle),
     );
     if (folder && canManage) row.setAttribute('draggable', 'true');
     li.append(row);
@@ -150,13 +166,15 @@ export function mountDocumentFolders({ panel, canManage, status, framework, onSe
 
   function folderItem(folder, level) {
     const open = expanded.has(folder.id) && (children.get(folder.id) || []).length;
+    const { total, title } = folderCount(folder);
     return item(
       folder.id,
       folder.name,
       open ? 'bi-folder2-open' : 'bi-folder',
-      folder.document_count,
+      total,
       level,
       folder,
+      title,
     );
   }
 

@@ -26,6 +26,7 @@ from .inbox import router as inbox_router
 from .integrations import router as integrations_router
 from .isms import router as isms_router
 from .managed_configurations import router as managed_configurations_router
+from .map import router as map_router
 from .mcp import router as mcp_router
 from .me import router as me_router
 from .pestle import router as pestle_router
@@ -106,6 +107,10 @@ OPENAPI_TAGS = [
     },
     {"name": "Graph", "description": "Graph/topology endpoints."},
     {
+        "name": "Map",
+        "description": "Records and the relationships between them, as one graph.",
+    },
+    {
         "name": "MCP",
         "description": "AI agent access over the Model Context Protocol: the MCP "
         "endpoint, its OAuth endpoints, consent and each person's connections.",
@@ -143,6 +148,7 @@ router.include_router(stories_router, tags=["Stories"])
 router.include_router(quizzes_router, tags=["Quizzes"])
 router.include_router(stats_router, tags=["Stats"])
 router.include_router(graph_router, tags=["Graph"])
+router.include_router(map_router, tags=["Map"])
 router.include_router(integrations_router, tags=["Admin"])
 router.include_router(agents_router, tags=["Keen Agent"])
 router.include_router(evidence_retention_router, tags=["Admin"])

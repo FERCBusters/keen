@@ -93,8 +93,8 @@ async function deleteClicked(ev) {
 }
 
 document.getElementById('pageSubtitle').textContent = isAdmin
-  ? 'Open and answered question threads across evidence, risks, PESTLE(E) items, SWOT items and stories.'
-  : 'Threads you have opened on evidence, risks, PESTLE(E) items, SWOT items and stories, with their replies.';
+  ? 'Open and answered question threads across evidence, risks, PESTLE(E) items, SWOT items, legal register items and stories.'
+  : 'Threads you have opened on evidence, risks, PESTLE(E) items, SWOT items, legal register items and stories, with their replies.';
 document.getElementById(isAdmin ? 'adminCard' : 'userCard').style.display = '';
 document.getElementById('btnRefresh').addEventListener('click', load);
 document.getElementById('btnRefreshUser').addEventListener('click', load);

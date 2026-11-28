@@ -18,6 +18,7 @@ import {
   withFramework,
   initCollapsibleFilterSections,
   initRichTextEditors,
+  refreshPicker,
   plainTextFromRichText,
   setRichTextEditorValue,
   syncRichTextEditor,
@@ -225,6 +226,7 @@ function updateMeetingPersonBubble() {
       (o) => o.value === matching.id,
     );
     if (option) option.selected = true;
+    refreshPicker($('meetingPersonAttendees'));
   }
   $('meetingCreatePerson').hidden = !(canManage && name && !matching);
 }
@@ -579,6 +581,17 @@ function installIsmsSectionChrome() {
           .querySelector('#objectivesStatus')
           .addEventListener('change', () => applyIsmsTableFilter($(filterId)));
       }
+      if (cfg.key === 'documents') {
+        // Choosing a tag is a filter too, so the tags sit with the search and
+        // fold away with it.
+        const tags = document.createElement('div');
+        tags.className = 'mt-3';
+        const heading = document.createElement('div');
+        heading.className = 'form-label small-muted mb-1';
+        heading.textContent = 'Tags';
+        tags.append(heading, $('docTagCloud'));
+        filter.querySelector('[data-mosp-filter-body]').append(tags);
+      }
       card.insertAdjacentElement('beforebegin', filter);
     }
   }
@@ -717,6 +730,7 @@ function resetLicenseForm(item = null) {
 function setSelectValues(select, values = []) {
   const wanted = new Set(values.map((v) => String(v)));
   for (const opt of Array.from(select.options)) opt.selected = wanted.has(String(opt.value));
+  refreshPicker(select);
 }
 function clearFileInput(input) {
   if (input) input.value = '';
@@ -1133,8 +1147,9 @@ function renderOverview() {
               ${button({ label: 'Asset matrix', href: '/isms.html?tab=assets', x: 656, y: 146, w: 96, h: 34 })}
               ${button({ label: 'Policies & processes', href: '/isms.html?tab=documents', x: 384, y: 196, w: 174, h: 34 })}
               ${button({ label: 'Access control matrix', href: '/isms.html?tab=access', x: 570, y: 196, w: 182, h: 34, lines: ['Access control', 'matrix'] })}
-              ${button({ label: 'Effectiveness measures', href: '/isms.html?tab=effectiveness', x: 384, y: 238, w: 224, h: 34, lines: ['Effectiveness', 'measures'] })}
-              ${featureEnabled(me, 'swot') ? button({ label: 'SWOT', href: '/isms.html?tab=swot', x: 620, y: 238, w: 132, h: 34 }) : ''}
+              ${button({ label: 'Effectiveness measures', href: '/isms.html?tab=effectiveness', x: 384, y: 238, w: 140, h: 34, lines: ['Effectiveness', 'measures'] })}
+              ${featureEnabled(me, 'swot') ? button({ label: 'SWOT', href: '/isms.html?tab=swot', x: 536, y: 238, w: 70, h: 34 }) : ''}
+              ${featureEnabled(me, 'legal_register') ? button({ label: 'Legal register', href: '/legal-register.html', x: 618, y: 238, w: 134, h: 34 }) : ''}
             </g>
 
             <g class="isms-flow-section isms-flow-compliance">
@@ -2423,6 +2438,7 @@ $('meetingCreatePerson')?.addEventListener('click', async () => {
       (o) => o.value === person.id,
     );
     if (option) option.selected = true;
+    refreshPicker($('meetingPersonAttendees'));
     $('meetingNewPersonName').value = '';
     $('meetingNewPersonEmail').value = '';
     updateMeetingPersonBubble();
@@ -2629,6 +2645,70 @@ ismsTabs.addEventListener('shown.bs.tab', () => {
   ismsTabs.classList.remove('admin-nav-open');
   ismsNavigationToggle.setAttribute('aria-expanded', 'false');
 });
+
+// --- Panels that fold away ----------------------------------------------------------------------
+
+// The menu folds down to its icons and the folders fold away, so a wide
+// register has the room. Each choice is a convenience for this browser only.
+function remembered(key) {
+  try {
+    return localStorage.getItem(key) !== 'collapsed';
+  } catch {
+    return true;
+  }
+}
+
+function remember(key, open) {
+  try {
+    localStorage.setItem(key, open ? 'open' : 'collapsed');
+  } catch {
+    // Without storage the choice lasts until the page reloads.
+  }
+}
+
+const RAIL_KEY = 'keen.isms.menu';
+
+function showIsmsRail(open) {
+  ismsTabs.classList.toggle('isms-rail-collapsed', !open);
+  const toggle = $('toggleIsmsRail');
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.title = open ? 'Collapse the menu to icons' : 'Expand the menu';
+  toggle.querySelector('i').className = open
+    ? 'bi bi-chevron-double-left'
+    : 'bi bi-chevron-double-right';
+  toggle.querySelector('.isms-rail-label').textContent = open ? 'Collapse menu' : 'Expand menu';
+  // Folded to icons, each entry is named on hover.
+  for (const link of ismsTabs.querySelectorAll('.nav-link'))
+    link.title = open ? '' : link.querySelector('.isms-rail-label').textContent;
+}
+
+showIsmsRail(remembered(RAIL_KEY));
+$('toggleIsmsRail').addEventListener('click', () => {
+  const open = ismsTabs.classList.contains('isms-rail-collapsed');
+  showIsmsRail(open);
+  remember(RAIL_KEY, open);
+});
+
+const FOLDERS_KEY = 'keen.isms.folders';
+
+function showDocFolders(open) {
+  $('docFolderColumn').hidden = !open;
+  $('showDocFolders').hidden = open;
+  // Without the folders the list takes the whole row.
+  $('docListColumn').classList.toggle('col-xl-9', open);
+}
+
+showDocFolders(remembered(FOLDERS_KEY));
+for (const [id, open] of [
+  ['hideDocFolders', false],
+  ['showDocFolders', true],
+])
+  $(id).addEventListener('click', () => {
+    showDocFolders(open);
+    remember(FOLDERS_KEY, open);
+    // The keyboard follows to the button that undoes the change.
+    $(open ? 'hideDocFolders' : 'showDocFolders').focus();
+  });
 
 load()
   .then(() => activateInitialTab())

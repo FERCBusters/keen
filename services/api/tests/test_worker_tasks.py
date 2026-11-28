@@ -229,18 +229,23 @@ def test_quiz_invitations_run_for_the_rounds_queued():
     sessions[0].close.assert_called_once()
 
 
-def test_reminders_go_to_audit_attendees_and_quiz_participants():
+def test_reminders_go_to_audit_attendees_quiz_participants_and_legal_owners():
     with (
         running_session([]) as sessions,
         patch.object(wt, "send_audit_reminders", return_value={"sent": 1}) as audits,
         patch.object(wt, "send_quiz_reminders", return_value={"sent": 2}) as quizzes,
+        patch.object(
+            wt, "send_assessment_reminders", return_value={"sent": 3}
+        ) as legal,
     ):
         assert wt.send_reminders_task() == {
             "audits": {"sent": 1},
             "quizzes": {"sent": 2},
+            "legal_register": {"sent": 3},
         }
     audits.assert_called_once_with(sessions[0])
     quizzes.assert_called_once_with(sessions[0])
+    legal.assert_called_once_with(sessions[0])
     sessions[0].close.assert_called_once()
 
 

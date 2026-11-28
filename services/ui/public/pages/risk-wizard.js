@@ -3,6 +3,7 @@
 // an existing register risk. It asks for the method first and shows only the
 // fields that method needs.
 import { featureEnabled } from '/pages/feature-availability.js';
+import { catalogueLabel, controlsOnly } from '/pages/catalogue-options.js';
 import {
   AFFECTED_KINDS,
   affectedChoices,
@@ -19,6 +20,7 @@ import {
   esc,
   toast,
   debounce,
+  node,
   getCurrentFramework,
   getFrameworkCatalog,
   withFramework,
@@ -509,64 +511,47 @@ function updateRating(kind, field, value) {
 
 // --- Steps 6 and 7: controls and clauses --------------------------------------------------
 
-// Each step lists one kind of record to tick. A PESTLE(E) item also says how
-// relevant each ticked record is.
+// Each step chooses one kind of record in a multiple select, which the design
+// system presents as its picker. A PESTLE(E) item also says how relevant each
+// chosen record is, as the value the picker keeps beside it. What is chosen
+// lives in state, as record id -> relevance ('' for a risk).
 const LINKS = {
-  controls: {
-    search: 'controlSearch',
-    list: 'controlList',
-    count: 'controlCount',
-    box: 'control',
-    level: 'controlLevel',
-    all: () => allControls,
-  },
-  clauses: {
-    search: 'clauseSearch',
-    list: 'clauseList',
-    count: 'clauseCount',
-    box: 'clause',
-    level: 'clauseLevel',
-    all: () => clauses,
-  },
+  controls: { list: 'controlList', all: () => allControls },
+  clauses: { list: 'clauseList', all: () => clauses },
 };
 
-function dataAttribute(name) {
-  return `data-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
-}
-
 function renderLinks(kind) {
-  const spec = LINKS[kind];
+  const select = $(LINKS[kind].list);
   const chosen = state[kind];
   $(`${kind}Framework`).textContent = framework || 'this framework';
   for (const el of document.querySelectorAll(`[data-links-intro="${kind}"]`))
     el.hidden = el.dataset.linksFor !== (isPestle() ? 'pestle' : 'risk');
-  const q = String($(spec.search).value || '')
-    .trim()
-    .toLowerCase();
   const levels = pestleMeta.relevance_levels.filter((l) => l.code !== 'na');
-  const suggested = new Set(kind === 'controls' ? state.suggestedControlIds : []);
-  const rows = spec
-    .all()
-    .filter((row) => !q || `${row.ref} ${row.title}`.toLowerCase().includes(q))
-    .sort((a, b) => Number(suggested.has(b.id)) - Number(suggested.has(a.id)))
-    .slice(0, 400)
-    .map((row) => {
-      const picked = chosen.has(row.id);
-      // A record ticked before its relevance was chosen takes the overall relevance.
-      const code = chosen.get(row.id) || state.relevance;
-      const select = isPestle()
-        ? `<select class="form-select form-select-sm w-auto" ${dataAttribute(spec.level)}="${esc(row.id)}" ${picked ? '' : 'disabled'} aria-label="Relevance of ${esc(row.ref)}">${levels.map((l) => `<option value="${esc(l.code)}" ${code === l.code ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select>`
-        : '';
-      return `<div class="d-flex gap-2 align-items-center py-1">
-        <label class="d-flex gap-2 align-items-start flex-grow-1 mb-0">
-          <input class="form-check-input mt-1" type="checkbox" ${dataAttribute(spec.box)}="${esc(row.id)}" ${picked ? 'checked' : ''}>
-          <span><span class="fw-semibold">${esc(row.ref)}</span> ${esc(row.title)}${suggested.has(row.id) ? ' <span class="badge text-bg-info">suggested</span>' : ''}${row.in_scope === false ? ' <span class="badge text-bg-secondary">out of scope</span>' : ''}</span>
-        </label>
-        ${select}
-      </div>`;
+  if (isPestle())
+    select.dataset.pickerExtra = JSON.stringify({
+      label: 'Relevance',
+      choices: levels.map((l) => [l.code, l.label]),
+      // A record chosen before its relevance was set takes the overall relevance.
+      default: state.relevance,
     });
-  $(spec.list).innerHTML = rows.join('') || `<div class="small-muted">No ${kind} match.</div>`;
-  $(spec.count).textContent = String(chosen.size);
+  else delete select.dataset.pickerExtra;
+  const suggested = new Set(kind === 'controls' ? state.suggestedControlIds : []);
+  select.replaceChildren(
+    ...LINKS[kind]
+      .all()
+      .toSorted((a, b) => Number(suggested.has(b.id)) - Number(suggested.has(a.id)))
+      .map((row) => {
+        const option = node('option', { value: row.id }, catalogueLabel(row));
+        const badges = [
+          suggested.has(row.id) ? 'suggested' : '',
+          row.in_scope === false ? 'out of scope' : '',
+        ].filter(Boolean);
+        if (badges.length) option.dataset.badge = badges.join(' · ');
+        option.selected = chosen.has(row.id);
+        if (option.selected && chosen.get(row.id)) option.dataset.extra = chosen.get(row.id);
+        return option;
+      }),
+  );
   if (kind === 'controls') renderSuggestedControlsNote();
 }
 
@@ -876,7 +861,7 @@ async function loadOptions() {
   assets = assetData.items;
   users = userData.items;
   roles = userData.roles;
-  allControls = controlData.items;
+  allControls = controlsOnly(controlData.items);
   clauses = clauseData.items;
   library = libraryData.items;
   affectedOptions = affectedData;
@@ -1073,23 +1058,20 @@ document.addEventListener('input', (ev) => {
   if (range) updateRating(range.dataset.ratingKind, range.dataset.ratingField, range.value);
 });
 
-for (const [kind, spec] of Object.entries(LINKS)) {
-  $(spec.search).addEventListener(
-    'input',
-    debounce(() => renderLinks(kind), 120),
-  );
+for (const [kind, spec] of Object.entries(LINKS))
   $(spec.list).addEventListener('change', (ev) => {
-    const chosen = state[kind];
-    const id = ev.target.dataset[spec.box];
-    if (id) {
-      const select = $(spec.list).querySelector(`[${dataAttribute(spec.level)}="${id}"]`);
-      if (ev.target.checked) chosen.set(id, select ? select.value : '');
-      else chosen.delete(id);
-      if (select) select.disabled = !ev.target.checked;
-    } else chosen.set(ev.target.dataset[spec.level], ev.target.value);
-    $(spec.count).textContent = String(chosen.size);
+    const select = ev.currentTarget;
+    const listed = new Set(Array.from(select.options, (option) => option.value));
+    state[kind] = new Map([
+      // A record the list does not offer, such as one linked before controls
+      // were switched off, stays chosen.
+      ...[...state[kind]].filter(([id]) => !listed.has(id)),
+      ...Array.from(select.selectedOptions, (option) => [
+        option.value,
+        (isPestle() && option.dataset.extra) || '',
+      ]),
+    ]);
   });
-}
 
 // --- Start ------------------------------------------------------------------------------------
 

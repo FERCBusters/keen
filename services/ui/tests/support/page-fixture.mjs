@@ -46,6 +46,7 @@ export async function page(
   const calls = [],
     unexpected = [],
     confirmations = [];
+  const pickers = { enhanced: [], refreshed: [] };
   // Requests the page has started and not yet seen answered, so a test can
   // wait for pages that load their sections in parallel.
   let inflight = 0;
@@ -174,6 +175,10 @@ export async function page(
       sourceBadgeHtml: (s) => String(s),
       upstreamLinkHtml: () => '',
       safeExternalHref: (s) => (/^https?:\/\//.test(s) ? s : ''),
+      // The design system's picker for multiple selects. The stand-in leaves
+      // the native select as the control and records what the page asked for.
+      enhanceMultiSelects: (...args) => pickers.enhanced.push(args),
+      refreshMultiSelect: (select) => pickers.refreshed.push(select.id),
       ...vendor,
     },
   });
@@ -185,6 +190,7 @@ export async function page(
     ...ui,
     calls,
     confirmations,
+    pickers,
     idle: () => inflight === 0,
     el: (id) => ui.document.getElementById(id),
   };

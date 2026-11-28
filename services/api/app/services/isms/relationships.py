@@ -79,6 +79,7 @@ def _reverse_refs_for(
         "assets": [],
         "effectiveness_measures": [],
         "meetings": [],
+        "legal_items": [],
     }
     from app.services.features import ENTITY_FEATURES, state
 
@@ -102,6 +103,7 @@ def _reverse_refs_for(
             "asset": "assets",
             "effectiveness_measure": "effectiveness_measures",
             "meeting": "meetings",
+            "legal_item": "legal_items",
         }[et]
         grouped[key].append(_entity_out(db, et, row, framework, include_links=False))
     return {**grouped, "total": sum(len(v) for v in grouped.values())}

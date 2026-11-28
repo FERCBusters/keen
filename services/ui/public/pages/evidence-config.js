@@ -176,6 +176,8 @@ let rules = [],
   targets = [],
   // The chosen framework's controls and clauses; null until they have loaded.
   pickerControls = null,
+  // The framework whose catalogue the picker lists.
+  pickerFramework = '',
   frameworks = [],
   samples = [],
   previewedRule = null,
@@ -1043,7 +1045,6 @@ async function newRule({ openEditor = true } = {}) {
     $(`when-${field}`).value = '';
   targets = [];
   renderTargets();
-  resetControlPicker();
   if (selectActiveFramework()) await loadFrameworkControls();
   $('preview-results').textContent = '';
   $('backfill').replaceChildren();
@@ -1128,7 +1129,6 @@ async function editRule(rule, { suggestion = null } = {}) {
     $(`when-${field}`).value = rule.when?.[field] ?? '';
   targets = structuredClone(rule.map_to);
   renderTargets();
-  resetControlPicker();
   const linked = collectors.find(
     (item) =>
       item.collector === rule.when?.collector &&
@@ -1535,6 +1535,7 @@ function addTarget(target) {
 }
 function renderTargets() {
   ruleSentence();
+  fillControlPicker();
   const list = $('targets');
   list.replaceChildren();
   for (const [index, target] of targets.entries()) {
@@ -1649,70 +1650,56 @@ function loadTargetTitles() {
         });
     }
 }
-// The list stays open, so a long catalogue cannot close under the pointer;
-// the box above it narrows the list by reference or title.
+// Whether a target names this row of the picker's framework. A target saved
+// without a kind names the row with its reference.
+function targetIs(target, kind, ref) {
+  return (
+    target.framework === pickerFramework && target.ref === ref && (target.kind || kind) === kind
+  );
+}
+// The framework's controls and clauses are a multiple select, which the design
+// system presents as its picker; a row is chosen when the rule maps to it.
+// Targets in other frameworks are listed below it and stay as they are.
 function fillControlPicker() {
-  const select = $('control');
-  const chosen = select.selectedOptions[0];
-  const chosenKey = chosen?.value ? `${chosen.dataset.kind}|${chosen.value}` : '';
-  const words = $('control-filter').value.toLowerCase().split(/\s+/).filter(Boolean);
   const items = pickerControls || [];
-  select.replaceChildren();
-  for (const control of items) {
-    const kind = targetKind(control);
-    const label = `${targetLabel(kind, control.ref)} - ${control.title || control.type}`;
-    const text = label.toLowerCase();
-    if (!words.every((word) => text.includes(word))) continue;
-    const option = new Option(label, control.ref);
-    option.dataset.kind = kind;
-    option.selected = `${kind}|${control.ref}` === chosenKey;
-    select.add(option);
+  $('control').replaceChildren(
+    ...items.map((control) => {
+      const kind = targetKind(control);
+      const option = new Option(
+        `${targetLabel(kind, control.ref)} - ${control.title || control.type}`,
+        `${kind}|${control.ref}`,
+      );
+      option.dataset.kind = kind;
+      option.dataset.ref = control.ref;
+      option.selected = targets.some((target) => targetIs(target, kind, control.ref));
+      return option;
+    }),
+  );
+  $('control-count').textContent =
+    pickerControls && !items.length ? 'This framework has no controls or clauses.' : '';
+}
+// What is chosen in the picker becomes the rule's targets in its framework.
+$('control').addEventListener('change', () => {
+  for (const option of $('control').options) {
+    const { kind, ref } = option.dataset;
+    const index = targets.findIndex((target) => targetIs(target, kind, ref));
+    if (option.selected && index < 0) targets.push({ framework: pickerFramework, ref, kind });
+    else if (!option.selected && index >= 0) targets.splice(index, 1);
   }
-  $('control-count').textContent = !pickerControls
-    ? ''
-    : !items.length
-      ? 'This framework has no controls or clauses.'
-      : words.length
-        ? `${select.options.length} of ${items.length} match.`
-        : `${items.length} controls and clauses.`;
-}
-// Each rule opens on the whole list with nothing chosen.
-function resetControlPicker() {
-  $('control-filter').value = '';
-  fillControlPicker();
-  $('control').selectedIndex = -1;
-}
+  renderTargets();
+});
 async function loadFrameworkControls() {
   const framework = $('framework').value;
   const items = await frameworkCatalogue(framework);
   // A framework chosen while this one loaded wins.
   if ($('framework').value !== framework) return;
   pickerControls = items;
-  fillControlPicker();
+  pickerFramework = framework;
   renderTargets();
 }
 $('framework').addEventListener('change', () =>
   loadFrameworkControls().catch((error) => status(errorText(error))),
 );
-$('control-filter').addEventListener('input', fillControlPicker);
-$('control-filter').addEventListener('keydown', (event) => {
-  const select = $('control');
-  if (event.key === 'ArrowDown' && select.options.length) {
-    event.preventDefault();
-    if (select.selectedIndex < 0) select.selectedIndex = 0;
-    select.focus();
-  } else if (event.key === 'Enter' && select.options.length === 1) {
-    event.preventDefault();
-    select.selectedIndex = 0;
-    addSelectedTarget();
-  }
-});
-$('control').addEventListener('dblclick', addSelectedTarget);
-$('control').addEventListener('keydown', (event) => {
-  if (event.key !== 'Enter') return;
-  event.preventDefault();
-  addSelectedTarget();
-});
 async function restore(selectedRevision) {
   const ruleId = selectedRule;
   if (
@@ -1862,16 +1849,6 @@ $('editor').addEventListener('click', (event) => {
 });
 $('next-step').addEventListener('click', nextStep);
 $('new-rule').addEventListener('click', () => newRule().catch((error) => status(errorText(error))));
-function addSelectedTarget() {
-  const select = $('control'),
-    framework = $('framework').value,
-    ref = select.value,
-    kind = select.options[select.selectedIndex]?.dataset.kind;
-  if (!framework || !ref) return;
-  // Without a recorded kind, the server uses the only row with that reference.
-  addTarget(kind ? { framework, ref, kind } : { framework, ref });
-}
-$('add-target').addEventListener('click', addSelectedTarget);
 $('suggest-controls').addEventListener('click', async () => {
   const framework = $('framework').value;
   const description = $('description').value.trim();

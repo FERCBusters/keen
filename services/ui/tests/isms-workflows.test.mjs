@@ -785,6 +785,9 @@ test('meeting minutes keep documents and external links, and add a missing perso
     [...ui.el('meetingPersonAttendees').selectedOptions].map((o) => o.value),
     ['p1'],
   );
+  // The selection was set from code, so the attendee picker is redrawn.
+  assert.equal(ui.pickers.refreshed.at(-1), 'meetingPersonAttendees');
+  const redraws = ui.pickers.refreshed.length;
   ui.el('meetingNewPersonName').value = 'Eli';
   ui.el('meetingNewPersonEmail').value = 'eli@example.test';
   ui.el('meetingNewPersonEmail').dispatchEvent(new ui.window.Event('input'));
@@ -795,6 +798,8 @@ test('meeting minutes keep documents and external links, and add a missing perso
     [...ui.el('meetingPersonAttendees').selectedOptions].map((o) => o.value),
     ['p1', 'p2'],
   );
+  assert.ok(ui.pickers.refreshed.length > redraws);
+  assert.equal(ui.pickers.refreshed.at(-1), 'meetingPersonAttendees');
 
   // Another link row; a link needs its address.
   ui.click('#addMeetingExternalLink');

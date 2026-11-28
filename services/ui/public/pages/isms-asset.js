@@ -2,7 +2,6 @@ import {
   errorText,
   initNavbar,
   apiGet,
-  esc,
   fmtTs,
   getCurrentFramework,
   toast,
@@ -11,7 +10,8 @@ import {
   openAuditSampleModal,
   loadEntityChangelog,
   isoDateToDisplay,
-  userPillHtml,
+  userDisplayName,
+  node,
   assetHref,
 } from '/app.js';
 import {
@@ -23,10 +23,11 @@ import { featureEnabled } from '/pages/feature-availability.js';
 import {
   riskDisplayTitle,
   riskHref,
-  scoreBadge,
+  scoreClass,
   treatmentLabel,
   treatmentStatusLabel,
 } from '/pages/risk-common.js';
+import { fetchedCard, mountRelatedItems } from '/pages/related-items-tab.js';
 
 const me = await initNavbar();
 const framework = getCurrentFramework();
@@ -39,7 +40,6 @@ const canSampleAudits = canSampleIntoAudit(me, 'isms');
 const canViewRisks =
   featureEnabled(me, 'risk_cia') && !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
 let asset = null;
-let risksLoaded = false;
 
 function renderAsset(row) {
   asset = row;
@@ -84,47 +84,84 @@ async function loadChangelog() {
   );
 }
 
-function risksHtml(items) {
-  if (!items.length)
-    return '<p class="small-muted mb-0">No risks are recorded against this asset.</p>';
-  const rows = items
-    .map((r) => {
-      const types = r.risk_types
-        .map((x) => `<span class="badge badge-soft me-1">${esc(x)}</span>`)
-        .join('');
+// The risks recorded against the asset, as a card of the Related items tab.
+function risksTable(items) {
+  const score = (value) =>
+    node('span', { class: `badge ${scoreClass(value)}` }, String(Number(value || 0)));
+  return {
+    columns: [
+      { label: 'Risk' },
+      { label: 'Treatment', width: '220px' },
+      { label: 'Risk', width: '90px', align: 'end' },
+      { label: 'Residual', width: '100px', align: 'end' },
+      { label: 'Owner', width: '140px' },
+    ],
+    rows: items.map((r) => {
       const due = isoDateToDisplay(r.treatment_due_at);
-      return `<tr>
-        <td><a class="fw-semibold" href="${esc(riskHref(r.id, framework))}">${esc(riskDisplayTitle(r))}</a>${types ? `<div>${types}</div>` : ''}</td>
-        <td>${esc(treatmentLabel(r.treatment_strategy))}<div class="small-muted">${esc(treatmentStatusLabel(r.treatment_status))}${due ? ` · due ${esc(due)}` : ''}</div></td>
-        <td class="text-end">${scoreBadge(r.risk_score)}</td>
-        <td class="text-end">${scoreBadge(r.residual_risk_score)}</td>
-        <td>${userPillHtml(r.risk_owner)}</td>
-      </tr>`;
-    })
-    .join('');
-  return `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
-    <thead><tr><th>Risk</th><th>Treatment</th><th class="text-end">Risk</th><th class="text-end">Residual</th><th>Owner</th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
+      const owner = userDisplayName(r.risk_owner);
+      return [
+        [
+          node('a', { class: 'fw-semibold', href: riskHref(r.id, framework) }, riskDisplayTitle(r)),
+          ...(r.risk_types.length
+            ? [
+                node(
+                  'div',
+                  {},
+                  ...r.risk_types.map((type) =>
+                    node('span', { class: 'badge badge-soft me-1' }, type),
+                  ),
+                ),
+              ]
+            : []),
+        ],
+        [
+          treatmentLabel(r.treatment_strategy),
+          node(
+            'div',
+            { class: 'small-muted' },
+            `${treatmentStatusLabel(r.treatment_status)}${due ? ` · due ${due}` : ''}`,
+          ),
+        ],
+        score(r.risk_score),
+        score(r.residual_risk_score),
+        owner
+          ? node('span', { class: 'badge badge-soft user-pill' }, owner)
+          : node('span', { class: 'small-muted' }, '-'),
+      ];
+    }),
+  };
 }
 
-async function loadRisks() {
-  if (!canViewRisks || risksLoaded) return;
-  const host = $('assetRisks');
-  try {
-    const data = await apiGet(
-      `/api/v1/risks?asset_id=${encodeURIComponent(assetId)}&framework=${encodeURIComponent(framework)}&limit=500`,
-    );
-    risksLoaded = true;
-    host.innerHTML = risksHtml(data.items);
-  } catch (e) {
-    host.textContent = `Risks could not be loaded: ${errorText(e)}`;
-  }
-}
-
-if (canViewRisks) {
-  $('assetRisksTabItem').hidden = false;
-  $('assetRisksTab').addEventListener('shown.bs.tab', loadRisks);
-}
+const related = mountRelatedItems({
+  me,
+  kind: 'asset',
+  id: assetId,
+  framework,
+  first: canViewRisks
+    ? [
+        fetchedCard({
+          id: 'assetRisksCard',
+          title: 'Risks',
+          description: 'Risks recorded against this asset, highest first.',
+          what: 'risks',
+          empty: 'No risks are recorded against this asset.',
+          read: async () => {
+            const data = await apiGet(
+              `/api/v1/risks?asset_id=${encodeURIComponent(assetId)}&framework=${encodeURIComponent(framework)}&limit=500`,
+            );
+            return { count: data.items.length, table: risksTable(data.items) };
+          },
+        }),
+      ]
+    : [],
+});
+// An address that names the Risks tab, as earlier pages did, opens the tab
+// the risks are on now.
+const tabs = () => ({
+  changelog: $('assetChangelogTab'),
+  ...(related ? { related: related.tab } : {}),
+  ...(related && canViewRisks ? { risks: related.tab } : {}),
+});
 
 async function load() {
   if (!assetId) {
@@ -137,10 +174,7 @@ async function load() {
     );
     renderAsset(row);
     await loadChangelog();
-    activateTabFromHashOrQuery(params, {
-      changelog: $('assetChangelogTab'),
-      ...(canViewRisks ? { risks: $('assetRisksTab') } : {}),
-    });
+    activateTabFromHashOrQuery(params, tabs());
   } catch (e) {
     toast(status, `Failed to load asset: ${errorText(e)}`, 'danger');
   }
@@ -158,15 +192,5 @@ $('sampleAssetAudit')?.addEventListener('click', () => {
   });
 });
 
-window.addEventListener('hashchange', () =>
-  activateTabFromHashOrQuery(params, {
-    changelog: $('assetChangelogTab'),
-    ...(canViewRisks ? { risks: $('assetRisksTab') } : {}),
-  }),
-);
+window.addEventListener('hashchange', () => activateTabFromHashOrQuery(params, tabs()));
 load();
-
-import { mountSwotRelated } from '/pages/swot-related.js';
-import { mountStoryRelated } from '/pages/story-related.js';
-mountSwotRelated('asset', new URLSearchParams(location.search).get('id'));
-mountStoryRelated({ me, kind: 'asset', id: new URLSearchParams(location.search).get('id') });

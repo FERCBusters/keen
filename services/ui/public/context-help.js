@@ -84,6 +84,12 @@ const topics = {
     'Record context, significance and responses, then link framework controls, clauses and related records.',
     'Use quadrants, status boards and timelines to review the work. The guide explains hierarchy, questions and audit sampling.',
   ],
+  legalRegister: [
+    'Legal register',
+    'using-isms.html#legal-register',
+    'List the laws, regulations and contractual requirements that apply, with their scope, owner, controls and related records.',
+    'Add an assessment with its outcome and the next assessment date; the owner is reminded as that date falls due.',
+  ],
   isms: [
     'ISMS records',
     'using-isms.html',
@@ -138,11 +144,23 @@ const topics = {
     'A story collects the events that tell one account of what happened, in the order you choose, with a note on each step. Stories can be shared, commented on and sampled into audits.',
     'Add events from the Events list or a visualisation window, then arrange them on the timeline. The guide walks through starting, building and using a story.',
   ],
+  map: [
+    'Map',
+    'using-operations.html#map',
+    'The Map draws the records you can open and the links between them, so you can see what a control, risk or document is connected to and follow a thread from one record to the next.',
+    'Choose a record to list what it is linked to, then show its related records to bring in its clauses, records and evidence sources. The legend hides or shows each kind of record.',
+  ],
   storyFlow: [
     'Story flow chart',
     'using-events.html#build-the-story',
     "The flow chart shows the story's items as boxes you drag into place and join with labelled arrows, for example from the sign-in to the export it led to.",
     'If you can edit the story, drag boxes, choose Link items to draw an arrow, then Save layout. Arrange by time resets the positions; the Timeline order is unchanged.',
+  ],
+  storyFramework: [
+    'Story controls and clauses',
+    'using-events.html#story-controls-and-clauses',
+    "A story's author assigns it the controls and clauses it is about, in the framework selected in the navigation bar. They sit beside the controls the story's events map to.",
+    'If you can edit the story, type a control number or part of a title to search and add, or tick what applies in the list, then Save controls and clauses. Each control and clause lists the story back on its own page.',
   ],
   storyComments: [
     'Story comments and review',
@@ -292,6 +310,7 @@ const pages = {
   events: 'events',
   questions: 'questions',
   stories: 'stories',
+  map: 'map',
   sources: 'sources',
   source: 'sources',
   controls: 'frameworks',
@@ -316,9 +335,12 @@ const pages = {
   quiz: 'quizzes',
   'quiz-take': 'myQuizzes',
 };
+// Pages that share another page's name and have a guide of their own.
+const paths = { '/swot.html': 'swot', '/legal-register.html': 'legalRegister' };
 // Tabs that change the subject of a page. Keys are the tab buttons' ids.
 const tabs = {
   flowTab: 'storyFlow',
+  frameworkTab: 'storyFramework',
   visualisationTab: 'swot',
   commentsTab: 'storyComments',
   swotTab: 'swot',
@@ -338,6 +360,8 @@ const tabs = {
   'my-isms-objectives-tab': 'objectives',
   'my-isms-role-tab': 'peopleAssets',
   'my-isms-assets-tab': 'peopleAssets',
+  'my-legal-items-tab': 'legalRegister',
+  soaLegalTab: 'legalRegister',
   'my-meetings-tab': 'meetings',
   libraryTab: 'risks',
   newRiskScenarioTab: 'risks',
@@ -350,7 +374,7 @@ const tabs = {
   soaIsmsEffectivenessTab: 'measures',
   soaIsmsOrgAssetsTab: 'peopleAssets',
   controlRequirementsTab: 'controlRequirements',
-  controlGovernanceTab: 'risks',
+  controlItemsTab: 'risks',
   soaRisksTab: 'risks',
   controlEvidenceTab: 'events',
   sourceEventsTab: 'events',
@@ -401,8 +425,7 @@ export function resolveHelp(trigger) {
     if (page === 'admin')
       key = own(panes, document.querySelector('#adminTabContent > .tab-pane.active').id);
     else {
-      const swot = location.pathname === '/swot.html';
-      key = activeTabTopic() || (swot ? 'swot' : own(pages, page));
+      key = activeTabTopic() || own(paths, location.pathname) || own(pages, page);
     }
   }
   if (key === 'sources' && document.querySelector('#hub-mapping[aria-selected="true"]'))

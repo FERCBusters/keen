@@ -13,7 +13,7 @@ import {
   loadEntityChangelog,
   userPillsHtml,
 } from '/app.js';
-import { mountStoryRelated } from '/pages/story-related.js';
+import { mountRelatedItems } from '/pages/related-items-tab.js';
 import {
   activateTabFromHashOrQuery,
   clauseBadges,
@@ -124,5 +124,5 @@ async function load() {
 
 if (!canReadIsms) showAsAttendee();
 window.addEventListener('hashchange', activateMeetingTab);
-mountStoryRelated({ me, kind: 'meeting', id: meetingId, framework });
+mountRelatedItems({ me, kind: 'meeting', id: meetingId, framework });
 load();

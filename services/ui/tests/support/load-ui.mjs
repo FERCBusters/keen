@@ -3,6 +3,7 @@
 import { JSDOM, VirtualConsole } from 'jsdom';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
+import { relatedCardStandIn } from './related-cards.mjs';
 const publicRoot = new URL('../../public/', import.meta.url);
 export async function loadUi(
   path,
@@ -54,6 +55,7 @@ export async function loadUi(
     sourceBadgeHtml: unsupported,
     initNavbar: unsupported,
     initCollapsibleFilterSections: unsupported,
+    ...relatedCardStandIn(window),
     ...vendor,
   };
   const context = vm.createContext({

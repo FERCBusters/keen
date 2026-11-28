@@ -38,8 +38,14 @@ test('read-only vendor detail retains safe related SWOT navigation', async (t) =
   assert.equal(ui.el('deleteRecord').hidden, true);
   ui.el('tab-related').click();
   await settle(ui.idle);
-  const link = ui.el('recordSwot').querySelector('a');
+  // The vendor's related records are cards, as on every other record's page.
+  const card = ui.el('relatedSwotCard');
+  assert.equal(card.closest('#recordRelated') !== null, true);
+  await settle(() => /No SWOT items are related/.test(card.textContent));
+  const link = card.querySelector('.mosp-related-card-tools a');
+  assert.equal(link.textContent, 'Open in SWOT analysis');
   assert.match(link.getAttribute('href'), /target_type=vendor&target_id=vendor-1/);
+  assert.equal(ui.el('noRelated').hidden, true);
   assert.equal(ui.document.querySelector('#recordFacts img'), null);
   assert.match(ui.el('recordTitle').textContent, /<img src=x/);
 });

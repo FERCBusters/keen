@@ -152,6 +152,7 @@ def test_risk_tools_project_the_register_and_need_the_risk_scope(api):
     "tool, path, scope",
     [
         (tools.list_swot, "/v1/isms/swot", "isms.read"),
+        (tools.list_legal_register, "/v1/isms/legal-register", "isms.read"),
         (tools.list_objectives, "/v1/isms/objectives", "isms.read"),
         (tools.list_assets, "/v1/isms/assets", "isms.read"),
         (tools.list_pestle_items, "/v1/pestle/items", "pestle.read"),
@@ -169,6 +170,85 @@ def test_swot_passes_its_filters(api):
     api.answers["/v1/isms/swot"] = {"items": []}
     run(tools.list_swot(kind="threat", q="supplier"))
     assert api.calls[-1][2]["kind"] == "threat" and api.calls[-1][2]["q"] == "supplier"
+
+
+def test_the_legal_register_passes_its_filters_and_reads_one_item_in_full(api):
+    api.answers["/v1/isms/legal-register"] = {"items": []}
+    run(
+        tools.list_legal_register(
+            q="data", in_scope=True, status="non_compliant", due=False
+        )
+    )
+    assert api.calls[-1] == (
+        "/v1/isms/legal-register",
+        False,
+        {
+            "q": "data",
+            "in_scope": True,
+            "status": "non_compliant",
+            "due": False,
+            "framework": "fw",
+            "limit": 50,
+            "offset": 0,
+        },
+    )
+    item = "0f4c5a8e-5f0b-4b47-9d1c-2f6f0c1b7a11"
+    api.answers[f"/v1/isms/legal-register/{item}"] = {
+        "id": item,
+        "title": "Data Protection Act 2018",
+        "display": "Data Protection Act 2018",
+        "category_id": "c",
+        "url": None,
+        "requirement": "x" * 3000,
+        "controls": [{"ref": "A.5.31", "display": "A.5.31"}],
+        "assessments": [{"outcome": "compliant", "notes": ""}],
+    }
+    assert run(tools.get_legal_item(item, framework="other")) == {
+        "id": item,
+        "title": "Data Protection Act 2018",
+        "requirement": "x" * 2000 + " [truncated]",
+        "controls": [{"ref": "A.5.31"}],
+        "assessments": [{"outcome": "compliant"}],
+    }
+    assert api.calls[-1] == (
+        f"/v1/isms/legal-register/{item}",
+        False,
+        {"framework": "other"},
+    )
+    api.scopes = [code for code in ALL if code != "isms.read"]
+    with pytest.raises(ToolError, match="not granted isms.read"):
+        run(tools.get_legal_item(item))
+
+
+def test_one_swot_item_is_read_in_full_with_its_relationships(api):
+    item = "5d5e5f60-6162-4364-8566-676869707172"
+    api.answers[f"/v1/isms/swot/{item}"] = {
+        "id": item,
+        "title": "New regulation",
+        "display": "New regulation",
+        "description": "x" * 3000,
+        "parent_id": None,
+        "controls": [{"ref": "A.5.31", "display": "A.5.31"}],
+        "links": [
+            {
+                "target_type": "document",
+                "target_id": "d1",
+                "title": "Policy",
+                "url": "/x",
+            }
+        ],
+    }
+    seen = run(tools.get_swot_item(item, framework="other"))
+    assert seen["title"] == "New regulation"
+    assert seen["description"] == "x" * 2000 + " [truncated]"
+    # The relationships are shown as they are named when saving them.
+    assert [(link["target_type"], link["target_id"]) for link in seen["links"]] == [
+        ("document", "d1")
+    ]
+    assert api.calls[-1] == (f"/v1/isms/swot/{item}", False, {"framework": "other"})
+    api.scopes = [code for code in ALL if code != "isms.read"]
+    with pytest.raises(ToolError, match="not granted isms.read"):
+        run(tools.get_swot_item(item))
 
 
 def test_documents_list_excerpts_and_return_their_text(api):

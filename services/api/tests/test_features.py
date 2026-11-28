@@ -361,6 +361,7 @@ def test_every_router_has_an_availability_decision():
                         "relationships",
                     } == {
                         "swot",
+                        "legal_register",
                         "assets",
                         "personal",
                         "relationships",

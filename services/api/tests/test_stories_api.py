@@ -1178,3 +1178,293 @@ def test_text_and_author_helpers_guard_their_bounds(world):
     assert service._username(world.db, None) is None
     author = world.keen.user("stories.manage")
     assert service._username(world.db, author.id) == author.username
+
+
+# --- Assigned controls and clauses ----------------------------------------------
+
+
+@pytest.fixture
+def clauses(world):
+    from app.db.models import FrameworkClause
+
+    context = FrameworkClause(framework_slug=FW, ref="4.2", title="Interested parties")
+    planning = FrameworkClause(framework_slug=FW, ref="6.1", title="Risks")
+    elsewhere = FrameworkClause(framework_slug="fw-other", ref="CC1", title="Control")
+    world.db.add_all([context, planning, elsewhere])
+    world.db.commit()
+    return SimpleNamespace(context=context, planning=planning, elsewhere=elsewhere)
+
+
+def _refs(story):
+    return (
+        [c["ref"] for c in story["linked_controls"]],
+        [c["ref"] for c in story["linked_clauses"]],
+    )
+
+
+def test_an_author_assigns_controls_and_clauses_to_a_story(world, clauses):
+    author = world.client("stories.manage", "events.read")
+    # A control or clause is named by its id or its reference, in any case.
+    story = world.create(
+        author,
+        controls=[str(world.backup.id), "a.5.15", "A.5.15"],
+        clauses=["4.2"],
+        items=[world.item("event", world.login)],
+    )
+    assert _refs(story) == (["A.5.15", "A.8.13"], ["4.2"])
+    assert story["linked_controls"][0] == {
+        "id": str(world.access.id),
+        "ref": "A.5.15",
+        "title": None,
+    }
+    assert story["linked_clauses"][0]["title"] == "Interested parties"
+    # Controls the story's events map to stay a separate list.
+    assert [c["ref"] for c in story["controls"]] == ["A.5.15"]
+
+    def patch(client, version, expect=200, framework=FW, **fields):
+        response = client.patch(
+            f"/v1/stories/{story['id']}?framework={framework}",
+            json={"expected_version": version, **fields},
+            headers=unsafe(client),
+        )
+        assert response.status_code == expect, response.text
+        return response.json()
+
+    # A save that names neither list keeps both; a list replaces its own kind.
+    kept = patch(author, 1, status="closed")
+    assert _refs(kept) == (["A.5.15", "A.8.13"], ["4.2"])
+    changed = patch(author, 2, controls=["A.8.13"])
+    assert _refs(changed) == (["A.8.13"], ["4.2"])
+    changed = patch(author, 3, clauses=["6.1", "4.2"], controls=[])
+    assert _refs(changed) == ([], ["4.2", "6.1"])
+
+    # Each framework keeps its own assignments.
+    other = patch(author, 4, framework="fw-other", controls=["CC6.1"], clauses=["CC1"])
+    assert _refs(other) == (["CC6.1"], ["CC1"])
+    assert other["framework"] == "fw-other"
+    here = author.get(f"/v1/stories/{story['id']}?framework={FW}").json()
+    assert _refs(here) == ([], ["4.2", "6.1"])
+
+    # A reference the framework lacks is refused, and nothing changes.
+    for fields, detail in (
+        ({"controls": ["A.8.13", "CC6.1"]}, "Unknown control: CC6.1"),
+        ({"controls": ["A.8.13"], "clauses": ["CC1"]}, "Unknown clause: CC1"),
+        ({"clauses": [str(uuid.uuid4())]}, None),
+    ):
+        refused = patch(author, 5, expect=400, **fields)
+        if detail:
+            assert refused == {"detail": detail}
+    assert _refs(author.get(f"/v1/stories/{story['id']}?framework={FW}").json()) == (
+        [],
+        ["4.2", "6.1"],
+    )
+    assert author.get(f"/v1/stories/{story['id']}").json()["version"] == 5
+    for fields, kind in (
+        ({"controls": [""]}, "string_too_short"),
+        ({"controls": ["x" * 129]}, "string_too_long"),
+        ({"clauses": ["4.2"] * 201}, "too_long"),
+        ({"controls": "A.8.13"}, "list_type"),
+    ):
+        refused = patch(author, 5, expect=422, **fields)
+        assert refused["detail"][0]["type"] == kind, fields
+    created = author.post(
+        f"/v1/stories?framework={FW}",
+        json={"title": "Refused", "controls": ["missing"]},
+        headers=unsafe(author),
+    )
+    assert (created.status_code, created.json()) == (
+        400,
+        {"detail": "Unknown control: missing"},
+    )
+    assert world.db.query(Story).filter_by(title="Refused").count() == 0
+
+
+def test_assigning_controls_follows_the_story_edit_rules(world, clauses):
+    author = world.client("stories.manage")
+    story = world.create(author, controls=["A.5.15"])
+    path = f"/v1/stories/{story['id']}?framework={FW}"
+    body = {"controls": ["A.8.13"], "clauses": ["4.2"], "expected_version": 1}
+    for client, detail in (
+        (world.client("stories.read"), "stories.manage permission required"),
+        (
+            world.client("stories.manage"),
+            "You can edit the stories you created; stories.admin covers every story",
+        ),
+    ):
+        refused = client.patch(path, json=body, headers=unsafe(client))
+        assert (refused.status_code, refused.json()) == (403, {"detail": detail})
+    refused = author.patch(path, json=body)
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "CSRF token missing or invalid"},
+    )
+    refused = author.patch(
+        path, json={**body, "expected_version": 7}, headers=unsafe(author)
+    )
+    assert refused.status_code == 409
+    # Every reader of the story sees what its author assigned.
+    reader = world.client("stories.read")
+    assert _refs(reader.get(path).json()) == (["A.5.15"], [])
+    admin = world.client("stories.admin")
+    saved = admin.patch(path, json=body, headers=unsafe(admin))
+    assert saved.status_code == 200, saved.text
+    assert _refs(saved.json()) == (["A.8.13"], ["4.2"])
+
+
+def test_assignments_are_recorded_sampled_and_listed_from_their_side(world, clauses):
+    author = world.client("stories.manage", "events.read")
+    story = world.create(
+        author,
+        controls=["A.8.13"],
+        clauses=["4.2"],
+        items=[world.item("event", world.login)],
+    )
+    other = world.create(author, title="Second story", controls=["A.8.13"])
+    sid = story["id"]
+    author.patch(
+        f"/v1/stories/{sid}?framework={FW}",
+        json={"controls": ["A.5.15", "A.8.13"], "clauses": [], "expected_version": 1},
+        headers=unsafe(author),
+    )
+    log = author.get(f"/v1/stories/{sid}/changelog").json()["items"]
+    assert [entry["action"] for entry in log] == ["updated", "created"]
+    changes = {change["field"]: change for change in log[0]["changes"]}
+    assert (changes["controls"]["before"], changes["controls"]["after"]) == (
+        ["A.8.13"],
+        ["A.5.15", "A.8.13"],
+    )
+    assert (changes["clauses"]["before"], changes["clauses"]["after"]) == (["4.2"], [])
+
+    # A sample of the story carries its assigned controls with those its
+    # events map to, each once.
+    world.db.add(
+        Mapping(
+            event_id=world.login.id, control_item_id=world.backup.id, method="manual"
+        )
+    )
+    world.db.commit()
+    assert [c["ref"] for c in service.story_controls(world.db, sid, FW)] == [
+        "A.5.15",
+        "A.8.13",
+    ]
+    assert service.story_controls(world.db, other["id"], FW)[0]["ref"] == "A.8.13"
+    assert service.story_controls(world.db, other["id"], "fw-other") == []
+
+    def related(client, kind, record, expect=200):
+        response = client.get(f"/v1/stories/related/{kind}/{record}")
+        assert response.status_code == expect, response.text
+        return response.json()
+
+    reader = world.client("stories.read")
+    listed = related(reader, "control", world.backup.id)
+    assert (listed["kind"], listed["entity_id"]) == ("control", str(world.backup.id))
+    assert {entry["title"] for entry in listed["items"]} == {
+        "Payroll export incident",
+        "Second story",
+    }
+    assert all(entry["can_edit"] is False for entry in listed["items"])
+    assert [e["id"] for e in related(reader, "control", world.access.id)["items"]] == [
+        sid
+    ]
+    # The clause was unassigned, so it lists no story.
+    assert related(reader, "clause", clauses.context.id)["items"] == []
+    author.patch(
+        f"/v1/stories/{other['id']}?framework={FW}",
+        json={"clauses": ["6.1"], "expected_version": 1},
+        headers=unsafe(author),
+    )
+    assert [
+        e["title"] for e in related(reader, "clause", clauses.planning.id)["items"]
+    ] == ["Second story"]
+    for kind, record, detail in (
+        ("control", uuid.uuid4(), "Control not found"),
+        ("control", "not-a-uuid", "Control not found"),
+        ("clause", world.backup.id, "Clause not found"),
+    ):
+        assert related(reader, kind, record, 404) == {"detail": detail}
+    refused = world.client("events.read").get(
+        f"/v1/stories/related/control/{world.backup.id}"
+    )
+    assert (refused.status_code, refused.json()) == (
+        403,
+        {"detail": "stories.read permission required"},
+    )
+    # Deleting a story removes its assignments with it.
+    from app.db.models import StoryClauseLink, StoryControlLink
+
+    admin = world.client("stories.admin")
+    for target, version in ((sid, 2), (other["id"], 2)):
+        gone = admin.delete(
+            f"/v1/stories/{target}?expected_version={version}", headers=unsafe(admin)
+        )
+        assert gone.status_code == 200, gone.text
+    assert world.db.query(StoryControlLink).count() == 0
+    assert world.db.query(StoryClauseLink).count() == 0
+    assert related(reader, "control", world.backup.id)["items"] == []
+
+
+# --- Legal register items --------------------------------------------------------
+
+
+def test_stories_include_legal_register_items_for_isms_readers(world):
+    from app.db.models import IsmsLegalItem
+
+    law = IsmsLegalItem(title="Data Protection Act 2018", requirement="Lawful use")
+    world.db.add(law)
+    world.db.commit()
+    author = world.client("stories.manage", "isms.read")
+    found = author.get("/v1/stories/choices/legal_item?q=protection").json()["items"]
+    assert [(c["target_id"], c["title"]) for c in found] == [
+        (str(law.id), "Data Protection Act 2018")
+    ]
+    story = world.create(author, items=[world.item("legal_item", law, note="Applies")])
+    (item,) = story["items"]
+    assert (item["kind_label"], item["title"], item["url"], item["note"]) == (
+        "Legal register item",
+        "Data Protection Act 2018",
+        f"/legal-register.html?id={law.id}",
+        "Applies",
+    )
+    # A reader without ISMS access sees that an item is there, and no more.
+    (withheld,) = (
+        world.client("stories.read").get(f"/v1/stories/{story['id']}").json()["items"]
+    )
+    assert (withheld["withheld"], withheld["title"], withheld["entity_id"]) == (
+        True,
+        "Legal register item you cannot view",
+        None,
+    )
+    assert withheld["note"] == ""
+    # Adding one needs ISMS read access, and the item's page lists the story.
+    outsider = world.client("stories.manage")
+    refused = outsider.post(
+        f"/v1/stories?framework={FW}",
+        json={"title": "Refused", "items": [world.item("legal_item", law)]},
+        headers=unsafe(outsider),
+    )
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Related item not available"},
+    )
+    listed = author.get(f"/v1/stories/related/legal_item/{law.id}").json()
+    assert [entry["id"] for entry in listed["items"]] == [story["id"]]
+    refused = outsider.get(f"/v1/stories/related/legal_item/{law.id}")
+    assert (refused.status_code, refused.json()) == (
+        404,
+        {"detail": "Legal register item not found"},
+    )
+    # With the legal register switched off, the item is withheld from everyone.
+    features.update(
+        world.db, world.keen.user(role="admin"), 0, {"legal_register": False}
+    )
+    (hidden,) = author.get(f"/v1/stories/{story['id']}").json()["items"]
+    assert hidden["withheld"] is True
+    # A SWOT item relates to a legal register item, as the item does to it; a
+    # register item does not relate to another, nor a SWOT item to another.
+    features.update(
+        world.db, world.keen.user(role="admin"), 1, {"legal_register": True}
+    )
+    isms = world.client("isms.manage")
+    assert isms.get("/v1/isms/swot-choices/legal_item").status_code == 200
+    assert isms.get("/v1/isms/swot-choices/swot").status_code == 400
+    assert isms.get("/v1/isms/legal-register/choices/legal_item").status_code == 400

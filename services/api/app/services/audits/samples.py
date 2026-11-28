@@ -17,6 +17,7 @@ from app.db.models import (
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
     IsmsEntityControlLink,
+    IsmsLegalItem,
     IsmsMeeting,
     IsmsObjective,
     IsmsOrgNode,
@@ -63,6 +64,8 @@ def entity_href(entity_type: str, entity_id: uuid.UUID, framework: str) -> str:
         return f"/pestle_item.html?id={eid}{fwq}"
     if entity_type == "isms_swot":
         return f"/swot.html?id={eid}{fwq}"
+    if entity_type == "isms_legal_item":
+        return f"/legal-register.html?id={eid}{fwq}"
     if entity_type == "story":
         return f"/story.html?id={eid}{fwq}"
     if entity_type == "isms_objective":
@@ -204,6 +207,12 @@ def audit_sample_entity_reference(
         if row:
             title = f"SWOT {row.kind}: {short_text(row.title, 180)}"
             subtitle = short_text(row.description, 220)
+            controls = isms_sample_controls(db, entity_type, row.id, framework)
+    elif entity_type == "isms_legal_item":
+        row = db.get(IsmsLegalItem, entity_id)
+        if row:
+            title = f"Legal register: {short_text(row.title, 180)}"
+            subtitle = short_text(row.requirement, 220)
             controls = isms_sample_controls(db, entity_type, row.id, framework)
     elif entity_type == "isms_objective":
         row = (

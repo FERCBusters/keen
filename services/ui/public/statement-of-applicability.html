@@ -28,6 +28,7 @@
         <a class="btn btn-outline-primary" data-nav-fw="1" href="/clauses.html">Clauses</a>
         <a class="btn btn-outline-primary" data-nav-fw="1" href="/risks.html">Risks</a>
         <a class="btn btn-outline-primary" data-nav-fw="1" href="/pestle.html">PESTLE(E)</a>
+        <a class="btn btn-outline-primary" data-nav-fw="1" data-feature="legal_register" href="/legal-register.html">Legal register</a>
       </div>
     </div>
 
@@ -61,9 +62,17 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="soaSwotTab" data-feature="swot" data-bs-toggle="tab" data-bs-target="#soaSwotPane" type="button" role="tab" aria-controls="soaSwotPane" aria-selected="false">SWOT</button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="soaLegalTab" data-feature="legal_register" data-bs-toggle="tab" data-bs-target="#soaLegalPane" type="button" role="tab" aria-controls="soaLegalPane" aria-selected="false">Legal register</button>
+      </li>
     </ul>
 
     <div class="tab-content" id="soaTabContent">
+      <section class="tab-pane fade" id="soaLegalPane" role="tabpanel" aria-labelledby="soaLegalTab" tabindex="0">
+        <div class="card"><div class="card-header"><div class="fw-bold">Legal register</div><div class="small-muted">Up to 500 laws, regulations and contractual requirements linked to controls or clauses in the selected framework, by title. Open an item to review its assessments and related records.</div></div>
+          <div class="card-body p-0 table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Legislation</th><th>Category</th><th>Scope</th><th>Compliance</th><th>Next assessment</th><th>Controls</th><th>Clauses</th></tr></thead><tbody id="legalRows"></tbody></table></div>
+        </div>
+      </section>
       <section class="tab-pane fade" id="soaSwotPane" role="tabpanel" aria-labelledby="soaSwotTab" tabindex="0">
         <div class="card"><div class="card-header"><div class="fw-bold">SWOT analysis</div><div class="small-muted">Up to 500 SWOT items mapped to controls or clauses in the selected framework, ordered by significance. Open an item to review its relationships and history.</div></div>
           <div class="card-body p-0 table-responsive"><table class="table table-sm table-hover align-middle mb-0"><thead><tr><th>Item</th><th>Type</th><th>Significance</th><th>Status</th><th>Controls</th><th>Clauses</th></tr></thead><tbody id="swotRows"></tbody></table></div>

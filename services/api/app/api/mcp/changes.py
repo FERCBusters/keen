@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app.api.mcp import tools
 from app.api.mcp.shaping import compact, fit
 from app.services.assurance import PersonInput, VendorInput
+from app.services.isms.legal_register import LegalItemPayload
 from app.services.isms.schemas import (
     AccessControlMatrixPayload,
     AssetPayload,
@@ -83,8 +84,10 @@ class Kind:
     # the record as it is: its GET path and how its answer maps to fields.
     whole: str | None = None
     current: tuple[tuple[str, str], ...] = ()
-    # Fields an update must carry, such as the version it was read at.
+    # Fields an update must carry, such as the version it was read at, and
+    # the tool that shows them.
     update_needs: tuple[str, ...] = ()
+    shown_by: str = ""
 
 
 _LINKS = (
@@ -107,10 +110,38 @@ KINDS: dict[str, Kind] = {
         SwotPayload,
         "A SWOT item. kind: strength, weakness, opportunity or threat; "
         "significance: 1 (low) to 5 (high); response: the planned response; "
-        "parent_id: an item of the same kind. An update needs expected_version, "
+        "parent_id: an item of the same kind. links: the objectives, documents, "
+        "assets, people, vendors, risks and legal register items the item "
+        "relates to, each {target_type: objective|document|asset|person|vendor|"
+        "risk|legal_item, target_id}; a relationship to a legal register item "
+        "is the one that item shows to this SWOT item, made from either end; "
+        "a list replaces the item's relationships, so include those to keep, "
+        "as get_swot_item shows them. An update needs expected_version, "
         "the item's version from list_swot. " + _LINKS,
-        hidden=frozenset({"links"}),
         update_needs=("expected_version",),
+        shown_by="list_swot",
+    ),
+    "legal_item": Kind(
+        "isms.manage",
+        "/v1/isms/legal-register",
+        LegalItemPayload,
+        "A legal register item: a law, regulation or contractual requirement. "
+        "title: its name; url: a link to its text; category_name: its category, "
+        "from list_choices('legal_categories') (a new name adds one); "
+        "jurisdiction and authority: where it applies and who enforces it; "
+        "requirement: what it requires; applicability: how it applies to the "
+        "organisation; in_scope: true or false; owner_user_id: an id from "
+        "list_choices('users'); next_assessment_date: YYYY-MM-DD. links: "
+        "the documents, assets, risks and SWOT items the item relates to, each "
+        "{target_type: document|asset|risk|swot, target_id}; a list replaces "
+        "the item's relationships, so include those to keep, as "
+        "get_legal_item shows them. A new item with no "
+        "controls starts with the framework's control for legal requirements "
+        "(A.5.31 in ISO/IEC 27001). An update needs expected_version, the "
+        "item's version from list_legal_register. " + _LINKS,
+        hidden=frozenset({"category_id"}),
+        update_needs=("expected_version",),
+        shown_by="list_legal_register",
     ),
     "asset": Kind(
         "isms.manage",
@@ -223,6 +254,7 @@ KINDS: dict[str, Kind] = {
 KindName = Literal[
     "objective",
     "swot_item",
+    "legal_item",
     "asset",
     "licence",
     "access_matrix_entry",
@@ -311,7 +343,8 @@ def _summary(kind: str, answer: Any) -> dict:
 async def create_record(
     kind: KindName, fields: Fields, framework: Framework = None
 ) -> dict:
-    """Add one record to Keen: an objective, SWOT item, asset, licence, access
+    """Add one record to Keen: an objective, SWOT item, legal register item,
+    asset, licence, access
     matrix row, organisation chart node, effectiveness measure, meeting, person,
     vendor / 3rd party, risk or PESTLE(E) item. Call describe_record first.
     Confirm with the person what you are about to add, and add only what they
@@ -350,7 +383,7 @@ async def update_record(
     missing = [name for name in spec.update_needs if name not in fields]
     if missing:
         raise ToolError(
-            f"Updating a {kind} needs {', '.join(missing)}, as list_swot shows it"
+            f"Updating a {kind} needs {', '.join(missing)}, as {spec.shown_by} shows it"
         )
     body = _payload(kind, fields, partial=True)
     fw = await tools._framework(framework)
@@ -390,6 +423,7 @@ ChoiceName = Literal[
     "pestle_types",
     "pestle_lenses",
     "pestle_relevance",
+    "legal_categories",
 ]
 # Each list: the scope it needs, the route and section it comes from, and the
 # key holding it.
@@ -418,6 +452,12 @@ _CHOICES: dict[str, tuple[str, str, str | None, str | None]] = {
     "pestle_types": ("pestle.read", "/v1/pestle/meta", None, "types"),
     "pestle_lenses": ("pestle.read", "/v1/pestle/meta", None, "lenses"),
     "pestle_relevance": ("pestle.read", "/v1/pestle/meta", None, "relevance_levels"),
+    "legal_categories": (
+        "isms.read",
+        "/v1/isms/legal-register/meta",
+        None,
+        "categories",
+    ),
 }
 # Keen accounts are named by id and username only.
 _USER_FIELDS = ("id", "username")
@@ -465,7 +505,8 @@ async def list_choices(name: ChoiceName, framework: Framework = None) -> dict:
     """The values a record's fields can name: Keen accounts, organisation
     chart nodes, asset categories and licences, objective statuses, document
     types and folders, measure sources, people, vendors / 3rd parties, risk
-    categories, and PESTLE(E) types, lenses and relevance levels."""
+    categories, PESTLE(E) types, lenses and relevance levels, and legal
+    register categories."""
     scope, path, section, _ = _CHOICES[name]
     tools._needs(scope)
     params: dict[str, Any] = {}

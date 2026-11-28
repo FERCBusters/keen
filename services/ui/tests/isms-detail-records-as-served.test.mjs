@@ -41,6 +41,8 @@ async function detail(t, name, { path, row, me = { is_admin: true }, risks, quer
       if (u.pathname.endsWith('/changelog')) return { items: [] };
       if (u.pathname.endsWith('/revisions') || u.pathname.endsWith('/comments')) return [];
       if (u.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
+      if (u.pathname === '/api/v1/isms/legal-register') return { items: [], total: 0 };
+      if (u.pathname.startsWith('/api/v1/stories')) return { items: [] };
       if (u.pathname === '/api/v1/sources') return { items: [] };
       if (risks && u.pathname === '/api/v1/risks') return risks(u);
       throw new Error('Unexpected GET ' + u);
@@ -96,32 +98,44 @@ test("an asset's risks show only the treatment details they have, and load once"
           riskRow('r2', 'Leaked payslips', {
             risk_types: ['Confidentiality'],
             treatment_due_at: '2026-12-01',
+            risk_owner: { username: 'dana' },
+            residual_risk_score: null,
           }),
         ],
       };
     },
   });
-  ui.el('assetRisksTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => ui.el('assetRisks').querySelectorAll('tbody tr').length === 2);
-  const [plainRisk, fullRisk] = ui.el('assetRisks').querySelectorAll('tbody tr');
+  ui.el('relatedItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('assetRisksCard').querySelectorAll('tbody tr').length === 2);
+  const [plainRisk, fullRisk] = ui.el('assetRisksCard').querySelectorAll('tbody tr');
   assert.equal(plainRisk.querySelector('td').querySelectorAll('div').length, 0);
   assert.equal(
     plainRisk.querySelectorAll('td')[1].querySelector('.small-muted').textContent,
     'Open',
   );
   assert.equal(plainRisk.querySelector('a').textContent, 'Unpatched ' + hostile);
-  assert.equal(ui.el('assetRisks').querySelector('img'), null);
+  assert.equal(ui.el('assetRisksCard').querySelector('img'), null);
   assert.equal(fullRisk.querySelector('td div .badge').textContent, 'Confidentiality');
   assert.equal(
     fullRisk.querySelectorAll('td')[1].querySelector('.small-muted').textContent,
     'Open · due 2026-12-01',
   );
-  ui.el('assetRisksTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  // A risk names its owner, or shows that it has none; a score not yet
+  // given reads as nought.
+  assert.deepEqual(
+    [plainRisk, fullRisk].map((row) => [...row.cells].slice(2).map((cell) => cell.textContent)),
+    [
+      ['12', '6', '-'],
+      ['12', '0', 'dana'],
+    ],
+  );
+  assert.equal(fullRisk.cells[4].querySelector('.user-pill').textContent, 'dana');
+  ui.el('relatedItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(asked.length, 1);
 });
 
-test("an asset's risks that cannot load say so in the tab", async (t) => {
+test("an asset's risks that cannot load say so in their card", async (t) => {
   const { ui } = await detail(t, 'isms-asset', {
     path: '/api/v1/isms/assets/x1',
     row: assetRecord('x1', 'Payroll'),
@@ -130,9 +144,10 @@ test("an asset's risks that cannot load say so in the tab", async (t) => {
       throw new Error('Risk register offline');
     },
   });
-  ui.el('assetRisksTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => ui.el('assetRisks').textContent.includes('could not be loaded'));
-  assert.equal(ui.el('assetRisks').textContent, 'Risks could not be loaded: Risk register offline');
+  ui.el('relatedItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  const body = ui.el('assetRisksCard').querySelector('.mosp-related-card-body');
+  await settle(() => body.textContent.includes('could not be loaded'));
+  assert.equal(body.textContent, 'Risks could not be loaded: Risk register offline');
 });
 
 test('an asset page follows its address fragment to the tabs the reader has', async (t) => {
@@ -146,7 +161,8 @@ test('an asset page follows its address fragment to the tabs the reader has', as
     reader.ui.window.location.hash = hash;
     reader.ui.window.dispatchEvent(new reader.ui.window.HashChangeEvent('hashchange'));
   }
-  assert.deepEqual(reader.shown, ['assetRisksTab', 'assetChangelogTab']);
+  // The risks are among the related items, so their old address opens that tab.
+  assert.deepEqual(reader.shown, ['relatedItemsTab', 'assetChangelogTab']);
 
   const withoutRisks = await detail(t, 'isms-asset', {
     path: '/api/v1/isms/assets/x1',
@@ -158,6 +174,22 @@ test('an asset page follows its address fragment to the tabs the reader has', as
     withoutRisks.ui.window.dispatchEvent(new withoutRisks.ui.window.HashChangeEvent('hashchange'));
   }
   assert.deepEqual(withoutRisks.shown, ['assetChangelogTab']);
+
+  // A reader with no related-items card has no such tab to be taken to.
+  const alone = await detail(t, 'isms-asset', {
+    path: '/api/v1/isms/assets/x1',
+    row: assetRecord('x1', 'Payroll'),
+    me: {
+      can_view_isms: true,
+      features: { enabled: { swot: false, legal_register: false, stories: false } },
+    },
+  });
+  assert.equal(alone.ui.el('relatedItemsTab'), null);
+  for (const hash of ['#related', '#risks', '#changelog']) {
+    alone.ui.window.location.hash = hash;
+    alone.ui.window.dispatchEvent(new alone.ui.window.HashChangeEvent('hashchange'));
+  }
+  assert.deepEqual(alone.shown, ['assetChangelogTab']);
 });
 
 for (const [who, me, editable] of [

@@ -387,6 +387,66 @@ async def list_swot(
     return await _shape(listing, answer)
 
 
+def _record_detail(detail: dict) -> dict:
+    return fit(compact(detail))
+
+
+async def get_swot_item(item_id: Identifier, framework: Framework = None) -> dict:
+    """One SWOT item in full, with its linked controls and clauses and its
+    related objectives, documents, assets, people, vendors, risks and legal
+    register items."""
+    _needs("isms.read")
+    answer = await _get(
+        f"/v1/isms/swot/{item_id}", framework=await _framework(framework)
+    )
+    return await _shape(_record_detail, answer)
+
+
+async def list_legal_register(
+    q: Query = "",
+    in_scope: Annotated[
+        bool | None, Field(description="Only items in scope, or only those out.")
+    ] = None,
+    status: Annotated[
+        str | None,
+        Field(pattern="^(not_assessed|compliant|partially_compliant|non_compliant)$"),
+    ] = None,
+    due: Annotated[
+        bool | None,
+        Field(description="Only items whose assessment is due, or only the rest."),
+    ] = None,
+    framework: Framework = None,
+    limit: Limit200 = 50,
+    offset: Offset = 0,
+) -> dict:
+    """List the legal register: the laws, regulations and contractual
+    requirements the organisation has identified, with each one's category,
+    requirement, applicability, whether it is in scope, its owner, compliance
+    status and assessment dates."""
+    _needs("isms.read")
+    answer = await _get(
+        "/v1/isms/legal-register",
+        q=q,
+        in_scope=in_scope,
+        status=status,
+        due=due,
+        framework=await _framework(framework),
+        limit=limit,
+        offset=offset,
+    )
+    return await _shape(listing, answer)
+
+
+async def get_legal_item(item_id: Identifier, framework: Framework = None) -> dict:
+    """One legal register item in full, with its linked controls and clauses,
+    related documents, assets, risks and SWOT items, and its assessments, newest first."""
+    _needs("isms.read")
+    answer = await _get(
+        f"/v1/isms/legal-register/{item_id}", framework=await _framework(framework)
+    )
+    return await _shape(_record_detail, answer)
+
+
 async def list_objectives(
     q: Query = "",
     framework: Framework = None,
@@ -526,6 +586,9 @@ TOOLS = (
     list_risks,
     get_risk,
     list_swot,
+    get_swot_item,
+    list_legal_register,
+    get_legal_item,
     list_objectives,
     list_documents,
     get_document,
@@ -544,8 +607,9 @@ def tailor_isms_document(document_title: str) -> str:
         "1. Call keen_overview, then get_statement_of_applicability.\n"
         "2. Find the controls the document addresses, and call get_control "
         "for each to see the policies, objectives, risks and evidence behind it.\n"
-        "3. Use list_risks, list_swot, list_objectives, list_assets and "
-        "list_pestle_items for the context the document describes.\n"
+        "3. Use list_risks, list_swot, list_legal_register, list_objectives, "
+        "list_assets and list_pestle_items for the context the document "
+        "describes.\n"
         "4. Replace template placeholders with what the records show. Where Keen "
         "holds nothing for a statement, mark it [TO CONFIRM] instead of "
         "inventing it, and cite the Keen record (id or control ref) behind "

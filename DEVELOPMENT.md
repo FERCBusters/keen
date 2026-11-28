@@ -213,7 +213,7 @@ Every table is a SQLAlchemy model in the single file `app/db/models.py`, and eve
 | `Event`, `Artifact`, `Mapping` | One collected occurrence, its original bytes, and its link to a control. |
 | `Risk`, `RiskAsset`, `RiskControlLink`, `RiskClauseLink` | A risk, the asset it concerns, and its links to controls and clauses. |
 | `PestleItem`, `PestleClauseRelevance`, `PestleControlRelevance` | A PESTLE(E) item and how relevant it is to each clause and control. |
-| `Isms*` | The ISMS registers: objectives, documents, organisation chart, people, vendors, access matrix, measures, meetings, SWOT. |
+| `Isms*` | The ISMS registers: objectives, documents, organisation chart, people, vendors, access matrix, measures, meetings, SWOT, the legal register. |
 | `IsmsEntityControlLink`, `IsmsEntityClauseLink` | One generic pair of link tables that ties any ISMS record to controls and clauses. |
 | `EntityChangelog` | One recorded change to any record, with the state before and after as JSON. |
 | `User`, `Group`, `Permission` | Accounts, groups and the permission codes they hold. |
@@ -408,7 +408,7 @@ Each row is a feature area, the service that owns it and its pages. Routes live 
 | Sources and connections | `services/sources.py`, `source_connections.py` | `sources.html`, `source.html`, `admin.html` |
 | Risks | `services/risks.py`, `risk_register.py`, `risk_mitigator.py` | `risks.html`, `risk.html`, `risk-wizard.html`, `mitigator.html` |
 | PESTLE(E) | `services/pestle.py` | `pestle.html`, `pestle_item.html` |
-| ISMS records | `services/isms/` (objectives, documents, meetings, assets, organisation, effectiveness, SWOT) | `isms.html` and the `isms-*.html` pages, `swot.html` |
+| ISMS records | `services/isms/` (objectives, documents, meetings, assets, organisation, effectiveness, SWOT, legal register) | `isms.html` and the `isms-*.html` pages, `swot.html`, `legal-register.html` |
 | Audits | `services/audits/` | `audits.html`, `audit.html`, `audit-wizard.html` |
 | People, vendors, quizzes | `services/people.py`, `assurance.py`, `services/quizzes/` | `assurance.html`, `person.html`, `vendor.html`, `quizzes.html` |
 | Questions and stories | `services/questions.py`, `stories.py` | `questions.html`, `stories.html`, `story.html` |
@@ -511,6 +511,16 @@ An administrator can switch features off. Two things make the UI follow:
 
 - `pages/feature-availability.js` maps each page to its feature, and hides links to a page whose feature is off.
 - An element with `data-feature="<key>"` is hidden when that feature is off. Use it on tabs and buttons that belong to another feature, as the Visualisation tabs do with `data-feature="visualisations"`.
+
+### Related-item cards
+
+A page that lists what a record is linked to builds each list with the design system's `relatedCard` and groups them with `relatedCards` (both come through `/app.js`), and changes a card's count and content with `updateRelatedCard`. Do not write a card's markup by hand: the frame, heading, text size and table style are the design system's, which is what keeps the cards alike on every page. `pages/related-records.js` draws the Related items tab of a record that keeps its own relationships, as the legal register and SWOT pages use it, and a control's cards are built at the top of `pages/control.js`.
+
+Pass text as strings and it is written as text. Where a card needs markup of its own (a badge, a form), build the element with `node()` and pass the element; the builder refuses a string in an element's place. Page tests run against a stand-in for the design system (`tests/support/related-cards.mjs`) that keeps the same contract.
+
+### The Map
+
+`app/services/record_map.py` builds the Map's graph: `load_records` adds a node for every record the reader can open and `load_links` adds a link for every relationship, which `link()` keeps only when both ends are nodes. To put a new kind of record on the Map, add it to `KINDS`, load its rows in `load_records` with the same access rule its own page uses, and add its relationships to `load_links`; then give it a colour in `pages/map.js`. To draw a new relationship between existing kinds, add it to `load_links` and name it in `RELATIONS` in `pages/map.js`.
 
 ### Recipe: add a page
 

@@ -1,6 +1,7 @@
 // The mapping library, rule insights, revisions and historical runs for rules
 // as the rules YAML can hold them: without a description, a source or a
 // connection, and answers that arrive after the administrator has moved on.
+import { chooseTarget, chosenTargets } from './support/rule-targets.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { settle } from './support/page-fixture.mjs';
@@ -24,8 +25,7 @@ const button = (root, text) =>
 async function publish(ui, description = 'Collected evidence') {
   await ui.click('next-step');
   ui.$('description').value = description;
-  ui.$('control').value = 'A1';
-  ui.$('add-target').click();
+  chooseTarget(ui.$('control'), 'A1');
   await ui.click('next-step');
   ui.$('predefine').checked = true;
   await ui.click('save-rule');

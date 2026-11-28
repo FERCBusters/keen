@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Keen - Map</title>
+  <script src="/vendor/mosp-design-system/theme-boot.js"></script>
+  <link href="/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css"/>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script src="/demo-notice.js" defer></script>
+</head>
+<body data-page="map">
+  <a class="visually-hidden-focusable" href="#main-content">Skip to content</a>
+  <div id="navbar"></div>
+
+  <main id="main-content" class="container-fluid px-3 px-lg-4 py-4">
+    <div class="mb-3">
+      <h1 class="h3 mb-1">Map</h1>
+      <div class="small-muted">The records you can open and how they relate: controls and clauses with the risks, documents, people, assets, vendors and other records that refer to them. Choose a record to see what it is linked to, and show its related records to follow a thread.</div>
+    </div>
+
+    <div id="status" class="alert alert-info" style="display:none;" role="status"></div>
+
+    <div class="card mb-3">
+      <div class="card-body d-flex flex-wrap gap-3 align-items-start">
+        <div class="map-search">
+          <label for="mapSearch" class="form-label">Find a record</label>
+          <input id="mapSearch" class="form-control" type="search" maxlength="128" placeholder="Name or reference" autocomplete="off" aria-controls="mapMatches">
+          <div id="mapMatches" class="list-group map-matches" hidden></div>
+        </div>
+        <div>
+          <div class="form-label">Show</div>
+          <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="mapEvidence"><label class="form-check-label" for="mapEvidence">Evidence sources</label></div>
+          <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="mapUnlinked"><label class="form-check-label" for="mapUnlinked">Records with no links</label></div>
+        </div>
+        <div class="ms-auto d-flex gap-2 align-self-end">
+          <button id="mapFit" class="btn btn-outline-secondary" type="button"><i class="bi bi-arrows-fullscreen me-1" aria-hidden="true"></i>Fit to view</button>
+          <button id="mapReset" class="btn btn-outline-secondary" type="button"><i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Start again</button>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div id="mapKinds" class="d-flex flex-wrap gap-2" role="group" aria-label="Kinds of record shown"></div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-9">
+        <div class="card">
+          <div id="mapCanvas" class="map-canvas" aria-live="off"></div>
+          <div class="card-footer small-muted d-flex flex-wrap justify-content-between gap-2">
+            <span id="mapMeta">Loading</span>
+            <span>Drag to move, scroll to zoom, double-click a record to show what it is related to.</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3">
+        <div class="card">
+          <div id="mapPanel" class="card-body map-panel"><p class="small-muted mb-0">Choose a record to see what it is and what it is linked to.</p></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/d3/d3.min.js"></script>
+  <script type="module" src="/pages/map.js"></script>
+</body>
+</html>

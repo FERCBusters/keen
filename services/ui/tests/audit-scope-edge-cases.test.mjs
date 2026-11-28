@@ -1,13 +1,15 @@
 // Audit scope selection and the scope graph beyond the common path covered in
 // audit-page.test.mjs: ticking controls, filters, parent clauses, node order
 // and large scopes.
+import { deselectAll, scopeBox, scopeChosen } from './support/scope-lists.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { settle } from './support/page-fixture.mjs';
 import { apiAudit, auditPage, change, reloaded } from './support/audit-pages.mjs';
 
+// Chooses an entry of a scope list as the picker would.
 const tick = (ui, attr, id, checked = true) =>
-  change(ui, ui.document.querySelector(`[${attr}="${id}"]`), { checked });
+  change(ui, scopeBox(ui, attr.split('-')[1], id), { checked });
 
 test('ticking a control adds it to the scope that is saved', async (t) => {
   const { ui, state } = await auditPage(t, {
@@ -21,7 +23,7 @@ test('ticking a control adds it to the scope that is saved', async (t) => {
   await reloaded(ui);
 });
 
-test('scope filters say when nothing matches, and an untitled control does not match "null"', async (t) => {
+test('the scope lists name an untitled control by its reference alone', async (t) => {
   const { ui } = await auditPage(t, {
     responses: {
       '/api/v1/controls': {
@@ -32,20 +34,13 @@ test('scope filters say when nothing matches, and an untitled control does not m
       },
     },
   });
-  const listed = () =>
-    [...ui.document.querySelectorAll('[data-control-id]')].map((x) => x.dataset.controlId);
-  assert.deepEqual(listed(), ['c1', 'c9']);
-  ui.el('controlFilter').value = 'nul';
-  ui.el('controlFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.deepEqual(listed(), []);
-  assert.equal(ui.el('controlsList').textContent, 'No controls match.');
-  ui.el('controlFilter').value = 'a9';
-  ui.el('controlFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.deepEqual(listed(), ['c9']);
-
-  ui.el('clauseFilter').value = 'zzz';
-  ui.el('clauseFilter').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(ui.el('clausesList').textContent, 'No clauses match.');
+  assert.deepEqual(
+    [...ui.el('controlsList').options].map((option) => [option.value, option.textContent]),
+    [
+      ['c1', 'A1 Access'],
+      ['c9', 'A9'],
+    ],
+  );
 });
 
 test('choosing a parent clause reports the child clauses and controls it added', async (t) => {
@@ -74,11 +69,11 @@ test('choosing a parent clause reports the child clauses and controls it added',
   assert.equal(status(), 'Selected 1 child clause and 1 linked control.');
   // A parent whose children are all chosen still brings back their controls.
   tick(ui, 'data-clause-id', 'cl4');
-  ui.el('deselectControls').click();
+  deselectAll(ui, 'control');
   tick(ui, 'data-clause-id', 'cl4');
   assert.equal(status(), 'Selected 0 child clauses and 1 linked control.');
-  assert.equal(ui.document.querySelector('[data-control-id="c1"]').checked, true);
-  assert.equal(ui.document.querySelector('[data-control-id="c2"]').checked, false);
+  assert.equal(scopeBox(ui, 'control', 'c1').checked, true);
+  assert.equal(scopeBox(ui, 'control', 'c2').checked, false);
   // With nothing left to add, nothing is reported.
   ui.el('status').textContent = '';
   tick(ui, 'data-clause-id', 'cl4');
@@ -206,8 +201,10 @@ test('with documents switched off, the documents already in scope are listed and
     audit: apiAudit({ scoped_documents: [scoped] }),
   });
   assert.ok(!state.gets.some((path) => path.startsWith('/api/v1/isms/documents')));
-  const row = ui.document.querySelector('[data-document-id="d1"]').closest('label');
-  assert.match(row.textContent, /Policy <b>one<\/b>\s*policy\s*0 clauses, 0 controls/);
+  const row = scopeBox(ui, 'document', 'd1').option;
+  assert.equal(row.textContent, 'Policy <b>one</b>');
+  assert.equal(row.dataset.badge, 'policy');
+  assert.equal(row.title, '0 clauses, 0 controls');
   assert.equal(row.querySelector('b'), null);
   tick(ui, 'data-document-id', 'd1', false);
   assert.equal(ui.el('documentScopeCount').textContent, '0 selected');

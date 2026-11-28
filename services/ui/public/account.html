@@ -67,6 +67,9 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="my-isms-assets-tab" data-feature="assets" data-bs-toggle="tab" data-bs-target="#my-isms-assets-pane" type="button" role="tab" aria-controls="my-isms-assets-pane" aria-selected="false" data-tab-hash="#my-isms-assets"><i class="bi bi-box-seam" aria-hidden="true"></i> My assets</button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="my-legal-items-tab" data-feature="legal_register" data-bs-toggle="tab" data-bs-target="#my-legal-items-pane" type="button" role="tab" aria-controls="my-legal-items-pane" aria-selected="false" data-tab-hash="#my-legal-items"><i class="bi bi-bank" aria-hidden="true"></i> My legal items</button>
+      </li>
     </ul>
 
     <div class="tab-content flex-grow-1" id="accountTabContent">
@@ -471,6 +474,37 @@
                   </tr>
                 </thead>
                 <tbody id="myIsmsAssetsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-pane fade" id="my-legal-items-pane" role="tabpanel" aria-labelledby="my-legal-items-tab" tabindex="0">
+        <div id="myLegalItemsStatus" class="alert alert-info" style="display:none;" role="status"></div>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div>
+              <div class="fw-semibold">My legal items</div>
+              <div class="small-muted">Legal register items you own, with the next assessment first. You are reminded by email when an assessment is due.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="myLegalItemsRefresh" type="button"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          </div>
+          <div class="card-body">
+            <div id="myLegalItemsEmpty" class="small-muted" style="display:none;">You do not own any legal register items. An item's owner is chosen on the item, under ISMS › Legal register.</div>
+            <div class="table-responsive" id="myLegalItemsTableWrap" style="display:none;">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Legislation</th>
+                    <th>Category</th>
+                    <th>Scope</th>
+                    <th>Compliance</th>
+                    <th>Last assessed</th>
+                    <th>Next assessment</th>
+                  </tr>
+                </thead>
+                <tbody id="myLegalItemsTbody"></tbody>
               </table>
             </div>
           </div>

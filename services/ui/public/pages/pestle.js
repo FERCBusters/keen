@@ -464,7 +464,7 @@ function drawRelevanceVenn(data) {
 }
 
 function pestleClauseHref(id) {
-  return withFramework(`/clause.html?id=${encodeURIComponent(id)}&tab=pestle`, framework);
+  return withFramework(`/clause.html?id=${encodeURIComponent(id)}&tab=related`, framework);
 }
 
 function estimatedPestleLabelChars(nodes, fallback = 36) {

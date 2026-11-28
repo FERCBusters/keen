@@ -40,6 +40,7 @@ async function shell(
     url = 'https://keen.example/controls.html?framework=A',
     globals = {},
     apiPost,
+    vendor = {},
   } = {},
 ) {
   let win;
@@ -77,6 +78,7 @@ async function shell(
         win.document.getElementById('navbar').innerHTML = navbarHtml(links);
         return me;
       },
+      ...vendor,
     },
   });
   t.after(ui.close);
@@ -94,7 +96,7 @@ async function shell(
   return { ...ui, me: result, nav, seen, topLevel, menu, window: win };
 }
 
-test('the design system receives the Stories link for accounts that may read them', async (t) => {
+test('the design system receives the Stories link for accounts that may read them, and the Map', async (t) => {
   const ui = await shell(t);
   assert.deepEqual(JSON.parse(JSON.stringify(ui.seen.config.links)), [
     {
@@ -103,6 +105,8 @@ test('the design system receives the Stories link for accounts that may read the
       href: '/stories.html',
       requireAny: ['is_admin', 'can_view_stories'],
     },
+    // The Map names no permission: it shows each person their own records.
+    { key: 'map', label: 'Map', href: '/map.html' },
   ]);
 });
 
@@ -128,6 +132,7 @@ test('risk and ISMS pages are grouped into menus that keep the framework', async
     ['ISMS overview', '/isms.html?framework=A'],
     ['Objectives', '/isms.html?tab=objectives&framework=A'],
     ['SWOT analysis', '/swot.html?framework=A'],
+    ['Legal register', '/legal-register.html?framework=A'],
     ['Effectiveness measures', '/isms.html?tab=effectiveness&framework=A'],
     ['Quizzes', '/quizzes.html?framework=A'],
     ['Policies & processes', '/isms.html?tab=documents&framework=A'],
@@ -158,7 +163,7 @@ test('without risk access the ISMS menu still joins the navigation', async (t) =
   });
   assert.equal(ui.nav.querySelector('#riskAssessmentsDropdown'), null);
   assert.ok(ui.topLevel().includes('ISMS'));
-  assert.equal(ui.menu('ismsDropdown').length, 12);
+  assert.equal(ui.menu('ismsDropdown').length, 13);
 });
 
 test('an ISMS link supplied by the design system is used as it is', async (t) => {
@@ -393,4 +398,30 @@ test('a provider logout address the design system handles is left to it', async 
   ui.document.getElementById('navLogout').click();
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(posts, []);
+});
+
+test('every page asks the design system for its multi-select picker, once', async (t) => {
+  const asked = [];
+  const refreshed = [];
+  const ui = await shell(t, {
+    vendor: {
+      enhanceMultiSelects: (...args) => asked.push(args),
+      refreshMultiSelect: (select) => refreshed.push(select),
+    },
+  });
+  // The whole document, so each list of several choices works the same way.
+  assert.deepEqual(asked, [[]]);
+  await ui.api.initNavbar();
+  assert.equal(asked.length, 1, 'a second page module shares the setup');
+  // Code that sets selections on options already listed asks for a redraw.
+  const select = ui.document.createElement('select');
+  ui.api.refreshPicker(select);
+  assert.deepEqual(refreshed, [select]);
+});
+
+test('a design system from before the picker leaves native lists in place', async (t) => {
+  const ui = await shell(t);
+  assert.equal(ui.me.user, 'admin', 'the shell still starts');
+  // Asking for a redraw is harmless too.
+  assert.equal(ui.api.refreshPicker(ui.document.createElement('select')), undefined);
 });

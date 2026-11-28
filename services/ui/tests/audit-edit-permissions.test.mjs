@@ -2,6 +2,7 @@
 // administrators edit it; other audit managers only read it, even when they
 // re-enable its controls; people are added to the directory only by those
 // who manage the ISMS.
+import { deselectAll, scopeBox, scopeList } from './support/scope-lists.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { settle } from './support/page-fixture.mjs';
@@ -34,10 +35,10 @@ test('another audit manager cannot save notes, reports, people or evidence on th
   await refused(() => submit(ui, 'attendeeForm'));
   ui.el('urlEvidence').value = 'https://evidence.example/item';
   await refused(() => submit(ui, 'urlEvidenceForm'));
-  // Re-enabled buttons are refused the same way.
-  for (const id of ['deselectDocuments', 'deselectClauses']) {
-    ui.el(id).disabled = false;
-    await refused(() => ui.el(id).click());
+  // Re-enabled scope lists are refused the same way.
+  for (const kind of ['document', 'clause']) {
+    scopeList(ui, kind).disabled = false;
+    await refused(() => deselectAll(ui, kind));
   }
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.deepEqual([state.patched, state.posted, state.put], [[], [], null]);
@@ -53,7 +54,7 @@ test('re-enabled scope boxes do not change the scope for another audit manager',
     ['data-clause-id', 'cl41', 'clauseScopeCount'],
     ['data-control-id', 'c1', 'controlScopeCount'],
   ]) {
-    const box = ui.document.querySelector(`[${attr}="${id}"]`);
+    const box = scopeBox(ui, attr.split('-')[1], id);
     assert.equal(box.disabled, true, id);
     box.disabled = false;
     change(ui, box, { checked: true });
@@ -69,9 +70,9 @@ test('the creator of the audit can tick a document and its linked controls', asy
     me: { can_manage_audits: true, can_view_events: true, user_id: 'u1' },
     responses: { '/api/v1/isms/documents': documents },
   });
-  change(ui, ui.document.querySelector('[data-document-id="d1"]'), { checked: true });
+  change(ui, scopeBox(ui, 'document', 'd1'), { checked: true });
   assert.equal(ui.el('documentScopeCount').textContent, '1 selected');
-  assert.equal(ui.document.querySelector('[data-control-id="c2"]').checked, true);
+  assert.equal(scopeBox(ui, 'control', 'c2').checked, true);
 });
 
 test('the template schedule form of an ordinary audit saves nothing', async (t) => {

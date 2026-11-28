@@ -116,6 +116,12 @@ async function riskPage(t, options = {}) {
           total: 1,
         };
       }
+      if (p === '/api/v1/isms/legal-register') {
+        assert.equal(u.searchParams.get('target_type'), 'risk');
+        assert.equal(u.searchParams.get('target_id'), 'r1');
+        return { items: [{ id: 'l1', title: 'GDPR <b>Art. 32</b>', in_scope: true }], total: 1 };
+      }
+      if (p === '/api/v1/stories/related/risk/r1' || p === '/api/v1/stories') return { items: [] };
       if (p === '/api/v1/audits')
         return { items: [{ id: 'au1', title: 'Audit', status: 'in_progress' }] };
       throw new Error('Unexpected GET ' + u);
@@ -136,7 +142,7 @@ async function riskPage(t, options = {}) {
       return { ok: true };
     },
   });
-  await settle(() => ui.el('swotRelatedPane')?.textContent || ui.el('status').textContent);
+  await settle(() => (ui.calls.length && ui.idle()) || ui.el('status').textContent);
   return { ui, state };
 }
 
@@ -193,15 +199,34 @@ test('risk details render scores, types, controls and mitigator context as text'
   assert.equal(ui.el('controlsCount').textContent, '2');
   assert.equal(ui.el('linkedControls').querySelector('i'), null);
   assert.match(ui.el('linkedControls').textContent, /In scope[\s\S]*Out of scope/);
-  // Related SWOT items are mounted as an extra tab.
-  const swot = ui.el('swotRelatedPane');
+  // SWOT items, legal register items and stories related to the risk are
+  // cards of one Related items tab, ahead of the Changelog.
+  assert.deepEqual(
+    [...ui.document.querySelectorAll('main .nav-tabs button')].map((b) => b.textContent.trim()),
+    ['Details', 'Visualisation', 'Questions', 'Related items', 'Changelog'],
+  );
+  assert.deepEqual(
+    [...ui.el('relatedItemsPane').querySelectorAll('.mosp-related-card-title')].map(
+      (title) => title.textContent,
+    ),
+    ['SWOT analysis', 'Legal register', 'Stories'],
+  );
+  tab(ui, 'relatedItemsTab');
+  const swot = ui.el('relatedSwotCard');
+  await settle(() => swot.querySelector('.mosp-related-link'));
   assert.equal(swot.querySelector('b'), null);
-  assert.match(swot.textContent, /Old <b>backups<\/b> weakness · 4\/5/);
+  assert.equal(swot.querySelector('.mosp-related-link').textContent, 'Old <b>backups</b>');
+  assert.equal(swot.querySelector('.mosp-related-detail').textContent, 'weakness · 4/5');
   assert.match(
-    swot.querySelector('a').getAttribute('href'),
+    swot.querySelector('.mosp-related-link').getAttribute('href'),
     /swot\.html\?id=s1&tab=related&framework=A/,
   );
-  assert.match(swot.textContent, /Explore in SWOT analysis \(1\)/);
+  assert.equal(swot.querySelector('.mosp-related-card-count').textContent, '1');
+  await settle(() => ui.el('relatedLegalCard').querySelector('.mosp-related-link'));
+  assert.equal(
+    ui.el('relatedLegalCard').querySelector('.mosp-related-link').textContent,
+    'GDPR <b>Art. 32</b>',
+  );
 });
 
 test('records a risk affects never link to another host, whatever path they name', async (t) => {
@@ -257,19 +282,18 @@ test('risks without optional data show fallbacks and readers lose edit and sampl
   assert.equal(ui.el('deleteRisk').style.display, 'none');
   assert.equal(ui.el('sampleRiskAudit').style.display, 'none');
   assert.equal(ui.el('riskQuestions').querySelector('[data-question-ask]').hidden, true);
-  assert.match(ui.el('swotRelatedPane').textContent, /No SWOT items linked/);
+  // A reader of risks alone has no related-items card to see, so no tab.
+  assert.equal(ui.el('relatedItemsTab'), null);
 });
 
-test('related SWOT items explain when access is unavailable', async (t) => {
+test('related SWOT items that cannot be read say so in their card', async (t) => {
   const { ui } = await riskPage(t, { fail: { swot: true } });
-  assert.equal(
-    ui.el('swotRelatedPane').textContent,
-    'Related SWOT items are unavailable with your current access.',
-  );
+  tab(ui, 'relatedItemsTab');
+  const body = ui.el('relatedSwotCard').querySelector('.mosp-related-card-body');
+  await settle(() => /could not/.test(body.textContent));
+  assert.equal(body.textContent, 'SWOT analysis could not be loaded: denied');
 });
 
-// The shared question panel is tested through the event page; these tests
-// cover what the risk page supplies: its question address and plain-text posts.
 test('risk questions are asked and answered at the risk', async (t) => {
   const { ui, state } = await riskPage(t);
   tab(ui, 'riskQuestionsTab');

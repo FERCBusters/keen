@@ -44,3 +44,8 @@ def my_isms_assets(
     db: Session = Depends(get_db),
 ):
     return service.my_isms_assets(framework=framework, user=user, db=db)
+
+
+@router.get("/v1/me/isms-legal-items")
+def my_legal_items(user=Depends(require_authenticated), db: Session = Depends(get_db)):
+    return service.my_legal_items(user=user, db=db)

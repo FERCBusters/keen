@@ -159,7 +159,15 @@ test('the tree lists every view and folder with its count, names as text', async
   assert.deepEqual(p.names(), ['All documents', 'Unfiled', hostile, 'Governance', 'People']);
   assert.equal(p.ui.el('docFolderPanel').querySelector('img'), null);
   const count = (key) => p.row(key).querySelector('.badge').textContent;
-  assert.deepEqual(['all', 'unfiled', 'f1', 'f2', 'f4'].map(count), ['3', '1', '0', '1', '1']);
+  // A folder counts what is filed in it and in the folders inside it:
+  // Governance holds nothing itself and one document in Policies.
+  assert.deepEqual(['all', 'unfiled', 'f1', 'f2', 'f4'].map(count), ['3', '1', '1', '1', '1']);
+  const hint = (key) => p.row(key).querySelector('.badge').getAttribute('title');
+  assert.equal(hint('f1'), '0 in this folder, 1 with the folders inside it');
+  // Where the two are the same there is nothing to explain.
+  assert.equal(hint('f2'), null);
+  assert.equal(hint('f4'), null);
+  assert.equal(hint('all'), null);
   // A folder with folders inside it opens and closes; one without has no toggle.
   assert.equal(p.item('f1').getAttribute('aria-expanded'), 'false');
   assert.equal(p.item('f4').hasAttribute('aria-expanded'), false);

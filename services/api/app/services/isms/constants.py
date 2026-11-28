@@ -7,6 +7,7 @@ from app.db.models import (
     IsmsDocument,
     IsmsEffectivenessMeasure,
     IsmsEffectivenessMetricEntry,
+    IsmsLegalItem,
     IsmsLicense,
     IsmsMeeting,
     IsmsObjective,
@@ -107,6 +108,7 @@ ENTITY_TYPES = {
         "isms_access_control_matrix",
     ),
     "meeting": (IsmsMeeting, "isms_meeting"),
+    "legal_item": (IsmsLegalItem, "isms_legal_item"),
     "effectiveness_measure": (
         IsmsEffectivenessMeasure,
         "isms_effectiveness_measure",

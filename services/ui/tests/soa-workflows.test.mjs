@@ -330,13 +330,17 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   assert.equal(pestle[1].querySelector('a').textContent, 'PESTLE(E) item');
   // Who a factor affects links to each record, names as text.
   const affected = pestle[0].querySelectorAll('td')[5];
+  // A long name is cut to 32 characters and given in full on hover.
+  const longName = HOSTILE + 'Commissioner';
   assert.deepEqual(
     [...affected.querySelectorAll('.badge')].map((b) => [b.textContent, b.getAttribute('href')]),
     [
-      ['Vendor / 3rd party: ' + HOSTILE + 'Commissioner', '/vendor.html?id=v1&framework=A'],
+      ['Vendor / 3rd party: ' + longName.slice(0, 31) + '…', '/vendor.html?id=v1&framework=A'],
       ['Asset: CRM', null],
     ],
   );
+  assert.ok(affected.querySelector('.badge').title.startsWith(longName));
+  assert.equal(affected.querySelector('img'), null);
   assert.equal(pestle[1].querySelectorAll('td')[5].textContent, '-');
   // Rated controls link to the control and carry the rating, as text.
   const rated = pestle[0].querySelectorAll('td')[6].querySelectorAll('.badge');
@@ -349,7 +353,7 @@ test('risks and PESTLE(E) items render scores, relevance, who they affect and fi
   );
   assert.equal(pestle[1].querySelectorAll('td')[6].textContent, '-');
   const clauseBadges = pestle[0].querySelectorAll('td')[7].querySelectorAll('a');
-  assert.equal(clauseBadges[0].getAttribute('href'), '/clause.html?id=k1&tab=pestle&framework=A');
+  assert.equal(clauseBadges[0].getAttribute('href'), '/clause.html?id=k1&tab=related&framework=A');
   assert.equal(clauseBadges[0].getAttribute('title'), 'Context · High');
   assert.equal(clauseBadges[1].textContent, 'Clause');
   filter(ui, 'pestleFilter', 'a.5.1 ' + HOSTILE.toLowerCase() + 'policies medium');
@@ -369,11 +373,11 @@ test('ISMS objectives, documents, measures, organisation and assets are listed',
   assert.match(o1.textContent, /sam/);
   assert.equal(
     o1.querySelectorAll('td')[5].querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=governance&framework=A',
+    '/control.html?id=c1&tab=items&framework=A',
   );
   assert.equal(
     o1.querySelectorAll('td')[6].querySelector('a').getAttribute('href'),
-    '/clause.html?id=k2&tab=isms&framework=A',
+    '/clause.html?id=k2&tab=related&framework=A',
   );
   assert.equal(
     o1.querySelectorAll('td')[6].querySelector('a').getAttribute('title'),
@@ -625,4 +629,117 @@ test('untitled controls and unnamed records show no placeholder text and match n
   const swot = ui.el('swotRows').querySelector('tr').cells;
   assert.equal(swot[4].textContent, '-');
   assert.equal(swot[5].textContent, '4.1');
+});
+
+test('the summary counts the legal register items of the framework for those who may read them', async (t) => {
+  const meta = async (extra) =>
+    (await soaPage(t, { data: { ...soa(), ...extra } })).el('soaMeta').textContent;
+  assert.doesNotMatch(await meta({}), /legal register/);
+  const counts = soa().counts;
+  assert.match(
+    await meta({ can_view_legal_register: true, counts: { ...counts, legal_items: 1 } }),
+    / · 1 assets · 1 legal register item$/,
+  );
+  assert.match(
+    await meta({ can_view_legal_register: true, counts: { ...counts, legal_items: 12 } }),
+    / · 12 legal register items$/,
+  );
+  assert.match(
+    await meta({ can_view_legal_register: true, counts: undefined }),
+    / · 0 legal register items$/,
+  );
+  // Without that access the count is not shown, whatever was served.
+  assert.doesNotMatch(
+    await meta({ can_view_legal_register: false, counts: { ...counts, legal_items: 3 } }),
+    /legal register/,
+  );
+});
+
+test('the header links to the legal register while that feature is on', async (t) => {
+  const ui = await soaPage(t);
+  const link = ui.document.querySelector('main a[href="/legal-register.html"]');
+  assert.equal(link.textContent.trim(), 'Legal register');
+  assert.equal(link.dataset.feature, 'legal_register', 'hidden with the feature');
+});
+
+test('the Legal register tab lists the items linked to the framework, as text', async (t) => {
+  const legal_items = [
+    {
+      id: 'l/1',
+      title: 'Data <b>Protection</b> Act 2018',
+      category: { name: 'Data <i>protection</i>' },
+      in_scope: true,
+      compliance_status: 'non_compliant',
+      compliance_status_label: 'Non-compliant',
+      next_assessment_date: '2026-11-01',
+      assessment_due: true,
+      controls: [
+        { id: 'c1', ref: 'A.5.31', title: 'Legal requirements' },
+        { id: 'c/2', ref: 'A.5.34', title: '' },
+      ],
+      clauses: [{ id: 'k1', ref: '4.2', title: 'Interested parties' }],
+    },
+    {
+      id: 'l2',
+      title: 'Bribery Act 2010',
+      category: null,
+      in_scope: false,
+      compliance_status: 'not_assessed',
+      compliance_status_label: 'Not assessed',
+      next_assessment_date: null,
+      assessment_due: false,
+      controls: [],
+      clauses: [],
+    },
+  ];
+  const ui = await soaPage(t, { data: { ...soa(), can_view_legal_register: true, legal_items } });
+  const tab = ui.el('soaLegalTab');
+  assert.equal(tab.textContent, 'Legal register');
+  assert.equal(tab.dataset.feature, 'legal_register');
+  assert.equal(tab.closest('li').hidden, false);
+  assert.deepEqual(rowTexts(ui, 'legalRows'), [
+    'Data <b>Protection</b> Act 2018 Data <i>protection</i> In scope Non-compliant 2026-11-01Due A.5.31, A.5.34 4.2',
+    'Bribery Act 2010 - Out of scope Not assessed - - -',
+  ]);
+  assert.equal(ui.el('legalRows').querySelector('b, i'), null);
+  const links = [...ui.el('legalRows').rows[0].querySelectorAll('a')].map((a) => [
+    a.textContent,
+    a.getAttribute('href'),
+    a.title,
+  ]);
+  assert.deepEqual(links, [
+    ['Data <b>Protection</b> Act 2018', '/legal-register.html?id=l%2F1&framework=A', ''],
+    ['A.5.31', '/control.html?id=c1&framework=A', 'Legal requirements'],
+    ['A.5.34', '/control.html?id=c%2F2&framework=A', 'A.5.34'],
+    ['4.2', '/clause.html?id=k1&framework=A', 'Interested parties'],
+  ]);
+  assert.deepEqual(
+    [...ui.el('legalRows').querySelectorAll('td:nth-child(4) .badge')].map((b) => b.className),
+    ['badge text-bg-danger', 'badge text-bg-secondary'],
+  );
+});
+
+test('the Legal register tab says when nothing is linked and hides without access', async (t) => {
+  const empty = await soaPage(t, {
+    data: { ...soa(), can_view_legal_register: true, legal_items: [] },
+  });
+  assert.deepEqual(rowTexts(empty, 'legalRows'), [
+    'No legal register items linked to this framework.',
+  ]);
+  assert.equal(empty.el('legalRows').querySelector('td').getAttribute('colspan'), '7');
+  // A statement served without the list, to a reader without that access.
+  const hidden = await soaPage(t);
+  assert.equal(hidden.el('soaLegalTab').closest('li').hidden, true);
+  assert.deepEqual(rowTexts(hidden, 'legalRows'), [
+    'No legal register items linked to this framework.',
+  ]);
+});
+
+test('a link to the Legal register tab opens it', async (t) => {
+  const shown = [];
+  await soaPage(t, {
+    query: '&tab=legal',
+    tabs: { Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) } },
+  });
+  assert.deepEqual(shown, ['soaLegalTab']);
 });

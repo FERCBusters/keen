@@ -29,7 +29,7 @@ import {
   renderGraph,
 } from '/pages/planning-views.js';
 import { controlBadges, clauseBadges } from '/pages/isms-detail-common.js';
-import { mountStoryRelated } from '/pages/story-related.js';
+import { renderRelatedRecords, storiesCard } from '/pages/related-records.js';
 const $ = (id) => document.getElementById(id),
   params = new URLSearchParams(location.search);
 const me = await initNavbar(),
@@ -53,29 +53,34 @@ let row = null,
   total = 0,
   loading = false;
 initCollapsibleFilterSections();
-const types = ['objective', 'document', 'asset', 'risk', 'person', 'vendor'].filter((type) =>
-  featureEnabled(
-    me,
-    {
-      objective: 'objectives',
-      document: 'documents',
-      asset: 'assets',
-      risk: 'risk_cia',
-      person: 'people',
-      vendor: 'vendors',
-    }[type],
-  ),
+// A relationship to a legal register item is the one that item shows to this
+// SWOT item: it is made and removed here or there.
+const typeLabel = (type) => (type === 'legal_item' ? 'Legal register item' : label(type));
+const types = ['objective', 'document', 'asset', 'risk', 'person', 'vendor', 'legal_item'].filter(
+  (type) =>
+    featureEnabled(
+      me,
+      {
+        objective: 'objectives',
+        document: 'documents',
+        asset: 'assets',
+        risk: 'risk_cia',
+        person: 'people',
+        vendor: 'vendors',
+        legal_item: 'legal_register',
+      }[type],
+    ),
 );
-function options(id, values, first = '') {
+function options(id, values, first = '', name = label) {
   $(id).innerHTML =
-    first + values.map((v) => `<option value="${esc(v)}">${esc(label(v))}</option>`).join('');
+    first + values.map((v) => `<option value="${esc(v)}">${esc(name(v))}</option>`).join('');
 }
 options('kind', kinds);
 options('kindFilter', kinds, '<option value="">All quadrants</option>');
 options('itemStatus', statuses);
 options('statusFilter', statuses, '<option value="">All statuses</option>');
-options('relatedType', types, '<option value="">Any relationship</option>');
-options('linkType', types);
+options('relatedType', types, '<option value="">Any relationship</option>', typeLabel);
+options('linkType', types, '', typeLabel);
 const draftLinks = [];
 let draftDirty = false;
 let mappingCatalog = { controls: [], clauses: [] };
@@ -202,6 +207,8 @@ async function parents() {
   }
   $('parent').value = row?.parent_id || '';
 }
+// The stories card is built once and shown again each time the tab is drawn.
+let relatedStories = null;
 function renderRelations() {
   const current = isNew
     ? {
@@ -218,12 +225,15 @@ function renderRelations() {
         ),
       }
     : row;
-  $('relatedList').innerHTML = types
-    .map((type) => {
-      const links = current.links.filter((link) => link.target_type === type);
-      return `<section class="col-12 col-md-6 col-xl-4"><div class="card h-100"><div class="card-body p-3"><h3 class="h6 d-flex justify-content-between">${esc(label(type))}<span class="badge text-bg-secondary">${links.length}</span></h3><div class="d-grid gap-2">${links.map((link) => `<div class="border rounded p-2 d-flex align-items-center gap-2"><a class="text-break flex-grow-1" href="${esc(localPath(withFramework(link.url, framework)) || '#')}"${isNew ? ' target="_blank" rel="noopener noreferrer"' : ''}>${esc(link.title)}</a>${manage ? `<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-unlink-type="${type}" data-unlink-id="${esc(link.target_id)}" aria-label="Remove ${esc(link.title)}">Unlink</button>` : ''}</div>`).join('') || '<span class="small-muted">No linked items.</span>'}</div></div></div></section>`;
-    })
-    .join('');
+  renderRelatedRecords($('relatedList'), {
+    types,
+    label: typeLabel,
+    links: current.links,
+    href: (link) => localPath(withFramework(link.url, framework)) || '',
+    manage,
+    newTab: isNew,
+    stories: relatedStories,
+  });
   renderGraph($('graph'), current, framework);
 }
 function mappingOptions(id, records = [], selected = [], filter = false) {
@@ -459,13 +469,24 @@ try {
   if (itemId || isNew) {
     if (isNew && kinds.includes(params.get('kind'))) $('kind').value = params.get('kind');
     await loadDetail();
+    // The stories that include the item are a card among its related items.
+    if (itemId) {
+      relatedStories = storiesCard({
+        me,
+        kind: 'swot',
+        id: itemId,
+        framework,
+        trigger: $('relatedTab'),
+        noun: 'SWOT item',
+      });
+      renderRelations();
+    }
     const tab = ['details', 'related', 'visualisation', 'questions', 'changelog'].includes(
       params.get('tab'),
     )
       ? params.get('tab')
       : 'details';
     if (window.bootstrap) window.bootstrap.Tab.getOrCreateInstance($(tab + 'Tab')).show();
-    if (itemId) mountStoryRelated({ me, kind: 'swot', id: itemId, framework });
   } else {
     const meta = await apiGet(`/api/v1/isms/meta?${fw}`);
     mappingOptions('controlFilter', meta.controls, [], true);

@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadUi } from './support/load-ui.mjs';
 import { page, settle } from './support/page-fixture.mjs';
 
 const hostile = '<img src=x onerror=alert(1)>';
@@ -38,6 +37,8 @@ async function detail(
       // A document page also lists its revisions and comments.
       if (u.pathname.endsWith('/revisions') || u.pathname.endsWith('/comments')) return [];
       if (swot && u.pathname === '/api/v1/isms/swot') return { items: [], total: 0 };
+      if (u.pathname === '/api/v1/isms/legal-register') return { items: [], total: 0 };
+      if (u.pathname.startsWith('/api/v1/stories')) return { items: [] };
       if (sources && u.pathname === '/api/v1/sources')
         return { items: [{ source: 'jira', label: 'Jira' }] };
       if (risks && u.pathname === '/api/v1/risks') {
@@ -166,7 +167,7 @@ test('meeting minutes render attendees, sanitised notes and safe supporting link
   assert.equal(links[2].textContent, 'https://docs.example/minutes');
   assert.match(
     ui.el('meetingClauses').querySelector('a').getAttribute('href'),
-    /clause\.html\?id=k1&tab=isms&framework=B/,
+    /clause\.html\?id=k1&tab=related&framework=B/,
   );
   assert.match(ui.el('editMeetingLink').getAttribute('href'), /edit=meeting%3Ax1|edit=meeting:x1/);
   assert.match(ui.el('meetingChangelog').textContent, /Changed <img/);
@@ -254,7 +255,22 @@ test('ISMS documents link uploaded files and only safe external URLs', async (t)
   // The open button prefers a safe external URL and otherwise the uploaded file.
   assert.equal(ui.el('openDocumentLink').getAttribute('href'), '/api/v1/isms/documents/x1/file');
   assert.equal(ui.el('openDocumentLink').style.display, '');
-  assert.match(ui.el('swotRelatedPane').textContent, /No SWOT items linked/);
+  // The records related to the document are cards of one Related items tab.
+  assert.deepEqual(
+    [...ui.el('documentTabs').querySelectorAll('button')].map((b) => b.textContent),
+    ['Details', 'Revisions', 'Comments', 'Related items', 'Changelog'],
+  );
+  assert.deepEqual(
+    [...ui.el('relatedItemsPane').querySelectorAll('.mosp-related-card-title')].map(
+      (title) => title.textContent,
+    ),
+    ['SWOT analysis', 'Legal register', 'Stories'],
+  );
+  ui.el('relatedItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => /No SWOT items are related/.test(ui.el('relatedSwotCard').textContent));
+  await settle(() =>
+    /No legal register items are related/.test(ui.el('relatedLegalCard').textContent),
+  );
   // A document's controls open on Requirements, which lists their policies.
   assert.equal(
     ui.el('documentControls').querySelector('a').getAttribute('href'),
@@ -343,7 +359,7 @@ test('objectives show status, owners and linked requirements', async (t) => {
   // Other ISMS records link to the control's Governance tab.
   assert.equal(
     ui.el('objectiveControls').querySelector('a').getAttribute('href'),
-    '/control.html?id=c1&tab=governance&framework=A',
+    '/control.html?id=c1&tab=items&framework=A',
   );
   const body = await sample(ui, posted, 'sampleObjectiveAudit');
   assert.equal(body.entity_type, 'isms_objective');
@@ -413,14 +429,20 @@ test('assets show classification, owners and risk counts', async (t) => {
   assert.equal(reader.ui.el('editAssetLink').style.display, 'none');
   assert.equal(reader.ui.el('sampleAssetAudit').style.display, 'none');
   // Risks stay with people who can read the risk register.
-  assert.equal(reader.ui.el('assetRisksTabItem').hidden, true);
+  assert.equal(reader.ui.el('assetRisksCard'), null);
+  assert.deepEqual(
+    [...reader.ui.el('relatedItemsPane').querySelectorAll('.mosp-related-card-title')].map(
+      (title) => title.textContent,
+    ),
+    ['SWOT analysis', 'Legal register'],
+  );
   assert.equal(
     reader.ui.calls.some((c) => c.url.startsWith('/api/v1/risks')),
     false,
   );
 });
 
-test('an asset lists its risks to risk readers when the tab opens', async (t) => {
+test('an asset lists its risks to risk readers among its related items', async (t) => {
   const risk = {
     id: 'r1',
     title: hostile + 'Unrestricted users without 2FA',
@@ -439,19 +461,34 @@ test('an asset lists its risks to risk readers when the tab opens', async (t) =>
     risks: [risk],
     me: { can_view_isms: true, can_view_risks: true },
   });
-  assert.equal(ui.el('assetRisksTabItem').hidden, false);
+  // The risks are the first card of Related items; there is no Risks tab.
+  assert.deepEqual(
+    [...ui.el('assetTabs').querySelectorAll('button')].map((b) => b.textContent),
+    ['Details', 'Related items', 'Changelog'],
+  );
+  assert.equal(ui.el('relatedItemsPane').querySelector('.mosp-related-card').id, 'assetRisksCard');
+  assert.match(ui.el('assetRisksCard').textContent, /Risks recorded against this asset/);
   assert.equal(
     ui.calls.some((c) => c.url.startsWith('/api/v1/risks')),
     false,
   );
-  ui.el('assetRisksTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
-  await settle(() => ui.el('assetRisks').querySelector('table'));
-  const link = ui.el('assetRisks').querySelector('a');
+  ui.el('relatedItemsTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => ui.el('assetRisksCard').querySelector('table'));
+  const link = ui.el('assetRisksCard').querySelector('td a');
+  assert.equal(ui.el('assetRisksCard').querySelector('.mosp-related-card-count').textContent, '1');
+  assert.deepEqual(
+    [...ui.el('assetRisksCard').querySelectorAll('th')].map((th) => th.textContent),
+    ['Risk', 'Treatment', 'Risk', 'Residual', 'Owner'],
+  );
+  assert.deepEqual(
+    [...ui.el('assetRisksCard').querySelectorAll('td .badge')].map((b) => b.textContent),
+    ['Confidentiality', '15', '4'],
+  );
   assert.equal(link.textContent, risk.title);
   assert.match(link.getAttribute('href'), /^\/risk\.html\?id=r1/);
-  assert.equal(ui.el('assetRisks').querySelector('img'), null);
-  assert.match(ui.el('assetRisks').textContent, /Accept/);
-  assert.match(ui.el('assetRisks').textContent, /due 01\/12\/2026|due 2026-12-01|due 1 Dec/);
+  assert.equal(ui.el('assetRisksCard').querySelector('img'), null);
+  assert.match(ui.el('assetRisksCard').textContent, /Accept/);
+  assert.match(ui.el('assetRisksCard').textContent, /due 01\/12\/2026|due 2026-12-01|due 1 Dec/);
 
   const none = await detail(t, 'isms-asset', {
     path: '/api/v1/isms/assets/x1',
@@ -460,8 +497,8 @@ test('an asset lists its risks to risk readers when the tab opens', async (t) =>
     risks: [],
     me: { can_view_isms: true, can_manage_risks: true },
   });
-  none.ui.el('assetRisksTab').dispatchEvent(new none.ui.window.Event('shown.bs.tab'));
-  await settle(() => /No risks/.test(none.ui.el('assetRisks').textContent));
+  none.ui.el('relatedItemsTab').dispatchEvent(new none.ui.window.Event('shown.bs.tab'));
+  await settle(() => /No risks/.test(none.ui.el('assetRisksCard').textContent));
 });
 
 for (const [name, path, message] of [
@@ -486,22 +523,3 @@ for (const [name, path, message] of [
     const missing = await detail(t, name, { path, query: '', swot: true, sources: true });
     assert.match(missing.ui.el('status').textContent, /^Missing /);
   });
-
-test('related SWOT significance and totals are inserted as text', async (t) => {
-  const ui = await loadUi('pages/swot-related.js', {
-    html: '<main><div id="host"></div></main>',
-    vendor: {
-      apiGet: async () => ({
-        items: [{ id: 's1', title: 'Team', kind: 'strength', significance: hostile }],
-        total: hostile,
-      }),
-      withFramework: (url) => url,
-    },
-  });
-  t.after(ui.close);
-  await ui.api.mountSwotRelated('document', 'd1', ui.document.getElementById('host'));
-  const pane = ui.document.getElementById('swotRelatedPane');
-  assert.equal(pane.querySelector('img'), null);
-  assert.match(pane.textContent, /strength · <img src=x onerror=alert\(1\)>\/5/);
-  assert.match(pane.textContent, /Explore in SWOT analysis \(<img src=x onerror=alert\(1\)>\)/);
-});

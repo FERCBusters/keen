@@ -1,7 +1,9 @@
+import { mountAssignedStories } from '/pages/story-related.js';
+import { catalogueLabel } from '/pages/catalogue-options.js';
 import { featureEnabled } from '/pages/feature-availability.js';
 import { createRelatedControlsBrowser } from './related-controls.js';
 import { createControlRequirements } from './control-requirements.js';
-import { linkedRisksTable, pestleItemRows } from '/pages/risk-common.js';
+import { linkedRisksData, pestleItemsData } from '/pages/risk-common.js';
 import { mountOwners, ownerNames } from '/pages/owners.js';
 import {
   errorText,
@@ -35,7 +37,11 @@ import {
   wireOffsetPagerButtons,
   loadEntityChangelog,
   node,
-  applicabilityBadge,
+  refreshPicker,
+  applicabilityPill,
+  relatedCard,
+  relatedCards,
+  updateRelatedCard,
 } from '/app.js';
 
 const me = await initNavbar();
@@ -55,13 +61,104 @@ const crossList = document.getElementById('crossFrameworkLinks');
 const crossFrameworkSource = document.getElementById('crossFrameworkSource');
 const crossFrameworkControl = document.getElementById('crossFrameworkControl');
 const selLimit = document.getElementById('limit');
-const clausesCard = document.getElementById('clausesCard');
-const clausesView = document.getElementById('clausesView');
-const clausesCount = document.getElementById('clausesCount');
-const risksCard = document.getElementById('risksCard');
-const risksView = document.getElementById('risksView');
-const risksCount = document.getElementById('risksCount');
-const adminClausesCard = document.getElementById('adminClausesCard');
+// The Related items tab: every card is the design system's related-item
+// card, so the frame, the headings and the tables match those of other
+// records' pages. Clauses and Stories are short and share a row; the cards
+// that hold a table each take the full width.
+const editClauseApplicabilityBtn = node(
+  'button',
+  {
+    id: 'editClauseApplicability',
+    class: 'btn btn-sm btn-outline-primary no-print',
+    type: 'button',
+  },
+  'Edit',
+);
+editClauseApplicabilityBtn.hidden = true;
+const clausesCard = relatedCard({
+  id: 'clausesCard',
+  title: 'Clauses',
+  description: 'Clauses linked to this control and their applicability.',
+  count: 0,
+  action: editClauseApplicabilityBtn,
+  empty: 'No clauses linked.',
+});
+const controlStoriesHost = node('div', { id: 'controlStories' });
+const controlStoriesCard = relatedCard({
+  id: 'controlStoriesCard',
+  title: 'Stories',
+  description:
+    "Stories whose authors assigned them to this control, on the story's Controls and clauses tab.",
+  body: controlStoriesHost,
+  wide: false,
+});
+controlStoriesCard.dataset.feature = 'stories';
+const adminClausesCard = relatedCard({
+  id: 'adminClausesCard',
+  title: 'Admin: clause applicability',
+  description:
+    'Choose the clauses this control supports and how far. A clause left out is not applicable; a parent clause follows its children.',
+  body: document.getElementById('adminClausesEditor'),
+  wide: true,
+});
+adminClausesCard.classList.add('no-print');
+const risksCard = relatedCard({
+  id: 'risksCard',
+  title: 'Cross-referenced risks',
+  description: 'Risks mapped to this control for the selected framework.',
+  count: 0,
+  empty: 'No risks linked.',
+  wide: true,
+});
+const controlIsmsCard = relatedCard({
+  id: 'controlIsmsCard',
+  title: 'ISMS references',
+  description:
+    'SWOT items, legal register items, objectives, organisation roles, assets and meetings linked to this control. Policies, processes and effectiveness measures are under Requirements.',
+  action: node(
+    'a',
+    { class: 'btn btn-sm btn-outline-primary', 'data-nav-fw': '1', href: '/isms.html' },
+    'Open ISMS',
+  ),
+  empty: 'Loading ISMS references',
+  wide: true,
+});
+const controlPestleCard = relatedCard({
+  id: 'controlPestleCard',
+  title: 'PESTLE(E) relevance',
+  description: 'PESTLE(E) items rated against this control.',
+  wide: true,
+});
+// A card shows once its records are loaded for a reader who may see them.
+for (const card of [
+  clausesCard,
+  controlStoriesCard,
+  adminClausesCard,
+  risksCard,
+  controlPestleCard,
+])
+  card.hidden = true;
+// Each card's content and count keep the names the rest of the page knows.
+for (const [card, body, count] of [
+  [clausesCard, 'clausesView', 'clausesCount'],
+  [risksCard, 'risksView', 'risksCount'],
+  [controlIsmsCard, 'controlIsmsView', ''],
+  [controlPestleCard, 'controlPestleView', ''],
+]) {
+  card.querySelector('.mosp-related-card-body').id = body;
+  if (count) card.querySelector('.mosp-related-card-count').id = count;
+}
+relatedCards(
+  [
+    clausesCard,
+    controlStoriesCard,
+    adminClausesCard,
+    risksCard,
+    controlIsmsCard,
+    controlPestleCard,
+  ],
+  document.getElementById('controlRelatedItems'),
+);
 const controlJustificationCard = document.getElementById('controlJustificationCard');
 const adminClausesList = document.getElementById('adminClausesList');
 const controlUpstreamUrl = document.getElementById('controlUpstreamUrl');
@@ -69,13 +166,13 @@ const saveControlUpstreamUrlBtn = document.getElementById('saveControlUpstreamUr
 const controlJustification = document.getElementById('controlJustification');
 const saveControlJustificationBtn = document.getElementById('saveControlJustification');
 const saveClauseLinksBtn = document.getElementById('saveClauseLinks');
-const editClauseApplicabilityBtn = document.getElementById('editClauseApplicability');
 const controlsBreadcrumb = document.getElementById('controlsBreadcrumb');
 const controlRequirementsTab = document.getElementById('controlRequirementsTab');
 const controlEvidenceTab = document.getElementById('controlEvidenceTab');
 const controlRelatedTab = document.getElementById('controlRelatedTab');
+const controlItemsTab = document.getElementById('controlItemsTab');
 const controlGovernanceTab = document.getElementById('controlGovernanceTab');
-const controlIsmsView = document.getElementById('controlIsmsView');
+const controlChangelogTab = document.getElementById('controlChangelogTab');
 const controlChangelogEl = document.getElementById('controlChangelog');
 const canViewRisks = !!(me?.is_admin || me?.can_view_risks || me?.can_manage_risks);
 const canViewIsms = !!(
@@ -372,8 +469,10 @@ function activateControlTab(name) {
   const tabs = {
     requirements: controlRequirementsTab,
     evidence: controlEvidenceTab,
+    items: controlItemsTab,
     related: controlRelatedTab,
     governance: controlGovernanceTab,
+    changelog: controlChangelogTab,
   };
   const resolved = Object.hasOwn(tabs, name) ? name : 'requirements';
   if (tabs[resolved] && window.bootstrap?.Tab)
@@ -382,7 +481,6 @@ function activateControlTab(name) {
 }
 
 function wireControlTabs() {
-  if (!canViewRisks) risksCard?.classList.add('d-none');
   controlRequirementsTab?.addEventListener('shown.bs.tab', () => {
     setControlTabQuery('requirements');
     loadRequirements();
@@ -395,14 +493,16 @@ function wireControlTabs() {
     setControlTabQuery('related');
     await loadRelatedControls();
   });
-  controlGovernanceTab?.addEventListener('shown.bs.tab', async () => {
-    setControlTabQuery('governance');
-    await Promise.all([
-      loadLinkedRisks(),
-      loadControlPestle(),
-      loadControlIsms(),
-      loadControlChangelog(),
-    ]);
+  // Related items: the records that refer to the control, each in its card.
+  controlItemsTab?.addEventListener('shown.bs.tab', async () => {
+    setControlTabQuery('items');
+    await Promise.all([loadLinkedRisks(), loadControlPestle(), loadControlIsms()]);
+  });
+  // Governance holds the owners and the justification, loaded with the control.
+  controlGovernanceTab?.addEventListener('shown.bs.tab', () => setControlTabQuery('governance'));
+  controlChangelogTab?.addEventListener('shown.bs.tab', async () => {
+    setControlTabQuery('changelog');
+    await loadControlChangelog();
   });
   activeTab = activateControlTab(qs('tab', 'requirements'));
 }
@@ -422,6 +522,12 @@ function _ismsEntityRows(data) {
   const groups = [
     ['SWOT', data.swot, (x) => x.title, (x) => `/swot.html?id=${encodeURIComponent(x.id)}`],
     [
+      'Legal register',
+      data.legal_items,
+      (x) => x.title,
+      (x) => `/legal-register.html?id=${encodeURIComponent(x.id)}`,
+    ],
+    [
       'Objectives',
       data.objectives,
       (x) => x.goal || x.requirement || 'Objective',
@@ -440,34 +546,46 @@ function _ismsEntityRows(data) {
   const rows = [];
   for (const [label, items, titleFn, hrefFn] of groups) {
     for (const item of items || []) {
-      const href = hrefFn(item);
-      rows.push(
-        `<tr><td>${esc(label)}</td><td class="wrap"><a class="fw-semibold" href="${esc(withFramework(href, ctrl?.framework || framework))}">${esc(shorten(titleFn(item), 180))}</a></td><td class="small-muted">${esc(fmtTs(item.updated_at))}</td></tr>`,
-      );
+      rows.push([
+        label,
+        {
+          text: shorten(titleFn(item), 180),
+          href: withFramework(hrefFn(item), ctrl?.framework || framework),
+        },
+        fmtTs(item.updated_at),
+      ]);
     }
   }
-  if (!rows.length)
-    return '<div class="small-muted">No SWOT items, objectives, organisation roles, assets or meetings are linked to this control.</div>';
-  return `<div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th style="width:190px;">Type</th><th>Entity</th><th style="width:170px;">Updated</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  return {
+    table: {
+      columns: [{ label: 'Type', width: '190px' }, 'Entity', { label: 'Updated', width: '170px' }],
+      rows,
+    },
+    empty:
+      'No SWOT items, legal register items, objectives, organisation roles, assets or meetings are linked to this control.',
+  };
 }
 
 async function loadControlIsms({ force = false } = {}) {
   if (!featureEnabled(me, 'isms')) return;
   if (!id) return;
   if (!canViewIsms) {
-    controlIsmsView.innerHTML =
-      '<span class="small-muted">You do not have permission to view ISMS references.</span>';
+    updateRelatedCard(controlIsmsCard, {
+      empty: 'You do not have permission to view ISMS references.',
+    });
     return;
   }
   if (ismsLoaded && !force) return;
-  controlIsmsView.innerHTML = '<span class="small-muted">Loading ISMS references</span>';
+  updateRelatedCard(controlIsmsCard, { empty: 'Loading ISMS references' });
   try {
     const data = await loadIsmsReferences();
     ismsLoaded = true;
-    controlIsmsView.innerHTML = _ismsEntityRows(data);
+    updateRelatedCard(controlIsmsCard, _ismsEntityRows(data));
   } catch (e) {
     ismsLoaded = false;
-    controlIsmsView.innerHTML = '<span class="text-danger">Failed to load ISMS references.</span>';
+    updateRelatedCard(controlIsmsCard, {
+      body: node('span', { class: 'text-danger' }, 'Failed to load ISMS references.'),
+    });
   }
 }
 
@@ -485,58 +603,43 @@ function controlScopedSourceHref(src) {
 }
 
 function renderLinkedClauses() {
-  const links = ctrl.clauses;
-  clausesCard.style.display = '';
-  if (clausesCount) clausesCount.textContent = String(links.length);
-  if (editClauseApplicabilityBtn) {
-    editClauseApplicabilityBtn.style.display = me?.is_admin ? '' : 'none';
-    editClauseApplicabilityBtn.textContent = clauseApplicabilityEditMode ? 'Hide edit' : 'Edit';
-  }
-  if (!links.length) {
-    clausesView.innerHTML = '<span class="small-muted">No clauses linked to this control.</span>';
-    return;
-  }
-
-  const rows = [...links].sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true }));
-  clausesView.innerHTML = `
-    <div class="table-responsive">
-      <table class="table table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th style="width:120px;">Clause</th>
-            <th>Title</th>
-            <th style="width:190px;">Applicability</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows
-            .map((c) => {
-              const clauseHref = c.clause_id
-                ? withFramework(
-                    `/clause.html?id=${encodeURIComponent(c.clause_id)}`,
-                    ctrl.framework,
-                  )
-                : '';
-              const refHtml = clauseHref
-                ? `<a href="${esc(clauseHref)}">${esc(c.ref)}</a>`
-                : esc(c.ref);
-              return `<tr>
-              <td class="fw-semibold">${refHtml}</td>
-              <td class="wrap">${esc(c.title)}</td>
-              <td>${applicabilityBadge(c.applicability)}</td>
-            </tr>`;
-            })
-            .join('')}
-        </tbody>
-      </table>
-    </div>`;
+  const links = [...ctrl.clauses].sort((a, b) =>
+    a.ref.localeCompare(b.ref, undefined, { numeric: true }),
+  );
+  clausesCard.hidden = false;
+  editClauseApplicabilityBtn.hidden = !me?.is_admin;
+  editClauseApplicabilityBtn.textContent = clauseApplicabilityEditMode ? 'Hide edit' : 'Edit';
+  updateRelatedCard(clausesCard, {
+    count: links.length,
+    table: {
+      columns: [
+        { label: 'Clause', width: '120px' },
+        'Title',
+        { label: 'Applicability', width: '190px' },
+      ],
+      rows: links.map((c) => [
+        c.clause_id
+          ? {
+              text: c.ref,
+              href: withFramework(
+                `/clause.html?id=${encodeURIComponent(c.clause_id)}`,
+                ctrl.framework,
+              ),
+            }
+          : node('span', { class: 'fw-semibold' }, c.ref),
+        c.title,
+        applicabilityPill(c.applicability),
+      ]),
+    },
+    empty: 'No clauses linked to this control.',
+  });
 }
 
 async function loadLinkedRisks({ force = false } = {}) {
   if (!featureEnabled(me, 'risk_cia')) return;
   if (!id) return;
   if (!canViewRisks) {
-    risksCard.style.display = 'none';
+    risksCard.hidden = true;
     return;
   }
   if (risksLoaded && !force) return;
@@ -546,46 +649,32 @@ async function loadLinkedRisks({ force = false } = {}) {
     );
     const items = data.items;
     risksLoaded = true;
-    risksCard.style.display = '';
-    if (risksCount) risksCount.textContent = String(items.length);
-    if (!items.length) {
-      risksView.innerHTML =
-        '<span class="small-muted">No risks mapped to this control for this framework.</span>';
-      return;
-    }
-    risksView.replaceChildren(linkedRisksTable(items, ctrl?.framework || framework));
+    risksCard.hidden = false;
+    updateRelatedCard(risksCard, {
+      count: items.length,
+      table: linkedRisksData(items, ctrl?.framework || framework),
+      empty: 'No risks mapped to this control for this framework.',
+    });
   } catch (e) {
     // Users without risk.read should not get a noisy control page.
     risksLoaded = false;
-    risksCard.style.display = 'none';
+    risksCard.hidden = true;
   }
 }
 // PESTLE(E) readers see the items rated against the control, once per page.
 async function loadControlPestle() {
   if (!id || pestleLoaded || !featureEnabled(me, 'pestle')) return;
   if (!(me?.is_admin || me?.can_view_pestle || me?.can_manage_pestle)) return;
-  const card = document.getElementById('controlPestleCard');
   try {
     const data = await apiGet(`/api/v1/controls/${encodeURIComponent(id)}/pestle`);
     pestleLoaded = true;
-    const rows = pestleItemRows(data.items, ctrl?.framework || framework);
-    const body = document.getElementById('controlPestleRows');
-    if (rows.length) body.replaceChildren(...rows);
-    else
-      body.replaceChildren(
-        node(
-          'tr',
-          {},
-          node(
-            'td',
-            { colspan: '6', class: 'p-4 small-muted' },
-            'No PESTLE(E) items are rated against this control.',
-          ),
-        ),
-      );
-    card.style.display = '';
+    updateRelatedCard(controlPestleCard, {
+      table: pestleItemsData(data.items, ctrl?.framework || framework, 'Control'),
+      empty: 'No PESTLE(E) items are rated against this control.',
+    });
+    controlPestleCard.hidden = false;
   } catch (e) {
-    card.style.display = 'none';
+    controlPestleCard.hidden = true;
   }
 }
 
@@ -605,10 +694,30 @@ function selectedClauseMap() {
   return m;
 }
 
-function clauseSelect(id) {
-  return adminClausesList.querySelector(
-    `.clause-applicability[data-clause-id="${CSS.escape(String(id))}"]`,
-  );
+// The clauses are chosen in a multiple select, which the design system
+// presents as its picker; each chosen clause carries its applicability. A
+// clause that is not chosen is not applicable.
+const controlClauses = document.getElementById('controlClauses');
+const APPLICABILITY = JSON.stringify({
+  label: 'Applicability',
+  choices: [
+    ['applicable', 'Applicable'],
+    ['partially_applicable', 'Partially applicable'],
+  ],
+  default: 'applicable',
+});
+
+function clauseOption(id) {
+  return Array.from(controlClauses.options).find((option) => option.value === String(id));
+}
+
+function clauseApplicability(option) {
+  return option.selected ? option.dataset.extra || 'applicable' : '';
+}
+
+function setClauseApplicability(option, value) {
+  option.selected = Boolean(value);
+  if (value) option.dataset.extra = value;
 }
 
 function applyInferredParentClauseApplicability() {
@@ -630,7 +739,7 @@ function applyInferredParentClauseApplicability() {
 
     const kids = childrenByParent.get(key) || [];
     if (!kids.length) {
-      const value = (clauseSelect(key)?.value || '').trim();
+      const value = clauseApplicability(clauseOption(key));
       memo.set(key, value);
       return value;
     }
@@ -652,76 +761,40 @@ function applyInferredParentClauseApplicability() {
     const clause = byId.get(key);
     const isIntermediateParent = Boolean(clause?.parent_id && kids.length);
     const valueToStore = isIntermediateParent ? '' : inferred;
-    const sel = clauseSelect(key);
-    if (sel && sel.value !== valueToStore) sel.value = valueToStore;
+    setClauseApplicability(clauseOption(key), valueToStore);
     memo.set(key, inferred);
     return inferred;
   }
 
   for (const c of flat) inferValue(c.id);
+  // The parents were set from code, so the picker is asked to show them.
+  refreshPicker(controlClauses);
 }
 
 function renderAdminClauses() {
   if (!me?.is_admin || !clauseApplicabilityEditMode) {
-    adminClausesCard.style.display = 'none';
+    adminClausesCard.hidden = true;
     return;
   }
-  adminClausesCard.style.display = '';
+  adminClausesCard.hidden = false;
   if (controlUpstreamUrl) controlUpstreamUrl.value = ctrl?.upstream_url || '';
 
   const flat = flattenClauseTree(clauseCatalog.tree);
   const selected = selectedClauseMap();
-  if (!flat.length) {
-    adminClausesList.innerHTML =
-      '<span class="small-muted">No clauses are loaded for this framework.</span>';
-    return;
-  }
-
-  adminClausesList.innerHTML = `
-    <div class="table-responsive admin-control-clauses-wrap">
-      <table class="table table-sm align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Clause</th>
-            <th style="width:220px;">Applicability</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${flat
-            .map((c) => {
-              const cid = String(c.id);
-              const cur = selected.get(cid) || '';
-              const depth = Math.max(0, Number(c.depth || 0));
-              const indent = depth ? `style="padding-left:${Math.min(depth * 1.25, 4)}rem"` : '';
-              const parentClass = depth === 0 ? 'fw-bold' : '';
-              const clauseHref = withFramework(
-                `/clause.html?id=${encodeURIComponent(cid)}`,
-                ctrl.framework,
-              );
-              return `<tr>
-              <td class="wrap ${parentClass}" ${indent}>
-                <a class="me-2" href="${esc(clauseHref)}">${esc(c.ref)}</a>
-                <span class="small-muted">${esc(c.title)}</span>
-              </td>
-              <td>
-                <select class="form-select form-select-sm clause-applicability" data-clause-id="${esc(cid)}">
-                  <option value="" ${cur ? '' : 'selected'}>Not applicable</option>
-                  <option value="applicable" ${cur === 'applicable' ? 'selected' : ''}>Applicable</option>
-                  <option value="partially_applicable" ${cur === 'partially_applicable' ? 'selected' : ''}>Partially applicable</option>
-                </select>
-              </td>
-            </tr>`;
-            })
-            .join('')}
-        </tbody>
-      </table>
-    </div>`;
-
-  for (const sel of adminClausesList.querySelectorAll('.clause-applicability')) {
-    sel.addEventListener('change', applyInferredParentClauseApplicability);
-  }
+  adminClausesList.textContent = flat.length ? '' : 'No clauses are loaded for this framework.';
+  controlClauses.dataset.pickerExtra = APPLICABILITY;
+  controlClauses.replaceChildren(
+    ...flat.map((c) => {
+      const option = node('option', { value: c.id }, catalogueLabel(c));
+      setClauseApplicability(option, selected.get(String(c.id)) || '');
+      return option;
+    }),
+  );
   applyInferredParentClauseApplicability();
 }
+
+// A parent clause follows its children as they are chosen.
+controlClauses.addEventListener('change', applyInferredParentClauseApplicability);
 
 async function loadClauseCatalog() {
   const data = await apiGet(`/api/v1/clauses?framework=${encodeURIComponent(ctrl.framework)}`);
@@ -920,9 +993,8 @@ async function load() {
       opening,
       loadLinkedRisks(),
       tab === 'related' ? loadRelatedControls() : null,
-      tab === 'governance'
-        ? Promise.all([loadControlChangelog(), loadControlIsms({ force: true })])
-        : null,
+      tab === 'items' ? loadControlIsms({ force: true }) : null,
+      tab === 'changelog' ? loadControlChangelog() : null,
     ]);
   } catch (e) {
     toast(status, `Failed to load control: ${errorText(e)}`, 'danger');
@@ -954,14 +1026,14 @@ wireOffsetPagerButtons(pagerButtons, (direction) => {
 });
 
 // Toggle editing of the control's clause applicability.
-editClauseApplicabilityBtn?.addEventListener('click', async () => {
+editClauseApplicabilityBtn.addEventListener('click', async () => {
   clauseApplicabilityEditMode = !clauseApplicabilityEditMode;
   renderLinkedClauses();
   if (clauseApplicabilityEditMode) {
     try {
       await ensureClauseCatalogLoaded();
       renderAdminClauses();
-      adminClausesCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      adminClausesCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       clauseApplicabilityEditMode = false;
       renderLinkedClauses();
@@ -1007,12 +1079,10 @@ document.getElementById('saveSearch')?.addEventListener('click', async () => {
 
 saveClauseLinksBtn?.addEventListener('click', async () => {
   applyInferredParentClauseApplicability();
-  const clauses = [];
-  for (const sel of adminClausesList.querySelectorAll('.clause-applicability')) {
-    const applicability = (sel.value || '').trim();
-    if (!applicability) continue;
-    clauses.push({ clause_id: sel.dataset.clauseId, applicability });
-  }
+  const clauses = Array.from(controlClauses.selectedOptions, (option) => ({
+    clause_id: option.value,
+    applicability: clauseApplicability(option),
+  }));
   saveClauseLinksBtn.disabled = true;
   try {
     await apiPatch(`/api/v1/admin/controls/${encodeURIComponent(id)}/clauses`, { clauses });
@@ -1067,3 +1137,13 @@ saveControlUpstreamUrlBtn?.addEventListener('click', async () => {
 });
 
 load();
+
+// The stories whose authors assigned them to this control, among its related items.
+const stories = mountAssignedStories({
+  me,
+  kind: 'control',
+  id,
+  host: controlStoriesHost,
+  trigger: controlItemsTab,
+});
+controlStoriesCard.hidden = !stories;

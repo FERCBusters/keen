@@ -289,42 +289,29 @@ test('administrators edit diary entries, including links, controls, details and 
   assert.equal(ui.el('editDiaryDetails').value, 'Line one\n<script>alert(1)</script>');
   assert.equal(ui.el('editDiaryTs').placeholder, '2026-02-01T10:00:00Z');
   assert.equal(ui.el('editDiaryLinks').querySelectorAll('[data-link-row]').length, 4);
-  // Choices are kept by id: a clause and a control can share a reference.
-  assert.deepEqual(
-    [...ui.el('editControlSelected').querySelectorAll('[data-remove]')].map(
-      (b) => b.dataset.remove,
-    ),
-    ['c1', 'c2', 'c3'],
-  );
-  // Remove a link row and a control; add a new control and a clause from search.
+  // The catalogue is a multiple select, which the design system presents as
+  // its picker. Choices are kept by id: a clause and a control can share a
+  // reference. What the entry maps to outside the catalogue stays listed and
+  // chosen, so saving keeps it; a catalogue row without a reference is left out.
+  const select = ui.el('editDiaryControls');
+  const listed = () => [...select.options].map((o) => [o.value, o.textContent, o.selected]);
+  assert.equal(select.multiple, true);
+  assert.deepEqual(listed(), [
+    ['c1', 'A1 Access', true],
+    ['c5', 'B5 Logging <b>', false],
+    ['k1', 'Clause A1 Access clause', false],
+    ['c2', 'A2 Backup', true],
+    ['c3', 'A3', true],
+  ]);
+  assert.equal(select.querySelector('b'), null);
+  // Remove a link row and a control; add a new control and a clause.
   ui.el('editDiaryLinks').querySelectorAll('[data-link-remove]')[1].click();
-  ui.el('editControlSelected').querySelector('[data-remove="c2"]').click();
-  ui.el('editControlSearch').value = 'logg';
-  ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(ui.el('editControlResults').querySelector('b'), null);
-  ui.el('editControlResults').querySelector('[data-add="c5"]').click();
-  ui.el('editControlSearch').value = 'access';
-  ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
-  assert.deepEqual(
-    [...ui.el('editControlResults').querySelectorAll('[data-add]')].map((b) => [
-      b.dataset.add,
-      b.querySelector('.mono').textContent,
-    ]),
-    [
-      ['c1', 'A1'],
-      ['k1', 'Clause A1'],
-    ],
-  );
-  ui.el('editControlResults').querySelector('[data-add="k1"]').click();
-  assert.deepEqual(
-    [...ui.el('editControlSelected').querySelectorAll('.badge')].map((b) =>
-      b.textContent.replace('×', '').trim(),
-    ),
-    ['A1', 'A3', 'B5', 'Clause A1'],
-  );
-  ui.el('editControlSearch').value = '';
-  ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(ui.el('editControlResults').innerHTML, '');
+  const choose = (id, on) => {
+    [...select.options].find((o) => o.value === id).selected = on;
+  };
+  choose('c2', false);
+  choose('c5', true);
+  choose('k1', true);
   ui.el('editDiaryAddLink').click();
   const rows = ui.el('editDiaryLinks').querySelectorAll('[data-link-row]');
   rows[rows.length - 1].querySelector('[data-link-url]').value = ' https://new.example ';
@@ -341,7 +328,7 @@ test('administrators edit diary entries, including links, controls, details and 
     { url: '/event.html?id=e2', text: '' },
     { url: 'https://new.example', text: '' },
   ]);
-  assert.deepEqual(body.controls, ['c1', 'c3', 'c5', 'k1']);
+  assert.deepEqual(body.controls, ['c1', 'c5', 'k1', 'c3']);
   assert.equal(body.framework, 'A');
   assert.equal(body.timestamp, new Date('2026-02-05T09:30').toISOString());
   await settle(() => ui.el('status').textContent === 'Diary entry updated');
@@ -728,10 +715,16 @@ test('the diary editor falls back to the stored summary and JSON details', async
   await settle(() => ui.el('editDiaryModal').dataset.shown === '1');
   assert.equal(ui.el('editDiarySummary').value, 'Weekly <b>check</b>');
   assert.deepEqual(JSON.parse(ui.el('editDiaryDetails').value), { reviewer: 'dana', score: 3 });
-  // Without the control catalogue, the search offers nothing and stays usable.
-  ui.el('editControlSearch').value = 'acc';
-  ui.el('editControlSearch').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(ui.el('editControlResults').querySelectorAll('[data-add]').length, 0);
+  // Without the control catalogue, the entry's own controls are still listed
+  // and chosen, so a save keeps them.
+  assert.deepEqual(
+    [...ui.el('editDiaryControls').options].map((o) => [o.value, o.selected]),
+    [
+      ['c1', true],
+      ['c2', true],
+      ['c3', true],
+    ],
+  );
 
   const plain = await eventPage(t, {
     event: diaryEvent({ summary: 'diary:', normalized_payload: { details: {} } }),

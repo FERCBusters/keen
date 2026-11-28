@@ -238,6 +238,50 @@ a:hover {
   color: var(--keen-accent-700);
   box-shadow: none;
 }
+/* The ISMS menu folds down to its icons on wide screens; a narrow screen has
+   the menu button instead. */
+.isms-rail-bar {
+  padding: 0 4px 4px;
+}
+.isms-rail-bar .btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  white-space: nowrap;
+}
+@media (min-width: 992px) {
+  /* The design system gives the rail a minimum width for its labels; folded
+     to icons it is only as wide as an icon and its padding. */
+  .isms-tab-nav.isms-rail-collapsed {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    padding: 12px 8px;
+  }
+  .isms-rail-collapsed .nav-link,
+  .isms-rail-collapsed .isms-rail-bar .btn {
+    width: auto;
+  }
+  .isms-rail-collapsed .admin-nav-label,
+  .isms-rail-collapsed .isms-rail-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .isms-rail-collapsed .nav-link,
+  .isms-rail-collapsed .isms-rail-bar .btn {
+    justify-content: center;
+    padding: 11px 12px;
+    gap: 0;
+  }
+  .isms-rail-collapsed .isms-rail-bar {
+    padding: 0 0 4px;
+  }
+}
 .admin-nav-label {
   padding: 16px 14px 6px;
   text-transform: uppercase;
@@ -281,16 +325,6 @@ a:hover {
 
 #pane-groups .admin-groups-table-wrap .table thead th {
   position: static;
-}
-
-/* Control detail: keep the admin clause applicability matrix contained. */
-#adminClausesCard .admin-control-clauses-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-#adminClausesCard .admin-control-clauses-wrap > .table {
-  min-width: 900px;
 }
 
 .whitespace-pre-wrap {
@@ -620,11 +654,6 @@ a.schedule-calendar-event {
 .risk-method-card.selected {
   border-color: var(--bs-primary) !important;
   box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.15);
-}
-
-.risk-wizard-scroll {
-  max-height: 22rem;
-  overflow-y: auto;
 }
 
 .risk-rating .form-range {
@@ -2594,4 +2623,112 @@ dialog.keen-confirm [data-message] {
 }
 tr[data-doc-drag] {
   cursor: grab;
+}
+
+/* The Map: records and the links between them. */
+.map-canvas {
+  min-height: 320px;
+  overflow: hidden;
+}
+
+/* The canvas takes what is left of the window under the page's controls, so
+   the whole map is in view without scrolling. */
+.map-canvas svg {
+  display: block;
+  width: 100%;
+  height: max(360px, calc(100vh - 26rem));
+  cursor: grab;
+}
+
+.map-canvas svg:active {
+  cursor: grabbing;
+}
+
+.map-link {
+  stroke: var(--bs-secondary-color);
+  stroke-opacity: 0.35;
+}
+
+.map-link-evidence {
+  stroke-dasharray: 4 3;
+}
+
+.map-node {
+  cursor: pointer;
+}
+
+.map-node circle {
+  stroke: var(--bs-body-bg);
+  stroke-width: 1.5;
+}
+
+.map-node.map-selected circle {
+  stroke: var(--bs-body-color);
+  stroke-width: 3;
+}
+
+.map-label {
+  display: none;
+  fill: var(--bs-body-color);
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--bs-body-bg);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.map-hub .map-label,
+.map-selected .map-label,
+.map-labels .map-label,
+.map-dim .map-near .map-label {
+  display: block;
+}
+
+.map-dim .map-node:not(.map-near),
+.map-dim .map-link:not(.map-near) {
+  opacity: 0.12;
+}
+
+.map-dim .map-link.map-near {
+  stroke-opacity: 0.8;
+}
+
+.map-dot {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.map-kind .map-dot {
+  margin-right: 0.35em;
+}
+
+.map-search {
+  position: relative;
+  flex: 1 1 18rem;
+  max-width: 28rem;
+}
+
+.map-matches {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  max-height: 20rem;
+  overflow-y: auto;
+  box-shadow: var(--bs-box-shadow);
+}
+
+.map-panel {
+  max-height: max(360px, calc(100vh - 23rem));
+  overflow-y: auto;
+}
+
+/* The two actions of a record's Stories card are as wide as their words need,
+   and as wide as each other, so the fields beside them end in line. */
+.story-related-action {
+  min-width: 8.5rem;
 }

@@ -40,6 +40,7 @@ from app.services.audit_schedules import (
 from app.services.control_evidence_stats import refresh_framework_event_counts_cache
 from app.services.effectiveness_metrics import materialize_missing_monthly_zero_metrics
 from app.services.inbox import remove_old_items
+from app.services.isms.legal_register import send_assessment_reminders
 from app.services.quizzes.rounds import (
     close_due_quiz_rounds,
     invite_waiting,
@@ -150,10 +151,15 @@ def send_quiz_invitations_task(round_ids: list[str]) -> dict:
 
 @celery_app.task(name="app.worker.tasks.send_reminders_task")
 def send_reminders_task() -> dict:
-    """Remind audit attendees and quiz participants of what is coming up."""
+    """Remind audit attendees, quiz participants and legal register owners of
+    what is coming up."""
     db: Session = SessionLocal()
     try:
-        return {"audits": send_audit_reminders(db), "quizzes": send_quiz_reminders(db)}
+        return {
+            "audits": send_audit_reminders(db),
+            "quizzes": send_quiz_reminders(db),
+            "legal_register": send_assessment_reminders(db),
+        }
     finally:
         db.close()
 

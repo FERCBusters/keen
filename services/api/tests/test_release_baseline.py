@@ -10,7 +10,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from app.core.config import settings
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 
 from tests.db_helpers import required_database_url
 from tests.test_builtin_rules import ALL_RULES as BUILTIN_RULES
@@ -145,6 +145,9 @@ def test_release_revision_chain_contains_no_catalogue_transformations():
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert [r.revision for r in script.walk_revisions()] == [
+        "0061_mcp_refresh_grace",
+        "0060_story_controls_legal",
+        "0059_isms_legal_register",
         "0058_isms_document_diagrams",
         "0057_user_login_keys",
         "0056_osa_snapshot_2026_11",
@@ -777,6 +780,153 @@ def test_stories_take_the_new_record_kinds_and_downgrade_drops_them():
             assert conn.scalar(text("SELECT count(*) FROM story_links")) == 0
             with pytest.raises(Exception, match="ck_story_item_kind"):
                 add_item(uuid.uuid4(), "swot")
+            conn.rollback()
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        engine.dispose()
+
+
+def test_stories_take_controls_and_legal_items_and_downgrade_drops_them():
+    url = required_database_url("KEEN_RETENTION_TEST_DATABASE_URL")
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine(url)
+    schema = "story_controls_" + uuid.uuid4().hex
+    with engine.begin() as conn:
+        conn.execute(text(f"CREATE SCHEMA {schema}"))
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    story, event_item, legal_item = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    control, clause = uuid.uuid4(), uuid.uuid4()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"SET search_path TO {schema},public"))
+            conn.commit()
+            config.attributes["connection"] = conn
+            command.upgrade(config, "0001_release_schema")
+            command.stamp(config, "0002_release_seed")
+            command.upgrade(config, "0059_isms_legal_register")
+            run = lambda sql, **params: conn.execute(text(sql), params)  # noqa: E731
+
+            def add_item(item_id, kind):
+                run(
+                    "INSERT INTO story_items (id, story_id, kind, entity_id) VALUES"
+                    " (:id, :story, :kind, :entity)",
+                    id=item_id,
+                    story=story,
+                    kind=kind,
+                    entity=uuid.uuid4(),
+                )
+
+            def tables():
+                return set(inspect(conn).get_table_names(schema=schema))
+
+            run(
+                "INSERT INTO stories (id, title, created_at, updated_at) VALUES"
+                " (:id, 'Regulator enquiry', now(), now())",
+                id=story,
+            )
+            run(
+                "INSERT INTO control_items (id, framework_slug, ref, type, in_scope,"
+                " tags, metadata, created_at) VALUES (:id, 'fw', 'A.5.31', 'annex',"
+                " true, '[]', '{}', now())",
+                id=control,
+            )
+            run(
+                "INSERT INTO framework_clauses (id, framework_slug, ref, title,"
+                " sort_order, metadata, created_at, updated_at) VALUES (:id, 'fw',"
+                " '4.2', 'Parties', 0, '{}', now(), now())",
+                id=clause,
+            )
+            add_item(event_item, "event")
+            law = uuid.uuid4()
+            run(
+                "INSERT INTO isms_legal_items (id, title, jurisdiction, authority,"
+                " requirement, applicability, in_scope, compliance_status, version,"
+                " created_at, updated_at) VALUES (:id, 'Data Act', '', '', '', '',"
+                " true, 'not_assessed', 1, now(), now())",
+                id=law,
+            )
+
+            def relate(kind):
+                run(
+                    "INSERT INTO isms_legal_item_links (item_id, target_type,"
+                    " target_id) VALUES (:item, :kind, :target)",
+                    item=law,
+                    kind=kind,
+                    target=uuid.uuid4(),
+                )
+
+            relate("risk")
+            conn.commit()
+            with pytest.raises(Exception, match="ck_story_item_kind"):
+                add_item(uuid.uuid4(), "legal_item")
+            conn.rollback()
+            with pytest.raises(Exception, match="ck_legal_item_link_type"):
+                relate("swot")
+            conn.rollback()
+            assert "story_control_links" not in tables()
+
+            command.upgrade(config, "0060_story_controls_legal")
+            conn.commit()
+            with pytest.raises(Exception, match="ck_legal_item_link_type"):
+                relate("books")
+            conn.rollback()
+            add_item(legal_item, "legal_item")
+            relate("swot")
+            run(
+                "INSERT INTO story_links (id, story_id, from_item_id, to_item_id)"
+                " VALUES (:id, :story, :a, :b)",
+                id=uuid.uuid4(),
+                story=story,
+                a=event_item,
+                b=legal_item,
+            )
+            run(
+                "INSERT INTO story_control_links (story_id, control_item_id,"
+                " framework_slug) VALUES (:story, :control, 'fw')",
+                story=story,
+                control=control,
+            )
+            run(
+                "INSERT INTO story_clause_links (story_id, clause_id, framework_slug)"
+                " VALUES (:story, :clause, 'fw')",
+                story=story,
+                clause=clause,
+            )
+            conn.commit()
+            # A control or clause is assigned to a story once.
+            with pytest.raises(Exception, match="story_control_links_pkey"):
+                run(
+                    "INSERT INTO story_control_links (story_id, control_item_id,"
+                    " framework_slug) VALUES (:story, :control, 'fw')",
+                    story=story,
+                    control=control,
+                )
+            conn.rollback()
+            with pytest.raises(Exception, match="ck_story_item_kind"):
+                add_item(uuid.uuid4(), "books")
+            conn.rollback()
+            # Removing a control from the catalogue removes its assignments.
+            run("DELETE FROM control_items WHERE id = :id", id=control)
+            assert conn.scalar(text("SELECT count(*) FROM story_control_links")) == 0
+            conn.commit()
+
+            command.downgrade(config, "0059_isms_legal_register")
+            assert conn.execute(text("SELECT id, kind FROM story_items")).all() == [
+                (event_item, "event")
+            ]
+            assert conn.scalar(text("SELECT count(*) FROM story_links")) == 0
+            assert not {"story_control_links", "story_clause_links"} & tables()
+            with pytest.raises(Exception, match="ck_story_item_kind"):
+                add_item(uuid.uuid4(), "legal_item")
+            conn.rollback()
+            # A legal item's SWOT relationships go; its others stay.
+            assert conn.scalars(
+                text("SELECT target_type FROM isms_legal_item_links")
+            ).all() == ["risk"]
+            with pytest.raises(Exception, match="ck_legal_item_link_type"):
+                relate("swot")
             conn.rollback()
     finally:
         with engine.begin() as conn:

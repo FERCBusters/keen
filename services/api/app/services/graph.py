@@ -173,13 +173,26 @@ def graph_control_source(
     end_date: Optional[date] = None,
     scope: EventFilters | None = None,
     breakdown: str | None = None,
+    within_ms: int | None = None,
+    max_links: int | None = None,
+    only_control: Any = None,
+    guidance: bool = True,
     db: Session,
 ):
     """Graph for visualisation: sources × controls.
 
     Counts are **distinct events**. One event can map to multiple controls, so a
     count of mappings would inflate totals. With a breakdown, each source node
-    is split by that event field.
+    is split by that event field. ``within_ms`` is how long each statement of
+    the count may run; without it only a regular expression search is timed.
+
+    ``max_links`` has the database return no more than that many source and
+    control pairs, those with the most events, and the answer then says
+    whether it was ``truncated``. A control's total is of the pairs returned.
+    ``only_control`` keeps the pairs of that one control, so the limit is
+    applied to its evidence and not to that of the controls its events share.
+    Without ``guidance`` the controls are not read again for their guidance
+    links, for a caller that draws controls of its own.
     """
 
     user = context.actor
@@ -194,6 +207,9 @@ def graph_control_source(
         "scope": scope.cache_parts(),
         "breakdown": breakdown,
         "user": user_cache_scope(user),
+        "max_links": max_links,
+        "only_control": str(only_control) if only_control else None,
+        "guidance": guidance,
     }
 
     def _load():
@@ -203,11 +219,9 @@ def graph_control_source(
         pairs = evidence_pairs(framework, db)
         group = _source_group_columns(breakdown)
         width = len(group)
-        scan_budget(db, scope)
+        scan_budget(db, scope, within_ms=within_ms)
 
-        edge_rows = run_scan(
-            db,
-            scope,
+        edges = (
             db.query(
                 *group,
                 ControlItem.id,
@@ -220,8 +234,17 @@ def graph_control_source(
             .filter(diary_filter_condition(db, user))
             .filter(*event_filters)
             .group_by(*group, ControlItem.id, ControlItem.ref, ControlItem.title)
-            .all,
         )
+        if only_control:
+            edges = edges.filter(ControlItem.id == only_control)
+        if max_links is not None:
+            edges = edges.order_by(
+                func.count(func.distinct(Event.id)).desc(), ControlItem.id
+            ).limit(max_links + 1)
+        edge_rows = run_scan(db, scope, edges.all)
+        cut = max_links is not None and len(edge_rows) > max_links
+        if cut:
+            edge_rows = edge_rows[:max_links]
 
         src_totals_rows = run_scan(
             db,
@@ -288,20 +311,33 @@ def graph_control_source(
                 }
             )
 
-        if ctrl_ids:
+        if ctrl_ids and guidance:
             # Each control read here gave the edge rows above their control node.
-            for control in (
-                db.query(ControlItem).filter(ControlItem.id.in_(list(ctrl_ids))).all()
+            # Only what names its guidance link is read, within the same time.
+            for control in run_scan(
+                db,
+                scope,
+                db.query(
+                    ControlItem.id,
+                    ControlItem.ref,
+                    ControlItem.framework_slug,
+                    ControlItem.meta,
+                )
+                .filter(ControlItem.id.in_(list(ctrl_ids)))
+                .all,
             ):
                 nodes[f"control:{control.id}"]["upstream_url"] = _control_upstream_url(
                     control
                 )
 
-        return {
+        answer: dict[str, Any] = {
             "nodes": list(nodes.values()),
             "links": links,
             "graph_kind": "source_control_events",
         }
+        if max_links is not None:
+            answer["truncated"] = cut
+        return answer
 
     return cached_json("graph:control_source", cache_parts, _load)
 

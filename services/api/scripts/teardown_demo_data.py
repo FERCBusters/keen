@@ -62,6 +62,9 @@ from app.db.models import (  # noqa: E402
     IsmsEffectivenessMetricEntry,
     IsmsEntityClauseLink,
     IsmsEntityControlLink,
+    IsmsLegalAssessment,
+    IsmsLegalItem,
+    IsmsLegalItemLink,
     IsmsLicense,
     IsmsMeeting,
     IsmsMeetingAttendee,
@@ -109,6 +112,7 @@ ISMS_LINKED_RECORDS = {
     "access_control_matrix": "access",
     "asset": "assets",
     "swot": "swot",
+    "legal_item": "legal_items",
     "org_node": "org_nodes",
 }
 # Saving a record's framework links in the app maintains an automatic diary
@@ -213,6 +217,7 @@ class DemoTeardown:
             "people": self.labelled_ids(IsmsPerson, IsmsPerson.name),
             "vendors": self.labelled_ids(IsmsVendor, IsmsVendor.name),
             "swot": self.labelled_ids(IsmsSwot, IsmsSwot.title),
+            "legal_items": self.labelled_ids(IsmsLegalItem, IsmsLegalItem.title),
             "stories": self.labelled_ids(Story, Story.title),
             "quizzes": self.labelled_ids(Quiz, Quiz.title),
         }
@@ -371,6 +376,7 @@ class DemoTeardown:
             ("isms_access_control_matrix", found["access"]),
             ("isms_asset", found["assets"]),
             ("isms_swot", found["swot"]),
+            ("isms_legal_item", found["legal_items"]),
             ("risk", found["risks"]),
             ("pestle_item", found["pestle_items"]),
             ("story", found["stories"]),
@@ -440,6 +446,9 @@ class DemoTeardown:
                     model, model.entity_type == entity_type, model.entity_id.in_(ids)
                 )
         self.delete_ids(IsmsSwotLink, IsmsSwotLink.swot_id, found["swot"])
+        for model in (IsmsLegalItemLink, IsmsLegalAssessment):
+            self.delete_ids(model, model.item_id, found["legal_items"])
+        self.delete_ids(IsmsLegalItem, IsmsLegalItem.id, found["legal_items"])
         if found["swot"]:
             # Child items refer to their parents; detach them before deleting.
             self.db.query(IsmsSwot).filter(IsmsSwot.id.in_(found["swot"])).update(

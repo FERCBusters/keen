@@ -1,4 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
+import { catalogueLabel } from '/pages/catalogue-options.js';
 import {
   maskDomText,
   maskEventDataString,
@@ -37,6 +38,7 @@ import {
   apiPostForm,
   confirmAction,
   esc,
+  node,
   fmtTs,
   fmtTsFilename,
   toast,
@@ -226,13 +228,6 @@ function _setFormControlsDisabled(formId, disabled) {
     });
 }
 
-function updateScopeActionButtons() {
-  const canEdit = canEditAudit();
-  _setDisabled('deselectDocuments', !canEdit || selectedDocumentIds.size === 0);
-  _setDisabled('deselectClauses', !canEdit || selectedClauseIds.size === 0);
-  _setDisabled('deselectControls', !canEdit || selectedControlIds.size === 0);
-}
-
 function applyAuditEditability() {
   const locked = auditLocked();
   const canManage = canManageAudits();
@@ -278,7 +273,6 @@ function applyAuditEditability() {
   _setFormControlsDisabled('findingForm', !canEdit || template);
   _setFormControlsDisabled('templateScheduleForm', !canEdit || !template);
   _setDisabled('saveScope', !canEdit);
-  updateScopeActionButtons();
   refreshRichTextEditorStates(document);
 }
 
@@ -418,9 +412,6 @@ function captureUnsavedPageState() {
       tmplUntilText: fieldValue('tmplUntilText'),
       auditExecutiveSummary: fieldValue('auditExecutiveSummary'),
       auditNotes: fieldValue('auditNotes'),
-      clauseFilter: fieldValue('clauseFilter'),
-      documentFilter: fieldValue('documentFilter'),
-      controlFilter: fieldValue('controlFilter'),
       urlEvidence: fieldValue('urlEvidence'),
       attendeeUserId: fieldValue('attendeeUserId'),
       attendeePersonId: fieldValue('attendeePersonId'),
@@ -618,12 +609,8 @@ function _replaceAuditScopeListsForExport(clone) {
   const documentsList = clone.querySelector('#documentsList');
   const clausesList = clone.querySelector('#clausesList');
   const controlsList = clone.querySelector('#controlsList');
-  const documentFilter = clone.querySelector('#documentFilter');
-  const clauseFilter = clone.querySelector('#clauseFilter');
-  const controlFilter = clone.querySelector('#controlFilter');
-  if (documentFilter) documentFilter.remove();
-  if (clauseFilter) clauseFilter.remove();
-  if (controlFilter) controlFilter.remove();
+  // The export lists what is in scope; the pickers that choose it are left out.
+  for (const picker of clone.querySelectorAll('#scopeBody .mosp-picker')) picker.remove();
   if (documentsList)
     documentsList.replaceWith(
       _scopeExportList(audit.scoped_documents, 'No ISMS documents selected for this audit.'),
@@ -1043,48 +1030,39 @@ function _addScopeLinkedToDocument(documentId) {
   return added;
 }
 
+// The scope is chosen in three multiple selects, which the design system
+// presents as its picker. What is chosen lives in the three sets above: the
+// selects are drawn from them, and a change in a select is applied to its set
+// with whatever it brings into scope.
+function drawScopeList(id, countId, chosen, rows, option) {
+  document.getElementById(countId).textContent = `${chosen.size} selected`;
+  const select = document.getElementById(id);
+  select.disabled = !canEditAudit();
+  select.replaceChildren(...rows.map(option));
+}
+
+// Applies a select's choices to its set and returns the ids newly chosen. An
+// id the select does not list stays as it was.
+function takeScopeChoices(select, chosen, skip = () => false) {
+  const added = [];
+  for (const option of select.options) {
+    if (skip(option.value)) continue;
+    if (!option.selected) chosen.delete(option.value);
+    else if (!chosen.has(option.value)) {
+      chosen.add(option.value);
+      added.push(option.value);
+    }
+  }
+  return added;
+}
+
 function renderDocuments() {
-  const filter = (document.getElementById('documentFilter')?.value || '').trim().toLowerCase();
-  const wrap = document.getElementById('documentsList');
-  const countEl = document.getElementById('documentScopeCount');
-  if (countEl) countEl.textContent = `${selectedDocumentIds.size} selected`;
-  updateScopeActionButtons();
-  if (!wrap) return;
-  const rows = allDocuments.filter((d) =>
-    matchesFilter({ ref: d.document_type, title: d.title }, filter),
-  );
-  wrap.innerHTML =
-    rows
-      .map((d) => {
-        const id = String(d.id);
-        const checked = selectedDocumentIds.has(id) ? 'checked' : '';
-        const linked = `${(d.clauses || []).length} clauses, ${(d.controls || []).length} controls`;
-        return `<div class="col-12">
-      <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
-        <input class="form-check-input mt-1" type="checkbox" data-document-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(d.title)}</span> <span class="badge text-bg-light ms-1">${esc(d.document_type)}</span><div class="small-muted">${esc(linked)}</div></span>
-      </label>
-    </div>`;
-      })
-      .join('') || `<div class="small-muted">No ISMS documents match.</div>`;
-  wrap.querySelectorAll('[data-document-id]').forEach((cb) => {
-    cb.disabled = !canEditAudit();
-    cb.addEventListener('change', () => {
-      if (!canEditAudit()) return;
-      const id = cb.getAttribute('data-document-id');
-      if (cb.checked) {
-        selectedDocumentIds.add(id);
-        const added = _addScopeLinkedToDocument(id);
-        if (added > 0) {
-          renderClauses();
-          renderControls();
-        }
-      } else {
-        selectedDocumentIds.delete(id);
-      }
-      if (countEl) countEl.textContent = `${selectedDocumentIds.size} selected`;
-      updateScopeActionButtons();
-    });
+  drawScopeList('documentsList', 'documentScopeCount', selectedDocumentIds, allDocuments, (d) => {
+    const linked = `${(d.clauses || []).length} clauses, ${(d.controls || []).length} controls`;
+    const option = node('option', { value: d.id, title: linked }, d.title);
+    option.dataset.badge = d.document_type;
+    option.selected = selectedDocumentIds.has(String(d.id));
+    return option;
   });
 }
 
@@ -1117,120 +1095,28 @@ async function loadScopeItems() {
   renderScopeLists();
 }
 
-function matchesFilter(item, filter) {
-  if (!filter) return true;
-  return (
-    String(item.ref).toLowerCase().includes(filter) ||
-    String(item.title || '')
-      .toLowerCase()
-      .includes(filter)
-  );
-}
-
-function clauseIndent(c) {
-  const ref = String(c.ref);
-  return Math.min(Math.max(ref.split('.').length - 1, 0), 3);
-}
-
 function renderClauses() {
-  const filter = (document.getElementById('clauseFilter')?.value || '').trim().toLowerCase();
-  const wrap = document.getElementById('clausesList');
-  const countEl = document.getElementById('clauseScopeCount');
-  if (countEl) countEl.textContent = `${selectedClauseIds.size} selected`;
-  updateScopeActionButtons();
-  const rows = allClauses.filter((c) => matchesFilter(c, filter));
-  wrap.innerHTML =
-    rows
-      .map((c) => {
-        const id = String(c.id);
-        const hasChildren = _clauseHasChildren(c);
-        const descendants = hasChildren
-          ? _selectableDescendantClauseIds(id).filter((x) => x !== id)
-          : [];
-        const allChildrenSelected =
-          descendants.length > 0 &&
-          descendants.every((childId) => selectedClauseIds.has(String(childId)));
-        const checked = !hasChildren && selectedClauseIds.has(id) ? 'checked' : '';
-        const pad = clauseIndent(c) * 1.1;
-        const hint = hasChildren
-          ? `<span class="badge text-bg-secondary ms-2">${allChildrenSelected ? 'child clauses selected' : 'selects child clauses'}</span>`
-          : '';
-        const rowClass = hasChildren
-          ? 'border rounded p-2 d-flex gap-2 align-items-start h-100 bg-body-tertiary text-muted'
-          : 'border rounded p-2 d-flex gap-2 align-items-start h-100';
-        const title = hasChildren
-          ? 'Parent clauses are grouping headings. Selecting this will add the individual child clauses instead.'
-          : '';
-        return `<div class="col-12">
-      <label class="${rowClass}" style="margin-left:${pad}rem" title="${esc(title)}">
-        <input class="form-check-input mt-1" type="checkbox" data-clause-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(c.ref)}</span> <span class="small-muted">${esc(c.title)}</span>${hint}</span>
-      </label>
-    </div>`;
-      })
-      .join('') || `<div class="small-muted">No clauses match.</div>`;
-  wrap.querySelectorAll('[data-clause-id]').forEach((cb) => {
-    cb.disabled = !canEditAudit();
-    cb.addEventListener('change', () => {
-      if (!canEditAudit()) return;
-      const id = cb.getAttribute('data-clause-id');
-      if (_clauseHasChildren(id)) {
-        cb.checked = false;
-        const { clausesAdded, controlsAdded } = _selectClauseOrChildren(id);
-        renderScopeLists();
-        if (clausesAdded || controlsAdded) {
-          toast(
-            status,
-            `Selected ${clausesAdded} child clause${clausesAdded === 1 ? '' : 's'} and ${controlsAdded} linked control${controlsAdded === 1 ? '' : 's'}.`,
-            'info',
-            3000,
-          );
-        }
-        return;
-      }
-      if (cb.checked) {
-        selectedClauseIds.add(id);
-        const added = _addControlsLinkedToClause(id);
-        if (added > 0) renderControls();
-      } else {
-        selectedClauseIds.delete(id);
-      }
-      if (countEl) countEl.textContent = `${selectedClauseIds.size} selected`;
-      updateScopeActionButtons();
-    });
+  drawScopeList('clausesList', 'clauseScopeCount', selectedClauseIds, allClauses, (c) => {
+    const id = String(c.id);
+    const option = node('option', { value: id }, catalogueLabel(c));
+    if (_clauseHasChildren(c)) {
+      // A parent clause is a grouping heading: choosing it chooses its child
+      // clauses, and it is never in scope itself.
+      const children = _selectableDescendantClauseIds(id).filter((x) => x !== id);
+      const all = children.length > 0 && children.every((child) => selectedClauseIds.has(child));
+      option.dataset.badge = all ? 'child clauses selected' : 'selects child clauses';
+      option.title =
+        'Parent clauses are grouping headings. Selecting this will add the individual child clauses instead.';
+    } else option.selected = selectedClauseIds.has(id);
+    return option;
   });
 }
 
 function renderControls() {
-  const filter = (document.getElementById('controlFilter')?.value || '').trim().toLowerCase();
-  const wrap = document.getElementById('controlsList');
-  const countEl = document.getElementById('controlScopeCount');
-  if (countEl) countEl.textContent = `${selectedControlIds.size} selected`;
-  updateScopeActionButtons();
-  const rows = allControls.filter((c) => matchesFilter(c, filter));
-  wrap.innerHTML =
-    rows
-      .map((c) => {
-        const id = String(c.id);
-        const checked = selectedControlIds.has(id) ? 'checked' : '';
-        return `<div class="col-12 col-lg-6">
-      <label class="border rounded p-2 d-flex gap-2 align-items-start h-100">
-        <input class="form-check-input mt-1" type="checkbox" data-control-id="${esc(id)}" ${checked}>
-        <span><span class="fw-semibold">${esc(c.ref)}</span> <span class="small-muted">${esc(c.title)}</span></span>
-      </label>
-    </div>`;
-      })
-      .join('') || `<div class="small-muted">No controls match.</div>`;
-  wrap.querySelectorAll('[data-control-id]').forEach((cb) => {
-    cb.disabled = !canEditAudit();
-    cb.addEventListener('change', () => {
-      if (!canEditAudit()) return;
-      const id = cb.getAttribute('data-control-id');
-      if (cb.checked) selectedControlIds.add(id);
-      else selectedControlIds.delete(id);
-      if (countEl) countEl.textContent = `${selectedControlIds.size} selected`;
-      updateScopeActionButtons();
-    });
+  drawScopeList('controlsList', 'controlScopeCount', selectedControlIds, allControls, (c) => {
+    const option = node('option', { value: c.id }, catalogueLabel(c));
+    option.selected = selectedControlIds.has(String(c.id));
+    return option;
   });
 }
 
@@ -2099,27 +1985,51 @@ document.getElementById('reportForm')?.addEventListener('submit', async (ev) => 
   }
 });
 
-document.getElementById('documentFilter')?.addEventListener('input', renderDocuments);
-document.getElementById('clauseFilter')?.addEventListener('input', renderClauses);
-document.getElementById('controlFilter')?.addEventListener('input', renderControls);
-document.getElementById('deselectDocuments')?.addEventListener('click', () => {
-  if (!ensureAuditEditable()) return;
-  selectedDocumentIds.clear();
-  renderDocuments();
-  toast(status, 'All ISMS documents deselected. Save scope to apply the change.', 'info');
-});
+// A list re-enabled outside the page changes nothing: the reason is shown and
+// the lists are drawn again from the scope as it stands.
+function scopeEditable() {
+  if (ensureAuditEditable()) return true;
+  renderScopeLists();
+  return false;
+}
 
-document.getElementById('deselectClauses')?.addEventListener('click', () => {
-  if (!ensureAuditEditable()) return;
-  selectedClauseIds.clear();
-  renderClauses();
-  toast(status, 'All clauses deselected. Save scope to apply the change.', 'info');
+document.getElementById('documentsList').addEventListener('change', (ev) => {
+  if (!scopeEditable()) return;
+  // A document brings its linked clauses and controls into scope with it.
+  for (const id of takeScopeChoices(ev.currentTarget, selectedDocumentIds))
+    _addScopeLinkedToDocument(id);
+  renderScopeLists();
 });
-document.getElementById('deselectControls')?.addEventListener('click', () => {
-  if (!ensureAuditEditable()) return;
-  selectedControlIds.clear();
+document.getElementById('clausesList').addEventListener('change', (ev) => {
+  if (!scopeEditable()) return;
+  const select = ev.currentTarget;
+  // A clause brings its linked controls into scope with it.
+  for (const id of takeScopeChoices(select, selectedClauseIds, _clauseHasChildren))
+    _addControlsLinkedToClause(id);
+  // A chosen parent adds its child clauses, after the single clauses are
+  // taken so that they are not read back as unchosen.
+  let clausesAdded = 0;
+  let controlsAdded = 0;
+  for (const option of select.options) {
+    if (!option.selected || !_clauseHasChildren(option.value)) continue;
+    const added = _selectClauseOrChildren(option.value);
+    clausesAdded += added.clausesAdded;
+    controlsAdded += added.controlsAdded;
+  }
+  renderClauses();
   renderControls();
-  toast(status, 'All controls deselected. Save scope to apply the change.', 'info');
+  if (clausesAdded || controlsAdded)
+    toast(
+      status,
+      `Selected ${clausesAdded} child clause${clausesAdded === 1 ? '' : 's'} and ${controlsAdded} linked control${controlsAdded === 1 ? '' : 's'}.`,
+      'info',
+      3000,
+    );
+});
+document.getElementById('controlsList').addEventListener('change', (ev) => {
+  if (!scopeEditable()) return;
+  takeScopeChoices(ev.currentTarget, selectedControlIds);
+  renderControls();
 });
 document.getElementById('saveScope')?.addEventListener('click', async () => {
   try {
@@ -2212,9 +2122,6 @@ function applyManageVisibility() {
     if (el) el.classList.add('d-none');
   });
   document.getElementById('saveScope')?.classList.add('d-none');
-  document.getElementById('deselectDocuments')?.classList.add('d-none');
-  document.getElementById('deselectClauses')?.classList.add('d-none');
-  document.getElementById('deselectControls')?.classList.add('d-none');
   document
     .getElementById('status')
     ?.insertAdjacentHTML(

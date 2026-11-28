@@ -1,8 +1,9 @@
 """Fictional stories: evidence, records and notes that explain what happened.
 
 Each story places events from several sources beside the documents, assets,
-risks, objectives, people, suppliers, measures and meeting minutes involved,
-with notes for the decisions in between. Boxes sit on the flow chart from left
+risks, objectives, people, suppliers, measures, meeting minutes and legal
+register items involved, with notes for the decisions in between. Its author
+also assigns it the ISO/IEC 27001 controls and clauses it is about. Boxes sit on the flow chart from left
 to right in time order, and labelled links show how one step led to the next.
 """
 
@@ -14,10 +15,13 @@ from app.db.models import (
     IsmsPerson,
     IsmsVendor,
     Story,
+    StoryClauseLink,
     StoryComment,
+    StoryControlLink,
     StoryItem,
     StoryLink,
 )
+from app.services.control_refs import clause_by_id_or_ref, control_by_id_or_ref
 from app.services.entity_changelog import record_entity_changelog
 from app.services.stories import MARGIN, summary
 
@@ -26,6 +30,8 @@ from app.services.stories import MARGIN, summary
 # columns and rows are wider apart than Keen's arrangement for new items, so
 # link labels sit clear of the boxes.
 COLUMN, ROW = 300, 170
+# The stories' assigned controls and clauses name this framework's references.
+FRAMEWORK = "iso_27001_2022"
 STORIES = (
     dict(
         title="SSH brute force against app01: from detection to hardening",
@@ -132,7 +138,20 @@ STORIES = (
                 4,
                 2,
             ),
+            (
+                "law",
+                "legal_item",
+                "cma",
+                "",
+                "The attempts are offences under the Act; the logs were kept as evidence.",
+                1,
+                2,
+            ),
         ),
+        # What the author says the story is about, beside the controls its
+        # events map to.
+        controls=("A.5.24", "A.5.26", "A.8.20"),
+        clauses=("10.2",),
         links=(
             ("ossec", "ban", "blocked by"),
             ("ban", "guardduty", "seen by"),
@@ -146,6 +165,7 @@ STORIES = (
             ("policy", "triage", "guided"),
             ("risk", "asset", "threatens"),
             ("revoke", "supplier", "raised with"),
+            ("law", "triage", "offence under"),
         ),
         comments=(
             "Shared with the board at the management review as an example of layered monitoring working as intended.",
@@ -497,7 +517,30 @@ def _supporting_records(seeder):
     }
 
 
-def seed_stories(seeder, events, docs, assets, risks, objectives):
+def _assign(seeder, story, spec):
+    """Assign a new story its controls and clauses, where ISO 27001 is seeded."""
+    if FRAMEWORK not in seeder.seeded_frameworks:
+        return
+    for refs, lookup, model, column in (
+        (
+            spec.get("controls", ()),
+            control_by_id_or_ref,
+            StoryControlLink,
+            "control_item_id",
+        ),
+        (spec.get("clauses", ()), clause_by_id_or_ref, StoryClauseLink, "clause_id"),
+    ):
+        for ref in refs:
+            record = lookup(seeder.db, FRAMEWORK, ref)
+            if record:
+                seeder.ensure_link(
+                    model,
+                    {"story_id": story.id, column: record.id},
+                    {"framework_slug": FRAMEWORK},
+                )
+
+
+def seed_stories(seeder, events, docs, assets, risks, objectives, legal):
     """Seed the stories once; later runs keep any rearrangement made in Keen."""
     db = seeder.db
     records = {
@@ -506,6 +549,7 @@ def seed_stories(seeder, events, docs, assets, risks, objectives):
         "asset": assets,
         "risk": risks,
         "objective": objectives,
+        "legal_item": legal,
         **_supporting_records(seeder),
     }
     for spec in STORIES:
@@ -569,6 +613,7 @@ def seed_stories(seeder, events, docs, assets, risks, objectives):
                 },
             )
         if created:
+            _assign(seeder, story, spec)
             record_entity_changelog(
                 db,
                 entity_type="story",

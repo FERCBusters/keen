@@ -520,16 +520,22 @@ def test_draft_relationships_create_atomically_and_deduplicate(keen):
     assert len(created["links"]) == 1
     assert created["links"][0]["target_id"] == str(objective.id)
     assert keen.db.query(IsmsSwotLink).count() == 1
-    response = client.patch(
+    # A save that names no relationships keeps them; one that names them
+    # replaces them, here with none.
+    kept = client.patch(
         f"/v1/isms/swot/{created['id']}",
-        json={"expected_version": 1, "links": []},
+        json={"expected_version": 1, "response": "Rehearse"},
         headers=unsafe(client),
     )
-    assert (response.status_code, response.json()) == (
-        400,
-        {"detail": "Use relationship actions for an existing SWOT item"},
-    )
+    assert kept.status_code == 200, kept.text
     assert keen.db.query(IsmsSwotLink).count() == 1
+    response = client.patch(
+        f"/v1/isms/swot/{created['id']}",
+        json={"expected_version": 2, "links": []},
+        headers=unsafe(client),
+    )
+    assert (response.status_code, response.json()["links"]) == (200, [])
+    assert keen.db.query(IsmsSwotLink).count() == 0
     history = client.get(f"/v1/isms/swot/{created['id']}/changelog").text
     assert str(objective.id) not in history
     assert objective.goal not in history
@@ -682,7 +688,7 @@ def test_a_relationship_is_removed_only_at_the_current_version(keen):
                 {
                     "type": "literal_error",
                     "loc": ["path", "target_type"],
-                    "msg": "Input should be 'objective', 'document', 'asset', 'person', 'vendor' or 'risk'",
+                    "msg": "Input should be 'objective', 'document', 'asset', 'person', 'vendor', 'risk' or 'legal_item'",
                 }
             ]
         },
@@ -910,3 +916,388 @@ def test_change_link_records_history_without_request_context(keen):
         .one()
     )
     assert entry.request_path is None
+
+
+def test_a_save_that_names_relationships_replaces_those_its_author_can_read(
+    keen, monkeypatch
+):
+    from app.db.models import IsmsDocument, IsmsObjective
+    from app.services.isms import swot as service
+
+    admin = keen.client(keen.user(role="admin"))
+    manager = keen.client(keen.user("isms.manage"))
+    category = RiskCategory(name="Category")
+    keen.db.add(category)
+    keen.db.flush()
+    sub = RiskAssetSubcategory(name="Sub", category_id=category.id)
+    keen.db.add(sub)
+    keen.db.flush()
+    asset = RiskAsset(name="Asset", category_id=category.id, subcategory_id=sub.id)
+    document = IsmsDocument(title="Continuity plan", document_type="policy")
+    objective = IsmsObjective(requirement="Recover", goal="Recover in a day")
+    keen.db.add_all([asset, document, objective])
+    keen.db.flush()
+    risk = Risk(asset_id=asset.id, threat_summary="Restricted risk title")
+    keen.db.add(risk)
+    keen.db.commit()
+
+    def pair(kind, row):
+        return {"target_type": kind, "target_id": str(row.id)}
+
+    def stored():
+        keen.db.expire_all()
+        return sorted(link.target_type for link in keen.db.query(IsmsSwotLink))
+
+    def save(client, version, links, expect=200):
+        response = client.patch(
+            f"/v1/isms/swot/{item['id']}",
+            json={"expected_version": version, "links": links},
+            headers=unsafe(client),
+        )
+        assert response.status_code == expect, response.text
+        return response.json()
+
+    item = create(admin, links=[pair("document", document), pair("risk", risk)])
+    assert stored() == ["document", "risk"]
+    # The manager cannot read the risk: the document goes, the objective
+    # arrives, and the risk stays related.
+    saved = save(manager, 1, [pair("objective", objective)])
+    assert stored() == ["objective", "risk"]
+    assert [link["target_type"] for link in saved["links"]] == ["objective"]
+    history = manager.get(f"/v1/isms/swot/{item['id']}/changelog").text
+    # The history names the kinds of record that changed, never the records.
+    assert "relationship_types" in history
+    assert "Continuity plan" not in history and "Restricted risk title" not in history
+    # A record the author cannot read is refused, and nothing changes.
+    refused = save(manager, 2, [pair("risk", risk)], expect=404)
+    assert refused == {"detail": "Related item not available"}
+    assert stored() == ["objective", "risk"]
+    # The limit counts the relationships that stay.
+    monkeypatch.setattr(service, "MAX_LINKS", 1)
+    refused = save(manager, 2, [pair("objective", objective)], expect=400)
+    assert refused == {"detail": "A SWOT item supports up to 1 relationships"}
+    monkeypatch.setattr(service, "MAX_LINKS", 200)
+    assert stored() == ["objective", "risk"]
+    # An author who reads every record replaces them all.
+    save(admin, 2, [])
+    assert stored() == []
+
+
+def test_a_legal_register_item_is_related_from_either_end(keen, monkeypatch):
+    # One relationship joins a SWOT item and a legal register item. It is made,
+    # read, filtered on and removed from the SWOT item as it is from the
+    # register item, and is kept once.
+    import uuid
+
+    from app.db.models import IsmsLegalItem, IsmsLegalItemLink
+    from app.services.isms import related_records
+
+    manager = keen.client(keen.user("isms.manage"))
+    law = IsmsLegalItem(title="Privacy Act")
+    other = IsmsLegalItem(title="Spam Act")
+    keen.db.add_all([law, other])
+    keen.db.commit()
+
+    def pair(row):
+        return {"target_type": "legal_item", "target_id": str(row.id)}
+
+    def kept():
+        keen.db.expire_all()
+        return sorted(str(link.item_id) for link in keen.db.query(IsmsLegalItemLink))
+
+    def titles(row):
+        return sorted(link["title"] for link in row["links"])
+
+    def register_side(row):
+        answer = manager.get(f"/v1/isms/legal-register/{row.id}")
+        assert answer.status_code == 200, answer.text
+        return [(link["target_type"], link["title"]) for link in answer.json()["links"]]
+
+    # A new item takes the relationship; it is the register item's row.
+    item = create(manager, title="Regulatory change", links=[pair(law)])
+    path = f"/v1/isms/swot/{item['id']}"
+    assert titles(item) == ["Privacy Act"]
+    assert item["links"][0]["url"] == f"/legal-register.html?id={law.id}"
+    assert keen.db.query(IsmsSwotLink).count() == 0
+    assert kept() == [str(law.id)]
+    assert register_side(law) == [("swot", "Regulatory change")]
+
+    # One made on the register item shows on the SWOT item too.
+    patched = manager.patch(
+        f"/v1/isms/legal-register/{other.id}",
+        json={
+            "expected_version": 1,
+            "links": [{"target_type": "swot", "target_id": item["id"]}],
+        },
+        headers=unsafe(manager),
+    )
+    assert patched.status_code == 200, patched.text
+    assert titles(manager.get(path).json()) == ["Privacy Act", "Spam Act"]
+
+    # The register is filtered by the related item from the SWOT side.
+    listed = manager.get(
+        "/v1/isms/swot", params={"target_type": "legal_item", "target_id": str(law.id)}
+    )
+    assert [row["id"] for row in listed.json()["items"]] == [item["id"]]
+    unrelated = create(manager, title="Unrelated")
+    assert unrelated["links"] == []
+
+    # Adding one that is already there keeps one row; removing it removes it
+    # for both ends.
+    link_path = path + "/links"
+    again = manager.post(
+        link_path, json={**pair(law), "expected_version": 1}, headers=unsafe(manager)
+    )
+    assert (again.status_code, again.json()) == (200, {"ok": True, "version": 2})
+    assert kept() == sorted([str(law.id), str(other.id)])
+    removed = manager.delete(
+        f"{link_path}/legal_item/{law.id}",
+        params={"expected_version": 2},
+        headers=unsafe(manager),
+    )
+    assert (removed.status_code, removed.json()) == (200, {"ok": True, "version": 3})
+    assert kept() == [str(other.id)]
+    assert register_side(law) == []
+
+    # A register item's own limit holds from the SWOT side.
+    from dataclasses import replace
+
+    mirror = related_records.MIRRORS["swot"]["legal_item"]
+    monkeypatch.setitem(
+        related_records.MIRRORS["swot"],
+        "legal_item",
+        replace(mirror, limit=0),
+    )
+    refused = manager.post(
+        link_path, json={**pair(law), "expected_version": 3}, headers=unsafe(manager)
+    )
+    assert (refused.status_code, refused.json()) == (
+        400,
+        {"detail": "A legal register item supports up to 0 relationships"},
+    )
+    monkeypatch.setitem(related_records.MIRRORS["swot"], "legal_item", mirror)
+
+    # A save that names relationships replaces the register's too, and the
+    # choices list the register's items.
+    saved = manager.patch(
+        path,
+        json={"expected_version": 3, "links": [pair(law)]},
+        headers=unsafe(manager),
+    )
+    assert saved.status_code == 200, saved.text
+    assert titles(saved.json()) == ["Privacy Act"]
+    assert kept() == [str(law.id)]
+    choices = manager.get("/v1/isms/swot-choices/legal_item", params={"q": "spam"})
+    assert [row["title"] for row in choices.json()["items"]] == ["Spam Act"]
+
+    # Deleting the SWOT item removes the relationships kept for it.
+    gone = manager.delete(path, params={"expected_version": 4}, headers=unsafe(manager))
+    assert gone.status_code == 200, gone.text
+    assert kept() == []
+    assert keen.db.get(IsmsSwot, uuid.UUID(item["id"])) is None
+
+
+def test_a_swot_items_limit_holds_for_relationships_made_from_the_register(
+    keen, monkeypatch
+):
+    # A relationship between a SWOT item and a legal register item is the
+    # register item's row, and the SWOT item reads it as its own. So the SWOT
+    # item's limit is held when the register makes the relationship too, and
+    # an item never resolves more than it supports, whatever is stored.
+    from dataclasses import replace
+
+    from app.db.models import IsmsLegalItem, IsmsLegalItemLink, IsmsObjective
+    from app.services.isms import related_records
+    from app.services.isms import swot as service
+
+    manager = keen.client(keen.user("isms.manage"))
+    laws = [IsmsLegalItem(title=f"Act {n}") for n in range(4)]
+    objective = IsmsObjective(goal="Own relationship")
+    keen.db.add_all([*laws, objective])
+    keen.db.commit()
+    item = create(
+        manager,
+        title="Regulatory change",
+        links=[{"target_type": "objective", "target_id": str(objective.id)}],
+    )
+    monkeypatch.setitem(
+        related_records.READERS,
+        "swot",
+        replace(related_records.READERS["swot"], limit=2),
+    )
+    swot_link = {"target_type": "swot", "target_id": item["id"]}
+    full = {"detail": "A SWOT item supports up to 2 relationships"}
+
+    def kept():
+        keen.db.expire_all()
+        return keen.db.query(IsmsLegalItemLink).count()
+
+    # One more fits beside the item's own relationship.
+    added = manager.post(
+        f"/v1/isms/legal-register/{laws[0].id}/links",
+        json={**swot_link, "expected_version": 1},
+        headers=unsafe(manager),
+    )
+    assert added.status_code == 200, added.text
+    # The third is refused however the register makes it: one at a time,
+    # in a save that names its relationships, and on a new register item.
+    refused = manager.post(
+        f"/v1/isms/legal-register/{laws[1].id}/links",
+        json={**swot_link, "expected_version": 1},
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (400, full)
+    refused = manager.patch(
+        f"/v1/isms/legal-register/{laws[2].id}",
+        json={"expected_version": 1, "links": [swot_link]},
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (400, full)
+    refused = manager.post(
+        "/v1/isms/legal-register",
+        json={"title": "New act", "links": [swot_link]},
+        headers=unsafe(manager),
+    )
+    assert (refused.status_code, refused.json()) == (400, full)
+    assert kept() == 1
+    assert keen.db.query(IsmsLegalItem).filter_by(title="New act").count() == 0
+    # Adding the one already there again changes nothing and is not refused.
+    again = manager.post(
+        f"/v1/isms/legal-register/{laws[0].id}/links",
+        json={**swot_link, "expected_version": 2},
+        headers=unsafe(manager),
+    )
+    assert again.status_code == 200, again.text
+    # A relationship to another kind of record is not the SWOT item's concern.
+    other = manager.patch(
+        f"/v1/isms/legal-register/{laws[3].id}",
+        json={"expected_version": 1, "links": []},
+        headers=unsafe(manager),
+    )
+    assert other.status_code == 200, other.text
+
+    # Rows stored past the limit by other means are not all resolved.
+    for law in laws[1:]:
+        keen.db.add(
+            IsmsLegalItemLink(
+                item_id=law.id, target_type="swot", target_id=uuid_of(item)
+            )
+        )
+    keen.db.commit()
+    monkeypatch.setattr(service, "MAX_LINKS", 3)
+    shown = manager.get(f"/v1/isms/swot/{item['id']}").json()["links"]
+    assert len(shown) == 3
+
+
+def uuid_of(item):
+    import uuid
+
+    return uuid.UUID(item["id"])
+
+
+def test_a_register_items_limit_holds_while_the_item_is_being_saved(
+    postgres_engine, monkeypatch
+):
+    # A relationship made from a SWOT item is the register item's row. A save
+    # of the register item, on another connection, may be adding its last
+    # relationship at that moment: the SWOT side waits for it, then counts.
+    import time
+    import uuid
+    from concurrent.futures import ThreadPoolExecutor
+    from dataclasses import replace
+
+    import pytest
+    from app.db.models import IsmsLegalItem, IsmsLegalItemLink, IsmsSwotLink
+    from app.services.isms import related_records
+    from mosp.services.errors import DomainError
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+
+    from tests.db_helpers import schema_engine
+
+    with postgres_engine.connect() as connection:
+        schema = connection.exec_driver_sql("SELECT current_schema()").scalar()
+    workers = schema_engine(
+        postgres_engine.url.render_as_string(hide_password=False), schema, pool_size=4
+    )
+    mirror = related_records.MIRRORS["swot"]["legal_item"]
+    monkeypatch.setitem(
+        related_records.MIRRORS["swot"], "legal_item", replace(mirror, limit=1)
+    )
+    swot_id, other_id = uuid.uuid4(), uuid.uuid4()
+    try:
+        with Session(workers) as db:
+            law = IsmsLegalItem(title="Act " + uuid.uuid4().hex[:8])
+            db.add(law)
+            db.commit()
+            law_id = law.id
+
+        def relate():
+            with Session(workers, autoflush=False) as db:
+                try:
+                    related_records.add_link(
+                        db, IsmsSwotLink, {"swot_id": swot_id}, "legal_item", law_id
+                    )
+                    db.commit()
+                    return "kept"
+                except DomainError as error:
+                    return error.detail
+
+        with Session(workers) as saving, ThreadPoolExecutor(max_workers=1) as pool:
+            # The register's own save: its row locked, its last relationship
+            # added and not yet kept.
+            saving.query(IsmsLegalItem).filter_by(id=law_id).with_for_update().one()
+            saving.add(
+                IsmsLegalItemLink(
+                    item_id=law_id, target_type="asset", target_id=other_id
+                )
+            )
+            saving.flush()
+            waiting = pool.submit(relate)
+            try:
+                # Wait until the other connection is seen waiting for the row, so
+                # the test cannot pass because it merely started late.
+                with Session(workers) as watching:
+                    blocked = text(
+                        "SELECT query FROM pg_stat_activity "
+                        "WHERE wait_event_type = 'Lock' "
+                        "AND datname = current_database() "
+                        "AND query LIKE '%isms_legal_item%' "
+                        "AND pid <> pg_backend_pid()"
+                    )
+                    deadline = time.monotonic() + 10
+                    queries: list[str] = []
+                    while not queries and time.monotonic() < deadline:
+                        queries = list(watching.execute(blocked).scalars())
+                        watching.rollback()
+                        time.sleep(0.02)
+                # What it waits on is the register item's own row, before counting.
+                assert len(queries) == 1 and "FROM isms_legal_items" in queries[0]
+                assert "FOR UPDATE" in queries[0]
+                assert not waiting.done()
+                saving.commit()
+            finally:
+                # Whatever was found, let the other connection go.
+                saving.rollback()
+            assert waiting.result(timeout=10) == (
+                "A legal register item supports up to 1 relationships"
+            )
+        with Session(workers) as db:
+            assert db.query(IsmsLegalItemLink).filter_by(item_id=law_id).count() == 1
+
+        # A register item removed since it was chosen is said to be gone.
+        with Session(workers, autoflush=False) as db:
+            with pytest.raises(DomainError) as gone:
+                related_records.add_link(
+                    db, IsmsSwotLink, {"swot_id": swot_id}, "legal_item", uuid.uuid4()
+                )
+            assert (gone.value.status_code, gone.value.detail) == (
+                404,
+                "Legal register item not found",
+            )
+    finally:
+        with Session(workers) as db:
+            db.query(IsmsLegalItemLink).filter_by(item_id=law_id).delete()
+            db.query(IsmsLegalItem).filter_by(id=law_id).delete()
+            db.commit()
+        workers.dispose()

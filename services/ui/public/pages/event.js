@@ -1,4 +1,5 @@
 import { featureEnabled } from '/pages/feature-availability.js';
+import { chosenIds, fillCatalogueSelect } from '/pages/catalogue-options.js';
 import { canManageStories, mountStoryRelated } from '/pages/story-related.js';
 import { createEvidenceExporter } from './evidence-export/index.js';
 import { renderJson } from '/json-highlight.js';
@@ -226,20 +227,6 @@ function renderDiaryEvidence(e) {
 
 let editAllControls = null;
 let editAllControlsFramework = null;
-// Chosen catalogue rows ({ id, ref, type }). A clause and a control can share a
-// reference, so choices are sent by id.
-let editSelected = [];
-
-function editControlLabel(item) {
-  return `${item?.type === 'clause' ? 'Clause ' : ''}${item?.ref}`;
-}
-
-function editSortSelected() {
-  editSelected.sort((a, b) =>
-    editControlLabel(a).localeCompare(editControlLabel(b), undefined, { numeric: true }),
-  );
-}
-
 async function loadAllControlsOnce(frameworkSlug = null) {
   const fw = String(frameworkSlug || getCurrentFramework()).trim() || 'iso_27001_2022';
   if (editAllControls && editAllControlsFramework === fw) return editAllControls;
@@ -285,57 +272,6 @@ function editReadLinks() {
     if (url) links.push({ url, text });
   });
   return links;
-}
-
-function editRenderSelected() {
-  const wrap = document.getElementById('editControlSelected');
-  wrap.innerHTML = editSelected
-    .map(
-      (item) => `
-        <span class="badge badge-soft">
-          ${esc(editControlLabel(item))}
-          <button type="button" class="btn btn-sm btn-link link-danger p-0 ms-1" data-remove="${esc(item.id)}" aria-label="Remove">×</button>
-        </span>
-      `,
-    )
-    .join('');
-
-  wrap.querySelectorAll('[data-remove]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-remove');
-      editSelected = editSelected.filter((item) => item.id !== id);
-      editRenderSelected();
-    });
-  });
-}
-
-function editRenderResults(items) {
-  const resEl = document.getElementById('editControlResults');
-  if (!items.length) {
-    resEl.innerHTML = '';
-    return;
-  }
-  resEl.innerHTML = items
-    .map((it) => {
-      const title = it.title ? ` <span class="small-muted">${esc(it.title)}</span>` : '';
-      return `
-          <button type="button" class="list-group-item list-group-item-action" data-add="${esc(it.id)}">
-            <span class="mono">${esc(editControlLabel(it))}</span>${title}
-          </button>
-        `;
-    })
-    .join('');
-
-  resEl.querySelectorAll('[data-add]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-add');
-      // Results come from the loaded catalogue.
-      const chosen = editAllControls.find((item) => item.id === id);
-      if (!editSelected.some((item) => item.id === id)) editSelected.push(chosen);
-      editSortSelected();
-      editRenderSelected();
-    });
-  });
 }
 
 async function openEditDiaryModal() {
@@ -386,39 +322,17 @@ async function openEditDiaryModal() {
     if (editLinksWrap.children.length === 0) editAddLinkRow();
   }
 
-  // Controls selection
-  editSelected = [
-    ...new Map(
-      e.controls
-        .filter((c) => c.id && c.ref)
-        .map((c) => [c.id, { id: c.id, ref: c.ref, type: c.type }]),
-    ).values(),
-  ];
-  editSortSelected();
-  editRenderSelected();
-
-  // Wire up control search
-  await loadAllControlsOnce(pageFramework);
-  const searchEl = document.getElementById('editControlSearch');
-  if (searchEl && !searchEl.dataset.bound) {
-    searchEl.dataset.bound = '1';
-    searchEl.addEventListener('input', (ev) => {
-      const q = (ev.target.value || '').trim().toLowerCase();
-      if (!q || !Array.isArray(editAllControls) || editAllControls.length === 0) {
-        editRenderResults([]);
-        return;
-      }
-      const hits = [];
-      for (const c of editAllControls) {
-        const hay = `${c.ref} ${c.title || ''}`.toLowerCase();
-        if (hay.includes(q)) {
-          hits.push(c);
-          if (hits.length >= 25) break;
-        }
-      }
-      editRenderResults(hits);
-    });
-  }
+  // The entry's controls and clauses are chosen in a multiple select, which
+  // the design system presents as its picker. A clause and a control can share
+  // a reference, so choices are sent by id. What the entry maps to outside the
+  // loaded catalogue stays listed and chosen, so saving keeps it.
+  const mapped = e.controls.filter((c) => c.id && c.ref);
+  fillCatalogueSelect(
+    document.getElementById('editDiaryControls'),
+    await loadAllControlsOnce(pageFramework),
+    mapped.map((c) => c.id),
+    mapped,
+  );
 
   // Add link button
   const addLinkBtn = document.getElementById('editDiaryAddLink');
@@ -455,7 +369,7 @@ async function openEditDiaryModal() {
           summary,
           details: detailsPayload,
           links: editReadLinks(),
-          controls: editSelected.map((item) => item.id),
+          controls: chosenIds(document.getElementById('editDiaryControls')),
           framework: pageFramework,
         };
 

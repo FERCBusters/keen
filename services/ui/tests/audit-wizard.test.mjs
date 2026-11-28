@@ -98,10 +98,14 @@ const next = (ui) =>
   ui.el('wizardForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
 const visible = (ui) =>
   [...ui.document.querySelectorAll('.risk-wizard-step')].find((s) => !s.hidden).dataset.step;
+// Each scope list is a multiple select, which the design system presents as
+// its picker; a test chooses as the picker would.
+const scopeSelect = (ui, key) => ui.document.querySelector(`[data-scope-list="${key}"]`);
+const scopeEntry = (ui, key, value) =>
+  [...scopeSelect(ui, key).options].find((option) => option.value === value);
 const tick = (ui, key, value, checked = true) => {
-  const box = ui.document.querySelector(`[data-scope-key="${key}"][value="${value}"]`);
-  box.checked = checked;
-  box.dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+  scopeEntry(ui, key, value).selected = checked;
+  scopeSelect(ui, key).dispatchEvent(new ui.window.Event('change', { bubbles: true }));
 };
 const tabs = (ui) => [...ui.el('scopeTabs').querySelectorAll('button')].map((b) => b.textContent);
 
@@ -151,7 +155,7 @@ test('an audit starts with its details, checked before moving on', async (t) => 
   assert.equal(ui.el('status').style.display, 'none');
   assert.equal(ui.el('backStep').hidden, false);
   assert.equal(ui.el('skipStep').hidden, false);
-  await settle(() => ui.document.querySelector('[data-scope-key="controls"]'));
+  await settle(() => scopeSelect(ui, 'controls')?.options.length);
 });
 
 test('a type chosen while the page is still loading is the one highlighted', async (t) => {
@@ -171,18 +175,20 @@ test('scope covers controls, clauses, policies and SWOT items with their links',
   const { ui } = await wizard(t);
   ui.el('auditTitle').value = 'Scoped';
   next(ui);
-  await settle(() =>
-    ui.document.querySelector('[data-scope-key="d1"], [data-scope-key="documents"]'),
-  );
+  await settle(() => scopeSelect(ui, 'documents')?.options.length);
   assert.deepEqual(tabs(ui), ['Controls', 'Clauses', 'Policies and procedures', 'SWOT items']);
-  assert.equal(ui.document.querySelectorAll('[data-scope-key="controls"]').length, 2);
-  assert.equal(ui.document.querySelector('[data-scope-items="controls"] img'), null);
-  // Clauses are indented by depth.
-  assert.equal(
-    ui.document.querySelector('[data-scope-key="clauses"][value="k41"]').closest('label').style
-      .marginLeft,
-    '1rem',
-  );
+  assert.equal(scopeSelect(ui, 'controls').options.length, 2);
+  assert.equal(scopeSelect(ui, 'controls').multiple, true);
+  assert.equal(scopeSelect(ui, 'controls').getAttribute('aria-label'), 'Controls');
+  assert.equal(scopeSelect(ui, 'controls').querySelector('img'), null);
+  // The lists were built after the page loaded, so the page asks for their pickers.
+  assert.equal(ui.pickers.enhanced.at(-1)[0], ui.el('scopePanes'));
+  // A policy shows its kind beside it and what it links to as a tooltip; a
+  // SWOT item shows its quadrant.
+  const policy = scopeEntry(ui, 'documents', 'd1');
+  assert.ok(policy.dataset.badge);
+  assert.match(policy.title, /^\d+ clauses, \d+ controls$/);
+  assert.ok(scopeEntry(ui, 'swot', 's1').dataset.badge);
 
   // A policy brings its clause, the clause's control and its own control.
   tick(ui, 'documents', 'd1');
@@ -193,7 +199,7 @@ test('scope covers controls, clauses, policies and SWOT items with their links',
     'Policies and procedures (1)',
     'SWOT items',
   ]);
-  assert.equal(ui.document.querySelector('[data-scope-key="controls"][value="c9"]').checked, true);
+  assert.equal(scopeEntry(ui, 'controls', 'c9').selected, true);
   tick(ui, 'documents', 'd2');
   assert.equal(ui.el('scopeNote').textContent, '');
   tick(ui, 'controls', 'c1', false);
@@ -202,20 +208,11 @@ test('scope covers controls, clauses, policies and SWOT items with their links',
   assert.equal(ui.el('scopeNote').textContent, 'Added 1 linked clause or control as well.');
   tick(ui, 'swot', 's1');
 
-  // Tabs switch the list on show; filters narrow it.
+  // Tabs switch the list on show.
   ui.el('scopeTabs').querySelector('[data-scope-tab="swot"]').click();
   assert.equal(ui.document.querySelector('[data-scope-pane="swot"]').hidden, false);
   assert.equal(ui.document.querySelector('[data-scope-pane="controls"]').hidden, true);
-  const filter = ui.document.querySelector('[data-scope-filter="controls"]');
-  filter.value = 'zzz';
-  filter.dispatchEvent(new ui.window.Event('input', { bubbles: true }));
-  assert.match(
-    ui.document.querySelector('[data-scope-items="controls"]').textContent,
-    /Nothing matches/,
-  );
-  filter.value = 'logging';
-  filter.dispatchEvent(new ui.window.Event('input', { bubbles: true }));
-  assert.equal(ui.document.querySelectorAll('[data-scope-key="controls"]').length, 1);
+  assert.equal(ui.document.querySelector('[data-scope-items="controls"]').textContent, '');
 
   next(ui);
   assert.equal(visible(ui), 'people');
@@ -245,7 +242,8 @@ test('list failures stay in their own list and empty lists say so', async (t) =>
   // Going back and forward again keeps the loaded lists and choices.
   ui.el('backStep').click();
   next(ui);
-  assert.equal(ui.document.querySelector('[data-scope-key="clauses"][value="k41"]').checked, true);
+  assert.equal(scopeEntry(ui, 'clauses', 'k41').selected, true);
+  assert.equal(scopeSelect(ui, 'documents').options.length, 0, 'a list that failed offers nothing');
 });
 
 test('attendees come from the register, Keen accounts or plain details', async (t) => {
@@ -325,7 +323,7 @@ test('the review creates the audit with its scope and attendees, then offers whe
   ui.el('auditTitle').value = ' Spring audit ';
   ui.el('auditStart').value = '2026-03-01';
   next(ui);
-  await settle(() => ui.document.querySelector('[data-scope-key="controls"]'));
+  await settle(() => scopeSelect(ui, 'controls')?.options.length);
   tick(ui, 'controls', 'c1');
   next(ui);
   await settle(() => ui.el('attendeeWho').options.length === 3);
@@ -395,7 +393,7 @@ test('SWOT scope is sent when chosen and a refused audit stays on the review', a
   const { ui, state } = await wizard(t, { createFail: true });
   ui.el('auditTitle').value = 'Refused';
   next(ui);
-  await settle(() => ui.document.querySelector('[data-scope-key="swot"]'));
+  await settle(() => scopeSelect(ui, 'swot')?.options.length);
   tick(ui, 'swot', 's1');
   next(ui);
   next(ui);
@@ -423,7 +421,7 @@ test('readers cannot start audits, and lists follow features and ISMS access', a
   const { ui } = manager;
   ui.el('auditTitle').value = 'Narrow';
   next(ui);
-  await settle(() => ui.document.querySelector('[data-scope-key="controls"]'));
+  await settle(() => scopeSelect(ui, 'controls')?.options.length);
   assert.deepEqual(tabs(ui), ['Controls', 'Clauses']);
   next(ui);
   await settle(() => /Could not list Keen accounts/.test(ui.el('status').textContent));

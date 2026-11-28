@@ -39,6 +39,8 @@ test('an ISMS link names only its own sections, never inherited object keys', as
     assert.equal(ui.api.hrefFeature('/isms.html?tab=objectives'), 'objectives');
     assert.equal(ui.api.hrefFeature('/isms.html?tab=constructor'), 'isms');
     assert.equal(ui.api.hrefFeature('/isms.html?tab=__proto__'), 'isms');
+    // The Map is a feature of its own, whichever record a link to it names.
+    assert.equal(ui.api.hrefFeature('/map.html?focus=risk:1'), 'map');
     // The server reports a disabled parent's children as disabled too.
     ui.api.applyFeatures({ features: { enabled: { isms: false, objectives: false } } });
     const doc = ui.window.document;

@@ -122,7 +122,7 @@ def test_ingest_job_uses_cursor_and_classifies_outcomes(db):
     assert db.commit.call_count == 2
 
 
-def test_ingest_job_skips_seen_and_unknown_timestamp_builds(db):
+def test_a_build_with_no_timestamp_is_reported_not_passed_over(db):
     job = {
         "allBuilds": [
             build(2, "SUCCESS"),
@@ -142,10 +142,14 @@ def test_ingest_job_skips_seen_and_unknown_timestamp_builds(db):
                 side_effect=lambda db, **kw: stored.append(kw) or {"deduped": False},
             ),
         ):
-            jk.ingest_jenkins_job(db, "deploy", None, "release")
+            result = jk.ingest_jenkins_job(db, "deploy", None, "release")
     assert [
         (s["raw_pointer"]["jenkins"]["build_number"], s["action"]) for s in stored
     ] == [(2, "release")]
+    # The cursor moves past builds 1 and 0, which no later run reads, so the
+    # run says that two builds it wanted could not be read.
+    assert cursor.meta["last_number"] == 2
+    assert (result["created_events"], result["invalid_records"]) == (1, 2)
 
 
 def test_ingest_job_cursor_blocks_old_builds(db):

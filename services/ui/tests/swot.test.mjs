@@ -855,15 +855,128 @@ test('SWOT relationships that resolve to another host link nowhere', async (t) =
   });
   await settle(() => ui.el('pageTitle').textContent === item.title);
   assert.deepEqual(
-    [...ui.el('relatedList').querySelectorAll('a.text-break')].map((a) => [
+    [...ui.el('relatedList').querySelectorAll('.mosp-related-link')].map((a) => [
       a.textContent,
       a.getAttribute('href'),
     ]),
     [
-      ['Dots', '#'],
-      ['Encoded', '#'],
-      ['Script', '#'],
+      // An address that is not a path on Keen is text with no link.
+      ['Dots', null],
+      ['Encoded', null],
+      ['Script', null],
       ['Policy', '/isms-document.html?id=d4&framework=A'],
     ],
   );
+});
+
+test('a SWOT item relates to legal register items among its other relationships', async (t) => {
+  const item = {
+    id: 's1',
+    title: 'New regulation',
+    kind: 'threat',
+    version: 1,
+    links: [
+      {
+        target_type: 'legal_item',
+        target_id: 'l1',
+        title: 'Data <b>Act</b>',
+        url: '/legal-register.html?id=l1',
+      },
+    ],
+  };
+  const open = (me) =>
+    page(t, 'swot', {
+      query: '&id=s1',
+      me,
+      get(url) {
+        if (url.pathname === '/api/v1/isms/swot/s1') return { ...item, controls: [], clauses: [] };
+        if (url.pathname === '/api/v1/isms/meta') return { users: [], controls: [], clauses: [] };
+        if (url.pathname === '/api/v1/isms/swot') return { items: [item], total: 1 };
+        if (url.pathname.includes('/changelog')) return { items: [] };
+        if (url.pathname.startsWith('/api/v1/isms/swot-choices/')) return { items: [] };
+        if (url.pathname.startsWith('/api/v1/questions/entities/')) return { threads: [] };
+        throw Error('Unexpected GET ' + url);
+      },
+    });
+  const names = (ui, id) => [...ui.el(id).options].map((option) => [option.value, option.text]);
+  const ui = await open({ is_admin: true, can_view_isms: true });
+  await settle(() => ui.el('pageTitle').textContent === item.title);
+  // The register is one of the kinds to relate to and to filter by, by name.
+  assert.deepEqual(names(ui, 'linkType').at(-1), ['legal_item', 'Legal register item']);
+  assert.deepEqual(names(ui, 'relatedType').at(-1), ['legal_item', 'Legal register item']);
+  // The last of the cards for kinds of record; the stories card follows them.
+  const section = [...ui.el('relatedList').querySelectorAll('section:not(#relatedStoriesCard)')].at(
+    -1,
+  );
+  assert.ok(section.classList.contains('mosp-related-card'));
+  assert.equal(section.querySelector('h3').textContent, 'Legal register item');
+  assert.equal(section.querySelector('.mosp-related-card-count').textContent, '1');
+  assert.deepEqual(
+    [...section.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]),
+    [['Data <b>Act</b>', '/legal-register.html?id=l1&framework=A']],
+  );
+  assert.equal(section.querySelector('b'), null);
+  assert.equal(section.querySelector('[data-unlink-type]').dataset.unlinkType, 'legal_item');
+  // The relationships are in one place: there is no separate register tab.
+  assert.equal(ui.el('legalRelatedTab'), null);
+
+  // Not while the register is switched off.
+  const off = await open({
+    is_admin: true,
+    can_view_isms: true,
+    features: { enabled: { legal_register: false } },
+  });
+  await settle(() => off.el('pageTitle').textContent === item.title);
+  assert.ok(!names(off, 'linkType').some(([value]) => value === 'legal_item'));
+  assert.ok(!off.el('relatedList').textContent.includes('Legal register item'));
+});
+
+test('a saved SWOT item lists the stories that include it in a card among its related items', async (t) => {
+  const item = { id: 's1', title: 'New regulation', kind: 'threat', version: 1, links: [] };
+  const open = (me, query = '&id=s1') =>
+    page(t, 'swot', {
+      query,
+      me,
+      get(url) {
+        if (url.pathname === '/api/v1/isms/swot/s1') return { ...item, controls: [], clauses: [] };
+        if (url.pathname === '/api/v1/isms/meta') return { users: [], controls: [], clauses: [] };
+        if (url.pathname.includes('/changelog')) return { items: [] };
+        if (url.pathname.startsWith('/api/v1/isms/swot-choices/')) return { items: [] };
+        if (url.pathname.startsWith('/api/v1/questions/entities/')) return { threads: [] };
+        if (url.pathname === '/api/v1/isms/swot') return { items: [item], total: 1 };
+        if (url.pathname === '/api/v1/stories/related/swot/s1')
+          return {
+            items: [
+              { id: 'st1', title: 'Regulator <b>letter</b>', status: 'open', item_count: 2 },
+              { id: 'st2', title: 'Board review', status: 'closed', item_count: 1 },
+            ],
+          };
+        throw Error('Unexpected GET ' + url);
+      },
+    });
+  const ui = await open({ can_view_isms: true, can_view_stories: true });
+  await settle(() => ui.el('pageTitle').textContent === item.title);
+  // Stories are related items: there is no tab of their own.
+  assert.equal(ui.el('storiesRelatedTab'), null);
+  await settle(() => ui.el('relatedStoriesCard'));
+  const card = ui.el('relatedStoriesCard');
+  assert.ok(card.classList.contains('mosp-related-card'));
+  assert.equal(ui.el('relatedList').lastElementChild, card);
+  assert.match(card.textContent, /Stories that include this SWOT item/);
+  assert.ok(!ui.calls.some((call) => call.url.startsWith('/api/v1/stories')), 'loads with the tab');
+  ui.el('relatedTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+  await settle(() => card.querySelector('.list-group a'));
+  assert.equal(card.querySelector('.mosp-related-card-count').textContent, '2');
+  assert.equal(ui.el('relatedTab').textContent.trim(), 'Related items');
+  assert.equal(card.querySelector('.list-group a').textContent, 'Regulator <b>letter</b>');
+  assert.equal(card.querySelector('.list-group b'), null);
+
+  // Not for an account that cannot read stories, and not on a draft.
+  const reader = await open({ can_view_isms: true });
+  await settle(() => reader.el('pageTitle').textContent === item.title && reader.idle());
+  assert.equal(reader.el('relatedStoriesCard'), null);
+  assert.ok(reader.el('relatedList').children.length > 0);
+  const draft = await open({ can_view_isms: true, can_view_stories: true }, '&new=1&kind=threat');
+  await settle(() => !draft.el('draftNotice').hidden);
+  assert.equal(draft.el('relatedStoriesCard'), null);
 });

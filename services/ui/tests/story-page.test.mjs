@@ -107,10 +107,13 @@ async function open(
     globals,
     confirm,
     get,
+    query = '',
+    setup,
   } = {},
 ) {
   const ui = await page(t, 'story', {
-    query: '&id=s1',
+    query: '&id=s1' + query,
+    setup,
     me: { user_id: 'u1', can_view_stories: true, can_create_questions: true, ...me },
     globals,
     confirm,
@@ -803,6 +806,7 @@ test('flow chart titles open records in a new tab and authors add any kind of re
       ['vendor', 'Vendor / 3rd party', 'vendors'],
       ['effectiveness_measure', 'Effectiveness measure', 'effectiveness'],
       ['meeting', 'Meeting minutes', 'meetings'],
+      ['legal_item', 'Legal register item', 'legal_register'],
       ['note', 'Note', ''],
     ],
   );
@@ -820,4 +824,214 @@ test('flow chart titles open records in a new tab and authors add any kind of re
     '/api/v1/stories/s1/items',
     { items: [{ kind: 'meeting', entity_id: 'm1' }], expected_version: 3 },
   ]);
+});
+
+// --- Controls and clauses ---------------------------------------------------------
+
+const CONTROLS = [
+  { id: 'c1', ref: 'A.5.15', title: 'Access <control>', description: 'Rules for access' },
+  { id: 'c2', ref: 'A.5.31', title: 'Legal requirements' },
+  { id: 'c3', ref: 'A.8.13', title: 'Backup', in_scope: false },
+  // The controls catalogue also holds a row for each clause; the list of
+  // controls leaves it out, as clauses have a list of their own.
+  { id: 'x41', ref: '4.1', title: 'Context', type: 'clause' },
+];
+const CLAUSES = [
+  { id: 'k1', ref: '4.1', title: 'Context' },
+  { id: 'k2', ref: '9.2', title: 'Internal audit' },
+];
+
+// Answers the story's reads plus the framework catalogue; `world` counts the
+// catalogue reads and can make them fail.
+function frameworkReads(detail, world) {
+  return async (url) => {
+    if (url.pathname === '/api/v1/stories/s1') return detail;
+    if (url.pathname === '/api/v1/stories/s1/comments') return { items: [] };
+    if (url.pathname === '/api/v1/stories/s1/changelog') return { items: [] };
+    if (url.pathname === '/api/v1/questions/entities/story/s1') return { threads: [] };
+    if (url.pathname === '/api/v1/controls' || url.pathname === '/api/v1/clauses') {
+      world.catalogue.push(url.pathname + url.search);
+      if (world.fail) throw new Error('Catalogue offline');
+      return { items: url.pathname.endsWith('controls') ? CONTROLS : CLAUSES };
+    }
+    throw new Error('Unexpected GET ' + url);
+  };
+}
+const showFramework = (ui) =>
+  ui.el('frameworkTab').dispatchEvent(new ui.window.Event('shown.bs.tab'));
+const chosen = (ui, id) => [...ui.el(id).selectedOptions].map((option) => option.value);
+const choose = (ui, id, value, on) => {
+  [...ui.el(id).options].find((option) => option.value === value).selected = on;
+  ui.el(id).dispatchEvent(new ui.window.Event('change', { bubbles: true }));
+};
+const submitFramework = (ui) =>
+  ui.el('frameworkForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+
+test('a reader sees the assigned controls and clauses as links, without the form', async (t) => {
+  const world = { catalogue: [] };
+  const detail = story({
+    linked_controls: [
+      { id: 'c1', ref: 'A.5.15', title: 'Access <control>' },
+      { id: 'c/2', ref: 'A.<b>5</b>', title: '' },
+    ],
+    linked_clauses: [{ id: 'k1', ref: '4.1', title: 'Context' }],
+  });
+  const ui = await open(t, { detail, get: frameworkReads(detail, world) });
+  assert.equal(ui.el('frameworkCount').textContent, '3');
+  assert.deepEqual(
+    [...ui.el('linkedControls').querySelectorAll('a')].map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+      a.title,
+    ]),
+    [
+      ['A.5.15', '/control.html?id=c1&framework=A', 'Access <control>'],
+      ['A.<b>5</b>', '/control.html?id=c%2F2&framework=A', 'A.<b>5</b>'],
+    ],
+  );
+  assert.equal(ui.el('linkedControls').querySelector('b'), null);
+  assert.deepEqual(
+    [...ui.el('linkedClauses').querySelectorAll('a')].map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+    ]),
+    [['4.1', '/clause.html?id=k1&framework=A']],
+  );
+  assert.equal(ui.el('frameworkForm').hidden, true);
+  // A reader's tab reads no catalogue.
+  showFramework(ui);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(world.catalogue, []);
+});
+
+test('a story served without assignments says none are assigned', async (t) => {
+  const ui = await open(t);
+  assert.equal(ui.el('frameworkCount').textContent, '');
+  assert.equal(ui.el('linkedControls').textContent, 'None assigned.');
+  assert.equal(ui.el('linkedClauses').textContent, 'None assigned.');
+});
+
+test('an author chooses controls and clauses in the shared picker, and saves them with the version', async (t) => {
+  const world = { catalogue: [] };
+  const patched = [];
+  const detail = story({
+    can_edit: true,
+    linked_controls: [{ id: 'c1', ref: 'A.5.15', title: 'Access <control>' }],
+    linked_clauses: [],
+  });
+  const ui = await open(t, {
+    me: { can_manage_stories: true },
+    detail,
+    get: frameworkReads(detail, world),
+    patch: async (url, body) => {
+      patched.push([url.pathname + url.search, plain(body)]);
+      return story({
+        can_edit: true,
+        version: 4,
+        linked_controls: [{ id: 'c2', ref: 'A.5.31', title: 'Legal requirements' }],
+        linked_clauses: [{ id: 'k2', ref: '9.2', title: 'Internal audit' }],
+      });
+    },
+  });
+  assert.equal(ui.el('frameworkForm').hidden, false);
+  assert.equal(ui.el('saveFramework').disabled, true, 'nothing is saved before the lists load');
+  assert.deepEqual(world.catalogue, [], 'the catalogue waits for the tab');
+  // Submitting before the catalogue is read replaces nothing.
+  submitFramework(ui);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(patched, []);
+
+  showFramework(ui);
+  assert.equal(ui.el('frameworkStatus').textContent, 'Loading controls and clauses');
+  await settle(() => !ui.el('saveFramework').disabled);
+  showFramework(ui);
+  assert.deepEqual(
+    world.catalogue,
+    ['/api/v1/controls?framework=A&limit=5000', '/api/v1/clauses?framework=A&limit=5000'],
+    'the catalogue is read once',
+  );
+  assert.equal(ui.el('frameworkStatus').textContent, '');
+  assert.deepEqual(chosen(ui, 'storyControls'), ['c1']);
+  assert.deepEqual(chosen(ui, 'storyClauses'), []);
+  // Each list is a multiple select, which the shared picker presents as a
+  // search box, a list to browse and chips. Options are text: reference then
+  // title, with the description as a tooltip the picker also searches.
+  assert.equal(ui.el('storyControls').multiple, true);
+  assert.equal(ui.pickers.enhanced.length, 1);
+  assert.deepEqual(
+    [...ui.el('storyControls').options].map((option) => [
+      option.value,
+      option.textContent,
+      option.title,
+      option.dataset.badge || '',
+    ]),
+    [
+      ['c1', 'A.5.15 Access <control>', 'Rules for access', ''],
+      ['c2', 'A.5.31 Legal requirements', '', ''],
+      ['c3', 'A.8.13 Backup', '', 'out of scope'],
+    ],
+  );
+  assert.equal(ui.el('storyControls').querySelector('control'), null);
+  assert.deepEqual(
+    [...ui.el('storyClauses').options].map((option) => option.textContent),
+    ['4.1 Context', '9.2 Internal audit'],
+  );
+  assert.equal(
+    ui.document.querySelector('label[for="storyControls"]').textContent,
+    'Controls in selected framework',
+  );
+
+  choose(ui, 'storyControls', 'c2', true);
+  choose(ui, 'storyControls', 'c1', false);
+  choose(ui, 'storyClauses', 'k2', true);
+  submitFramework(ui);
+  await settle(() => ui.el('status').textContent === 'Controls and clauses saved.');
+  assert.deepEqual(patched, [
+    ['/api/v1/stories/s1?framework=A', { controls: ['c2'], clauses: ['k2'], expected_version: 3 }],
+  ]);
+  // The saved story replaces what is shown and what is ticked.
+  assert.equal(ui.el('frameworkCount').textContent, '2');
+  assert.equal(ui.el('linkedControls').textContent, 'A.5.31');
+  assert.equal(ui.el('linkedClauses').textContent, '9.2');
+  assert.deepEqual(chosen(ui, 'storyControls'), ['c2']);
+  assert.deepEqual(chosen(ui, 'storyClauses'), ['k2']);
+});
+
+test('a refused save and an unread catalogue are reported, and the tab tries again', async (t) => {
+  const world = { catalogue: [], fail: true };
+  const detail = story({ can_edit: true });
+  const shown = [];
+  const ui = await open(t, {
+    me: { can_manage_stories: true },
+    detail,
+    query: '&tab=framework',
+    setup(window) {
+      window.bootstrap = {
+        Tab: { getOrCreateInstance: (el) => ({ show: () => shown.push(el.id) }) },
+      };
+    },
+    get: frameworkReads(detail, world),
+    patch: async () => {
+      throw new Error('409 This story changed. Reload before saving.');
+    },
+  });
+  // A link to the tab opens it and reads the catalogue without waiting for a click.
+  assert.deepEqual(shown, ['frameworkTab']);
+  await settle(() => /could not be listed/.test(ui.el('frameworkStatus').textContent));
+  assert.equal(
+    ui.el('frameworkStatus').textContent,
+    'Controls and clauses could not be listed: Catalogue offline',
+  );
+  assert.equal(ui.el('saveFramework').disabled, true);
+  assert.equal(world.catalogue.length, 2);
+
+  world.fail = false;
+  showFramework(ui);
+  await settle(() => !ui.el('saveFramework').disabled);
+  assert.equal(world.catalogue.length, 4);
+  assert.equal(ui.el('storyControls').options.length, 3);
+  submitFramework(ui);
+  await settle(() => ui.el('status').textContent.includes('Reload before saving'));
+  assert.equal(ui.el('status').dataset.alert, 'danger');
+  assert.equal(ui.el('linkedControls').textContent, 'None assigned.');
 });

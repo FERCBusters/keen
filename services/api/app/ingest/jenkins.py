@@ -216,7 +216,9 @@ def ingest_jenkins_job(
         return bool(cursor_last and ts and ts <= cursor_last)
 
     legacy = last_done is None and cursor_last is not None
-    with _client() as c:
+    # Every page of builds kept for this run counts against one allowance, so
+    # the run holds no more than one response may, however many pages it reads.
+    with _client() as c, retained_listing():
         # A cursor kept by time read the newest 50 builds each run, so a
         # build it stored running can lie a page below the first it reaches.
         builds = _listing(
@@ -235,20 +237,18 @@ def ingest_jenkins_job(
             numbers = [n for n in map(_number, builds) if n is not None]
         # A build still running is read by itself, however far back it is.
         listed = set(numbers)
-        # Together these hold no more than one response may.
-        with retained_listing():
-            for number in sorted(pending - listed)[:MAX_PENDING]:
-                r = c.get(
-                    f"{_job_api_path(job_name).removesuffix('/api/json')}"
-                    f"/{number}/api/json",
-                    params={"tree": BUILD_FIELDS},
-                )
-                if r.status_code == 404:
-                    continue  # Discarded in Jenkins.
-                r.raise_for_status()
-                build = decode_json(r.content)
-                if _number(build) == number:
-                    builds.append(build)
+        for number in sorted(pending - listed)[:MAX_PENDING]:
+            r = c.get(
+                f"{_job_api_path(job_name).removesuffix('/api/json')}"
+                f"/{number}/api/json",
+                params={"tree": BUILD_FIELDS},
+            )
+            if r.status_code == 404:
+                continue  # Discarded in Jenkins.
+            r.raise_for_status()
+            build = decode_json(r.content)
+            if _number(build) == number:
+                builds.append(build)
 
     def wanted(b: Any) -> bool:
         number = _number(b)
@@ -267,10 +267,12 @@ def ingest_jenkins_job(
     created = 0
     newest_ts = cursor_last
 
-    def read(b: dict[str, Any]) -> dict[str, Any] | None:
+    def read(b: dict[str, Any]) -> dict[str, Any]:
         ts = _build_time(b)
         if ts is None:
-            return None
+            # The cursor moves past this build's number, so it is reported
+            # as a record that could not be read, not passed over unseen.
+            raise TypeError("Jenkins build has no timestamp")
 
         result = b.get("result") or ("RUNNING" if b.get("building") else None)
         outcome = (

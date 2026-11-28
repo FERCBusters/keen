@@ -252,28 +252,13 @@ test('a cleared remap limit sends the default of 500', async (t) => {
   );
 });
 
-test('untitled controls are found by reference alone and chosen only once', async (t) => {
-  const { ui, el } = await admin(t, {
+test('an untitled control is listed by its reference alone', async (t) => {
+  const { el } = await admin(t, {
     controls: [{ id: 'c1', ref: 'A.8.1', title: null, type: 'annex_control' }],
   });
-  const search = (q) => {
-    el('controlSearch').value = q;
-    el('controlSearch').dispatchEvent(new ui.window.Event('input'));
-  };
-  search('null');
-  assert.equal(el('controlResults').querySelectorAll('[data-id]').length, 0);
-  search('a.8');
-  const result = el('controlResults').querySelector('[data-id="c1"]');
-  assert.equal(result.textContent, 'A.8.1');
-  assert.equal(result.querySelector('.small-muted'), null);
-  result.click();
-  search('a.8');
-  const again = el('controlResults').querySelector('[data-id="c1"]');
-  assert.ok(again.classList.contains('disabled'));
-  again.click();
   assert.deepEqual(
-    [...el('controlSelected').querySelectorAll('[data-remove]')].map((b) => b.dataset.remove),
-    ['c1'],
+    [...el('diaryControls').options].map((option) => [option.value, option.textContent]),
+    [['c1', 'A.8.1']],
   );
 });
 

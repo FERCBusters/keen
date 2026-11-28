@@ -121,6 +121,32 @@ const lists = {
     },
     { name: 'Shared drive', description: 'Team files', relationship: 'Custodian' },
   ],
+  '/api/v1/me/isms-legal-items': [
+    {
+      id: 'l/1',
+      title: 'Data <b>Protection</b> Act 2018',
+      requirement: 'Process personal data <i>lawfully</i>',
+      category: { name: 'Data protection' },
+      in_scope: true,
+      compliance_status: 'partially_compliant',
+      compliance_status_label: 'Partially compliant',
+      last_assessed_date: '2026-06-01',
+      next_assessment_date: '2026-11-01',
+      assessment_due: true,
+    },
+    {
+      id: 'l2',
+      title: 'Bribery Act 2010',
+      requirement: '',
+      category: null,
+      in_scope: false,
+      compliance_status: 'not_assessed',
+      compliance_status_label: 'Not assessed',
+      last_assessed_date: null,
+      next_assessment_date: null,
+      assessment_due: false,
+    },
+  ],
 };
 
 async function account(t, options = {}) {
@@ -500,6 +526,15 @@ for (const [tab, endpoint, tbody, empty, wrap, statusId, message] of [
     'myIsmsAssetsStatus',
     'Failed to load ISMS assets: Offline',
   ],
+  [
+    'my-legal-items-tab',
+    '/api/v1/me/isms-legal-items',
+    'myLegalItemsTbody',
+    'myLegalItemsEmpty',
+    'myLegalItemsTableWrap',
+    'myLegalItemsStatus',
+    'Failed to load legal register items: Offline',
+  ],
 ])
   test(`${tab} explains empty lists and load failures`, async (t) => {
     const empty_ = await account(t, { lists: emptyLists });
@@ -564,6 +599,7 @@ test("each tab's own hash opens it, and an unknown hash opens the default tab", 
     ['#my-isms-objectives', 'my-isms-objectives-tab'],
     ['#my-isms-role', 'my-isms-role-tab'],
     ['#MY-ISMS-ASSETS', 'my-isms-assets-tab'],
+    ['#my-legal-items', 'my-legal-items-tab'],
   ]) {
     const tabs = fakeTabs();
     await account(t, { query: hash, tabs, lists: emptyLists });
@@ -897,4 +933,54 @@ test('Refresh fetches my questions again and shows a later failure in the card',
   await settle(() => ui.el('myQuestionsStatus').textContent.includes('Offline'));
   assert.equal(ui.el('myQuestionsStatus').textContent, 'Failed to load questions: Offline');
   assert.equal(ui.el('myQuestionsTableWrap').style.display, 'none');
+});
+
+test('My legal items lists the items the account owns, with the next assessment and status', async (t) => {
+  const { ui, state } = await account(t);
+  assert.equal(ui.el('my-legal-items-tab').dataset.feature, 'legal_register');
+  showTab(ui, 'my-legal-items-tab');
+  await settle(() => ui.el('myLegalItemsTbody').querySelectorAll('tr').length === 2);
+  // The list is the account's own, whatever framework is selected.
+  assert.ok(state.gets.includes('/api/v1/me/isms-legal-items'));
+  const rows = [...ui.el('myLegalItemsTbody').querySelectorAll('tr')];
+  const cells = (row) => [...row.cells].map((cell) => cell.textContent.replace(/\s+/g, ' ').trim());
+  assert.deepEqual(cells(rows[0]), [
+    'Data <b>Protection</b> Act 2018Process personal data <i>lawfully</i>',
+    'Data protection',
+    'In scope',
+    'Partially compliant',
+    '2026-06-01',
+    '2026-11-01 Due',
+  ]);
+  assert.deepEqual(cells(rows[1]), [
+    'Bribery Act 2010',
+    '-',
+    'Out of scope',
+    'Not assessed',
+    '-',
+    '-',
+  ]);
+  assert.equal(ui.el('myLegalItemsTbody').querySelector('b, i'), null, 'stored text stays text');
+  assert.equal(
+    rows[0].querySelector('a').getAttribute('href'),
+    '/legal-register.html?id=l%2F1&framework=A',
+  );
+  assert.deepEqual(
+    rows.map((row) => row.cells[3].querySelector('.badge').className),
+    ['badge text-bg-warning', 'badge text-bg-secondary'],
+  );
+  assert.equal(rows[1].cells[5].querySelector('.badge'), null);
+  ui.el('myLegalItemsRefresh').click();
+  await settle(() => state.gets.filter((g) => g === '/api/v1/me/isms-legal-items').length === 2);
+});
+
+test('an owner without ISMS access reads their legal items without a link to the register', async (t) => {
+  const { ui } = await account(t, { me: { user_id: 'u7', preferences: {} } });
+  showTab(ui, 'my-legal-items-tab');
+  await settle(() => ui.el('myLegalItemsTbody').querySelectorAll('tr').length === 2);
+  assert.equal(ui.el('myLegalItemsTbody').querySelector('a'), null);
+  assert.match(ui.el('myLegalItemsTbody').textContent, /Data <b>Protection<\/b> Act 2018/);
+  const reader = await account(t, { me: { can_view_isms: true, preferences: {} } });
+  showTab(reader.ui, 'my-legal-items-tab');
+  await settle(() => reader.ui.el('myLegalItemsTbody').querySelector('a'));
 });

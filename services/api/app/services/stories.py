@@ -11,24 +11,30 @@ Permissions:
 
 - ``stories.read`` views stories and adds comments.
 - ``stories.manage`` creates stories and edits or deletes the stories its
-  holder created.
+  holder created, including the controls and clauses assigned to them.
 - ``stories.admin`` edits or deletes any story.
 
 A story is a container, so a reader sees each item only when they can read
 the referenced record themselves: events need ``events.read`` and diary
 visibility, risks their own read rule, and ISMS records (documents, assets,
-objectives, SWOT items, people, vendors, effectiveness measures and meeting
-minutes) ISMS read access.
+objectives, SWOT items, legal register items, people, vendors, effectiveness
+measures and meeting minutes) ISMS read access.
 Items a reader cannot see stay in the story as placeholders without the
 record's identifier, label or note, so the shape of the story remains while
 its restricted content does not. Adding an item needs the same read access.
+
+A story's author also assigns it controls and clauses of a framework. These
+are kept apart from the controls its events map to, which follow the mapping
+rules. Controls and clauses are the framework's catalogue, which every
+signed-in person reads, so they are shown to every reader of the story, and a
+control's or clause's page lists the stories assigned to it for story readers.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from mosp.core.datetime_utils import to_utc_naive
 from mosp.core.datetime_utils import utc_now_naive as _utcnow
@@ -43,9 +49,12 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     ControlItem,
     Event,
+    FrameworkClause,
     Mapping,
     Story,
+    StoryClauseLink,
     StoryComment,
+    StoryControlLink,
     StoryItem,
     StoryLink,
     User,
@@ -56,7 +65,11 @@ from app.services.entity_changelog import (
     record_entity_changelog,
 )
 from app.services.frameworks import framework_parameter
-from app.services.isms.common import _by_id_or_404
+from app.services.isms.common import (
+    _by_id_or_404,
+    _clause_by_ref_or_id,
+    _control_by_ref_or_id,
+)
 from app.services.isms.related_records import (
     resolve_target,
     search_targets,
@@ -73,8 +86,12 @@ RECORD_KINDS = (
     "vendor",
     "effectiveness_measure",
     "meeting",
+    "legal_item",
 )
 KINDS = ("event", *RECORD_KINDS, "note")
+# What a story is assigned to, as opposed to what it includes.
+LINK_KINDS = {"control": "Control", "clause": "Clause"}
+MAX_FRAMEWORK_LINKS = 200
 STATUSES = ("open", "closed")
 MAX_ITEMS = 200
 MAX_LINKS = 400
@@ -93,6 +110,7 @@ KIND_LABELS = {
     "vendor": "Vendor / 3rd party",
     "effectiveness_measure": "Effectiveness measure",
     "meeting": "Meeting minutes",
+    "legal_item": "Legal register item",
     "note": "Note",
 }
 # The stories that include one record are listed on its page, up to this many.
@@ -109,9 +127,12 @@ Kind = Literal[
     "vendor",
     "effectiveness_measure",
     "meeting",
+    "legal_item",
     "note",
 ]
 Status = Literal["open", "closed"]
+# A control or clause, by its id or its reference in the framework.
+Reference = Annotated[str, Field(min_length=1, max_length=128)]
 
 
 class DraftItem(BaseModel):
@@ -129,6 +150,10 @@ class StoryPayload(BaseModel):
     summary: str | None = Field(None, max_length=20000)
     status: Status | None = None
     items: list[DraftItem] | None = Field(None, max_length=MAX_ITEMS)
+    # The controls and clauses assigned in the request's framework; a list
+    # replaces the ones assigned there, and leaving it out keeps them.
+    controls: list[Reference] | None = Field(None, max_length=MAX_FRAMEWORK_LINKS)
+    clauses: list[Reference] | None = Field(None, max_length=MAX_FRAMEWORK_LINKS)
     expected_version: int | None = Field(None, ge=1)
 
 
@@ -315,8 +340,74 @@ def _event_controls(db: Session, event_ids: list, framework: str) -> dict:
     return out
 
 
+def _assigned(db: Session, story_id, framework: str) -> tuple[list[dict], list[dict]]:
+    """The controls and clauses assigned to the story in ``framework``."""
+    controls = (
+        db.query(ControlItem.id, ControlItem.ref, ControlItem.title)
+        .join(StoryControlLink, StoryControlLink.control_item_id == ControlItem.id)
+        .filter(
+            StoryControlLink.story_id == story_id,
+            StoryControlLink.framework_slug == framework,
+        )
+        .order_by(ControlItem.ref, ControlItem.id)
+        .limit(MAX_FRAMEWORK_LINKS)
+    )
+    clauses = (
+        db.query(FrameworkClause.id, FrameworkClause.ref, FrameworkClause.title)
+        .join(StoryClauseLink, StoryClauseLink.clause_id == FrameworkClause.id)
+        .filter(
+            StoryClauseLink.story_id == story_id,
+            StoryClauseLink.framework_slug == framework,
+        )
+        .order_by(FrameworkClause.ref, FrameworkClause.id)
+        .limit(MAX_FRAMEWORK_LINKS)
+    )
+
+    def out(rows):
+        return [
+            {"id": str(id_), "ref": ref, "title": title} for id_, ref, title in rows
+        ]
+
+    return out(controls), out(clauses)
+
+
+def _assign(db: Session, row: Story, framework: str, payload: StoryPayload) -> None:
+    """Replace the controls and clauses a save names, in ``framework`` only.
+
+    Every reference is resolved in the framework before anything is removed,
+    so an unknown one leaves the story's assignments as they were.
+    """
+    for refs, lookup, model, column in (
+        (payload.controls, _control_by_ref_or_id, StoryControlLink, "control_item_id"),
+        (payload.clauses, _clause_by_ref_or_id, StoryClauseLink, "clause_id"),
+    ):
+        if refs is None:
+            continue
+        ids = {lookup(db, ref, framework).id for ref in refs}
+        db.query(model).filter_by(story_id=row.id, framework_slug=framework).delete(
+            synchronize_session=False
+        )
+        for record_id in sorted(ids, key=str):
+            db.add(
+                model(story_id=row.id, framework_slug=framework, **{column: record_id})
+            )
+    db.flush()
+
+
+def _history(db: Session, row: Story, framework: str, **extra) -> dict:
+    """What the changelog keeps of a story: its fields and assignments."""
+    controls, clauses = _assigned(db, row.id, framework)
+    return {
+        **summary(row, **extra),
+        "framework": framework,
+        "controls": [control["ref"] for control in controls],
+        "clauses": [clause["ref"] for clause in clauses],
+    }
+
+
 def story_controls(db: Session, story_id, framework: str) -> list[dict]:
-    """Every control the story's events map to in ``framework``."""
+    """Every control of ``framework`` the story bears on: those assigned to
+    it and those its events map to."""
     event_ids = [
         row[0]
         for row in db.query(StoryItem.entity_id)
@@ -324,7 +415,9 @@ def story_controls(db: Session, story_id, framework: str) -> list[dict]:
         .limit(MAX_ITEMS)
         .all()
     ]
-    seen: dict = {}
+    seen: dict = {
+        control["id"]: control for control in _assigned(db, story_id, framework)[0]
+    }
     for controls in _event_controls(db, event_ids, framework).values():
         for control in controls:
             seen.setdefault(control["id"], control)
@@ -455,6 +548,7 @@ def output(db: Session, user: User, row: Story, framework: str) -> dict:
         for control in item.get("controls") or []:
             controls.setdefault(control["id"], control)
     out["controls"] = sorted(controls.values(), key=lambda c: (c["ref"], c["id"]))
+    out["linked_controls"], out["linked_clauses"] = _assigned(db, row.id, framework)
     out["comment_count"] = int(comment_count or 0)
     return out
 
@@ -561,13 +655,16 @@ def list_stories(*, user, db, q="", status="", limit=50, offset=0):
 
 
 def related_stories(*, kind, entity_id, user, db):
-    """The stories that include one record, for the record's own page.
+    """The stories that include one record, or are assigned to one control or
+    clause, for that record's own page.
 
     The caller must be able to read the record itself, as they can on its
     page, so the list never confirms that a record they cannot see belongs to
     a story.
     """
     require_read(db, user)
+    if kind in LINK_KINDS:
+        return _assigned_stories(db, user, kind, entity_id)
     if kind not in KINDS or kind == "note":
         raise DomainError(400, "Unknown story item kind")
     record_id = try_uuid(entity_id)
@@ -585,6 +682,31 @@ def related_stories(*, kind, entity_id, user, db):
     return {
         "kind": kind,
         "entity_id": str(record.id),
+        "items": _listing(db, user, rows),
+    }
+
+
+def _assigned_stories(db: Session, user: User, kind: str, entity_id) -> dict:
+    """The stories assigned to one control or clause, for its own page."""
+    model, link, column = (
+        (ControlItem, StoryControlLink, StoryControlLink.control_item_id)
+        if kind == "control"
+        else (FrameworkClause, StoryClauseLink, StoryClauseLink.clause_id)
+    )
+    record_id = try_uuid(entity_id)
+    if record_id is None or db.get(model, record_id) is None:
+        raise DomainError(404, f"{LINK_KINDS[kind]} not found")
+    rows = (
+        db.query(Story)
+        .join(link, link.story_id == Story.id)
+        .filter(column == record_id)
+        .order_by(Story.updated_at.desc(), Story.id)
+        .limit(MAX_RELATED)
+        .all()
+    )
+    return {
+        "kind": kind,
+        "entity_id": str(record_id),
         "items": _listing(db, user, rows),
     }
 
@@ -672,11 +794,13 @@ def create_story(*, payload: StoryPayload, framework, user, db, context):
     )
     db.add(row)
     db.flush()
+    fw = framework_parameter(framework)
     added = _add_items(db, user, row, payload.items or [])
-    after = summary(row, item_count=added)
+    _assign(db, row, fw, payload)
+    after = _history(db, row, fw, item_count=added)
     _record(db, row, "created", None, after, user, context)
     db.commit()
-    return output(db, user, row, framework_parameter(framework))
+    return output(db, user, row, fw)
 
 
 def update_story(*, story_id, payload: StoryPayload, framework, user, db, context):
@@ -684,18 +808,20 @@ def update_story(*, story_id, payload: StoryPayload, framework, user, db, contex
     _version(row, payload.expected_version)
     if payload.items is not None:
         raise DomainError(400, "Use the items action to add items to a story")
-    before = summary(row)
+    fw = framework_parameter(framework)
+    before = _history(db, row, fw)
     if payload.title is not None:
         row.title = _text(payload.title, max_len=256, label="title", required=True)
     if payload.summary is not None:
         row.summary = _text(payload.summary, max_len=20000, label="summary")
     if payload.status is not None:
         row.status = payload.status
+    _assign(db, row, fw, payload)
     row.version += 1
     row.updated_at = _utcnow()
-    _record(db, row, "updated", before, summary(row), user, context)
+    _record(db, row, "updated", before, _history(db, row, fw), user, context)
     db.commit()
-    return output(db, user, row, framework_parameter(framework))
+    return output(db, user, row, fw)
 
 
 def delete_story(*, story_id, expected_version, user, db, context):

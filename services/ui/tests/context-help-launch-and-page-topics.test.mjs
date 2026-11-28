@@ -197,6 +197,12 @@ test('the SWOT page keeps its own guide on tabs without a topic of their own', a
   assert.equal(swot('detailsTab').url, '/help/using-swot.html');
   assert.equal(swot('relatedTab').title, 'SWOT analysis and objective planning');
   assert.equal(swot('questionsTab').url, '/help/using-events.html#questions-and-incidents');
+  // The legal register shares the ISMS page name too, and has its own guide.
+  const legal = await open('legal-register.html');
+  assert.equal(legal('detailsTab').url, '/help/using-isms.html#legal-register');
+  assert.equal(legal('graphTab').title, 'Legal register');
+  assert.equal(legal('assessmentsTab').title, 'Legal register');
+  assert.equal(legal('changelogTab').title, swot('changelogTab').title);
   // Other ISMS pages share its page name and keep the ISMS guide.
   const assurance = await open('assurance.html');
   assert.equal(assurance('peopleTab').url, '/help/using-isms.html');

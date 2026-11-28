@@ -378,20 +378,11 @@
           <div>
             <div class="fw-bold">Audit scope</div>
             <div class="small-muted">
-              Select ISMS policies/processes, clauses and controls. Saving documents/clauses
-              automatically includes their linked clauses/controls.
+              Search for or tick ISMS policies/processes, clauses and controls. Choosing a document or
+              clause brings its linked clauses and controls into scope.
             </div>
           </div>
           <div class="d-flex flex-wrap gap-2 align-items-center">
-            <button id="deselectDocuments" class="btn btn-sm btn-outline-secondary" type="button">
-              Deselect all documents
-            </button>
-            <button id="deselectClauses" class="btn btn-sm btn-outline-secondary" type="button">
-              Deselect all clauses
-            </button>
-            <button id="deselectControls" class="btn btn-sm btn-outline-secondary" type="button">
-              Deselect all controls
-            </button>
             <button id="saveScope" class="btn btn-sm btn-primary">Save scope</button>
             <button
               class="btn btn-sm btn-outline-secondary"
@@ -413,48 +404,24 @@
                   <div class="fw-semibold">ISMS documents</div>
                   <div class="small-muted" id="documentScopeCount">0 selected</div>
                 </div>
-                <input
-                  id="documentFilter"
-                  class="form-control mb-2"
-                  placeholder="Filter policies/processes"
-                />
-                <div
-                  id="documentsList"
-                  class="row g-2"
-                  style="max-height: 340px; overflow: auto"
-                ></div>
+                <label class="visually-hidden" for="documentsList">ISMS documents in scope</label>
+                <select id="documentsList" class="form-select" multiple size="10"></select>
               </div>
               <div class="col-12 col-xl-4">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                   <div class="fw-semibold">Clauses</div>
                   <div class="small-muted" id="clauseScopeCount">0 selected</div>
                 </div>
-                <input
-                  id="clauseFilter"
-                  class="form-control mb-2"
-                  placeholder="Filter clauses by ref or title"
-                />
-                <div
-                  id="clausesList"
-                  class="row g-2"
-                  style="max-height: 340px; overflow: auto"
-                ></div>
+                <label class="visually-hidden" for="clausesList">Clauses in scope</label>
+                <select id="clausesList" class="form-select" multiple size="10"></select>
               </div>
               <div class="col-12 col-xl-4">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                   <div class="fw-semibold">Controls</div>
                   <div class="small-muted" id="controlScopeCount">0 selected</div>
                 </div>
-                <input
-                  id="controlFilter"
-                  class="form-control mb-2"
-                  placeholder="Filter controls by ref or title"
-                />
-                <div
-                  id="controlsList"
-                  class="row g-2"
-                  style="max-height: 340px; overflow: auto"
-                ></div>
+                <label class="visually-hidden" for="controlsList">Controls in scope</label>
+                <select id="controlsList" class="form-select" multiple size="10"></select>
               </div>
             </div>
           </div>

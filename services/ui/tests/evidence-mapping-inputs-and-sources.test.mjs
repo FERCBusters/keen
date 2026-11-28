@@ -1,6 +1,7 @@
 // The mapping editor's source and collection step: BookStack catalogue
 // entries without names, the field that names each kind of collection input,
 // webhook providers and connections, and source patterns that name sources.
+import { chooseTarget, chosenTargets } from './support/rule-targets.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collection, collectorId, editor, rules } from './support/evidence-mapping-editor.mjs';
@@ -11,8 +12,7 @@ const step = (ui) => ui.$('step-number').textContent;
 async function publish(ui, description = 'Collected evidence') {
   await ui.click('next-step');
   ui.$('description').value = description;
-  ui.$('control').value = 'A1';
-  ui.$('add-target').click();
+  chooseTarget(ui.$('control'), 'A1');
   await ui.click('next-step');
   ui.$('predefine').checked = true;
   await ui.click('save-rule');
@@ -371,8 +371,7 @@ test('frameworks without names and controls without titles are listed by referen
     [...ui.$('control').options].map((option) => option.textContent),
     ['B1 - control', 'Clause B2 - clause'],
   );
-  ui.$('control').value = 'B1';
-  ui.$('add-target').click();
+  chooseTarget(ui.$('control'), 'B1');
   await ui.idle();
   const target = ui.$('targets').firstElementChild;
   assert.equal(target.querySelector('.text-break').textContent, 'B / B1');

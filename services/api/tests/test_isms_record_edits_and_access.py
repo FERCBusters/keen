@@ -256,5 +256,15 @@ def test_a_swot_structure_edit_takes_the_structure_lock(contract_db):
     assert statements == [
         "SAVEPOINT sa_savepoint_1",
         "SELECT pg_advisory_xact_lock_shared(%(key)s)",
-        "SELECT pg_advisory_xact_lock(724103610)",
+        "SELECT pg_advisory_xact_lock(%(key)s)",
     ]
+    # The key is the one a record relating to a SWOT item locks with too.
+    from sqlalchemy import text
+
+    held = contract_db.execute(
+        text(
+            "SELECT objid FROM pg_locks WHERE locktype = 'advisory' "
+            "AND mode = 'ExclusiveLock' AND granted"
+        )
+    ).scalars()
+    assert 724103610 in set(held)

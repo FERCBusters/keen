@@ -662,13 +662,16 @@ test('groups open into an editable detail with members and permissions', async (
   assert.deepEqual(calls('PUT', '/api/v1/admin/groups/g1/members')[0].body, { user_ids: ['u1'] });
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(el('groupsStatus').textContent, 'Members saved');
-  // Permissions are shown as wrapped checkboxes kept in sync with the hidden select.
-  const box = [
-    ...ui.document.querySelectorAll('.keen-multiselect-wrap input[type="checkbox"]'),
-  ].find((b) => b.value === 'admin.audit_trail');
-  assert.equal(box.closest('label').title, 'admin.audit_trail');
-  box.checked = true;
-  box.dispatchEvent(new ui.window.Event('change'));
+  // Permissions are a multiple select, presented by the design system's
+  // picker like every other list of several choices; the page keeps no
+  // checklist of its own.
+  assert.equal(el('groupPermissions').multiple, true);
+  assert.equal(ui.document.querySelector('.keen-multiselect-wrap'), null);
+  const permission = [...el('groupPermissions').options].find(
+    (option) => option.value === 'admin.audit_trail',
+  );
+  assert.equal(permission.title, 'admin.audit_trail');
+  permission.selected = true;
   el('groupApplyPermissions').click();
   await settle(() => details() === 4);
   await new Promise((r) => setTimeout(r, 10));
@@ -770,49 +773,34 @@ test('group failures are reported', async (t) => {
 
 test('diary evidence collects controls, links, timestamp and attachments', async (t) => {
   const { el, ui, calls } = await admin(t);
-  const search = (q) => {
-    el('controlSearch').value = q;
-    el('controlSearch').dispatchEvent(new ui.window.Event('input'));
-  };
-  search('a.5');
-  // A clause and a control can share a reference, so results are chosen by id.
-  const results = [...el('controlResults').querySelectorAll('[data-id]')];
+  // The catalogue is offered in a multiple select, which the design system
+  // presents as its picker. A clause and a control can share a reference, so
+  // each is chosen by id and a clause is named as one.
+  const options = [...el('diaryControls').options];
+  assert.equal(el('diaryControls').multiple, true);
+  assert.equal(
+    ui.document.querySelector('label[for="diaryControls"]').textContent,
+    'Map to controls',
+  );
   assert.deepEqual(
-    results.map((r) => [r.dataset.id, r.querySelector('.badge').textContent]),
+    options.slice(0, 3).map((option) => [option.value, option.textContent.split(' ')[0]]),
     [
       ['c-a51', 'A.5.1'],
       ['c-a52', 'A.5.2'],
-      ['k-a51', 'Clause A.5.1'],
+      ['k-a51', 'Clause'],
     ],
   );
-  assert.equal(el('controlResults').querySelector('img'), null);
-  search('bulk');
-  assert.equal(el('controlResults').querySelectorAll('[data-id]').length, 25);
-  search('a.5');
-  el('controlResults').querySelector('[data-id="c-a52"]').click();
-  assert.equal(el('controlSearch').value, '');
-  assert.equal(el('controlResults').innerHTML, '');
-  search('a.5');
-  assert.equal(
-    el('controlResults').querySelector('[data-id="c-a52"]').classList.contains('disabled'),
-    true,
-  );
-  el('controlResults').querySelector('[data-id="k-a51"]').click();
-  search('a.5');
-  el('controlResults').querySelector('[data-id="c-a51"]').click();
-  assert.deepEqual(
-    [...el('controlSelected').querySelectorAll('[data-remove]')].map((b) => b.dataset.remove),
-    ['c-a51', 'c-a52', 'k-a51'],
-  );
-  assert.deepEqual(
-    [...el('controlSelected').querySelectorAll('.badge')].map((b) =>
-      b.textContent.replace('×', '').trim(),
-    ),
-    ['A.5.1', 'A.5.2', 'Clause A.5.1'],
-  );
-  el('controlSelected').querySelector('[data-remove="c-a52"]').click();
-  search('');
-  assert.equal(el('controlResults').innerHTML, '');
+  assert.match(options[2].textContent, /^Clause A\.5\.1/);
+  assert.equal(el('diaryControls').querySelector('img'), null, 'titles are text');
+  assert.ok(options.length > 25, 'the whole catalogue is listed to browse');
+  assert.deepEqual([...el('diaryControls').selectedOptions], []);
+  const choose = (id, on = true) => {
+    options.find((option) => option.value === id).selected = on;
+  };
+  choose('c-a52');
+  choose('k-a51');
+  choose('c-a51');
+  choose('c-a52', false);
 
   const submit = () =>
     el('diaryForm').dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
@@ -858,21 +846,23 @@ test('diary evidence collects controls, links, timestamp and attachments', async
   assert.equal(el('diarySummary').value, '');
   assert.equal(el('diaryLinks').querySelectorAll('[data-link-row]').length, 1);
   // The control selection is kept for the next entry.
-  assert.ok(el('controlSelected').querySelector('[data-remove="c-a51"]'));
-  assert.ok(el('controlSelected').querySelector('[data-remove="k-a51"]'));
+  assert.deepEqual(
+    [...el('diaryControls').selectedOptions].map((option) => option.value),
+    ['c-a51', 'k-a51'],
+  );
 });
 
 test("a control's Requirements link starts the diary form with that control chosen", async (t) => {
   const { el } = await admin(t, { hash: '?control=c-a52&framework=A#diary' });
-  assert.deepEqual(
-    [...el('controlSelected').querySelectorAll('[data-remove]')].map((b) => b.dataset.remove),
-    ['c-a52'],
-  );
+  const chosen = (page) => [...page('diaryControls').selectedOptions].map((option) => option.value);
+  assert.deepEqual(chosen(el), ['c-a52']);
   // The chosen title stays text.
-  assert.equal(el('controlSelected').querySelector('img'), null);
-  // An unknown control leaves the form empty.
+  assert.equal(el('diaryControls').querySelector('img'), null);
+  // An unknown control, or none, leaves nothing chosen.
   const unknown = await admin(t, { hash: '?control=nothing#diary' });
-  assert.equal(unknown.el('controlSelected').querySelectorAll('[data-remove]').length, 0);
+  assert.deepEqual(chosen(unknown.el), []);
+  const none = await admin(t);
+  assert.deepEqual(chosen(none.el), []);
 });
 
 test('a rejected diary entry is reported', async (t) => {
@@ -1057,17 +1047,15 @@ test('the audit trail keeps its entity changelog and requests in tabs of their o
 
 test('the access dialog opens with empty lists when groups and permissions are unavailable', async (t) => {
   FakeModal.shown = [];
-  const { el, ui } = await admin(t, { fail: { groups: true, permissions: true, controls: true } });
+  const { el } = await admin(t, { fail: { groups: true, permissions: true, controls: true } });
   assert.match(el('groupsStatus').textContent, /Failed to load groups: Groups offline/);
   el('usersRows').querySelector('[data-access]').click();
   await settle(() => FakeModal.shown.includes('userAccessModal'));
   assert.equal(el('userAccessGroups').options.length, 0);
   assert.equal(el('userAccessPerms').options.length, 0);
   assert.equal(el('userAccessEffective').textContent, 'audits.view, admin.audit_trail');
-  // Without the control catalogue the diary search finds nothing.
-  el('controlSearch').value = 'a.5';
-  el('controlSearch').dispatchEvent(new ui.window.Event('input'));
-  assert.equal(el('controlResults').querySelectorAll('[data-id]').length, 0);
+  // Without the control catalogue the diary form offers no controls.
+  assert.equal(el('diaryControls').options.length, 0);
 });
 
 test('groups that inherit their role are labelled so in the access dialog', async (t) => {

@@ -1,4 +1,4 @@
-"""KEEN's audit and quiz emails, sent through mosp's mailer."""
+"""KEEN's audit, quiz and legal register emails, sent through mosp's mailer."""
 
 from __future__ import annotations
 
@@ -215,4 +215,43 @@ def send_quiz_reminder_email(
             quiz_title=quiz_title, due_on=due_on, quiz_url=quiz_url, uid=uid
         ),
         filename="keen-quiz.ics",
+    )
+
+
+def send_legal_assessment_reminder_email(
+    *,
+    to_email: str,
+    owner_name: str | None,
+    title: str,
+    due_on: str,
+    overdue: bool,
+    item_url: str,
+    uid: str,
+) -> None:
+    """Tell a legal register item's owner that its assessment is due."""
+    who = (owner_name or "").strip() or "there"
+    state = "is overdue" if overdue else "is due soon"
+    body = (
+        f"Hello {who},\n\n"
+        f"The assessment of a legal register item you own {state}. "
+        "An .ics calendar file is attached.\n\n"
+        f"Item: {title}\n"
+        f"Assessment due: {due_on}\n\n"
+        f"Open the item to record the assessment: {item_url}\n\n"
+        "You are receiving this reminder because you are the item's owner.\n"
+    )
+    send_with_invite(
+        to_email=to_email,
+        subject=f"{sender_name()}: Legal register assessment due {due_on} - {title}",
+        body=body,
+        invite=build_calendar_invite(
+            summary=f"Assess: {title}",
+            description=f"Legal register assessment due. Open the item: {item_url}",
+            starts=due_on,
+            url=item_url,
+            uid=uid,
+            uid_prefix="keen-legal-assessment",
+            product="Legal Register",
+        ),
+        filename="keen-legal-assessment.ics",
     )
