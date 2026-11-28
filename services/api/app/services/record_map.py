@@ -21,7 +21,7 @@ from typing import Any
 from mosp.core.identifiers import try_uuid
 from mosp.services.context import ChangeContext, signed_in_user
 from mosp.services.errors import DomainError
-from sqlalchemy import false, or_, select
+from sqlalchemy import false, or_, select, true
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -243,6 +243,20 @@ class _Graph:
             Risk.risk_owner_role_id.in_(roles),
         )
 
+    def _risks_read(self):
+        """The condition for the risks the reader sees."""
+        return true() if can_read_risks(self.db, self.user) else self._own_risks()
+
+    def _audits_read(self) -> list:
+        """The conditions for the audits the reader sees: the selected
+        framework's, and without audit access only those they attend."""
+        conditions = [Audit.framework_slug == self.framework]
+        if not can_read_audits(self.db, self.user):
+            conditions.append(
+                Audit.id.in_(select(AuditAttendee.audit_id).where(attends(self.user)))
+            )
+        return conditions
+
     def load_records(self) -> None:
         db, fw = self.db, self.framework
         # Only the columns a node shows are read, never a record's body.
@@ -263,8 +277,7 @@ class _Graph:
         risks = db.query(Risk.id, Risk.threat_summary, RiskAsset.name).outerjoin(
             RiskAsset, RiskAsset.id == Risk.asset_id
         )
-        if not can_read_risks(db, self.user):
-            risks = risks.filter(self._own_risks())
+        risks = risks.filter(self._risks_read())
         for risk_id, threat, asset in self._rows("risk", risks):
             self.node("risk", risk_id, threat or asset, asset)
         for row in self._rows(
@@ -325,12 +338,8 @@ class _Graph:
         for row in self._rows("story", db.query(Story.id, Story.title, Story.status)):
             self.node("story", row.id, row.title, row.status)
         audits = db.query(Audit.id, Audit.title, Audit.audit_type).filter(
-            Audit.framework_slug == fw
+            *self._audits_read()
         )
-        if not can_read_audits(db, self.user):
-            audits = audits.filter(
-                Audit.id.in_(select(AuditAttendee.audit_id).where(attends(self.user)))
-            )
         for row in self._rows("audit", audits):
             self.node("audit", row.id, row.title, row.audit_type)
 
@@ -370,6 +379,8 @@ class _Graph:
         control = ("control", "control_item_id")
         clause = ("clause", "clause_id")
         seen = sorted(self.allowed)
+        # Relationships are read for the audits the reader sees and no others.
+        audits = select(Audit.id).where(*self._audits_read())
         # (rows, one end, the other end, relation), for the tables whose
         # columns say which kinds they join.
         plain: list[tuple[Any, tuple[str, str], tuple[str, str], str]] = [
@@ -473,28 +484,48 @@ class _Graph:
                 clause,
                 "mapped",
             ),
-            (db.query(AuditScopedControl), ("audit", "audit_id"), control, "scope"),
-            (db.query(AuditScopedClause), ("audit", "audit_id"), clause, "scope"),
             (
-                db.query(AuditScopedIsmsDocument),
+                db.query(AuditScopedControl).filter(
+                    AuditScopedControl.audit_id.in_(audits)
+                ),
+                ("audit", "audit_id"),
+                control,
+                "scope",
+            ),
+            (
+                db.query(AuditScopedClause).filter(
+                    AuditScopedClause.audit_id.in_(audits)
+                ),
+                ("audit", "audit_id"),
+                clause,
+                "scope",
+            ),
+            (
+                db.query(AuditScopedIsmsDocument).filter(
+                    AuditScopedIsmsDocument.audit_id.in_(audits)
+                ),
                 ("audit", "audit_id"),
                 ("document", "document_id"),
                 "scope",
             ),
             (
-                db.query(AuditSwotScope),
+                db.query(AuditSwotScope).filter(AuditSwotScope.audit_id.in_(audits)),
                 ("audit", "audit_id"),
                 ("swot", "swot_id"),
                 "scope",
             ),
             (
-                db.query(AuditFinding.audit_id, AuditFinding.control_item_id),
+                db.query(AuditFinding.audit_id, AuditFinding.control_item_id).filter(
+                    AuditFinding.audit_id.in_(audits)
+                ),
                 ("audit", "audit_id"),
                 control,
                 "finding",
             ),
             (
-                db.query(AuditAttendee.audit_id, AuditAttendee.person_id),
+                db.query(AuditAttendee.audit_id, AuditAttendee.person_id).filter(
+                    AuditAttendee.audit_id.in_(audits)
+                ),
                 ("audit", "audit_id"),
                 ("person", "person_id"),
                 "attends",
@@ -547,8 +578,8 @@ class _Graph:
         )
         # Last, the tables read whole before their rows are sorted into links,
         # so they cannot leave the ones above short.
+        items = select(PestleItem.id).where(PestleItem.framework_slug == fw)
         if "pestle_item" in self.allowed:
-            items = select(PestleItem.id).where(PestleItem.framework_slug == fw)
             for model, end in (
                 (PestleControlRelevance, control),
                 (PestleClauseRelevance, clause),
@@ -560,7 +591,13 @@ class _Graph:
                 )
                 self._relate(rated, ("pestle_item", "pestle_item_id"), end, "relevant")
         if {"person", "vendor", "asset"} & self.allowed:
-            affected = self._link_rows(db.query(AffectedLink))
+            # Only what the reader's risks and PESTLE(E) items affect.
+            owners = [
+                AffectedLink.risk_id.in_(select(Risk.id).where(self._risks_read()))
+            ]
+            if "pestle_item" in self.allowed:
+                owners.append(AffectedLink.pestle_item_id.in_(items))
+            affected = self._link_rows(db.query(AffectedLink).filter(or_(*owners)))
             for owner in (("risk", "risk_id"), ("pestle_item", "pestle_item_id")):
                 for target in ("person", "vendor", "asset"):
                     self._relate(affected, owner, (target, f"{target}_id"), "affects")
@@ -585,6 +622,8 @@ class _Graph:
                 scope=scope,
                 within_ms=EVIDENCE_BUDGET_MS,
                 max_links=MAX_LINK_ROWS,
+                only_control=try_uuid(control) if control else None,
+                guidance=False,
                 db=self.db,
             )
         except DomainError as exc:
@@ -599,11 +638,14 @@ class _Graph:
                     f"{node['mapped_events']} mapped events",
                 )
         # Events chosen for one control also count towards the others they map
-        # to; only that control's own count is whole, so only it is shown.
+        # to; only that control's own count is whole, so only it is asked for
+        # and shown. Evidence for a control the Map does not hold cannot be
+        # drawn, and is set aside before the allowance is applied.
         links = [
             link
             for link in data["links"]
             if control in (None, link["target"].removeprefix("control:"))
+            and link["target"] in self.nodes
         ]
         # Evidence counts towards the request's relationships like any other;
         # when there is more than it has left, the heaviest is kept.

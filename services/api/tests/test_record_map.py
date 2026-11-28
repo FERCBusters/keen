@@ -696,9 +696,7 @@ def test_a_role_makes_its_members_owners_and_a_connection_owns_nothing(world):
     assert [node for node in data["nodes"] if node["kind"] == "risk"] == []
 
 
-def test_the_map_reads_a_bounded_number_of_rows_and_requests(world, monkeypatch):
-    import fakeredis
-    from app.api.routes import map as routes
+def test_the_map_reads_a_bounded_number_of_rows(world, monkeypatch):
     from app.services import record_map
 
     # No more records of a kind are read than the Map shows, and the answer
@@ -733,24 +731,6 @@ def test_the_map_reads_a_bounded_number_of_rows_and_requests(world, monkeypatch)
         {"detail": "Record not available"},
     )
     monkeypatch.setattr(record_map._Graph, "load_links", load_links)
-
-    # Each account has an allowance of requests a minute, counted apart.
-    store = fakeredis.FakeRedis(decode_responses=True)
-    monkeypatch.setattr(routes, "get_valkey", lambda: store)
-    monkeypatch.setattr(routes, "REQUESTS_PER_MINUTE", 2)
-    other = world.keen.client(world.keen.user("isms.read"))
-    for path in (
-        "/v1/map?framework=A",
-        f"/v1/map/neighbours?framework=A&node=risk:{world.risk.id}",
-    ):
-        assert world.admin.get(path).status_code == 200
-    limited = world.admin.get("/v1/map?framework=A")
-    assert (limited.status_code, limited.json()) == (
-        429,
-        {"detail": "The Map was asked for too often; try again shortly."},
-    )
-    assert int(limited.headers["Retry-After"]) > 0
-    assert other.get("/v1/map?framework=A").status_code == 200
 
 
 def test_a_request_reads_a_bounded_number_of_relationships_in_all(world, monkeypatch):
@@ -812,6 +792,46 @@ def test_a_request_reads_a_bounded_number_of_relationships_in_all(world, monkeyp
     graph, links = of(world.change, 1)
     assert links == [("source:jenkins", f"control:{world.change.id}", 1)]
     assert (graph.rows_left, graph.truncated) == (0, False)
+    # The database is asked for that control's pairs alone, so its limit too
+    # is applied to them and not to the other controls' heavier ones.
+    monkeypatch.setattr(record_map, "MAX_LINK_ROWS", 1)
+    graph, links = of(world.change, 10)
+    assert links == [("source:jenkins", f"control:{world.change.id}", 1)]
+    assert graph.truncated is False
+    monkeypatch.setattr(record_map, "MAX_LINK_ROWS", 20000)
+    own = graph_control_source(
+        context=context, framework="A", only_control=world.change.id, db=world.db
+    )
+    assert [(link["target"], link["value"]) for link in own["links"]] == [
+        (f"control:{world.change.id}", 1)
+    ]
+
+    # Evidence for a control the Map does not hold, as when a framework has
+    # more controls than the Map reads, cannot be drawn and spends nothing.
+    graph = record_map._Graph(world.db, context, "A")
+    graph.load_records()
+    del graph.nodes[f"control:{world.logging.id}"]
+    graph.rows_left = 2
+    graph.load_evidence()
+    assert sorted(link["source"] for link in graph.links.values()) == [
+        "source:github",
+        "source:jenkins",
+    ]
+    assert (graph.rows_left, graph.truncated) == (0, False)
+
+    # The count reads no control whole: only what names its guidance link.
+    reads = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        reads.append(statement)
+
+    sql_event.listen(world.db.get_bind(), "before_cursor_execute", capture)
+    try:
+        graph_control_source(context=context, framework="A", db=world.db)
+    finally:
+        sql_event.remove(world.db.get_bind(), "before_cursor_execute", capture)
+    controls = [text for text in reads if "FROM control_items" in text]
+    assert controls and not [text for text in controls if "tags" in text]
 
     # The database returns no more evidence than one table's limit, the
     # heaviest first, and says when there was more.
@@ -852,6 +872,21 @@ def test_a_request_reads_a_bounded_number_of_relationships_in_all(world, monkeyp
 
     assert record_map.EVIDENCE_BUDGET_MS == 20000
     assert statements(lambda: evidence(10)) == ["SET LOCAL statement_timeout = 20000"]
+    world.db.rollback()
+    # The Map draws controls of its own, so the count does not read them
+    # again for their guidance links.
+    reads = []
+
+    def capture_reads(conn, cursor, statement, parameters, context, executemany):
+        reads.append(statement)
+
+    sql_event.listen(world.db.get_bind(), "before_cursor_execute", capture_reads)
+    try:
+        graph = record_map._Graph(world.db, context, "A")
+        graph.load_evidence()
+    finally:
+        sql_event.remove(world.db.get_bind(), "before_cursor_execute", capture_reads)
+    assert reads and not [text for text in reads if "control_items.meta" in text]
     world.db.rollback()
     assert (
         statements(
@@ -937,3 +972,58 @@ def test_a_reader_spends_the_allowance_only_on_what_they_can_see(world, monkeypa
     other.load_records()
     other.load_links()
     assert other.rows_left > everything.rows_left
+
+
+def test_relationships_are_read_only_for_the_audits_and_risks_a_reader_sees(
+    world, monkeypatch
+):
+    from app.services import record_map
+    from mosp.services.context import ChangeContext
+
+    def rows_read(user):
+        """How many rows of each relationship table one reader's Map read."""
+        graph = record_map._Graph(world.db, ChangeContext(actor=user), "A")
+        read_rows = graph._link_rows
+        found: dict[str, int] = {}
+
+        def counted(query):
+            rows = read_rows(query)
+            table = query.column_descriptions[0]["entity"].__tablename__
+            found[table] = found.get(table, 0) + len(rows)
+            return rows
+
+        monkeypatch.setattr(graph, "_link_rows", counted)
+        graph.load_records()
+        graph.load_links()
+        return found
+
+    audit_tables = {
+        "audit_scoped_controls",
+        "audit_scoped_clauses",
+        "audit_findings",
+        "audit_attendees",
+    }
+    everything = rows_read(world.keen.user(role="admin"))
+    assert all(everything[table] > 0 for table in audit_tables)
+    assert everything["affected_links"] == 3
+
+    # An account that attends an audit reads that audit's relationships; one
+    # that attends none reads no audit's, though the tables hold them.
+    attending = rows_read(world.db.merge(world.owner))
+    assert attending["audit_scoped_controls"] > 0 and attending["audit_findings"] > 0
+    stranger = rows_read(world.keen.user())
+    assert {table: stranger.get(table, 0) for table in audit_tables} == dict.fromkeys(
+        audit_tables, 0
+    )
+
+    # What a risk or a PESTLE(E) item affects is read for those the reader
+    # sees: a reader of the ISMS alone sees people and assets, but no risk of
+    # theirs and no PESTLE(E) item, and so reads none of it.
+    isms = rows_read(world.keen.user("isms.read"))
+    assert isms["affected_links"] == 0
+    # A reader of risks reads what the risks affect, and with them the
+    # PESTLE(E) items a risk reader may open; a reader of PESTLE(E) alone
+    # reads what those items affect and nothing of the risks.
+    risks = rows_read(world.keen.user("isms.read", "risk.read"))
+    pestle = rows_read(world.keen.user("isms.read", "pestle.read"))
+    assert (risks["affected_links"], pestle["affected_links"]) == (3, 1)

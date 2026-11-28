@@ -1260,7 +1260,10 @@ def test_a_register_items_limit_holds_while_the_item_is_being_saved(
                 with Session(workers) as watching:
                     blocked = text(
                         "SELECT query FROM pg_stat_activity "
-                        "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+                        "WHERE wait_event_type = 'Lock' "
+                        "AND datname = current_database() "
+                        "AND query LIKE '%isms_legal_item%' "
+                        "AND pid <> pg_backend_pid()"
                     )
                     deadline = time.monotonic() + 10
                     queries: list[str] = []

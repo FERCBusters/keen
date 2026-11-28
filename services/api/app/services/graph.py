@@ -175,6 +175,8 @@ def graph_control_source(
     breakdown: str | None = None,
     within_ms: int | None = None,
     max_links: int | None = None,
+    only_control: Any = None,
+    guidance: bool = True,
     db: Session,
 ):
     """Graph for visualisation: sources × controls.
@@ -187,6 +189,10 @@ def graph_control_source(
     ``max_links`` has the database return no more than that many source and
     control pairs, those with the most events, and the answer then says
     whether it was ``truncated``. A control's total is of the pairs returned.
+    ``only_control`` keeps the pairs of that one control, so the limit is
+    applied to its evidence and not to that of the controls its events share.
+    Without ``guidance`` the controls are not read again for their guidance
+    links, for a caller that draws controls of its own.
     """
 
     user = context.actor
@@ -202,6 +208,8 @@ def graph_control_source(
         "breakdown": breakdown,
         "user": user_cache_scope(user),
         "max_links": max_links,
+        "only_control": str(only_control) if only_control else None,
+        "guidance": guidance,
     }
 
     def _load():
@@ -227,6 +235,8 @@ def graph_control_source(
             .filter(*event_filters)
             .group_by(*group, ControlItem.id, ControlItem.ref, ControlItem.title)
         )
+        if only_control:
+            edges = edges.filter(ControlItem.id == only_control)
         if max_links is not None:
             edges = edges.order_by(
                 func.count(func.distinct(Event.id)).desc(), ControlItem.id
@@ -301,10 +311,20 @@ def graph_control_source(
                 }
             )
 
-        if ctrl_ids:
+        if ctrl_ids and guidance:
             # Each control read here gave the edge rows above their control node.
-            for control in (
-                db.query(ControlItem).filter(ControlItem.id.in_(list(ctrl_ids))).all()
+            # Only what names its guidance link is read, within the same time.
+            for control in run_scan(
+                db,
+                scope,
+                db.query(
+                    ControlItem.id,
+                    ControlItem.ref,
+                    ControlItem.framework_slug,
+                    ControlItem.meta,
+                )
+                .filter(ControlItem.id.in_(list(ctrl_ids)))
+                .all,
             ):
                 nodes[f"control:{control.id}"]["upstream_url"] = _control_upstream_url(
                     control
