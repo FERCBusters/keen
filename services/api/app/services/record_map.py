@@ -78,11 +78,14 @@ from app.services.risks import can_read_risks
 from app.services.stories import can_read_stories
 
 # A graph larger than this is cut to its best connected records. No more
-# records of one kind, and no more rows of one relationship table, are read
-# than these, so the work one request causes is bounded by them and not by
-# how much the installation holds.
+# records of one kind, no more rows of one relationship table and no more
+# relationship rows in all are read than these, so the work one request
+# causes is bounded by them and not by how much the installation holds.
 MAX_NODES = 2000
 MAX_LINK_ROWS = 20000
+MAX_REQUEST_ROWS = 60000
+# Counting the events behind the evidence is given this long.
+EVIDENCE_BUDGET_MS = 20000
 LABEL_LIMIT = 80
 
 
@@ -158,6 +161,7 @@ class _Graph:
         self.links: dict[tuple[str, str, str], dict[str, Any]] = {}
         self.notes: list[str] = []
         self.truncated = False
+        self.rows_left = MAX_REQUEST_ROWS
         features = feature_state(db)
         isms = can_read_isms(db, self.user)
         readable = {
@@ -215,6 +219,13 @@ class _Graph:
         if len(rows) > limit:
             self.truncated = True
         return rows[:limit]
+
+    def _link_rows(self, query) -> list:
+        """A relationship table's rows, within the table's limit and what the
+        request has left of its own."""
+        rows = self._capped(query, max(0, min(MAX_LINK_ROWS, self.rows_left)))
+        self.rows_left -= len(rows)
+        return rows
 
     def _rows(self, kind: str, query) -> list:
         return self._capped(query, MAX_NODES) if kind in self.allowed else []
@@ -310,7 +321,7 @@ class _Graph:
         ``..._kind_column`` instead.
         """
         if not isinstance(rows, list):
-            rows = self._capped(rows, MAX_LINK_ROWS)
+            rows = self._link_rows(rows)
         for row in rows:
             a_kind = getattr(row, a_kind_column) if a_kind_column else a[0]
             b_kind = getattr(row, b_kind_column) if b_kind_column else b[0]
@@ -339,17 +350,13 @@ class _Graph:
                 "mitigates",
             ),
             (
-                rated_links(
-                    self._capped(db.query(PestleControlRelevance), MAX_LINK_ROWS)
-                ),
+                rated_links(self._link_rows(db.query(PestleControlRelevance))),
                 ("pestle_item", "pestle_item_id"),
                 control,
                 "relevant",
             ),
             (
-                rated_links(
-                    self._capped(db.query(PestleClauseRelevance), MAX_LINK_ROWS)
-                ),
+                rated_links(self._link_rows(db.query(PestleClauseRelevance))),
                 ("pestle_item", "pestle_item_id"),
                 clause,
                 "relevant",
@@ -459,7 +466,7 @@ class _Graph:
                 "attends",
             ),
         ]
-        affected = self._capped(db.query(AffectedLink), MAX_LINK_ROWS)
+        affected = self._link_rows(db.query(AffectedLink))
         for owner in (("risk", "risk_id"), ("pestle_item", "pestle_item_id")):
             for target in ("person", "vendor", "asset"):
                 plain.append((affected, owner, (target, f"{target}_id"), "affects"))
@@ -517,7 +524,11 @@ class _Graph:
         )
         try:
             data = graph_control_source(
-                context=self.context, framework=self.framework, scope=scope, db=self.db
+                context=self.context,
+                framework=self.framework,
+                scope=scope,
+                within_ms=EVIDENCE_BUDGET_MS,
+                db=self.db,
             )
         except DomainError as exc:
             self.notes.append(f"Evidence sources are not shown: {exc.detail}")
@@ -530,7 +541,14 @@ class _Graph:
                     node["label"],
                     f"{node['mapped_events']} mapped events",
                 )
-        for link in data["links"]:
+        # Evidence counts towards the request's relationships like any other;
+        # when there is more than it has left, the heaviest is kept.
+        links = sorted(data["links"], key=lambda link: -link["value"])
+        if len(links) > self.rows_left:
+            self.truncated = True
+            links = links[: max(0, self.rows_left)]
+        self.rows_left -= len(links)
+        for link in links:
             target = link["target"].removeprefix("control:")
             # Events chosen for one control also count towards the others they
             # map to; only that control's own count is whole.

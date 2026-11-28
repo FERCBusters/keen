@@ -173,13 +173,15 @@ def graph_control_source(
     end_date: Optional[date] = None,
     scope: EventFilters | None = None,
     breakdown: str | None = None,
+    within_ms: int | None = None,
     db: Session,
 ):
     """Graph for visualisation: sources × controls.
 
     Counts are **distinct events**. One event can map to multiple controls, so a
     count of mappings would inflate totals. With a breakdown, each source node
-    is split by that event field.
+    is split by that event field. ``within_ms`` is how long each statement of
+    the count may run; without it only a regular expression search is timed.
     """
 
     user = context.actor
@@ -203,7 +205,7 @@ def graph_control_source(
         pairs = evidence_pairs(framework, db)
         group = _source_group_columns(breakdown)
         width = len(group)
-        scan_budget(db, scope)
+        scan_budget(db, scope, within_ms=within_ms)
 
         edge_rows = run_scan(
             db,

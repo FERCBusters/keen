@@ -1060,11 +1060,13 @@ def test_a_legal_register_item_is_related_from_either_end(keen, monkeypatch):
     assert register_side(law) == []
 
     # A register item's own limit holds from the SWOT side.
+    from dataclasses import replace
+
     mirror = related_records.MIRRORS["swot"]["legal_item"]
     monkeypatch.setitem(
         related_records.MIRRORS["swot"],
         "legal_item",
-        related_records.Mirror(IsmsLegalItemLink, "item_id", 0, "legal register item"),
+        replace(mirror, limit=0),
     )
     refused = manager.post(
         link_path, json={**pair(law), "expected_version": 3}, headers=unsafe(manager)
@@ -1191,3 +1193,76 @@ def uuid_of(item):
     import uuid
 
     return uuid.UUID(item["id"])
+
+
+def test_a_register_items_limit_holds_while_the_item_is_being_saved(
+    postgres_engine, monkeypatch
+):
+    # A relationship made from a SWOT item is the register item's row. A save
+    # of the register item, on another connection, may be adding its last
+    # relationship at that moment: the SWOT side waits for it, then counts.
+    import time
+    import uuid
+    from concurrent.futures import ThreadPoolExecutor
+    from dataclasses import replace
+
+    from app.db.models import IsmsLegalItem, IsmsLegalItemLink, IsmsSwotLink
+    from app.services.isms import related_records
+    from mosp.services.errors import DomainError
+    from sqlalchemy.orm import Session
+
+    from tests.db_helpers import schema_engine
+
+    with postgres_engine.connect() as connection:
+        schema = connection.exec_driver_sql("SELECT current_schema()").scalar()
+    workers = schema_engine(
+        postgres_engine.url.render_as_string(hide_password=False), schema, pool_size=4
+    )
+    mirror = related_records.MIRRORS["swot"]["legal_item"]
+    monkeypatch.setitem(
+        related_records.MIRRORS["swot"], "legal_item", replace(mirror, limit=1)
+    )
+    swot_id, other_id = uuid.uuid4(), uuid.uuid4()
+    try:
+        with Session(workers) as db:
+            law = IsmsLegalItem(title="Act " + uuid.uuid4().hex[:8])
+            db.add(law)
+            db.commit()
+            law_id = law.id
+
+        def relate():
+            with Session(workers, autoflush=False) as db:
+                try:
+                    related_records.add_link(
+                        db, IsmsSwotLink, {"swot_id": swot_id}, "legal_item", law_id
+                    )
+                    db.commit()
+                    return "kept"
+                except DomainError as error:
+                    return error.detail
+
+        with Session(workers) as saving, ThreadPoolExecutor(max_workers=1) as pool:
+            # The register's own save: its row locked, its last relationship
+            # added and not yet kept.
+            saving.query(IsmsLegalItem).filter_by(id=law_id).with_for_update().one()
+            saving.add(
+                IsmsLegalItemLink(
+                    item_id=law_id, target_type="asset", target_id=other_id
+                )
+            )
+            saving.flush()
+            waiting = pool.submit(relate)
+            time.sleep(0.5)
+            assert not waiting.done(), "the SWOT side counted without waiting"
+            saving.commit()
+            assert waiting.result(timeout=10) == (
+                "A legal register item supports up to 1 relationships"
+            )
+        with Session(workers) as db:
+            assert db.query(IsmsLegalItemLink).filter_by(item_id=law_id).count() == 1
+    finally:
+        with Session(workers) as db:
+            db.query(IsmsLegalItemLink).filter_by(item_id=law_id).delete()
+            db.query(IsmsLegalItem).filter_by(id=law_id).delete()
+            db.commit()
+        workers.dispose()

@@ -151,12 +151,14 @@ class Mirror:
     """Where a relationship is kept when the other record's kind keeps it.
 
     ``model`` is the other kind's link table, ``column`` names that record in
-    it, ``limit`` is how many relationships one of those records supports and
-    ``noun`` is what a message calls it.
+    it, ``record`` is that record's own table, ``limit`` is how many
+    relationships one of those records supports and ``noun`` is what a message
+    calls it.
     """
 
     model: Any
     column: str
+    record: Any
     limit: int
     noun: str
 
@@ -165,7 +167,9 @@ class Mirror:
 # item's relationship to a legal register item is the register item's row.
 MIRRORS: dict[str, dict[str, Mirror]] = {
     "swot": {
-        "legal_item": Mirror(IsmsLegalItemLink, "item_id", 200, "legal register item"),
+        "legal_item": Mirror(
+            IsmsLegalItemLink, "item_id", IsmsLegalItem, 200, "legal register item"
+        ),
     },
 }
 
@@ -262,6 +266,9 @@ def add_link(db, model, owner: dict, kind: str, target_id) -> None:
         _room_at_reader(db, model, kind, target_id)
         db.add(model(**owner, target_type=kind, target_id=target_id))
         return
+    # The far end's own saves count its relationships under its row lock, so
+    # this count waits for one in progress and holds until this change is kept.
+    db.query(mirror.record).filter_by(id=target_id).with_for_update().first()
     held = db.query(mirror.model).filter_by(**{mirror.column: target_id}).count()
     if held >= mirror.limit:
         raise DomainError(

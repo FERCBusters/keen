@@ -751,3 +751,72 @@ def test_the_map_reads_a_bounded_number_of_rows_and_requests(world, monkeypatch)
     )
     assert int(limited.headers["Retry-After"]) > 0
     assert other.get("/v1/map?framework=A").status_code == 200
+
+
+def test_a_request_reads_a_bounded_number_of_relationships_in_all(world, monkeypatch):
+    from app.services import record_map
+    from app.services.graph import graph_control_source
+    from mosp.services.context import ChangeContext
+    from sqlalchemy import event as sql_event
+
+    # Beside each table's own limit, every relationship a request reads counts
+    # against one allowance, so many full tables cost no more than one.
+    whole = read(world.admin, "&evidence=true")
+    assert whole["truncated"] is False
+    monkeypatch.setattr(record_map, "MAX_REQUEST_ROWS", 3)
+    data = read(world.admin, "&evidence=true")
+    assert data["truncated"] is True
+    assert 0 < len(data["links"]) <= 3 < len(whole["links"])
+    # Evidence shares it: with the allowance spent, none is added.
+    assert [link for link in data["links"] if link["relation"] == "evidence"] == []
+    assert read(world.admin)["truncated"] is True
+    monkeypatch.setattr(record_map, "MAX_REQUEST_ROWS", 60000)
+
+    admin = world.keen.user(role="admin")
+    context = ChangeContext(actor=admin)
+
+    def evidence(left):
+        graph = record_map._Graph(world.db, context, "A")
+        graph.load_records()
+        graph.rows_left = left
+        graph.load_evidence()
+        return graph, sorted(
+            (link["source"], link["value"]) for link in graph.links.values()
+        )
+
+    # All of it fits in what is left, and is counted.
+    graph, links = evidence(10)
+    assert links == [("source:github", 1), ("source:jenkins", 1), ("source:jenkins", 2)]
+    assert (graph.rows_left, graph.truncated) == (7, False)
+    # When it does not, the heaviest evidence is what is kept, and the answer
+    # is marked as partial.
+    graph, links = evidence(1)
+    assert links == [("source:jenkins", 2)]
+    assert (graph.rows_left, graph.truncated) == (0, True)
+    graph, links = evidence(0)
+    assert (links, graph.rows_left, graph.truncated) == ([], 0, True)
+
+    # The count behind the evidence is given a fixed time by the database; the
+    # Visualisations page's own count is timed as it was, by its filters.
+    def statements(call):
+        found = []
+
+        def capture(conn, cursor, statement, parameters, context, executemany):
+            found.append(statement)
+
+        sql_event.listen(world.db.get_bind(), "before_cursor_execute", capture)
+        try:
+            call()
+        finally:
+            sql_event.remove(world.db.get_bind(), "before_cursor_execute", capture)
+        return [text for text in found if "statement_timeout" in text]
+
+    assert record_map.EVIDENCE_BUDGET_MS == 20000
+    assert statements(lambda: evidence(10)) == ["SET LOCAL statement_timeout = 20000"]
+    world.db.rollback()
+    assert (
+        statements(
+            lambda: graph_control_source(context=context, framework="A", db=world.db)
+        )
+        == []
+    )
